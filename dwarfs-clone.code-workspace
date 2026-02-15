@@ -1,0 +1,23 @@
+{
+	"folders": [
+		{
+			"name": "dwarfs-clone",
+			"path": "."
+		},
+		{
+			"name": "raylib",
+			"path": "../../../../raylib/raylib"
+		},
+		{
+			"name": "raylib-jai",
+			"path": "../../../../ThirdParty/raylib-jai"
+		},
+		{
+			"path": "../../../../ThirdParty/jai"
+		},
+		{
+			"path": "../terraria-clone"
+		}
+	],
+	"settings": {}
+}

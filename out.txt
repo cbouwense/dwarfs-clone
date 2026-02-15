@@ -1,0 +1,151 @@
+INFO: Initializing raylib 5.5
+INFO: Platform backend: DESKTOP (GLFW)
+INFO: Supported raylib modules:
+INFO:     > rcore:..... loaded (mandatory)
+INFO:     > rlgl:...... loaded (mandatory)
+INFO:     > rshapes:... loaded (optional)
+INFO:     > rtextures:. loaded (optional)
+INFO:     > rtext:..... loaded (optional)
+INFO:     > rmodels:... loaded (optional)
+INFO:     > raudio:.... loaded (optional)
+INFO: DISPLAY: Device initialized successfully
+INFO:     > Display size: 2560 x 1440
+INFO:     > Screen size:  1600 x 900
+INFO:     > Render size:  1600 x 900
+INFO:     > Viewport offsets: 0, 0
+INFO: GLAD: OpenGL extensions loaded successfully
+INFO: GL: Supported extensions count: 403
+INFO: GL: OpenGL device information:
+INFO:     > Vendor:   NVIDIA Corporation
+INFO:     > Renderer: NVIDIA GeForce RTX 3070/PCIe/SSE2
+INFO:     > Version:  3.3.0 NVIDIA 577.00
+INFO:     > GLSL:     3.30 NVIDIA via Cg compiler
+INFO: GL: VAO extension detected, VAO functions loaded successfully
+INFO: GL: NPOT textures extension detected, full NPOT textures supported
+INFO: GL: DXT compressed textures supported
+INFO: GL: ETC2/EAC compressed textures supported
+INFO: PLATFORM: DESKTOP (GLFW - Win32): Initialized successfully
+INFO: TEXTURE: [ID 1] Texture loaded successfully (1x1 | R8G8B8A8 | 1 mipmaps)
+INFO: TEXTURE: [ID 1] Default texture loaded successfully
+INFO: SHADER: [ID 1] Vertex shader compiled successfully
+INFO: SHADER: [ID 2] Fragment shader compiled successfully
+INFO: SHADER: [ID 3] Program shader loaded successfully
+INFO: SHADER: [ID 3] Default shader loaded successfully
+INFO: RLGL: Render batch vertex buffers loaded successfully in RAM (CPU)
+INFO: RLGL: Render batch vertex buffers loaded successfully in VRAM (GPU)
+INFO: RLGL: Default OpenGL state initialized successfully
+INFO: TEXTURE: [ID 2] Texture loaded successfully (128x128 | GRAY_ALPHA | 1 mipmaps)
+INFO: FONT: Default font loaded successfully (224 glyphs)
+INFO: SYSTEM: Working Directory: C:\Users\bouwe\Projects\xcom-clone
+INFO: TIMER: Target time per frame: 6.944 milliseconds
+INFO: FILEIO: [data/tilemap-general.png] File loaded successfully
+INFO: IMAGE: Data loaded successfully (320x320 | R8G8B8A8 | 1 mipmaps)
+INFO: TEXTURE: [ID 3] Texture loaded successfully (320x320 | R8G8B8A8 | 1 mipmaps)
+INFO: FILEIO: [data/tilemap-dishes.png] File loaded successfully
+INFO: IMAGE: Data loaded successfully (320x320 | R8G8B8A8 | 1 mipmaps)
+INFO: TEXTURE: [ID 4] Texture loaded successfully (320x320 | R8G8B8A8 | 1 mipmaps)
+game_state.active_entity.pos = {16, 304} (Vector2)
+
+{
+[128,48]: 2ac_024c_09e0
+[224,192]: 2ac_024c_14d0
+[288,160]: 2ac_024c_1ac0
+[128,272]: 2ac_024c_0c10
+[256,80]: 2ac_024c_16b0
+[32,96]: 2ac_024c_0120
+[160,320]: 2ac_024c_0fd0
+[288,128]: 2ac_024c_1a70
+[32,128]: 2ac_024c_0170
+[96,32]: 2ac_024c_06c0
+[256,144]: 2ac_024c_1750
+[96,224]: 2ac_024c_08a0
+[64,112]: 2ac_024c_0440
+[256,112]: 2ac_024c_1700
+[320,208]: 2ac_024c_1e30
+[224,128]: 2ac_024c_1430
+[160,288]: 2ac_024c_0f80
+[96,160]: 2ac_024c_0800
+[160,32]: 2ac_024c_0d00
+[288,224]: 2ac_024c_1b60
+[192,112]: 2ac_024c_10c0
+[96,128]: 2ac_024c_07b0
+[32,192]: 2ac_024c_0210
+[32,160]: 2ac_024c_01c0
+[256,304]: 2ac_024c_18e0
+[288,320]: 2ac_024c_1c50
+[96,288]: 2ac_024c_0940
+[64,240]: 2ac_024c_0580
+[320,272]: 2ac_024c_1ed0
+[224,224]: 2ac_024c_1520
+[224,160]: 2ac_024c_1480
+[32,32]: 2ac_024c_0080
+[32,64]: 2ac_024c_00d0
+[160,192]: 2ac_024c_0e90
+[320,48]: 2ac_024c_1ca0
+[320,176]: 2ac_024c_1de0
+[64,336]: 2ac_024c_0670
+[32,224]: 2ac_024c_0260
+[128,144]: 2ac_024c_0ad0
+[160,96]: 2ac_024c_0da0
+[64,272]: 2ac_024c_05d0
+[64,208]: 2ac_024c_0530
+[192,336]: 2ac_024c_12f0
+[320,80]: 2ac_024c_1cf0
+[160,64]: 2ac_024c_0d50
+[192,80]: 2ac_024c_1070
+[32,288]: 2ac_024c_0300
+[192,144]: 2ac_024c_1110
+[64,176]: 2ac_024c_04e0
+[256,176]: 2ac_024c_17a0
+[224,32]: 2ac_024c_1340
+[288,64]: 2ac_024c_19d0
+[64,304]: 2ac_024c_0620
+[96,64]: 2ac_024c_0710
+[288,32]: 2ac_024c_1980
+[224,320]: 2ac_024c_1610
+[32,256]: 2ac_024c_02b0
+[192,176]: 2ac_024c_1160
+[128,240]: 2ac_024c_0bc0
+[320,304]: 2ac_024c_1f20
+[192,304]: 2ac_024c_12a0
+[192,48]: 2ac_024c_1020
+[320,112]: 2ac_024c_1d40
+[96,192]: 2ac_024c_0850
+[288,288]: 2ac_024c_1c00
+[128,208]: 2ac_024c_0b70
+[288,256]: 2ac_024c_1bb0
+[32,320]: 2ac_024c_0350
+[64,80]: 2ac_024c_03f0
+[160,224]: 2ac_024c_0ee0
+[256,48]: 2ac_024c_1660
+[160,128]: 2ac_024c_0df0
+[320,144]: 2ac_024c_1d90
+[128,112]: 2ac_024c_0a80
+[160,160]: 2ac_024c_0e40
+[288,192]: 2ac_024c_1b10
+[64,48]: 2ac_024c_03a0
+[96,96]: 2ac_024c_0760
+[256,240]: 2ac_024c_1840
+[256,272]: 2ac_024c_1890
+[224,96]: 2ac_024c_13e0
+[128,304]: 2ac_024c_0c60
+[192,240]: 2ac_024c_1200
+[320,240]: 2ac_024c_1e80
+[64,144]: 2ac_024c_0490
+[160,256]: 2ac_024c_0f30
+[96,320]: 2ac_024c_0990
+[224,288]: 2ac_024c_15c0
+[288,96]: 2ac_024c_1a20
+[128,176]: 2ac_024c_0b20
+[224,256]: 2ac_024c_1570
+[256,336]: 2ac_024c_1930
+[320,336]: 2ac_024c_1f70
+[96,256]: 2ac_024c_08f0
+[256,208]: 2ac_024c_17f0
+[128,80]: 2ac_024c_0a30
+[192,272]: 2ac_024c_1250
+[192,208]: 2ac_024c_11b0
+[128,336]: 2ac_024c_0cb0
+[224,64]: 2ac_024c_1390
+}
+16,304
