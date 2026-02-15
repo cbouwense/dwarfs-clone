@@ -141,9 +141,19 @@ Tile :: struct {
 
 data_folder: string;
 
-chunks : [..] Chunk; // TODO: pointers?
-dirt_tiles : [..] *Tile;
-// edges : [..] Edge; // List of edges between tiles for pathfinding
+WORLD_COLS :: 10000;
+WORLD_ROWS :: 10000;
+
+// Tile ID's will go row-wise, starting at 1 (zero means invalid or whatever)
+// so like
+// 1 2 3
+// 4 5 6
+// 7 8 9
+// This means that to get the position of a tile you just have to do some math,
+// which also means that we don't need to store that anywhere. Check out
+// get_tile_pos_by_id.
+mined_tile_ids : [..] s32;
+mined_tile_ids_active : [..] s32;
 
 main :: () {
     random_seed(123456789);
@@ -186,21 +196,10 @@ main :: () {
         controls.move_camera_right[1] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_D     };
     }
 
-    // Initialize tiles
-    #if false {
-        world_width  := 10_000;
-        world_height := 10_000;
-        chunks_x     := (world_width / CHUNK_SIZE) + 1;
-        chunks_y     := (world_height / CHUNK_SIZE) + 1;
-        total_chunks := chunks_x * chunks_y;
-
-        // Generate them all (Only happens ONCE at startup)
-        for y: 0..chunks_y {
-            for x: 0..chunks_x {
-                array_add(*chunks, create_chunk(x, y, tilemap_texture_general));
-            }
-        }
-    }
+    array_add(*mined_tile_ids, 1);
+    array_add(*mined_tile_ids, 7);
+    array_add(*mined_tile_ids, 3);
+    array_add(*mined_tile_ids, 8);
 
     // Initialize camera
     camera: Camera2D;
@@ -237,6 +236,8 @@ main :: () {
             move_camera_left  = control_is_down(controls.move_camera_left);
             move_camera_right = control_is_down(controls.move_camera_right);
         }
+
+        derive_active_entities(camera, *mined_tile_ids_active, mined_tile_ids);
 
         //
         // Update
@@ -288,173 +289,72 @@ main :: () {
                 BeginMode2D(camera);
                 defer EndMode2D();
 
-                source := Rectangle.{ 
-                    0, 
-                    0, 
-                    dirt_texture.width * 10000.0,  // Repeat 10,000 times horizontally
-                    dirt_texture.height * 10000.0  // Repeat 10,000 times vertically
-                };
+                // First, draw base layer of dirt which is just one giant quad
+                {
+                    // This accomplishes the tiling effect when we sample the source
+                    // with such a big triangle.
+                    source := Rectangle.{ 
+                        0, 
+                        0, 
+                        xx (dirt_texture.width * WORLD_COLS),  // Repeat 10,000 times horizontally
+                        xx (dirt_texture.height * WORLD_ROWS),   // Repeat 10,000 times vertically
+                    };
 
-                // destRec: Where to draw it in the world (The giant area)
-                dest := Rectangle.{ 
-                    0, 
-                    0, 
-                    dirt_texture.width * 10000.0, 
-                    dirt_texture.height * 10000.0 
-                };
-                
-                // Draw base layer of dirt
-                DrawTexturePro(dirt_texture, source, dest, Vector2.{0,0}, 0.0, WHITE);
+                    dest := Rectangle.{ 
+                        0, 
+                        0, 
+                        xx (dirt_texture.width * WORLD_COLS),
+                        xx (dirt_texture.height * WORLD_ROWS),
+                    };
+                    
+                    DrawTexturePro(dirt_texture, source, dest, Vector2.{0,0}, 0.0, WHITE);
+                }
 
-                // Draw tiles (chunks)
-                // for chunks {
-                //     // TODO: Simple Culling
-                //     DrawModel(it.model, Vector3.{ it.position.x, it.position.y, 0.0 }, 1.0, WHITE);
-                // }
-
-                // Draw tiles (old)
-                // {
-                //     for tile: dirt_tiles {
-                //         DrawTexturePro(
-                //             tilemap_texture_general,
-                //             Rectangle.{
-                //                 1 * TILEMAP_GENERAL_TILE_WIDTH,
-                //                 1 * TILEMAP_GENERAL_TILE_HEIGHT,
-                //                 TILEMAP_GENERAL_TILE_WIDTH  - TILEMAP_GENERAL_TILE_PADDING,
-                //                 TILEMAP_GENERAL_TILE_HEIGHT - TILEMAP_GENERAL_TILE_PADDING,
-                //             },
-                //             tile.rect,
-                //             Vector2.{ 0, 0 },
-                //             0.0,
-                //             WHITE,
-                //         );
-
-                //         if debug_mode {
-                //             DrawText(
-                //                 tprint("%\0", it_index).data,
-                //                 xx (pos(tile).x),
-                //                 xx (pos(tile).y),
-                //                 12,
-                //                 WHITE,
-                //             );
-                //         }
-                //     }
-                // }
+                // Then draw any mined tiles over the base layer
+                {
+                    print_vars(mined_tile_ids_active);
+                    for mined_tile_ids_active {
+                        DrawRectangleV(
+                            get_tile_pos_by_id(it),
+                            Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
+                            BEIGE,
+                        );
+                    }
+                }
             }
 
             // Draw debug
             DrawFPS(10, 10);
             if debug_mode {
+
             }
         }
     }
 }
 
-CHUNK_SIZE :: 64;   // 64x64 tiles per chunk
-TILE_SIZE  :: 16.0; // Size of one tile in pixels
+derive_active_entities :: (camera: Camera2D, mined_tile_ids_active: *[..] s32, mined_tile_ids: [..] s32) {
+    window_start := GetScreenToWorld2D(Vector2.{ 0, 0 }, camera);
+    window_end   := GetScreenToWorld2D(Vector2.{ cast(float) GetScreenWidth(), cast(float) GetScreenHeight()}, camera);
 
-// A generic "Chunk" structure to hold our mesh
-Chunk :: struct {
-    mesh     : Mesh;
-    model    : Model;
-    position : Vector2; // World position of this chunk
-    active   : bool;
-}
+    array_reset(mined_tile_ids_active);
+    
+    // Derive active tiles
+    // NOTE: The order in which tiles are added to active_tiles matters!
+    // The first will be furthest away in the z ordering.
+    {
+        for tile_id: mined_tile_ids {
+            pos := get_tile_pos_by_id(tile_id);
 
-// Function to generate a single mesh for a specific chunk of the world
-create_chunk :: (chunk_x: int, chunk_y: int, texture: Texture2D) -> Chunk {
-    chunk : Chunk;
-    chunk.position = Vector2.{ xx (chunk_x * CHUNK_SIZE * TILE_SIZE), xx (chunk_y * CHUNK_SIZE * TILE_SIZE) };
-    chunk.active = true;
-
-    // 1. Allocate CPU Memory for the Mesh Data
-    max_tiles := CHUNK_SIZE * CHUNK_SIZE;
-    // chunk.mesh = Mesh.{ 0 }; Jai should zero initialize this I think
-    chunk.mesh.vertexCount = xx (max_tiles * 4);   // 4 verts per tile
-    chunk.mesh.triangleCount = xx (max_tiles * 2); // 2 triangles per tile
-
-    // Raylib requires us to allocate these arrays
-    chunk.mesh.vertices  = alloc(chunk.mesh.vertexCount   * 3 * size_of(float));
-    chunk.mesh.texcoords = alloc(chunk.mesh.vertexCount   * 2 * size_of(float));
-    chunk.mesh.indices   = alloc(chunk.mesh.triangleCount * 3 * size_of(u16));
-
-    // 2. Fill the Mesh with Data
-    v_counter := 0; // Vertex counter
-    t_counter := 0; // Triangle (index) counter
- 
-    for y : 0..CHUNK_SIZE {
-        for x : 0..CHUNK_SIZE {
-            // Relative position inside the chunk
-            posX := x * TILE_SIZE;
-            posY := y * TILE_SIZE;
-
-            // --- VERTICES (3 floats per vertex: x, y, z) ---
-            // Top-Left
-            chunk.mesh.vertices[v_counter * 3 + 0] = posX;
-            chunk.mesh.vertices[v_counter * 3 + 1] = posY;
-            chunk.mesh.vertices[v_counter * 3 + 2] = 0.0;
+            if pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x continue;
+            if pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x continue;
             
-            // Bottom-Left
-            chunk.mesh.vertices[v_counter * 3 + 3] = posX;
-            chunk.mesh.vertices[v_counter * 3 + 4] = posY + TILE_SIZE;
-            chunk.mesh.vertices[v_counter * 3 + 5] = 0.0;
+            if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y continue;
+            if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-            // Bottom-Right
-            chunk.mesh.vertices[v_counter * 3 + 6] = posX + TILE_SIZE;
-            chunk.mesh.vertices[v_counter * 3 + 7] = posY + TILE_SIZE;
-            chunk.mesh.vertices[v_counter * 3 + 8] = 0.0;
-
-            // Top-Right
-            chunk.mesh.vertices[v_counter * 3 + 9]  = posX + TILE_SIZE;
-            chunk.mesh.vertices[v_counter * 3 + 10] = posY;
-            chunk.mesh.vertices[v_counter * 3 + 11] = 0.0;
-
-            // --- TEXCOORDS (2 floats per vertex: u, v) ---
-
-            u_tile_len_excluding_padding : float32 = (cast(float) (TILEMAP_GENERAL_TILE_WIDTH  - TILEMAP_GENERAL_TILE_PADDING)) / TILEMAP_GENERAL_MAP_WIDTH;
-            v_tile_len_excluding_padding : float32 = (cast(float) (TILEMAP_GENERAL_TILE_HEIGHT - TILEMAP_GENERAL_TILE_PADDING)) / TILEMAP_GENERAL_MAP_HEIGHT;
-            u_tile_len_including_padding : float32 = (cast(float) (TILEMAP_GENERAL_TILE_WIDTH))  / TILEMAP_GENERAL_MAP_WIDTH;
-            v_tile_len_including_padding : float32 = (cast(float) (TILEMAP_GENERAL_TILE_HEIGHT)) / TILEMAP_GENERAL_MAP_HEIGHT;
-
-            // The scalar before the including_padding variant can be thought of as the zero-indexed placement of the tile in the tilemap.
-            chunk.mesh.texcoords[v_counter * 2 + 0] = 0 * u_tile_len_including_padding + u_tile_len_excluding_padding;
-            chunk.mesh.texcoords[v_counter * 2 + 1] = 0 * v_tile_len_including_padding + v_tile_len_excluding_padding;
-            
-            chunk.mesh.texcoords[v_counter * 2 + 2] = 0 * u_tile_len_including_padding + u_tile_len_excluding_padding;
-            chunk.mesh.texcoords[v_counter * 2 + 3] = 1 * v_tile_len_including_padding + v_tile_len_excluding_padding;
-            
-            chunk.mesh.texcoords[v_counter * 2 + 4] = 1 * u_tile_len_including_padding + u_tile_len_excluding_padding;
-            chunk.mesh.texcoords[v_counter * 2 + 5] = 1 * v_tile_len_including_padding + v_tile_len_excluding_padding;
-            
-            chunk.mesh.texcoords[v_counter * 2 + 6] = 1 * u_tile_len_including_padding + u_tile_len_excluding_padding;
-            chunk.mesh.texcoords[v_counter * 2 + 7] = 0 * v_tile_len_including_padding + v_tile_len_excluding_padding;
-
-
-            // --- INDICES (Linking vertices to make triangles) ---
-            // Triangle 1 (Top-Left, Bottom-Left, Bottom-Right)
-            chunk.mesh.indices[t_counter * 3 + 0] = xx (v_counter + 0);
-            chunk.mesh.indices[t_counter * 3 + 1] = xx (v_counter + 1);
-            chunk.mesh.indices[t_counter * 3 + 2] = xx (v_counter + 2);
-
-            // Triangle 2 (Top-Left, Bottom-Right, Top-Right)
-            chunk.mesh.indices[t_counter * 3 + 3] = xx (v_counter + 0);
-            chunk.mesh.indices[t_counter * 3 + 4] = xx (v_counter + 2);
-            chunk.mesh.indices[t_counter * 3 + 5] = xx (v_counter + 3);
-
-            v_counter += 4;
-            t_counter += 2;
+            array_add(mined_tile_ids_active, tile_id);
+            // array_add(collidable_blocks, block);
         }
     }
-
-    // 3. Upload to GPU
-    // This sends the data to VRAM.
-    UploadMesh(*chunk.mesh, false);
-
-    // 4. Create a Model to make it easy to draw
-    chunk.model = LoadModelFromMesh(chunk.mesh);
-    chunk.model.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = texture;
-
-    return chunk;
 }
 
 // TODO: maybe have this accept anything with a rect field on it?
@@ -497,7 +397,15 @@ is_entity_on_tile :: (entity: Entity, tile: Tile) -> bool {
 }
 
 get_tile_pos_by_id :: (id: s32) -> Vector2 {
-    return pos(dirt_tiles[id]); // TODO: feels sus
+    index := id - 1; 
+
+    grid_x := index % WORLD_COLS; // Remainder = Column
+    grid_y := index / WORLD_COLS; // Integer Div = Row
+
+    pixel_x := cast(float32) grid_x * TILEMAP_GENERAL_WORLD_WIDTH;
+    pixel_y := cast(float32) grid_y * TILEMAP_GENERAL_WORLD_HEIGHT;
+
+    return Vector2.{ pixel_x, pixel_y };
 }
 
 find_tile_by_pos :: (pos: Vector2) -> (tile_exists: bool, tile: *Tile) {
