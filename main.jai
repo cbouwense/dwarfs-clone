@@ -26,10 +26,10 @@ window_height := 800;
 CAMERA_MOVE_SPEED :: 4;
 CAMERA_ZOOM_SPEED :: 0.3;
 
-MAP_ROW_COUNT :: 100;
-MAP_COL_COUNT :: 100;
+MAP_ROW_COUNT :: 1000;
+MAP_COL_COUNT :: 1000;
 
-SCALE :: 2;
+SCALE :: 1;
 
 TRANSPARENT_WHITE :: Color.{ 255, 255, 255, 100 };
 
@@ -45,8 +45,8 @@ debug_mode       := false;
 // Textures
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-TILEMAP_GENERAL_MAP_WIDTH    :: 320;
-TILEMAP_GENERAL_MAP_HEIGHT   :: 320;
+TILEMAP_GENERAL_MAP_WIDTH    :: 288;
+TILEMAP_GENERAL_MAP_HEIGHT   :: 270;
 TILEMAP_GENERAL_TILE_WIDTH   :: 18;
 TILEMAP_GENERAL_TILE_HEIGHT  :: 18;
 TILEMAP_GENERAL_TILE_PADDING :: 2;
@@ -134,6 +134,7 @@ Tile :: struct {
 
 data_folder: string;
 
+chunks : [..] Chunk; // TODO: pointers?
 dirt_tiles : [..] *Tile;
 // edges : [..] Edge; // List of edges between tiles for pathfinding
 
@@ -180,65 +181,18 @@ main :: () {
 
     // Initialize tiles
     {
-        for col: 0..MAP_COL_COUNT-1 {
-            for row: 0..MAP_ROW_COUNT-1 {
-                tile := New(Tile);
-                tile.rect = Rectangle.{
-                    xx (col * TILEMAP_GENERAL_WORLD_WIDTH),
-                    xx (row * TILEMAP_GENERAL_WORLD_HEIGHT),
-                    TILEMAP_GENERAL_WORLD_WIDTH,
-                    TILEMAP_GENERAL_WORLD_HEIGHT,
-                };
+        world_width  := 1000;
+        world_height := 1000;
+        chunks_x     := (world_width / CHUNK_SIZE) + 1;
+        chunks_y     := (world_height / CHUNK_SIZE) + 1;
+        total_chunks := chunks_x * chunks_y;
 
-                tile_index := cast(s32) (col * MAP_ROW_COUNT + row);
-
-                array_add(*dirt_tiles, tile);
-                table_add(*global_tile_pos_to_tile, vector2_to_string_permanent(pos(tile)), tile);
-                table_add(*global_tile_id_to_tile, tile_index, tile); // TODO: seems flimsy
-
-                // neighbor_list := New([..] *Tile);
-                // table_add(*global_tile_id_to_neighbors, tile_index, neighbor_list); // TODO: seems flimsy
+        // Generate them all (Only happens ONCE at startup)
+        for y: 0..chunks_y {
+            for x: 0..chunks_x {
+                array_add(*chunks, create_chunk(x, y, tilemap_texture_general));
             }
         }
-
-        // // Initialize tile neighbor table
-        // for tile: tiles {
-        //     neighbor_list_exists, neighbor_list := table_find(*global_tile_id_to_neighbors, tile.id);
-        //     assert(neighbor_list_exists, "Could not find neighbor list for tile id %\n", tile.id);
-
-        //     add_neighbor_if_it_exists :: (tile: *Tile, neighbor_list: *[..] *Tile, dx: float32, dy: float32) {
-        //         neighbor_pos := Vector2.{ pos(tile).x + dx, pos(tile).y + dy };
-        //         neighbor_exists, neighbor := table_find(*global_tile_pos_to_tile, vector2_to_string_temp(neighbor_pos));
-        //         if neighbor_exists array_add(neighbor_list, neighbor);
-        //     }
- 
-        //     add_neighbor_if_it_exists(tile, neighbor_list, 0.0, -TILEMAP_GENERAL_WORLD_HEIGHT); // north
-        //     add_neighbor_if_it_exists(tile, neighbor_list, 0.0, +TILEMAP_GENERAL_WORLD_HEIGHT); // south
-        //     add_neighbor_if_it_exists(tile, neighbor_list, +TILEMAP_GENERAL_WORLD_WIDTH, 0.0);  // east
-        //     add_neighbor_if_it_exists(tile, neighbor_list, -TILEMAP_GENERAL_WORLD_WIDTH, 0.0);  // west
-        //     add_neighbor_if_it_exists(tile, neighbor_list, +TILEMAP_GENERAL_WORLD_WIDTH * 0.50, -TILEMAP_GENERAL_WORLD_HEIGHT * 0.50); // north east
-        //     add_neighbor_if_it_exists(tile, neighbor_list, -TILEMAP_GENERAL_WORLD_WIDTH * 0.50, -TILEMAP_GENERAL_WORLD_HEIGHT * 0.50); // north west
-        //     add_neighbor_if_it_exists(tile, neighbor_list, +TILEMAP_GENERAL_WORLD_WIDTH * 0.50, +TILEMAP_GENERAL_WORLD_HEIGHT * 0.50); // south east
-        //     add_neighbor_if_it_exists(tile, neighbor_list, -TILEMAP_GENERAL_WORLD_WIDTH * 0.50, +TILEMAP_GENERAL_WORLD_HEIGHT * 0.50); // south west
-        // }
-
-        // // Initialize edge list
-        // {
-        //     for global_tile_id_to_neighbors {
-        //         tile_id, neighbors := it_index, it;
-        //         for neighbor: neighbors.* {
-        //             distance := 1.0;
-
-        //             // Cardinal neighbors are actually farther away than diagonal neighbors
-        //             if neighbor.id == tile_id - 1  distance = 1.414; // north
-        //             if neighbor.id == tile_id + 1  distance = 1.414; // south
-        //             if neighbor.id == tile_id + 2 * MAP_ROW_COUNT distance = 1.414; // east
-        //             if neighbor.id == tile_id - 2 * MAP_ROW_COUNT distance = 1.414; // west
-
-        //             array_add(*edges, Edge.{ from = tile_id, to = neighbor.id, distance = distance });
-        //         }
-        //     }
-        // }
     }
 
     // Initialize camera
@@ -275,8 +229,6 @@ main :: () {
             move_camera_down  = control_is_down(controls.move_camera_down);
             move_camera_left  = control_is_down(controls.move_camera_left);
             move_camera_right = control_is_down(controls.move_camera_right);
-
-            camera.zoom += mouse_wheel_move * CAMERA_ZOOM_SPEED;
         }
 
         //
@@ -287,7 +239,7 @@ main :: () {
             {
                 CAMERA_ZOOM_INCREMENT :: 0.2;
                 CAMERA_ZOOM_MIN :: 0.1;
-                CAMERA_ZOOM_MAX :: 3.0;
+                CAMERA_ZOOM_MAX :: 13.0;
 
                 if move_camera_up    camera.target.y -= CAMERA_MOVE_SPEED;
                 if move_camera_down  camera.target.y += CAMERA_MOVE_SPEED;
@@ -329,34 +281,39 @@ main :: () {
                 BeginMode2D(camera);
                 defer EndMode2D();
 
-                // Draw tiles
-                {
-                    for tile: dirt_tiles {
-                        DrawTexturePro(
-                            tilemap_texture_general,
-                            Rectangle.{
-                                1 * TILEMAP_GENERAL_TILE_WIDTH,
-                                1 * TILEMAP_GENERAL_TILE_HEIGHT,
-                                TILEMAP_GENERAL_TILE_WIDTH  - TILEMAP_GENERAL_TILE_PADDING,
-                                TILEMAP_GENERAL_TILE_HEIGHT - TILEMAP_GENERAL_TILE_PADDING,
-                            },
-                            tile.rect,
-                            Vector2.{ 0, 0 },
-                            0.0,
-                            WHITE,
-                        );
-
-                        if debug_mode {
-                            DrawText(
-                                tprint("%\0", it_index).data,
-                                xx (pos(tile).x),
-                                xx (pos(tile).y),
-                                12,
-                                WHITE,
-                            );
-                        }
-                    }
+                for chunks {
+                    // TODO: Simple Culling
+                    DrawModel(it.model, Vector3.{ it.position.x, it.position.y, 0.0 }, 1.0, WHITE);
                 }
+
+                // Draw tiles (old)
+                // {
+                //     for tile: dirt_tiles {
+                //         DrawTexturePro(
+                //             tilemap_texture_general,
+                //             Rectangle.{
+                //                 1 * TILEMAP_GENERAL_TILE_WIDTH,
+                //                 1 * TILEMAP_GENERAL_TILE_HEIGHT,
+                //                 TILEMAP_GENERAL_TILE_WIDTH  - TILEMAP_GENERAL_TILE_PADDING,
+                //                 TILEMAP_GENERAL_TILE_HEIGHT - TILEMAP_GENERAL_TILE_PADDING,
+                //             },
+                //             tile.rect,
+                //             Vector2.{ 0, 0 },
+                //             0.0,
+                //             WHITE,
+                //         );
+
+                //         if debug_mode {
+                //             DrawText(
+                //                 tprint("%\0", it_index).data,
+                //                 xx (pos(tile).x),
+                //                 xx (pos(tile).y),
+                //                 12,
+                //                 WHITE,
+                //             );
+                //         }
+                //     }
+                // }
             }
 
             // Draw debug
@@ -365,6 +322,104 @@ main :: () {
             }
         }
     }
+}
+
+CHUNK_SIZE :: 64;   // 64x64 tiles per chunk
+TILE_SIZE  :: 16.0; // Size of one tile in pixels
+
+// A generic "Chunk" structure to hold our mesh
+Chunk :: struct {
+    mesh     : Mesh;
+    model    : Model;
+    position : Vector2; // World position of this chunk
+    active   : bool;
+}
+
+// Function to generate a single mesh for a specific chunk of the world
+create_chunk :: (chunk_x: int, chunk_y: int, texture: Texture2D) -> Chunk {
+    chunk : Chunk;
+    chunk.position = Vector2.{ xx (chunk_x * CHUNK_SIZE * TILE_SIZE), xx (chunk_y * CHUNK_SIZE * TILE_SIZE) };
+    chunk.active = true;
+
+    // 1. Allocate CPU Memory for the Mesh Data
+    max_tiles := CHUNK_SIZE * CHUNK_SIZE;
+    // chunk.mesh = Mesh.{ 0 }; Jai should zero initialize this I think
+    chunk.mesh.vertexCount = xx (max_tiles * 4);   // 4 verts per tile
+    chunk.mesh.triangleCount = xx (max_tiles * 2); // 2 triangles per tile
+
+    // Raylib requires us to allocate these arrays
+    chunk.mesh.vertices  = alloc(chunk.mesh.vertexCount   * 3 * size_of(float));
+    chunk.mesh.texcoords = alloc(chunk.mesh.vertexCount   * 2 * size_of(float));
+    chunk.mesh.indices   = alloc(chunk.mesh.triangleCount * 3 * size_of(u16));
+
+    // 2. Fill the Mesh with Data
+    v_counter := 0; // Vertex counter
+    t_counter := 0; // Triangle (index) counter
+ 
+    for y : 0..CHUNK_SIZE {
+        for x : 0..CHUNK_SIZE {
+            // Relative position inside the chunk
+            posX := x * TILE_SIZE;
+            posY := y * TILE_SIZE;
+
+            // --- VERTICES (3 floats per vertex: x, y, z) ---
+            // Top-Left
+            chunk.mesh.vertices[v_counter * 3 + 0] = posX;
+            chunk.mesh.vertices[v_counter * 3 + 1] = posY;
+            chunk.mesh.vertices[v_counter * 3 + 2] = 0.0;
+            
+            // Bottom-Left
+            chunk.mesh.vertices[v_counter * 3 + 3] = posX;
+            chunk.mesh.vertices[v_counter * 3 + 4] = posY + TILE_SIZE;
+            chunk.mesh.vertices[v_counter * 3 + 5] = 0.0;
+
+            // Bottom-Right
+            chunk.mesh.vertices[v_counter * 3 + 6] = posX + TILE_SIZE;
+            chunk.mesh.vertices[v_counter * 3 + 7] = posY + TILE_SIZE;
+            chunk.mesh.vertices[v_counter * 3 + 8] = 0.0;
+
+            // Top-Right
+            chunk.mesh.vertices[v_counter * 3 + 9]  = posX + TILE_SIZE;
+            chunk.mesh.vertices[v_counter * 3 + 10] = posY;
+            chunk.mesh.vertices[v_counter * 3 + 11] = 0.0;
+
+            // --- TEXCOORDS (2 floats per vertex: u, v) ---
+
+            u_tile_len : float32 = (cast(float) (TILEMAP_GENERAL_TILE_WIDTH - TILEMAP_GENERAL_TILE_PADDING)  )/ TILEMAP_GENERAL_MAP_WIDTH;
+            v_tile_len : float32 = (cast(float) (TILEMAP_GENERAL_TILE_HEIGHT - TILEMAP_GENERAL_TILE_PADDING) )/ TILEMAP_GENERAL_MAP_HEIGHT;
+
+            // print_vars(u_tile_len, v_tile_len);
+
+            chunk.mesh.texcoords[v_counter * 2 + 0] = 1 * u_tile_len; chunk.mesh.texcoords[v_counter * 2 + 1] = 1 * v_tile_len;
+            chunk.mesh.texcoords[v_counter * 2 + 2] = 1 * u_tile_len; chunk.mesh.texcoords[v_counter * 2 + 3] = 2 * v_tile_len;
+            chunk.mesh.texcoords[v_counter * 2 + 4] = 2 * u_tile_len; chunk.mesh.texcoords[v_counter * 2 + 5] = 2 * v_tile_len;
+            chunk.mesh.texcoords[v_counter * 2 + 6] = 2 * u_tile_len; chunk.mesh.texcoords[v_counter * 2 + 7] = 1 * v_tile_len;
+
+            // --- INDICES (Linking vertices to make triangles) ---
+            // Triangle 1 (Top-Left, Bottom-Left, Bottom-Right)
+            chunk.mesh.indices[t_counter * 3 + 0] = xx (v_counter + 0);
+            chunk.mesh.indices[t_counter * 3 + 1] = xx (v_counter + 1);
+            chunk.mesh.indices[t_counter * 3 + 2] = xx (v_counter + 2);
+
+            // Triangle 2 (Top-Left, Bottom-Right, Top-Right)
+            chunk.mesh.indices[t_counter * 3 + 3] = xx (v_counter + 0);
+            chunk.mesh.indices[t_counter * 3 + 4] = xx (v_counter + 2);
+            chunk.mesh.indices[t_counter * 3 + 5] = xx (v_counter + 3);
+
+            v_counter += 4;
+            t_counter += 2;
+        }
+    }
+
+    // 3. Upload to GPU
+    // This sends the data to VRAM.
+    UploadMesh(*chunk.mesh, false);
+
+    // 4. Create a Model to make it easy to draw
+    chunk.model = LoadModelFromMesh(chunk.mesh);
+    chunk.model.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = texture;
+
+    return chunk;
 }
 
 // TODO: maybe have this accept anything with a rect field on it?

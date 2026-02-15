@@ -5,3 +5,5 @@
 # Bugs
 
 # Tech
+
+- hotreloading
