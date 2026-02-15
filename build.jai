@@ -53,7 +53,7 @@ build_simple_examples :: () {
     {
         opts.output_type = .EXECUTABLE;
         opts.use_custom_link_command = true;
-        opts.output_executable_name = "Dwarfs?! Clone";
+        opts.output_executable_name = "Dwarfs Clone";
 
         ws := create_workspace(opts);
         Compiler.compiler_begin_intercept(ws);
