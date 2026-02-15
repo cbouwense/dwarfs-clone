@@ -56,7 +56,7 @@ TILEMAP_GENERAL_WORLD_HEIGHT :: TILEMAP_GENERAL_TILE_HEIGHT * SCALE;
 tilemap_texture_general : Texture;
 
 init_textures :: () {
-    tilemap_texture_general = LoadTexture("data/tilemap-general.png");
+    tilemap_texture_general = LoadTexture("data/Tiles_0.png");
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -249,18 +249,10 @@ main :: () {
     camera.zoom     = 2;
 
     // Initialize game
-    game_state := GameState.{
-
-    };
-
-    tile_id_to_move_count_remaining : Table(s32, s32);
-    tile_id_to_move_count_remaining.allocator = temp;
-    init(*tile_id_to_move_count_remaining);
-    defer deinit(*tile_id_to_move_count_remaining);
+    game_state := GameState.{};
 
     while !WindowShouldClose() {
         reset_temporary_storage();
-        table_reset(*tile_id_to_move_count_remaining);
 
         time := GetTime();
         dt   := GetFrameTime();
@@ -340,15 +332,18 @@ main :: () {
                 // Draw tiles
                 {
                     for tile: dirt_tiles {
-                        tint: Color;
-
                         DrawTexturePro(
                             tilemap_texture_general,
-                            Rectangle.{0, 0, TILEMAP_GENERAL_TILE_WIDTH, TILEMAP_GENERAL_TILE_HEIGHT},
+                            Rectangle.{
+                                1 * TILEMAP_GENERAL_TILE_WIDTH,
+                                1 * TILEMAP_GENERAL_TILE_HEIGHT,
+                                TILEMAP_GENERAL_TILE_WIDTH  - TILEMAP_GENERAL_TILE_PADDING,
+                                TILEMAP_GENERAL_TILE_HEIGHT - TILEMAP_GENERAL_TILE_PADDING,
+                            },
                             tile.rect,
                             Vector2.{ 0, 0 },
                             0.0,
-                            tint,
+                            WHITE,
                         );
 
                         if debug_mode {
@@ -365,8 +360,8 @@ main :: () {
             }
 
             // Draw debug
+            DrawFPS(10, 10);
             if debug_mode {
-                DrawFPS(10, 10);
             }
         }
     }
@@ -386,38 +381,6 @@ check_if_neighbor_can_be_to_moved_to :: (tile: *Tile, dx: float32, dy: float32) 
     if !neighbor_exists { return false, null; }
 
     return true, neighbor;
-}
-
-populate_moveable_tiles :: (entity: *Entity, tile_id_to_move_count_remaining: *Table) {
-    table_reset(tile_id_to_move_count_remaining);
-    starting_tile   := get_tile_by_pos(entity.pos);
-    moves_remaining := entity.tile_moves_per_turn_current - 1;
-    populate_moveable_tiles_step(starting_tile, moves_remaining, tile_id_to_move_count_remaining);
-}
-
-populate_moveable_tiles_step :: (tile: *Tile, moves_remaining: s32, tile_id_to_move_count_remaining: *Table) {
-    if moves_remaining < 0 return;
-
-    for TILE_DIRECTION_DELTAS {
-        neighbor_valid, neighbor := check_if_neighbor_can_be_to_moved_to(tile, it[0], it[1]);
-
-        if neighbor_valid {
-            neighbor_already_visited := table_contains(tile_id_to_move_count_remaining, neighbor.id);
-            
-            if !neighbor_already_visited {
-                table_set(tile_id_to_move_count_remaining, neighbor.id, moves_remaining);
-            }
-        }
-    }
-
-    moves_remaining -= 1;
-    
-    for TILE_DIRECTION_DELTAS {
-        found_next_tile, next_tile := check_if_neighbor_can_be_to_moved_to(tile, it[0], it[1]);
-        if !found_next_tile continue;
-
-        populate_moveable_tiles_step(next_tile, moves_remaining, tile_id_to_move_count_remaining);
-    }
 }
 
 try_to_move_to_tile :: (entity: *Entity, tile: Tile, tile_id_to_move_count_remaining: *Table) {
