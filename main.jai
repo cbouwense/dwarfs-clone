@@ -26,8 +26,8 @@ window_height := 800;
 CAMERA_MOVE_SPEED :: 4;
 CAMERA_ZOOM_SPEED :: 0.3;
 
-MAP_ROW_COUNT :: 1000;
-MAP_COL_COUNT :: 1000;
+// MAP_ROW_COUNT :: 1_000_000;
+// MAP_COL_COUNT :: 1_000_000;
 
 SCALE :: 1;
 
@@ -54,9 +54,16 @@ TILEMAP_GENERAL_WORLD_WIDTH  :: TILEMAP_GENERAL_TILE_WIDTH * SCALE;
 TILEMAP_GENERAL_WORLD_HEIGHT :: TILEMAP_GENERAL_TILE_HEIGHT * SCALE;
 
 tilemap_texture_general : Texture;
+dirt_texture            : Texture;
 
 init_textures :: () {
     tilemap_texture_general = LoadTexture("data/Tiles_0.png");
+    dirt_texture = LoadTexture("data/dirt.png");
+    // The plan is just to just render a big-ass quad and tile the dirt over it.
+    // At this point I'm not even sure why I'm insisting on doing it like this,
+    // I guess because I feel like it should be possible to zoom way the fuck
+    // out, but, yeah idk this might be stupid.
+    SetTextureWrap(dirt_texture, .TEXTURE_WRAP_REPEAT);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -180,9 +187,9 @@ main :: () {
     }
 
     // Initialize tiles
-    {
-        world_width  := 1000;
-        world_height := 1000;
+    #if false {
+        world_width  := 10_000;
+        world_height := 10_000;
         chunks_x     := (world_width / CHUNK_SIZE) + 1;
         chunks_y     := (world_height / CHUNK_SIZE) + 1;
         total_chunks := chunks_x * chunks_y;
@@ -238,7 +245,7 @@ main :: () {
             // Update camera
             {
                 CAMERA_ZOOM_INCREMENT :: 0.2;
-                CAMERA_ZOOM_MIN :: 0.1;
+                CAMERA_ZOOM_MIN :: 0.001;
                 CAMERA_ZOOM_MAX :: 13.0;
 
                 if move_camera_up    camera.target.y -= CAMERA_MOVE_SPEED;
@@ -281,10 +288,29 @@ main :: () {
                 BeginMode2D(camera);
                 defer EndMode2D();
 
-                for chunks {
-                    // TODO: Simple Culling
-                    DrawModel(it.model, Vector3.{ it.position.x, it.position.y, 0.0 }, 1.0, WHITE);
-                }
+                source := Rectangle.{ 
+                    0, 
+                    0, 
+                    dirt_texture.width * 10000.0,  // Repeat 10,000 times horizontally
+                    dirt_texture.height * 10000.0  // Repeat 10,000 times vertically
+                };
+
+                // destRec: Where to draw it in the world (The giant area)
+                dest := Rectangle.{ 
+                    0, 
+                    0, 
+                    dirt_texture.width * 10000.0, 
+                    dirt_texture.height * 10000.0 
+                };
+                
+                // Draw base layer of dirt
+                DrawTexturePro(dirt_texture, source, dest, Vector2.{0,0}, 0.0, WHITE);
+
+                // Draw tiles (chunks)
+                // for chunks {
+                //     // TODO: Simple Culling
+                //     DrawModel(it.model, Vector3.{ it.position.x, it.position.y, 0.0 }, 1.0, WHITE);
+                // }
 
                 // Draw tiles (old)
                 // {
@@ -385,15 +411,24 @@ create_chunk :: (chunk_x: int, chunk_y: int, texture: Texture2D) -> Chunk {
 
             // --- TEXCOORDS (2 floats per vertex: u, v) ---
 
-            u_tile_len : float32 = (cast(float) (TILEMAP_GENERAL_TILE_WIDTH - TILEMAP_GENERAL_TILE_PADDING)  )/ TILEMAP_GENERAL_MAP_WIDTH;
-            v_tile_len : float32 = (cast(float) (TILEMAP_GENERAL_TILE_HEIGHT - TILEMAP_GENERAL_TILE_PADDING) )/ TILEMAP_GENERAL_MAP_HEIGHT;
+            u_tile_len_excluding_padding : float32 = (cast(float) (TILEMAP_GENERAL_TILE_WIDTH  - TILEMAP_GENERAL_TILE_PADDING)) / TILEMAP_GENERAL_MAP_WIDTH;
+            v_tile_len_excluding_padding : float32 = (cast(float) (TILEMAP_GENERAL_TILE_HEIGHT - TILEMAP_GENERAL_TILE_PADDING)) / TILEMAP_GENERAL_MAP_HEIGHT;
+            u_tile_len_including_padding : float32 = (cast(float) (TILEMAP_GENERAL_TILE_WIDTH))  / TILEMAP_GENERAL_MAP_WIDTH;
+            v_tile_len_including_padding : float32 = (cast(float) (TILEMAP_GENERAL_TILE_HEIGHT)) / TILEMAP_GENERAL_MAP_HEIGHT;
 
-            // print_vars(u_tile_len, v_tile_len);
+            // The scalar before the including_padding variant can be thought of as the zero-indexed placement of the tile in the tilemap.
+            chunk.mesh.texcoords[v_counter * 2 + 0] = 0 * u_tile_len_including_padding + u_tile_len_excluding_padding;
+            chunk.mesh.texcoords[v_counter * 2 + 1] = 0 * v_tile_len_including_padding + v_tile_len_excluding_padding;
+            
+            chunk.mesh.texcoords[v_counter * 2 + 2] = 0 * u_tile_len_including_padding + u_tile_len_excluding_padding;
+            chunk.mesh.texcoords[v_counter * 2 + 3] = 1 * v_tile_len_including_padding + v_tile_len_excluding_padding;
+            
+            chunk.mesh.texcoords[v_counter * 2 + 4] = 1 * u_tile_len_including_padding + u_tile_len_excluding_padding;
+            chunk.mesh.texcoords[v_counter * 2 + 5] = 1 * v_tile_len_including_padding + v_tile_len_excluding_padding;
+            
+            chunk.mesh.texcoords[v_counter * 2 + 6] = 1 * u_tile_len_including_padding + u_tile_len_excluding_padding;
+            chunk.mesh.texcoords[v_counter * 2 + 7] = 0 * v_tile_len_including_padding + v_tile_len_excluding_padding;
 
-            chunk.mesh.texcoords[v_counter * 2 + 0] = 1 * u_tile_len; chunk.mesh.texcoords[v_counter * 2 + 1] = 1 * v_tile_len;
-            chunk.mesh.texcoords[v_counter * 2 + 2] = 1 * u_tile_len; chunk.mesh.texcoords[v_counter * 2 + 3] = 2 * v_tile_len;
-            chunk.mesh.texcoords[v_counter * 2 + 4] = 2 * u_tile_len; chunk.mesh.texcoords[v_counter * 2 + 5] = 2 * v_tile_len;
-            chunk.mesh.texcoords[v_counter * 2 + 6] = 2 * u_tile_len; chunk.mesh.texcoords[v_counter * 2 + 7] = 1 * v_tile_len;
 
             // --- INDICES (Linking vertices to make triangles) ---
             // Triangle 1 (Top-Left, Bottom-Left, Bottom-Right)
