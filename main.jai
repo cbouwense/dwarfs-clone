@@ -321,6 +321,14 @@ main :: () {
                         );
                     }
                 }
+
+                // Draw hovered tile
+                {
+                    world_width  := WORLD_COLS * TILEMAP_GENERAL_WORLD_WIDTH;
+                    world_height := WORLD_ROWS * TILEMAP_GENERAL_WORLD_HEIGHT;
+                    hovered_tile_rect := get_tile_mouse_is_hovering_over(world_width, world_height, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
+                    DrawRectangleRec(hovered_tile_rect, TRANSPARENT_WHITE);
+                }
             }
 
             // Draw debug
@@ -360,6 +368,17 @@ derive_active_entities :: (camera: Camera2D, mined_tile_ids_active: *[..] s32, m
 // TODO: maybe have this accept anything with a rect field on it?
 pos :: (tile: Tile) -> Vector2 {
     return Vector2.{ tile.rect.x, tile.rect.y };
+}
+
+get_tile_mouse_is_hovering_over :: (world_width: int, world_height: int, tile_width: int, tile_height: int, mouse_pos_in_world: Vector2) -> Rectangle {
+    grid_col := cast(int)(mouse_pos_in_world.x / tile_width);
+    grid_row := cast(int)(mouse_pos_in_world.y / tile_height);
+
+    // Calculate the top-left pixel position of that specific tile
+    tile_x := grid_col * tile_width;
+    tile_y := grid_row * tile_height;
+
+    return Rectangle.{ xx tile_x, xx tile_y, xx tile_width, xx tile_height };
 }
 
 check_if_neighbor_can_be_to_moved_to :: (tile: *Tile, dx: float32, dy: float32) -> (is_valid: bool, neighbor: *Tile) {
