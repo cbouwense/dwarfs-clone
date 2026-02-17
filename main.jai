@@ -4,6 +4,7 @@
 #import "Math";
 #import "Print_Vars";
 #import "Random";
+#import "Sloppy_Math";
 #import "Sort";
 #import "String";
 #import "System";
@@ -151,8 +152,17 @@ Tile :: struct {
     rect : Rectangle;
 }
 
+DwarfState :: enum {
+    MOVING;
+    MINING;
+}
+
 Dwarf :: struct {
-    rect : Rectangle;
+    rect             : Rectangle;
+    state            : DwarfState;
+    velocity         : Vector2;
+    target_tile_id   : s32;
+    tile_ids_on_path : [] s32;
 }
 
 data_folder: string;
@@ -168,12 +178,15 @@ WORLD_ROWS :: 10000;
 // This means that to get the position of a tile you just have to do some math,
 // which also means that we don't need to store that anywhere. Check out
 // get_tile_pos_by_id.
-mined_tile_ids : [..] s32;
+mined_tile_ids          : [..] s32;
+mined_tile_ids_set      : Table(s32, Any); // for fast lookups
 mined_tile_ids_viewable : [..] s32;
-bases : [..] Base;
+bases          : [..] Base;
 bases_viewable : [..] Base;
-dwarves : [..] Dwarf;
-dwarves_viewable : [..] Dwarf;
+dwarves          : [..] *Dwarf;
+dwarves_viewable : [..] *Dwarf;
+
+edges : [..] Edge; // List of edges between tiles for pathfinding
 
 main :: () {
     random_seed(123456789);
@@ -242,7 +255,7 @@ main :: () {
             ok, neighbor_id := get_tile_id_by_pos(neighbor_pos);
             assert(ok);
 
-            array_add(*mined_tile_ids, neighbor_id);
+            set_tile_as_mined(*mined_tile_ids, *mined_tile_ids_set, neighbor_id);
         }
 
         print_vars(mined_tile_ids);
@@ -263,6 +276,8 @@ main :: () {
             TILEMAP_GENERAL_WORLD_WIDTH,
             TILEMAP_GENERAL_WORLD_HEIGHT
         };
+        first_dwarf.velocity = Vector2.{ 0, 0 };
+        first_dwarf.state = .MOVING;
 
         array_add(*dwarves, first_dwarf);
     }
@@ -275,6 +290,7 @@ main :: () {
     camera.zoom     = 2;
 
     while !WindowShouldClose() {
+        print_vars(edges);
         reset_temporary_storage();
 
         time := GetTime();
@@ -345,9 +361,42 @@ main :: () {
                 camera.offset = Vector2.{ GetScreenWidth() / 2.0, GetScreenHeight() / 2.0 };
             }
 
-            // Update tiles
+            // Update dwarves
             {
+                for dwarf: dwarves {
+                    if #complete dwarf.state == {
+                        case .MOVING;
+                            target_tile_pos := get_tile_pos_by_id(dwarf.target_tile_id);
 
+                            dwarf_reached_target := values_are_close(
+                                get_pos_from_thing_with_rect(dwarf),
+                                target_tile_pos
+                            );
+
+                            if dwarf_reached_target {
+                                // Find a new target by picking a random cardinal direction 1 tile away
+                                direction_index := cast(int) random_get_within_range(0, 3);
+                                dx := TILE_DIRECTION_DELTAS[direction_index][0];
+                                dy := TILE_DIRECTION_DELTAS[direction_index][1];
+
+                                new_target_tile_pos := Vector2.{
+                                    target_tile_pos.x + dx,
+                                    target_tile_pos.y + dy,
+                                };
+
+                                ok, new_target_tile_id := get_tile_id_by_pos(new_target_tile_pos);
+                                assert(ok);
+                                dwarf.target_tile_id = new_target_tile_id;
+                            } else {
+                                // Continue on to the target
+
+                            }
+
+                        case .MINING;
+
+
+                    }
+                }
             }
         }
 
@@ -446,11 +495,40 @@ main :: () {
     }
 }
 
+set_tile_as_mined :: (mined_tile_ids: *[..] s32, mined_tile_ids_set : *Table, tile_id: s32) {
+    array_add(mined_tile_ids, tile_id);
+    table_add(mined_tile_ids_set, tile_id, 0); // 0 is just a throwaway value since Sets don't need values.
+
+    dx, dy : float;
+    tile_pos := get_tile_pos_by_id(tile_id);
+
+    for i: 0..4 {
+        dx = TILE_DIRECTION_DELTAS[i][0];
+        dy = TILE_DIRECTION_DELTAS[i][1];
+        neighbor_pos := Vector2.{ tile_pos.x + dx, tile_pos.y + dy };
+        neighbor_exists, neighbor_id := get_tile_id_by_pos(neighbor_pos);
+        assert(neighbor_exists); // TODO: I think this will fail for tiles on the edge... sorry future me
+
+        neighbor_is_mined := table_contains(mined_tile_ids_set, neighbor_id);
+
+        if neighbor_is_mined {
+            array_add(*edges, Edge.{ from = tile_id, to = neighbor_id, distance = 1 });
+        }
+    }
+}
+
+things_with_rects_are_at_the_same_pos :: (rect_enjoyer1: $T/interface HasRect, rect_enjoyer2: T) -> bool {
+    return (
+        values_are_close(rect_enjoyer1.rect.x, rect_enjoyer2.rect.x) &&
+        values_are_close(rect_enjoyer1.rect.y, rect_enjoyer2.rect.y)
+    );
+}
+
 derive_viewable_entities :: (
     camera: Camera2D,
     mined_tile_ids: [..] s32, mined_tile_ids_viewable: *[..] s32, 
     bases: [..] Base,         bases_viewable: *[..] Base,
-    dwarves: [..] Dwarf,      dwarves_viewable: *[..] Dwarf
+    dwarves: [..] *Dwarf,     dwarves_viewable: *[..] *Dwarf
 ) {
     window_start := GetScreenToWorld2D(Vector2.{ 0, 0 }, camera);
     window_end   := GetScreenToWorld2D(Vector2.{ cast(float) GetScreenWidth(), cast(float) GetScreenHeight()}, camera);

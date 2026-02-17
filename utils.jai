@@ -143,3 +143,7 @@ table_print :: (table: Table, table_name: string = "") {
 
     print("}\n");
 }
+
+// values_are_close :: (a: Vector2, b: Vector2, epsilon := EPSILON) -> bool {
+//     return values_are_close(a.x, b.x, epsilon) && values_are_close(a.y, b.y, epsilon);
+// }
