@@ -194,7 +194,8 @@ main :: () {
     // Initialize controls
     controls: Controls;
     {
-        controls.drag_cam[0]          = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_RIGHT };
+        controls.drag_cam[0]          = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_RIGHT  };
+        controls.drag_cam[1]          = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_MIDDLE };
 
         controls.move_camera_up[0]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_UP    };
         controls.move_camera_up[1]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_W     };
@@ -223,6 +224,21 @@ main :: () {
         };
 
         array_add(*bases, home_base);
+
+        // Carve out some tiles around the base
+        for TILE_DIRECTION_DELTAS {
+            dx := it[0];
+            dy := it[1];
+
+            home_base_pos := get_pos_from_thing_with_rect(home_base);
+            neighbor_pos := Vector2.{ home_base_pos.x + dx, home_base_pos.y + dy };
+            ok, neighbor_id := get_tile_id_by_pos(neighbor_pos);
+            assert(ok);
+
+            array_add(*mined_tile_ids, neighbor_id);
+        }
+
+        print_vars(mined_tile_ids);
     }
 
     // Initialize camera
@@ -300,7 +316,6 @@ main :: () {
                 camera.zoom = clamp(camera.zoom, CAMERA_ZOOM_MIN, CAMERA_ZOOM_MAX);
 
                 camera.offset = Vector2.{ GetScreenWidth() / 2.0, GetScreenHeight() / 2.0 };
-                // camera.target = new_camera_target;
             }
 
             // Update tiles
@@ -495,6 +510,18 @@ get_tile_pos_by_id :: (id: s32) -> Vector2 {
     pixel_y := cast(float32) grid_y * TILEMAP_GENERAL_WORLD_HEIGHT;
 
     return Vector2.{ pixel_x, pixel_y };
+}
+
+get_tile_id_by_pos :: (pos: Vector2) -> (ok: bool, id: s32) {
+    grid_x := cast(s32) (pos.x / TILEMAP_GENERAL_WORLD_WIDTH);
+    grid_y := cast(s32) (pos.y / TILEMAP_GENERAL_WORLD_HEIGHT);
+
+    if grid_x < 0 || grid_x >= WORLD_COLS { return false, 0; }
+    if grid_y < 0 || grid_y >= WORLD_ROWS { return false, 0; }
+
+    index := (grid_y * WORLD_COLS) + grid_x;
+
+    return true, index + 1;
 }
 
 find_tile_by_pos :: (pos: Vector2) -> (tile_exists: bool, tile: *Tile) {
