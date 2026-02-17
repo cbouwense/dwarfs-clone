@@ -138,6 +138,7 @@ Entity :: struct {
     texture_map_source_pos : Vector2;
 }
 
+// This is the interface thing
 HasRect :: struct {
     rect : Rectangle;
 }
@@ -147,6 +148,10 @@ Base :: struct {
 }
 
 Tile :: struct {
+    rect : Rectangle;
+}
+
+Dwarf :: struct {
     rect : Rectangle;
 }
 
@@ -167,6 +172,8 @@ mined_tile_ids : [..] s32;
 mined_tile_ids_viewable : [..] s32;
 bases : [..] Base;
 bases_viewable : [..] Base;
+dwarves : [..] Dwarf;
+dwarves_viewable : [..] Dwarf;
 
 main :: () {
     random_seed(123456789);
@@ -241,6 +248,25 @@ main :: () {
         print_vars(mined_tile_ids);
     }
 
+    // Initialize dwarves
+    {
+        first_dwarf := New(Dwarf);
+
+        // Figure out where to spawn it based off of the home base
+        dx := TILE_DIRECTION_DELTAS[0][0];
+        dy := TILE_DIRECTION_DELTAS[0][1];
+        home_base_pos := get_pos_from_thing_with_rect(bases[0]);
+        neighbor_pos  := Vector2.{ home_base_pos.x + dx, home_base_pos.y + dy };
+
+        first_dwarf.rect = Rectangle.{
+            neighbor_pos.x, neighbor_pos.y,
+            TILEMAP_GENERAL_WORLD_WIDTH,
+            TILEMAP_GENERAL_WORLD_HEIGHT
+        };
+
+        array_add(*dwarves, first_dwarf);
+    }
+
     // Initialize camera
     camera: Camera2D;
     camera.target   = get_pos_from_thing_with_rect(bases[0]);
@@ -278,7 +304,8 @@ main :: () {
         derive_viewable_entities(
             camera,
             mined_tile_ids, *mined_tile_ids_viewable,
-            bases,          *bases_viewable
+            bases,          *bases_viewable,
+            dwarves,        *dwarves_viewable
         );
 
         //
@@ -392,6 +419,22 @@ main :: () {
                     hovered_tile_rect := get_tile_mouse_is_hovering_over(world_width, world_height, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
                     DrawRectangleRec(hovered_tile_rect, TRANSPARENT_WHITE);
                 }
+
+                // Draw dwarves
+                {
+                    for dwarf: dwarves_viewable {
+                        source := Rectangle.{
+                            1 * TILEMAP_GENERAL_TILE_WIDTH,
+                            0 * TILEMAP_GENERAL_TILE_HEIGHT,
+                            TILEMAP_GENERAL_TILE_WIDTH  - TILEMAP_GENERAL_TILE_PADDING,
+                            TILEMAP_GENERAL_TILE_HEIGHT - TILEMAP_GENERAL_TILE_PADDING,
+                        };
+
+                        dest := dwarf.rect;
+
+                        DrawTexturePro(tilemap_texture_general, source, dest, Vector2.{0,0}, 0.0, WHITE);
+                    }
+                }
             }
 
             // Draw debug
@@ -406,13 +449,15 @@ main :: () {
 derive_viewable_entities :: (
     camera: Camera2D,
     mined_tile_ids: [..] s32, mined_tile_ids_viewable: *[..] s32, 
-    bases: [..] Base,         bases_viewable: *[..] Base
+    bases: [..] Base,         bases_viewable: *[..] Base,
+    dwarves: [..] Dwarf,      dwarves_viewable: *[..] Dwarf
 ) {
     window_start := GetScreenToWorld2D(Vector2.{ 0, 0 }, camera);
     window_end   := GetScreenToWorld2D(Vector2.{ cast(float) GetScreenWidth(), cast(float) GetScreenHeight()}, camera);
 
     array_reset(mined_tile_ids_viewable);
     array_reset(bases_viewable);
+    array_reset(dwarves_viewable);
     
     // Derive viewable tiles
     // NOTE: The order in which tiles are added to viewable_tiles matters!
@@ -448,11 +493,32 @@ derive_viewable_entities :: (
         }
     }
 
-    // print_vars(mined_tile_ids_viewable.*, bases_viewable.*);
+    // Derive viewable bases
+    {
+        for dwarf: dwarves {
+            pos := get_pos_from_thing_with_rect(dwarf);
+
+            if pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x continue;
+            if pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x continue;
+            
+            if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y continue;
+            if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+
+            array_add(dwarves_viewable, dwarf);
+            // array_add(collidable_blocks, block);
+        }
+    }
+
+    print_vars(mined_tile_ids_viewable.*, bases_viewable.*, dwarves_viewable.*);
 }
 
-get_pos_from_thing_with_rect :: (x: $T/interface HasRect) -> Vector2 {
-    return Vector2.{ x.rect.x, x.rect.y };
+get_pos_from_thing_with_rect :: (rect_enjoyer: $T/interface HasRect) -> Vector2 {
+    return Vector2.{ rect_enjoyer.rect.x, rect_enjoyer.rect.y };
+}
+
+set_pos_of_thing_with_rect :: (rect_enjoyer: *$T/interface HasRect, x: float, y: float) {
+    rect_enjoyer.rect.x = x;
+    rect_enjoyer.rect.y = y;
 }
 
 get_tile_mouse_is_hovering_over :: (world_width: int, world_height: int, tile_width: int, tile_height: int, mouse_pos_in_world: Vector2) -> Rectangle {
