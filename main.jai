@@ -23,7 +23,7 @@ window_height := 800;
 // Constants
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-CAMERA_MOVE_SPEED :: 4;
+CAMERA_MOVE_SPEED_BASE :: 4;
 CAMERA_ZOOM_SPEED :: 0.3;
 
 // MAP_ROW_COUNT :: 1_000_000;
@@ -45,8 +45,8 @@ debug_mode       := false;
 // Textures
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-TILEMAP_GENERAL_MAP_WIDTH    :: 288;
-TILEMAP_GENERAL_MAP_HEIGHT   :: 270;
+TILEMAP_GENERAL_MAP_WIDTH    :: 320;
+TILEMAP_GENERAL_MAP_HEIGHT   :: 320;
 TILEMAP_GENERAL_TILE_WIDTH   :: 18;
 TILEMAP_GENERAL_TILE_HEIGHT  :: 18;
 TILEMAP_GENERAL_TILE_PADDING :: 2;
@@ -57,7 +57,7 @@ tilemap_texture_general : Texture;
 dirt_texture            : Texture;
 
 init_textures :: () {
-    tilemap_texture_general = LoadTexture("data/Tiles_0.png");
+    tilemap_texture_general = LoadTexture("data/tilemap-general.png");
     dirt_texture = LoadTexture("data/dirt.png");
     // The plan is just to just render a big-ass quad and tile the dirt over it.
     // At this point I'm not even sure why I'm insisting on doing it like this,
@@ -78,7 +78,8 @@ init_sprites :: () {
 // Controls
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-drag_cam          : bool;
+drag_cam_pressed  : bool;
+drag_cam_down     : bool;
 move_camera_up    : bool;
 move_camera_down  : bool;
 move_camera_left  : bool;
@@ -96,6 +97,8 @@ global_tile_id_to_tile      : Table(s32, *Tile);
 // TODO: maybe...
 // global_tile_id_to_entity    : Table(s32, *Entity);
 global_tile_id_to_neighbors : Table(s32, *[..] *Tile);
+
+mouse_drag_began_at_pos : Vector2;
 
 GameState :: struct {
 }
@@ -135,6 +138,14 @@ Entity :: struct {
     texture_map_source_pos : Vector2;
 }
 
+HasRect :: struct {
+    rect : Rectangle;
+}
+
+Base :: struct {
+    rect : Rectangle;
+}
+
 Tile :: struct {
     rect : Rectangle;
 }
@@ -153,7 +164,9 @@ WORLD_ROWS :: 10000;
 // which also means that we don't need to store that anywhere. Check out
 // get_tile_pos_by_id.
 mined_tile_ids : [..] s32;
-mined_tile_ids_active : [..] s32;
+mined_tile_ids_viewable : [..] s32;
+bases : [..] Base;
+bases_viewable : [..] Base;
 
 main :: () {
     random_seed(123456789);
@@ -196,20 +209,28 @@ main :: () {
         controls.move_camera_right[1] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_D     };
     }
 
-    array_add(*mined_tile_ids, 1);
-    array_add(*mined_tile_ids, 7);
-    array_add(*mined_tile_ids, 3);
-    array_add(*mined_tile_ids, 8);
+    // Initialize game
+    game_state := GameState.{};
+
+    // Initialize base
+    {
+        home_base := New(Base);
+        home_base.rect = Rectangle.{
+            WORLD_COLS * TILEMAP_GENERAL_WORLD_WIDTH  / 2,
+            WORLD_ROWS * TILEMAP_GENERAL_WORLD_HEIGHT / 2,
+            TILEMAP_GENERAL_WORLD_WIDTH,
+            TILEMAP_GENERAL_WORLD_HEIGHT,
+        };
+
+        array_add(*bases, home_base);
+    }
 
     // Initialize camera
     camera: Camera2D;
-    camera.target   = Vector2.{ 200, 180 };
+    camera.target   = get_pos_from_thing_with_rect(bases[0]);
     camera.offset   = Vector2.{ 800, 450 };
     camera.rotation = 0.0;
     camera.zoom     = 2;
-
-    // Initialize game
-    game_state := GameState.{};
 
     while !WindowShouldClose() {
         reset_temporary_storage();
@@ -230,14 +251,19 @@ main :: () {
             if IsKeyPressed(.KEY_G) debug_mode = !debug_mode;
 
             // Game controls
-            drag_cam          = control_is_down(controls.drag_cam);
+            drag_cam_pressed  = control_is_pressed(controls.drag_cam);
+            drag_cam_down     = control_is_down(controls.drag_cam);
             move_camera_up    = control_is_down(controls.move_camera_up);
             move_camera_down  = control_is_down(controls.move_camera_down);
             move_camera_left  = control_is_down(controls.move_camera_left);
             move_camera_right = control_is_down(controls.move_camera_right);
         }
 
-        derive_active_entities(camera, *mined_tile_ids_active, mined_tile_ids);
+        derive_viewable_entities(
+            camera,
+            mined_tile_ids, *mined_tile_ids_viewable,
+            bases,          *bases_viewable
+        );
 
         //
         // Update
@@ -249,24 +275,32 @@ main :: () {
                 CAMERA_ZOOM_MIN :: 0.001;
                 CAMERA_ZOOM_MAX :: 13.0;
 
-                if move_camera_up    camera.target.y -= CAMERA_MOVE_SPEED;
-                if move_camera_down  camera.target.y += CAMERA_MOVE_SPEED;
-                if move_camera_left  camera.target.x -= CAMERA_MOVE_SPEED;
-                if move_camera_right camera.target.x += CAMERA_MOVE_SPEED;
+
+                if move_camera_up    camera.target.y -= CAMERA_MOVE_SPEED_BASE;
+                if move_camera_down  camera.target.y += CAMERA_MOVE_SPEED_BASE;
+                if move_camera_left  camera.target.x -= CAMERA_MOVE_SPEED_BASE;
+                if move_camera_right camera.target.x += CAMERA_MOVE_SPEED_BASE;
 
                 camera.offset = Vector2.{ GetScreenWidth() / 2.0, GetScreenHeight() / 2.0 };
 
-                new_camera_target := camera.target;
+                camera_move_speed := CAMERA_MOVE_SPEED_BASE / 2 * camera.zoom;
+                if drag_cam_pressed {
+                    mouse_drag_began_at_pos = mouse_pos_in_world;
+                }
 
-                if drag_cam {
-                    new_camera_target = Vector2Add(new_camera_target, Vector2Scale(GetMouseDelta(), -1.0 * CAMERA_MOVE_SPEED));
+                if drag_cam_down {
+                    world_delta := Vector2Subtract(mouse_drag_began_at_pos, mouse_pos_in_world);
+                    
+                    // Apply that difference to the camera target.
+                    // This effectively "pulls" the world back so the mouse stays where it began.
+                    camera.target = Vector2Add(camera.target, world_delta);
                 }
 
                 camera.zoom += mouse_wheel_move * CAMERA_ZOOM_INCREMENT;
                 camera.zoom = clamp(camera.zoom, CAMERA_ZOOM_MIN, CAMERA_ZOOM_MAX);
 
                 camera.offset = Vector2.{ GetScreenWidth() / 2.0, GetScreenHeight() / 2.0 };
-                camera.target = new_camera_target;
+                // camera.target = new_camera_target;
             }
 
             // Update tiles
@@ -312,13 +346,27 @@ main :: () {
 
                 // Then draw any mined tiles over the base layer
                 {
-                    print_vars(mined_tile_ids_active);
-                    for mined_tile_ids_active {
+                    for mined_tile_ids_viewable {
                         DrawRectangleV(
                             get_tile_pos_by_id(it),
                             Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
                             BEIGE,
                         );
+                    }
+                }
+
+                // Draw bases
+                {
+                    for base: bases_viewable {
+                        source := Rectangle.{
+                            0, 0,
+                            TILEMAP_GENERAL_TILE_WIDTH  - TILEMAP_GENERAL_TILE_PADDING,
+                            TILEMAP_GENERAL_TILE_HEIGHT - TILEMAP_GENERAL_TILE_PADDING,
+                        };
+
+                        dest := base.rect;
+
+                        DrawTexturePro(tilemap_texture_general, source, dest, Vector2.{0,0}, 0.0, WHITE);
                     }
                 }
 
@@ -340,14 +388,19 @@ main :: () {
     }
 }
 
-derive_active_entities :: (camera: Camera2D, mined_tile_ids_active: *[..] s32, mined_tile_ids: [..] s32) {
+derive_viewable_entities :: (
+    camera: Camera2D,
+    mined_tile_ids: [..] s32, mined_tile_ids_viewable: *[..] s32, 
+    bases: [..] Base,         bases_viewable: *[..] Base
+) {
     window_start := GetScreenToWorld2D(Vector2.{ 0, 0 }, camera);
     window_end   := GetScreenToWorld2D(Vector2.{ cast(float) GetScreenWidth(), cast(float) GetScreenHeight()}, camera);
 
-    array_reset(mined_tile_ids_active);
+    array_reset(mined_tile_ids_viewable);
+    array_reset(bases_viewable);
     
-    // Derive active tiles
-    // NOTE: The order in which tiles are added to active_tiles matters!
+    // Derive viewable tiles
+    // NOTE: The order in which tiles are added to viewable_tiles matters!
     // The first will be furthest away in the z ordering.
     {
         for tile_id: mined_tile_ids {
@@ -359,15 +412,32 @@ derive_active_entities :: (camera: Camera2D, mined_tile_ids_active: *[..] s32, m
             if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y continue;
             if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-            array_add(mined_tile_ids_active, tile_id);
+            array_add(mined_tile_ids_viewable, tile_id);
             // array_add(collidable_blocks, block);
         }
     }
+
+    // Derive viewable bases
+    {
+        for base: bases {
+            pos := get_pos_from_thing_with_rect(base);
+
+            if pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x continue;
+            if pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x continue;
+            
+            if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y continue;
+            if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+
+            array_add(bases_viewable, base);
+            // array_add(collidable_blocks, block);
+        }
+    }
+
+    // print_vars(mined_tile_ids_viewable.*, bases_viewable.*);
 }
 
-// TODO: maybe have this accept anything with a rect field on it?
-pos :: (tile: Tile) -> Vector2 {
-    return Vector2.{ tile.rect.x, tile.rect.y };
+get_pos_from_thing_with_rect :: (x: $T/interface HasRect) -> Vector2 {
+    return Vector2.{ x.rect.x, x.rect.y };
 }
 
 get_tile_mouse_is_hovering_over :: (world_width: int, world_height: int, tile_width: int, tile_height: int, mouse_pos_in_world: Vector2) -> Rectangle {
@@ -382,7 +452,7 @@ get_tile_mouse_is_hovering_over :: (world_width: int, world_height: int, tile_wi
 }
 
 check_if_neighbor_can_be_to_moved_to :: (tile: *Tile, dx: float32, dy: float32) -> (is_valid: bool, neighbor: *Tile) {
-    neighbor_pos := Vector2.{ pos(tile).x + dx, pos(tile).y + dy };
+    neighbor_pos := Vector2.{ get_pos_from_thing_with_rect(tile).x + dx, get_pos_from_thing_with_rect(tile).y + dy };
 
     // First get a pointer to the thing if it exists
     neighbor_exists, neighbor := table_find(*global_tile_pos_to_tile, vector2_to_string_temp(neighbor_pos));
@@ -398,7 +468,7 @@ try_to_move_to_tile :: (entity: *Entity, tile: Tile, tile_id_to_move_count_remai
     starting_tile := get_tile_by_pos(entity.pos);
     has_entry, move_count_remaining := table_find(tile_id_to_move_count_remaining, tile.id);
 
-    // Check if this tile is even within the active entity's range
+    // Check if this tile is even within the viewable entity's range
     if has_entry {
         // Change tile before movement back to default
         starting_tile.tile_state = .DEFAULT; // TODO: terrible
@@ -412,7 +482,7 @@ try_to_move_to_tile :: (entity: *Entity, tile: Tile, tile_id_to_move_count_remai
 }
 
 is_entity_on_tile :: (entity: Entity, tile: Tile) -> bool {
-    return entity.pos.x == pos(tile).x && entity.pos.y == pos(tile).y;
+    return entity.pos.x == get_pos_from_thing_with_rect(tile).x && entity.pos.y == get_pos_from_thing_with_rect(tile).y;
 }
 
 get_tile_pos_by_id :: (id: s32) -> Vector2 {
