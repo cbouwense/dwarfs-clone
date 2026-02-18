@@ -27,8 +27,20 @@ window_height := 800;
 CAMERA_MOVE_SPEED_BASE :: 4;
 CAMERA_ZOOM_SPEED :: 0.3;
 
-// MAP_ROW_COUNT :: 1_000_000;
-// MAP_COL_COUNT :: 1_000_000;
+DWARF_SPEED :: 12;
+
+TILEMAP_GENERAL_MAP_WIDTH    :: 320;
+TILEMAP_GENERAL_MAP_HEIGHT   :: 320;
+TILEMAP_GENERAL_TILE_WIDTH   :: 18;
+TILEMAP_GENERAL_TILE_HEIGHT  :: 18;
+TILEMAP_GENERAL_TILE_PADDING :: 2;
+TILEMAP_GENERAL_WORLD_WIDTH  :: TILEMAP_GENERAL_TILE_WIDTH * SCALE;
+TILEMAP_GENERAL_WORLD_HEIGHT :: TILEMAP_GENERAL_TILE_HEIGHT * SCALE;
+
+WORLD_COLS :: 10000;
+WORLD_ROWS :: 10000;
+WORLD_WIDTH  :: WORLD_COLS * TILEMAP_GENERAL_WORLD_WIDTH;
+WORLD_HEIGHT :: WORLD_ROWS * TILEMAP_GENERAL_WORLD_HEIGHT;
 
 SCALE :: 1;
 
@@ -45,14 +57,6 @@ debug_mode       := false;
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Textures
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-
-TILEMAP_GENERAL_MAP_WIDTH    :: 320;
-TILEMAP_GENERAL_MAP_HEIGHT   :: 320;
-TILEMAP_GENERAL_TILE_WIDTH   :: 18;
-TILEMAP_GENERAL_TILE_HEIGHT  :: 18;
-TILEMAP_GENERAL_TILE_PADDING :: 2;
-TILEMAP_GENERAL_WORLD_WIDTH  :: TILEMAP_GENERAL_TILE_WIDTH * SCALE;
-TILEMAP_GENERAL_WORLD_HEIGHT :: TILEMAP_GENERAL_TILE_HEIGHT * SCALE;
 
 tilemap_texture_general : Texture;
 dirt_texture            : Texture;
@@ -167,9 +171,6 @@ Dwarf :: struct {
 
 data_folder: string;
 
-WORLD_COLS :: 10000;
-WORLD_ROWS :: 10000;
-
 // Tile ID's will go row-wise, starting at 1 (zero means invalid or whatever)
 // so like
 // 1 2 3
@@ -258,7 +259,7 @@ main :: () {
             set_tile_as_mined(*mined_tile_ids, *mined_tile_ids_set, neighbor_id);
         }
 
-        print_vars(mined_tile_ids);
+        // print_vars(mined_tile_ids);
     }
 
     // Initialize dwarves
@@ -290,7 +291,7 @@ main :: () {
     camera.zoom     = 2;
 
     while !WindowShouldClose() {
-        print_vars(edges);
+        // print_vars(edges);
         reset_temporary_storage();
 
         time := GetTime();
@@ -315,6 +316,15 @@ main :: () {
             move_camera_down  = control_is_down(controls.move_camera_down);
             move_camera_left  = control_is_down(controls.move_camera_left);
             move_camera_right = control_is_down(controls.move_camera_right);
+
+            // TEMP: clicking to set new target tile for dwarf 0
+            if (IsMouseButtonPressed(.MOUSE_BUTTON_LEFT)) {
+                new_target_tile_rect := get_tile_rect_mouse_is_hovering_over(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
+                new_target_tile_pos := Vector2.{ new_target_tile_rect.x, new_target_tile_rect.y };
+                ok, new_target_tile_id := get_tile_id_by_pos(new_target_tile_pos);
+                assert(ok);
+                dwarves[0].target_tile_id = new_target_tile_id;
+            }
         }
 
         derive_viewable_entities(
@@ -364,6 +374,7 @@ main :: () {
             // Update dwarves
             {
                 for dwarf: dwarves {
+                    print_vars(dwarf.*);
                     if #complete dwarf.state == {
                         case .MOVING;
                             target_tile_pos := get_tile_pos_by_id(dwarf.target_tile_id);
@@ -388,8 +399,16 @@ main :: () {
                                 assert(ok);
                                 dwarf.target_tile_id = new_target_tile_id;
                             } else {
-                                // Continue on to the target
+                                // If the dwarf has not reached its target yetm, then simply continue on to the target
 
+                                // Calculate the position change that the dwarf can accomplish this frame
+                                current_pos := get_pos_from_thing_with_rect(dwarf);
+                                target_pos  := get_tile_pos_by_id(dwarf.target_tile_id);
+                                delta := Vector2Subtract(target_pos, current_pos);
+                                direction := Vector2Normalize(delta);
+                                movement_vector := Vector2Scale(direction, DWARF_SPEED * dt);
+                                new_pos := Vector2Add(current_pos, movement_vector);
+                                set_pos_of_thing_with_rect(dwarf, new_pos);
                             }
 
                         case .MINING;
@@ -463,9 +482,7 @@ main :: () {
 
                 // Draw hovered tile
                 {
-                    world_width  := WORLD_COLS * TILEMAP_GENERAL_WORLD_WIDTH;
-                    world_height := WORLD_ROWS * TILEMAP_GENERAL_WORLD_HEIGHT;
-                    hovered_tile_rect := get_tile_mouse_is_hovering_over(world_width, world_height, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
+                    hovered_tile_rect := get_tile_rect_mouse_is_hovering_over(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
                     DrawRectangleRec(hovered_tile_rect, TRANSPARENT_WHITE);
                 }
 
@@ -587,7 +604,7 @@ derive_viewable_entities :: (
         }
     }
 
-    print_vars(mined_tile_ids_viewable.*, bases_viewable.*, dwarves_viewable.*);
+    // print_vars(mined_tile_ids_viewable.*, bases_viewable.*, dwarves_viewable.*);
 }
 
 get_pos_from_thing_with_rect :: (rect_enjoyer: $T/interface HasRect) -> Vector2 {
@@ -599,7 +616,12 @@ set_pos_of_thing_with_rect :: (rect_enjoyer: *$T/interface HasRect, x: float, y:
     rect_enjoyer.rect.y = y;
 }
 
-get_tile_mouse_is_hovering_over :: (world_width: int, world_height: int, tile_width: int, tile_height: int, mouse_pos_in_world: Vector2) -> Rectangle {
+set_pos_of_thing_with_rect :: (rect_enjoyer: *$T/interface HasRect, pos: Vector2) {
+    rect_enjoyer.rect.x = pos.x;
+    rect_enjoyer.rect.y = pos.y;
+}
+
+get_tile_rect_mouse_is_hovering_over :: (world_width: int, world_height: int, tile_width: int, tile_height: int, mouse_pos_in_world: Vector2) -> Rectangle {
     grid_col := cast(int)(mouse_pos_in_world.x / tile_width);
     grid_row := cast(int)(mouse_pos_in_world.y / tile_height);
 
