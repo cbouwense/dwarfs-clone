@@ -27,7 +27,7 @@ window_height := 800;
 CAMERA_MOVE_SPEED_BASE :: 4;
 CAMERA_ZOOM_SPEED :: 0.3;
 
-DWARF_SPEED :: 12;
+DWARF_SPEED :: 15;
 
 TILEMAP_GENERAL_MAP_WIDTH    :: 320;
 TILEMAP_GENERAL_MAP_HEIGHT   :: 320;
@@ -165,7 +165,7 @@ Dwarf :: struct {
     rect             : Rectangle;
     state            : DwarfState;
     velocity         : Vector2;
-    target_tile_id   : s32;
+    // target_tile_id   : s32;
     tile_ids_on_path : [] s32;
 }
 
@@ -319,11 +319,16 @@ main :: () {
 
             // TEMP: clicking to set new target tile for dwarf 0
             if (IsMouseButtonPressed(.MOUSE_BUTTON_LEFT)) {
-                new_target_tile_rect := get_tile_rect_mouse_is_hovering_over(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
+                new_target_tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
                 new_target_tile_pos := Vector2.{ new_target_tile_rect.x, new_target_tile_rect.y };
                 ok, new_target_tile_id := get_tile_id_by_pos(new_target_tile_pos);
                 assert(ok);
-                dwarves[0].target_tile_id = new_target_tile_id;
+
+                tile_rect_that_dwarf_is_currently_on := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, get_pos_from_thing_with_rect(dwarves[0]));
+                okk, tile_id_dwarf_is_currently_on := get_tile_id_by_pos(get_rect_pos(tile_rect_that_dwarf_is_currently_on));
+                assert(okk);
+                
+                dwarves[0].tile_ids_on_path = dijkstra(tile_id_dwarf_is_currently_on, new_target_tile_id, edges);
             }
         }
 
@@ -374,41 +379,61 @@ main :: () {
             // Update dwarves
             {
                 for dwarf: dwarves {
-                    print_vars(dwarf.*);
+                    // print_vars(dwarf.tile_ids_on_path);
                     if #complete dwarf.state == {
                         case .MOVING;
-                            target_tile_pos := get_tile_pos_by_id(dwarf.target_tile_id);
+                            dwarf_has_target := dwarf.tile_ids_on_path.count > 0;
+                            if dwarf_has_target {
+                                target_tile_pos := get_tile_pos_by_id(dwarf.tile_ids_on_path[0]);
 
-                            dwarf_reached_target := values_are_close(
-                                get_pos_from_thing_with_rect(dwarf),
-                                target_tile_pos
-                            );
+                                dwarf_reached_target := values_are_close(
+                                    get_pos_from_thing_with_rect(dwarf),
+                                    target_tile_pos,
+                                    1
+                                );
 
-                            if dwarf_reached_target {
-                                // Find a new target by picking a random cardinal direction 1 tile away
-                                direction_index := cast(int) random_get_within_range(0, 3);
-                                dx := TILE_DIRECTION_DELTAS[direction_index][0];
-                                dy := TILE_DIRECTION_DELTAS[direction_index][1];
+                                if dwarf_reached_target {
+                                    set_pos_of_thing_with_rect(dwarf, target_tile_pos);
 
-                                new_target_tile_pos := Vector2.{
-                                    target_tile_pos.x + dx,
-                                    target_tile_pos.y + dy,
-                                };
+                                    // TODO: Can I do this?...
+                                    // dwarf.tile_ids_on_path.data += 1;
 
-                                ok, new_target_tile_id := get_tile_id_by_pos(new_target_tile_pos);
-                                assert(ok);
-                                dwarf.target_tile_id = new_target_tile_id;
-                            } else {
-                                // If the dwarf has not reached its target yetm, then simply continue on to the target
+                                    array_ordered_remove_by_index(*(dwarf.tile_ids_on_path), 0);
+                                    // print_vars(dwarf.tile_ids_on_path);
+                                    
+                                    // Find a new target by picking a random cardinal direction 1 tile away
+                                    // direction_index := cast(int) random_get_within_range(0, 3);
+                                    // dx := TILE_DIRECTION_DELTAS[direction_index][0];
+                                    // dy := TILE_DIRECTION_DELTAS[direction_index][1];
 
-                                // Calculate the position change that the dwarf can accomplish this frame
-                                current_pos := get_pos_from_thing_with_rect(dwarf);
-                                target_pos  := get_tile_pos_by_id(dwarf.target_tile_id);
-                                delta := Vector2Subtract(target_pos, current_pos);
-                                direction := Vector2Normalize(delta);
-                                movement_vector := Vector2Scale(direction, DWARF_SPEED * dt);
-                                new_pos := Vector2Add(current_pos, movement_vector);
-                                set_pos_of_thing_with_rect(dwarf, new_pos);
+                                    // new_target_tile_pos := Vector2.{
+                                    //     target_tile_pos.x + dx,
+                                    //     target_tile_pos.y + dy,
+                                    // };
+
+                                    // ok, new_target_tile_id := get_tile_id_by_pos(new_target_tile_pos);
+                                    // assert(ok);
+                                    // dwarf.target_tile_id = new_target_tile_id;
+                                } else {
+                                    // If the dwarf has not reached its target yetm, then simply continue on to the target
+
+                                    // Calculate the position change that the dwarf can accomplish this frame
+                                    current_pos := get_pos_from_thing_with_rect(dwarf);
+                                    target_pos  := get_tile_pos_by_id(dwarf.tile_ids_on_path[0]);
+                                    delta := Vector2Subtract(target_pos, current_pos);
+                                    direction := Vector2Normalize(delta);
+                                    movement_vector := Vector2Scale(direction, DWARF_SPEED * dt);
+                                    new_pos := Vector2Add(current_pos, movement_vector);
+                                    set_pos_of_thing_with_rect(dwarf, new_pos);
+
+                                    // TEMP: If the dwarf runs into dirt, just mine it for now
+                                    center_of_dwarf := get_rect_center(dwarf.rect);
+                                    tile_rect_dwarf_is_on := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, center_of_dwarf);
+                                    ok, tile_id_dwarf_is_on   := get_tile_id_by_pos(get_rect_pos(tile_rect_dwarf_is_on));
+                                    assert(ok);
+                                    assert(table_contains(*mined_tile_ids_set, tile_id_dwarf_is_on), "dwarf is in rock or something lol");
+                                    set_tile_as_mined(*mined_tile_ids, *mined_tile_ids_set, tile_id_dwarf_is_on);
+                                }
                             }
 
                         case .MINING;
@@ -482,8 +507,11 @@ main :: () {
 
                 // Draw hovered tile
                 {
-                    hovered_tile_rect := get_tile_rect_mouse_is_hovering_over(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
+                    hovered_tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
                     DrawRectangleRec(hovered_tile_rect, TRANSPARENT_WHITE);
+                    ok, tile_id := get_tile_id_by_pos(get_rect_pos(hovered_tile_rect));
+                    assert(ok);
+                    DrawText(tprint("%\0", tile_id).data, xx hovered_tile_rect.x, xx hovered_tile_rect.y, 12, WHITE);
                 }
 
                 // Draw dwarves
@@ -519,7 +547,7 @@ set_tile_as_mined :: (mined_tile_ids: *[..] s32, mined_tile_ids_set : *Table, ti
     dx, dy : float;
     tile_pos := get_tile_pos_by_id(tile_id);
 
-    for i: 0..4 {
+    for i: 0..3 {
         dx = TILE_DIRECTION_DELTAS[i][0];
         dy = TILE_DIRECTION_DELTAS[i][1];
         neighbor_pos := Vector2.{ tile_pos.x + dx, tile_pos.y + dy };
@@ -529,7 +557,9 @@ set_tile_as_mined :: (mined_tile_ids: *[..] s32, mined_tile_ids_set : *Table, ti
         neighbor_is_mined := table_contains(mined_tile_ids_set, neighbor_id);
 
         if neighbor_is_mined {
-            array_add(*edges, Edge.{ from = tile_id, to = neighbor_id, distance = 1 });
+            // TODO: this is pretty fucked up to add these edges both ways, I think
+            array_add(*edges, Edge.{ from = tile_id,     to = neighbor_id, distance = 1 });
+            array_add(*edges, Edge.{ from = neighbor_id, to = tile_id, distance = 1 });
         }
     }
 }
@@ -607,6 +637,10 @@ derive_viewable_entities :: (
     // print_vars(mined_tile_ids_viewable.*, bases_viewable.*, dwarves_viewable.*);
 }
 
+get_rect_center :: (rect: Rectangle) -> Vector2 {
+    return Vector2.{ rect.x + rect.width/2, rect.y + rect.height/2 };
+}
+
 get_pos_from_thing_with_rect :: (rect_enjoyer: $T/interface HasRect) -> Vector2 {
     return Vector2.{ rect_enjoyer.rect.x, rect_enjoyer.rect.y };
 }
@@ -621,7 +655,7 @@ set_pos_of_thing_with_rect :: (rect_enjoyer: *$T/interface HasRect, pos: Vector2
     rect_enjoyer.rect.y = pos.y;
 }
 
-get_tile_rect_mouse_is_hovering_over :: (world_width: int, world_height: int, tile_width: int, tile_height: int, mouse_pos_in_world: Vector2) -> Rectangle {
+get_tile_rect_that_pos_is_within :: (world_width: int, world_height: int, tile_width: int, tile_height: int, mouse_pos_in_world: Vector2) -> Rectangle {
     grid_col := cast(int)(mouse_pos_in_world.x / tile_width);
     grid_row := cast(int)(mouse_pos_in_world.y / tile_height);
 
@@ -699,6 +733,10 @@ get_tile_by_pos :: (pos: Vector2) -> *Tile {
     tile_exists, tile := table_find(*global_tile_pos_to_tile, vector2_to_string_temp(pos));
     assert(tile_exists);
     return tile;
+}
+
+get_rect_pos :: (rect: Rectangle) -> Vector2 {
+    return { rect.x, rect.y };
 }
 
 find_entity_on_tile_by_pos :: (tile_pos: Vector2, entities: []*Entity) -> (found: bool, entity: *Entity) {
