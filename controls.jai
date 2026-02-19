@@ -4,11 +4,12 @@ Control :: struct {
 }
 
 Controls :: struct {
-    drag_cam          : [3] Control;
-    move_camera_up    : [3] Control;
-    move_camera_down  : [3] Control;
-    move_camera_left  : [3] Control;
-    move_camera_right : [3] Control;
+    drag_to_create_path : [3] Control;
+    drag_cam            : [3] Control;
+    move_camera_up      : [3] Control;
+    move_camera_down    : [3] Control;
+    move_camera_left    : [3] Control;
+    move_camera_right   : [3] Control;
 }
 
 control_is_down :: (haystack: [] Control) -> bool {

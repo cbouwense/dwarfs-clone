@@ -27,7 +27,7 @@ window_height := 800;
 CAMERA_MOVE_SPEED_BASE :: 4;
 CAMERA_ZOOM_SPEED :: 0.3;
 
-DWARF_SPEED :: 15;
+DWARF_SPEED :: 15 * 3;
 
 TILEMAP_GENERAL_MAP_WIDTH    :: 320;
 TILEMAP_GENERAL_MAP_HEIGHT   :: 320;
@@ -83,12 +83,13 @@ init_sprites :: () {
 // Controls
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-drag_cam_pressed  : bool;
-drag_cam_down     : bool;
-move_camera_up    : bool;
-move_camera_down  : bool;
-move_camera_left  : bool;
-move_camera_right : bool;
+drag_to_create_path : bool;
+drag_cam_pressed    : bool;
+drag_cam_down       : bool;
+move_camera_up      : bool;
+move_camera_down    : bool;
+move_camera_left    : bool;
+move_camera_right   : bool;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Other
@@ -166,7 +167,7 @@ Dwarf :: struct {
     state            : DwarfState;
     velocity         : Vector2;
     // target_tile_id   : s32;
-    tile_ids_on_path : [] s32;
+    tile_ids_on_path : [..] s32;
 }
 
 data_folder: string;
@@ -215,20 +216,22 @@ main :: () {
     // Initialize controls
     controls: Controls;
     {
-        controls.drag_cam[0]          = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_RIGHT  };
-        controls.drag_cam[1]          = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_MIDDLE };
+        controls.drag_to_create_path[0] = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_LEFT  };
 
-        controls.move_camera_up[0]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_UP    };
-        controls.move_camera_up[1]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_W     };
+        controls.drag_cam[0]            = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_RIGHT  };
+        controls.drag_cam[1]            = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_MIDDLE };
 
-        controls.move_camera_down[0]  = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_DOWN  };
-        controls.move_camera_down[1]  = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_S     };
+        controls.move_camera_up[0]      = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_UP    };
+        controls.move_camera_up[1]      = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_W     };
 
-        controls.move_camera_left[0]  = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT  };
-        controls.move_camera_left[1]  = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_A     };
+        controls.move_camera_down[0]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_DOWN  };
+        controls.move_camera_down[1]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_S     };
 
-        controls.move_camera_right[0] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT };
-        controls.move_camera_right[1] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_D     };
+        controls.move_camera_left[0]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT  };
+        controls.move_camera_left[1]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_A     };
+
+        controls.move_camera_right[0]   = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT };
+        controls.move_camera_right[1]   = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_D     };
     }
 
     // Initialize game
@@ -253,8 +256,7 @@ main :: () {
 
             home_base_pos := get_pos_from_thing_with_rect(home_base);
             neighbor_pos := Vector2.{ home_base_pos.x + dx, home_base_pos.y + dy };
-            ok, neighbor_id := get_tile_id_by_pos(neighbor_pos);
-            assert(ok);
+            neighbor_id := get_tile_id_by_pos(neighbor_pos);
 
             set_tile_as_mined(*mined_tile_ids, *mined_tile_ids_set, neighbor_id);
         }
@@ -275,10 +277,11 @@ main :: () {
         first_dwarf.rect = Rectangle.{
             neighbor_pos.x, neighbor_pos.y,
             TILEMAP_GENERAL_WORLD_WIDTH,
-            TILEMAP_GENERAL_WORLD_HEIGHT
+            TILEMAP_GENERAL_WORLD_HEIGHT,
         };
         first_dwarf.velocity = Vector2.{ 0, 0 };
         first_dwarf.state = .MOVING;
+        // first_dwarf.tile_ids_on_path
 
         array_add(*dwarves, first_dwarf);
     }
@@ -310,25 +313,51 @@ main :: () {
             if IsKeyPressed(.KEY_G) debug_mode = !debug_mode;
 
             // Game controls
-            drag_cam_pressed  = control_is_pressed(controls.drag_cam);
-            drag_cam_down     = control_is_down(controls.drag_cam);
-            move_camera_up    = control_is_down(controls.move_camera_up);
-            move_camera_down  = control_is_down(controls.move_camera_down);
-            move_camera_left  = control_is_down(controls.move_camera_left);
-            move_camera_right = control_is_down(controls.move_camera_right);
+            drag_to_create_path = control_is_down(controls.drag_to_create_path);
+            drag_cam_pressed    = control_is_pressed(controls.drag_cam);
+            drag_cam_down       = control_is_down(controls.drag_cam);
+            move_camera_up      = control_is_down(controls.move_camera_up);
+            move_camera_down    = control_is_down(controls.move_camera_down);
+            move_camera_left    = control_is_down(controls.move_camera_left);
+            move_camera_right   = control_is_down(controls.move_camera_right);
 
             // TEMP: clicking to set new target tile for dwarf 0
-            if (IsMouseButtonPressed(.MOUSE_BUTTON_LEFT)) {
+            if (drag_to_create_path) {
+                array_reset(*dwarves[0].tile_ids_on_path);
+
                 new_target_tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
                 new_target_tile_pos := Vector2.{ new_target_tile_rect.x, new_target_tile_rect.y };
-                ok, new_target_tile_id := get_tile_id_by_pos(new_target_tile_pos);
-                assert(ok);
+                new_target_tile_id := get_tile_id_by_pos(new_target_tile_pos);
 
                 tile_rect_that_dwarf_is_currently_on := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, get_pos_from_thing_with_rect(dwarves[0]));
-                okk, tile_id_dwarf_is_currently_on := get_tile_id_by_pos(get_rect_pos(tile_rect_that_dwarf_is_currently_on));
-                assert(okk);
+                tile_id_dwarf_is_currently_on := get_tile_id_by_pos(get_rect_pos(tile_rect_that_dwarf_is_currently_on));
                 
-                dwarves[0].tile_ids_on_path = dijkstra(tile_id_dwarf_is_currently_on, new_target_tile_id, edges);
+                // We need to separate the dx and dy
+                dx := new_target_tile_rect.x - tile_rect_that_dwarf_is_currently_on.x;
+                dy := new_target_tile_rect.y - tile_rect_that_dwarf_is_currently_on.y;
+
+                // Check which one is larger, that'll be the first leg
+                x_is_larger := abs(dx) > abs(dy);
+
+                target_tile_rect := Rectangle.{
+                    tile_rect_that_dwarf_is_currently_on.x + ifx x_is_larger then dx else 0,
+                    tile_rect_that_dwarf_is_currently_on.y + ifx x_is_larger then 0 else dy,
+                    TILEMAP_GENERAL_WORLD_WIDTH,
+                    TILEMAP_GENERAL_WORLD_HEIGHT,
+                };
+                target_tile_id := get_tile_id_by_pos(get_rect_pos(target_tile_rect));
+                array_add(*dwarves[0].tile_ids_on_path, target_tile_id);
+                
+                target_tile_rect = Rectangle.{
+                    target_tile_rect.x + ifx x_is_larger then 0 else dx,
+                    target_tile_rect.y + ifx x_is_larger then dy else 0,
+                    TILEMAP_GENERAL_WORLD_WIDTH,
+                    TILEMAP_GENERAL_WORLD_HEIGHT,
+                };
+                target_tile_id = get_tile_id_by_pos(get_rect_pos(target_tile_rect));
+                array_add(*dwarves[0].tile_ids_on_path, target_tile_id);
+
+                // dwarves[0].tile_ids_on_path = dijkstra(tile_id_dwarf_is_currently_on, new_target_tile_id, edges);
             }
         }
 
@@ -346,9 +375,8 @@ main :: () {
             // Update camera
             {
                 CAMERA_ZOOM_INCREMENT :: 0.2;
-                CAMERA_ZOOM_MIN :: 0.001;
+                CAMERA_ZOOM_MIN :: 0.01;
                 CAMERA_ZOOM_MAX :: 13.0;
-
 
                 if move_camera_up    camera.target.y -= CAMERA_MOVE_SPEED_BASE;
                 if move_camera_down  camera.target.y += CAMERA_MOVE_SPEED_BASE;
@@ -429,9 +457,8 @@ main :: () {
                                     // TEMP: If the dwarf runs into dirt, just mine it for now
                                     center_of_dwarf := get_rect_center(dwarf.rect);
                                     tile_rect_dwarf_is_on := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, center_of_dwarf);
-                                    ok, tile_id_dwarf_is_on   := get_tile_id_by_pos(get_rect_pos(tile_rect_dwarf_is_on));
-                                    assert(ok);
-                                    assert(table_contains(*mined_tile_ids_set, tile_id_dwarf_is_on), "dwarf is in rock or something lol");
+                                    tile_id_dwarf_is_on   := get_tile_id_by_pos(get_rect_pos(tile_rect_dwarf_is_on));
+                                    // assert(table_contains(*mined_tile_ids_set, tile_id_dwarf_is_on), "dwarf is in rock or something lol");
                                     set_tile_as_mined(*mined_tile_ids, *mined_tile_ids_set, tile_id_dwarf_is_on);
                                 }
                             }
@@ -509,8 +536,7 @@ main :: () {
                 {
                     hovered_tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
                     DrawRectangleRec(hovered_tile_rect, TRANSPARENT_WHITE);
-                    ok, tile_id := get_tile_id_by_pos(get_rect_pos(hovered_tile_rect));
-                    assert(ok);
+                    tile_id := get_tile_id_by_pos(get_rect_pos(hovered_tile_rect));
                     DrawText(tprint("%\0", tile_id).data, xx hovered_tile_rect.x, xx hovered_tile_rect.y, 12, WHITE);
                 }
 
@@ -551,8 +577,7 @@ set_tile_as_mined :: (mined_tile_ids: *[..] s32, mined_tile_ids_set : *Table, ti
         dx = TILE_DIRECTION_DELTAS[i][0];
         dy = TILE_DIRECTION_DELTAS[i][1];
         neighbor_pos := Vector2.{ tile_pos.x + dx, tile_pos.y + dy };
-        neighbor_exists, neighbor_id := get_tile_id_by_pos(neighbor_pos);
-        assert(neighbor_exists); // TODO: I think this will fail for tiles on the edge... sorry future me
+        neighbor_id := get_tile_id_by_pos(neighbor_pos);
 
         neighbor_is_mined := table_contains(mined_tile_ids_set, neighbor_id);
 
@@ -712,16 +737,16 @@ get_tile_pos_by_id :: (id: s32) -> Vector2 {
     return Vector2.{ pixel_x, pixel_y };
 }
 
-get_tile_id_by_pos :: (pos: Vector2) -> (ok: bool, id: s32) {
+get_tile_id_by_pos :: (pos: Vector2) -> s32 {
     grid_x := cast(s32) (pos.x / TILEMAP_GENERAL_WORLD_WIDTH);
     grid_y := cast(s32) (pos.y / TILEMAP_GENERAL_WORLD_HEIGHT);
 
-    if grid_x < 0 || grid_x >= WORLD_COLS { return false, 0; }
-    if grid_y < 0 || grid_y >= WORLD_ROWS { return false, 0; }
+    if grid_x < 0 || grid_x >= WORLD_COLS assert(false);
+    if grid_y < 0 || grid_y >= WORLD_ROWS assert(false);
 
     index := (grid_y * WORLD_COLS) + grid_x;
 
-    return true, index + 1;
+    return index + 1;
 }
 
 find_tile_by_pos :: (pos: Vector2) -> (tile_exists: bool, tile: *Tile) {
