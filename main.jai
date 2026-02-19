@@ -27,7 +27,11 @@ window_height := 800;
 CAMERA_MOVE_SPEED_BASE :: 4;
 CAMERA_ZOOM_SPEED :: 0.3;
 
-DWARF_SPEED :: 15 * 3;
+DIRT_HEALTH :: 100;
+
+DWARF_MOVE_SPEED :: 15 * 3;
+DWARF_MINE_COOLDOWN_MS :: 1000;
+DWARF_MINE_DAMAGE_PER_SWING :: 25;
 
 TILEMAP_GENERAL_MAP_WIDTH    :: 320;
 TILEMAP_GENERAL_MAP_HEIGHT   :: 320;
@@ -163,11 +167,12 @@ DwarfState :: enum {
 }
 
 Dwarf :: struct {
-    rect             : Rectangle;
-    state            : DwarfState;
-    velocity         : Vector2;
-    // target_tile_id   : s32;
-    tile_ids_on_path : [..] s32;
+    rect               : Rectangle;
+    state              : DwarfState;
+    velocity           : Vector2;
+    tile_ids_on_path   : [..] s32;
+    mining_cooldown_ms : s32;
+    tile_id_mining     : s32;
 }
 
 data_folder: string;
@@ -183,6 +188,11 @@ data_folder: string;
 mined_tile_ids          : [..] s32;
 mined_tile_ids_set      : Table(s32, Any); // for fast lookups
 mined_tile_ids_viewable : [..] s32;
+
+actively_mined_tile_ids          : [..] s32;
+actively_mined_tile_ids_set      : Table(s32, Any); // for fast lookups
+actively_mined_tile_ids_viewable : [..] s32;
+
 bases          : [..] Base;
 bases_viewable : [..] Base;
 dwarves          : [..] *Dwarf;
@@ -356,16 +366,15 @@ main :: () {
                 };
                 target_tile_id = get_tile_id_by_pos(get_rect_pos(target_tile_rect));
                 array_add(*dwarves[0].tile_ids_on_path, target_tile_id);
-
-                // dwarves[0].tile_ids_on_path = dijkstra(tile_id_dwarf_is_currently_on, new_target_tile_id, edges);
             }
         }
 
         derive_viewable_entities(
             camera,
-            mined_tile_ids, *mined_tile_ids_viewable,
-            bases,          *bases_viewable,
-            dwarves,        *dwarves_viewable
+            mined_tile_ids,          *mined_tile_ids_viewable,
+            actively_mined_tile_ids, *actively_mined_tile_ids_viewable,
+            bases,                   *bases_viewable,
+            dwarves,                 *dwarves_viewable
         );
 
         //
@@ -423,11 +432,9 @@ main :: () {
                                 if dwarf_reached_target {
                                     set_pos_of_thing_with_rect(dwarf, target_tile_pos);
 
-                                    // TODO: Can I do this?...
+                                    // TODO: Can I do this?...it'd be much faster
                                     // dwarf.tile_ids_on_path.data += 1;
-
                                     array_ordered_remove_by_index(*(dwarf.tile_ids_on_path), 0);
-                                    // print_vars(dwarf.tile_ids_on_path);
                                     
                                     // Find a new target by picking a random cardinal direction 1 tile away
                                     // direction_index := cast(int) random_get_within_range(0, 3);
@@ -443,29 +450,44 @@ main :: () {
                                     // assert(ok);
                                     // dwarf.target_tile_id = new_target_tile_id;
                                 } else {
-                                    // If the dwarf has not reached its target yetm, then simply continue on to the target
+                                    // If the dwarf has not reached its target yet, then simply continue on to the target
 
                                     // Calculate the position change that the dwarf can accomplish this frame
                                     current_pos := get_pos_from_thing_with_rect(dwarf);
                                     target_pos  := get_tile_pos_by_id(dwarf.tile_ids_on_path[0]);
                                     delta := Vector2Subtract(target_pos, current_pos);
                                     direction := Vector2Normalize(delta);
-                                    movement_vector := Vector2Scale(direction, DWARF_SPEED * dt);
+                                    movement_vector := Vector2Scale(direction, DWARF_MOVE_SPEED * dt);
                                     new_pos := Vector2Add(current_pos, movement_vector);
-                                    set_pos_of_thing_with_rect(dwarf, new_pos);
 
-                                    // TEMP: If the dwarf runs into dirt, just mine it for now
-                                    center_of_dwarf := get_rect_center(dwarf.rect);
-                                    tile_rect_dwarf_is_on := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, center_of_dwarf);
-                                    tile_id_dwarf_is_on   := get_tile_id_by_pos(get_rect_pos(tile_rect_dwarf_is_on));
-                                    // assert(table_contains(*mined_tile_ids_set, tile_id_dwarf_is_on), "dwarf is in rock or something lol");
-                                    set_tile_as_mined(*mined_tile_ids, *mined_tile_ids_set, tile_id_dwarf_is_on);
+                                    // Check whether the rect the dwarf may be entering into. If it's dirt, then they'll
+                                    // have to enter into the mining state before they can proceed.
+                                    tile_rect_dwarf_wants_to_move_to := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, new_pos);
+                                    tile_id_dwarf_wants_to_move_to   := get_tile_id_by_pos(get_rect_pos(tile_rect_dwarf_wants_to_move_to));
+                                    tile_is_mined := table_contains(*mined_tile_ids_set, tile_id_dwarf_wants_to_move_to);
+                                    // TODO: Eventually we'll want to check whether the tile is mineable or not.
+                                    if !tile_is_mined {
+                                        dwarf.state = .MINING;
+                                        dwarf.tile_id_mining = tile_id_dwarf_wants_to_move_to;
+                                        array_add(*actively_mined_tile_ids, tile_id_dwarf_wants_to_move_to);
+                                        table_add(*actively_mined_tile_ids_set, tile_id_dwarf_wants_to_move_to, DIRT_HEALTH);
+                                    } else {
+                                        set_pos_of_thing_with_rect(dwarf, new_pos);
+
+                                        center_of_dwarf := get_rect_center(dwarf.rect);
+                                        tile_rect_dwarf_is_on := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, center_of_dwarf);
+                                        tile_id_dwarf_is_on   := get_tile_id_by_pos(get_rect_pos(tile_rect_dwarf_is_on));
+                                         
+                                        assert(table_contains(*mined_tile_ids_set, tile_id_dwarf_is_on), "dwarf is in rock or something lol wtf");
+                                    }
                                 }
                             }
 
                         case .MINING;
-
-
+                            assert(dwarf.tile_id_mining > 0, "Dwarf tryna mine but he got no gotdamn tile to mine!!!!!!!");
+                            if dwarf.mining_cooldown_ms > 0 {
+                                dwarf.mining_cooldown_ms -= dt;
+                            }
                     }
                 }
             }
@@ -599,13 +621,15 @@ things_with_rects_are_at_the_same_pos :: (rect_enjoyer1: $T/interface HasRect, r
 derive_viewable_entities :: (
     camera: Camera2D,
     mined_tile_ids: [..] s32, mined_tile_ids_viewable: *[..] s32, 
-    bases: [..] Base,         bases_viewable: *[..] Base,
-    dwarves: [..] *Dwarf,     dwarves_viewable: *[..] *Dwarf
+    actively_mined_tile_ids: [..] s32, actively_mined_tile_ids_viewable: *[..] s32, 
+    bases: [..] Base, bases_viewable: *[..] Base,
+    dwarves: [..] *Dwarf, dwarves_viewable: *[..] *Dwarf
 ) {
     window_start := GetScreenToWorld2D(Vector2.{ 0, 0 }, camera);
     window_end   := GetScreenToWorld2D(Vector2.{ cast(float) GetScreenWidth(), cast(float) GetScreenHeight()}, camera);
 
     array_reset(mined_tile_ids_viewable);
+    array_reset(actively_mined_tile_ids_viewable);
     array_reset(bases_viewable);
     array_reset(dwarves_viewable);
     
@@ -624,6 +648,20 @@ derive_viewable_entities :: (
 
             array_add(mined_tile_ids_viewable, tile_id);
             // array_add(collidable_blocks, block);
+        }
+    }
+
+    {
+        for tile_id: actively_mined_tile_ids {
+            pos := get_tile_pos_by_id(tile_id);
+
+            if pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x continue;
+            if pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x continue;
+            
+            if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y continue;
+            if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+
+            array_add(actively_mined_tile_ids_viewable, tile_id);
         }
     }
 
