@@ -29,10 +29,11 @@ CAMERA_ZOOM_SPEED :: 0.3;
 
 DIRT_HEALTH :: 100;
 
-DWARF_COUNT :: 1;
-DWARF_MOVE_SPEED :: 15 * 1;
-DWARF_MINE_COOLDOWN_MS :: 250;
+DWARF_START_COUNT :: 1;
+DWARF_MOVE_SPEED :: 15 * 2;
+DWARF_MINE_COOLDOWN_MS :: 25;
 DWARF_MINE_DAMAGE_PER_SWING :: 50;
+DWARF_SPAWN_MS :: 5000;
 
 TILEMAP_GENERAL_MAP_WIDTH    :: 320;
 TILEMAP_GENERAL_MAP_HEIGHT   :: 320;
@@ -160,6 +161,7 @@ HasRect :: struct {
 
 Base :: struct {
     rect : Rectangle;
+    spawn_dwarf_cooldown_ms : s32;
 }
 
 Tile :: struct {
@@ -199,8 +201,8 @@ actively_mined_tile_ids                 : [..] s32;
 actively_mined_tile_ids_to_health_table : Table(s32, s32);
 actively_mined_tile_ids_viewable        : [..] s32;
 
-bases            : [..] Base;
-bases_viewable   : [..] Base;
+bases            : [..] *Base;
+bases_viewable   : [..] *Base;
 dwarves          : [..] *Dwarf;
 dwarves_viewable : [..] *Dwarf;
 
@@ -264,6 +266,7 @@ main :: () {
             TILEMAP_GENERAL_WORLD_WIDTH,
             TILEMAP_GENERAL_WORLD_HEIGHT,
         };
+        home_base.spawn_dwarf_cooldown_ms = DWARF_SPAWN_MS;
 
         array_add(*bases, home_base);
 
@@ -278,12 +281,10 @@ main :: () {
 
             set_tile_as_mined(*fully_mined_tile_ids, *fully_mined_tile_ids_set, neighbor_id);
         }
-
-        // print_vars(fully_mined_tile_ids);
     }
 
     // Initialize dwarves
-    for 1..DWARF_COUNT {
+    for 1..DWARF_START_COUNT {
         first_dwarf := New(Dwarf);
 
         // Figure out where to spawn it based off of the home base
@@ -297,9 +298,8 @@ main :: () {
             TILEMAP_GENERAL_WORLD_WIDTH,
             TILEMAP_GENERAL_WORLD_HEIGHT,
         };
-        first_dwarf.state = .MOVING;
-        first_dwarf.direction = .SOUTH;
-        // first_dwarf.direction = cast(Direction) cast(int) random_get_within_range(0, 3);
+        first_dwarf.state     = .MOVING;
+        first_dwarf.direction = cast(Direction) cast(int) random_get_within_range(0, 4);
         // first_dwarf.tile_ids_on_path intentionally not set
 
         array_add(*dwarves, first_dwarf);
@@ -497,26 +497,26 @@ main :: () {
                                     } else {
                                         set_pos_of_thing_with_rect(dwarf, new_pos);
 
-                                        center_of_dwarf := get_rect_center(dwarf.rect);
-                                        tile_rect_dwarf_is_on := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, center_of_dwarf);
-                                        tile_id_dwarf_is_on   := get_tile_id_by_pos(get_rect_pos(tile_rect_dwarf_is_on));
+                                        // center_of_dwarf       := get_rect_center(dwarf.rect);
+                                        // tile_rect_dwarf_is_on := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, center_of_dwarf);
+                                        // tile_id_dwarf_is_on   := get_tile_id_by_pos(get_rect_pos(tile_rect_dwarf_is_on));
                                          
-                                        assert(table_contains(*fully_mined_tile_ids_set, tile_id_dwarf_is_on), "dwarf is in rock or something lol wtf");
+                                        // assert(table_contains(*fully_mined_tile_ids_set, tile_id_dwarf_is_on), "dwarf is in rock or something lol wtf");
                                     }
                                 }
                             } else {
+                                // TODO: this is insanely inefficient. Really we should probably just pick an interval to change some dwarf directions or something.
                                 change_direction_rng := random_get_within_range(0, 1);
                                 // new_direction := ;
                                 if change_direction_rng < 0.25 {
                                     // Find a new target by picking a random cardinal direction 1 tile away
-                                    new_direction := cast(int) random_get_within_range(1, 4);
+                                    new_direction := cast(int) random_get_within_range(0, 4);
                                     dwarf.direction = cast(Direction) new_direction;
                                 }
 
                                 dx := TILE_DIRECTION_DELTAS[dwarf.direction][0];
                                 dy := TILE_DIRECTION_DELTAS[dwarf.direction][1];
 
-                                print("dwarf.direction: %\n", dwarf.direction);
                                 assert(dx == 0 || dy == 0, "dx: %, dy: %", dx, dy);
 
                                 new_target_tile_pos := Vector2.{
@@ -533,14 +533,13 @@ main :: () {
                             if dwarf.mining_cooldown_ms > 0 {
                                 dwarf.mining_cooldown_ms -= xx (dt_seconds * 1000);
                             } else {
-                                // print("swing! %\n", dwarf.tile_id_mining);
                                 // TODO: swing animation, I guess
                             
                                 // Decrease the tile health by the dwarf mining damage
                                 ok, current_health := table_find(*actively_mined_tile_ids_to_health_table, dwarf.tile_id_mining);
                                 assert(ok, "Tried mining a tile that doesn't exist");
                                 new_health := current_health - DWARF_MINE_DAMAGE_PER_SWING;
-                                // print_vars(current_health, new_health);
+
                                 // If the tile is now fully mined, we need to remove it from the actively mined lists,
                                 // and add it to the fully mined lists
                                 if new_health <= 0 {
@@ -561,6 +560,32 @@ main :: () {
                             }
 
                         case .IDLE;
+                    }
+                }
+            }
+
+            // Update bases
+            {
+                for base: bases {
+                    if base.spawn_dwarf_cooldown_ms <= 0 {
+                        dwarf := New(Dwarf);
+
+                        home_base_pos := get_pos_from_thing_with_rect(bases[0]);
+
+                        dwarf.rect = Rectangle.{
+                            home_base_pos.x, home_base_pos.y,
+                            TILEMAP_GENERAL_WORLD_WIDTH,
+                            TILEMAP_GENERAL_WORLD_HEIGHT,
+                        };
+                        dwarf.state     = .MOVING;
+                        dwarf.direction = cast(Direction) cast(int) random_get_within_range(0, 4);
+                        // dwarf.tile_ids_on_path intentionally not set
+
+                        array_add(*dwarves, dwarf);
+
+                        base.spawn_dwarf_cooldown_ms = DWARF_SPAWN_MS;
+                    } else {
+                        base.spawn_dwarf_cooldown_ms -= xx (dt_seconds * 1000);
                     }
                 }
             }
@@ -695,7 +720,7 @@ derive_viewable_entities :: (
     camera: Camera2D,
     fully_mined_tile_ids: [..] s32, fully_mined_tile_ids_viewable: *[..] s32, 
     actively_mined_tile_ids: [..] s32, actively_mined_tile_ids_viewable: *[..] s32, 
-    bases: [..] Base, bases_viewable: *[..] Base,
+    bases: [..] *Base, bases_viewable: *[..] *Base,
     dwarves: [..] *Dwarf, dwarves_viewable: *[..] *Dwarf
 ) {
     window_start := GetScreenToWorld2D(Vector2.{ 0, 0 }, camera);
@@ -712,8 +737,6 @@ derive_viewable_entities :: (
     {
         for tile_id: fully_mined_tile_ids {
             pos := get_tile_pos_by_id(tile_id);
-
-            // print_vars(tile_id, pos);
 
             if pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x continue;
             if pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x continue;
@@ -771,33 +794,6 @@ derive_viewable_entities :: (
             // array_add(collidable_blocks, block);
         }
     }
-
-    // print_vars(
-    //     fully_mined_tile_ids,
-    //     fully_mined_tile_ids_viewable.*,
-    //     actively_mined_tile_ids,
-    //     actively_mined_tile_ids_viewable.*
-    // );
-}
-
-MyCheckCollisionPointRec :: (point: Vector2, rec: Rectangle) -> bool {
-    collision := false;
-
-    print_vars(point, rec);
-
-    print("point.x >= rec.x: %\n", point.x >= rec.x);
-    print("point.x < (rec.x + rec.width): %\n", point.x < (rec.x + rec.width));
-    print("point.y >= rec.y: %\n", point.y >= rec.y);
-    print("point.y < (rec.y + rec.height): %\n", point.y < (rec.y + rec.height));
-
-    if (
-        (point.x >= rec.x) && (point.x < (rec.x + rec.width)) &&
-        (point.y >= rec.y) && (point.y < (rec.y + rec.height))
-    ) {
-        collision = true;
-    }
-
-    return collision;
 }
 
 get_rect_center :: (rect: Rectangle) -> Vector2 {
