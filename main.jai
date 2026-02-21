@@ -29,8 +29,9 @@ CAMERA_ZOOM_SPEED :: 0.3;
 
 DIRT_HEALTH :: 100;
 
-DWARF_MOVE_SPEED :: 15 * 5;
-DWARF_MINE_COOLDOWN_MS :: 25;
+DWARF_COUNT :: 1;
+DWARF_MOVE_SPEED :: 15 * 1;
+DWARF_MINE_COOLDOWN_MS :: 250;
 DWARF_MINE_DAMAGE_PER_SWING :: 50;
 
 TILEMAP_GENERAL_MAP_WIDTH    :: 320;
@@ -38,8 +39,8 @@ TILEMAP_GENERAL_MAP_HEIGHT   :: 320;
 TILEMAP_GENERAL_TILE_WIDTH   :: 18;
 TILEMAP_GENERAL_TILE_HEIGHT  :: 18;
 TILEMAP_GENERAL_TILE_PADDING :: 2;
-TILEMAP_GENERAL_WORLD_WIDTH  :: TILEMAP_GENERAL_TILE_WIDTH * SCALE;
-TILEMAP_GENERAL_WORLD_HEIGHT :: TILEMAP_GENERAL_TILE_HEIGHT * SCALE;
+TILEMAP_GENERAL_WORLD_WIDTH  :: (TILEMAP_GENERAL_TILE_WIDTH - TILEMAP_GENERAL_TILE_PADDING) * SCALE;
+TILEMAP_GENERAL_WORLD_HEIGHT :: (TILEMAP_GENERAL_TILE_HEIGHT - TILEMAP_GENERAL_TILE_PADDING) * SCALE;
 
 WORLD_COLS :: 10000;
 WORLD_ROWS :: 10000;
@@ -118,16 +119,16 @@ GameState :: struct {
 }
 
 Direction :: enum u8 #specified {
-    NORTH      :: 1;
-    NORTH_EAST :: 2;
-    NORTH_WEST :: 3;
-    SOUTH      :: 4;
-    SOUTH_EAST :: 5;
-    SOUTH_WEST :: 6;
-    EAST       :: 7;
-    WEST       :: 8;
-    CENTER     :: 9;  // essentially no direction
-    COUNT      :: 10; // helper value that explicitly stores the enum length
+    NORTH      :: 0;
+    SOUTH      :: 1;
+    EAST       :: 2;
+    WEST       :: 3;
+    NORTH_EAST :: 4;
+    NORTH_WEST :: 5;
+    SOUTH_EAST :: 6;
+    SOUTH_WEST :: 7;
+    CENTER     :: 8;  // essentially no direction
+    COUNT      :: 9; // helper value that explicitly stores the enum length
 }
 
 TILE_DIRECTION_DELTAS :: [2]float32.[
@@ -282,7 +283,7 @@ main :: () {
     }
 
     // Initialize dwarves
-    for 1..1_000 {
+    for 1..DWARF_COUNT {
         first_dwarf := New(Dwarf);
 
         // Figure out where to spawn it based off of the home base
@@ -297,6 +298,8 @@ main :: () {
             TILEMAP_GENERAL_WORLD_HEIGHT,
         };
         first_dwarf.state = .MOVING;
+        first_dwarf.direction = .SOUTH;
+        // first_dwarf.direction = cast(Direction) cast(int) random_get_within_range(0, 3);
         // first_dwarf.tile_ids_on_path intentionally not set
 
         array_add(*dwarves, first_dwarf);
@@ -313,7 +316,7 @@ main :: () {
         reset_temporary_storage();
 
         time  := GetTime();
-        dt_ms := GetFrameTime() * 1000;
+        dt_seconds := GetFrameTime();
 
         mouse_pos_in_ui    := GetMousePosition();
         mouse_pos_in_world := GetScreenToWorld2D(mouse_pos_in_ui, camera);
@@ -467,34 +470,21 @@ main :: () {
                                     target_pos      := get_tile_pos_by_id(dwarf.tile_ids_on_path[0]);
                                     delta           := Vector2Subtract(target_pos, current_pos);
                                     direction       := Vector2Normalize(delta);
-                                    movement_vector := Vector2Scale(direction, DWARF_MOVE_SPEED * dt_ms / 1000);
+                                    movement_vector := Vector2Scale(direction, DWARF_MOVE_SPEED * dt_seconds);
                                     new_pos         := Vector2Add(current_pos, movement_vector);
 
-                                    // We need to check which point, considering the north west and south east points of
-                                    // the new_pos rectangle, remains outside of the dwarf's current rectangle. This pos
-                                    // will be used to determine which tile the dwarf wants to move to, without needing to
-                                    // do any crazy looping or whatever.
-                                    north_west_pos := new_pos;
-                                    south_east_pos := Vector2.{
-                                        new_pos.x + TILEMAP_GENERAL_WORLD_WIDTH  - 0.01,
-                                        new_pos.y + TILEMAP_GENERAL_WORLD_HEIGHT - 0.01
-                                    };
+                                    dwarf_center := get_rect_center(dwarf.rect);
 
-                                    north_west_pos_is_outside_current_dwarf_rect := !CheckCollisionPointRec(north_west_pos, dwarf.rect);
-                                    south_east_pos_is_outside_current_dwarf_rect := !CheckCollisionPointRec(south_east_pos, dwarf.rect);
-
-                                    // Only one should be true
-                                    assert(
-                                        (north_west_pos_is_outside_current_dwarf_rect || south_east_pos_is_outside_current_dwarf_rect) &&
-                                        !(north_west_pos_is_outside_current_dwarf_rect && south_east_pos_is_outside_current_dwarf_rect),
-                                        "north_west: %, south_east: %", north_west_pos_is_outside_current_dwarf_rect, south_east_pos_is_outside_current_dwarf_rect
-                                    );
-
-                                    new_pos_to_check_for_new_tile := ifx north_west_pos_is_outside_current_dwarf_rect then north_west_pos else south_east_pos;
+                                    // Create a probe point just outside the dwarf's bounding box.
+                                    // We multiply the normalized 'direction' by 8.0 (half the dwarf's size) 
+                                    // plus a tiny epsilon (0.1) so it pokes out into the next tile.
+                                    PROBE_DISTANCE :: TILEMAP_GENERAL_WORLD_WIDTH / 2 + 0.1; 
+                                    probe_offset   := Vector2Scale(direction, PROBE_DISTANCE);
+                                    probe_pos      := Vector2Add(dwarf_center, probe_offset);
 
                                     // Check whether the rect the dwarf may be entering into. If it's dirt, then they'll
                                     // have to enter into the mining state before they can proceed.
-                                    tile_rect_dwarf_wants_to_move_to := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, new_pos_to_check_for_new_tile);
+                                    tile_rect_dwarf_wants_to_move_to := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, probe_pos);
                                     tile_id_dwarf_wants_to_move_to   := get_tile_id_by_pos(get_rect_pos(tile_rect_dwarf_wants_to_move_to));
                                     tile_is_mined := table_contains(*fully_mined_tile_ids_set, tile_id_dwarf_wants_to_move_to);
 
@@ -515,38 +505,19 @@ main :: () {
                                     }
                                 }
                             } else {
-                            
-
-
-
-
-
- 
-                                // TODO: you were figuring out how to get enums as numbers so you can randomly get them
-
-
-
-
-
-
-
-
-
-                                change_direction_rng := cast(int) random_get_within_range(0, 10);
-                                if change_direction_rng > 9 {
+                                change_direction_rng := random_get_within_range(0, 1);
+                                // new_direction := ;
+                                if change_direction_rng < 0.25 {
                                     // Find a new target by picking a random cardinal direction 1 tile away
-                                    new_direction_index := cast(int) random_get_within_range(0, 4);
-                                    new_direction : s64 = 1;
-                                    for enum_values_as_enum {
-                                        if new_direction_index == it {
-                                            new_direction = it;
-                                        }
-                                    }
-                                    dwarf.direction = new_direction;
+                                    new_direction := cast(int) random_get_within_range(1, 4);
+                                    dwarf.direction = cast(Direction) new_direction;
                                 }
 
                                 dx := TILE_DIRECTION_DELTAS[dwarf.direction][0];
                                 dy := TILE_DIRECTION_DELTAS[dwarf.direction][1];
+
+                                print("dwarf.direction: %\n", dwarf.direction);
+                                assert(dx == 0 || dy == 0, "dx: %, dy: %", dx, dy);
 
                                 new_target_tile_pos := Vector2.{
                                     dwarf.rect.x + dx,
@@ -560,7 +531,7 @@ main :: () {
                         case .MINING;
                             assert(dwarf.tile_id_mining > 0, "Dwarf tryna mine but he got no gotdamn tile to mine!!!!!!!");
                             if dwarf.mining_cooldown_ms > 0 {
-                                dwarf.mining_cooldown_ms -= xx dt_ms;
+                                dwarf.mining_cooldown_ms -= xx (dt_seconds * 1000);
                             } else {
                                 // print("swing! %\n", dwarf.tile_id_mining);
                                 // TODO: swing animation, I guess
@@ -807,6 +778,26 @@ derive_viewable_entities :: (
     //     actively_mined_tile_ids,
     //     actively_mined_tile_ids_viewable.*
     // );
+}
+
+MyCheckCollisionPointRec :: (point: Vector2, rec: Rectangle) -> bool {
+    collision := false;
+
+    print_vars(point, rec);
+
+    print("point.x >= rec.x: %\n", point.x >= rec.x);
+    print("point.x < (rec.x + rec.width): %\n", point.x < (rec.x + rec.width));
+    print("point.y >= rec.y: %\n", point.y >= rec.y);
+    print("point.y < (rec.y + rec.height): %\n", point.y < (rec.y + rec.height));
+
+    if (
+        (point.x >= rec.x) && (point.x < (rec.x + rec.width)) &&
+        (point.y >= rec.y) && (point.y < (rec.y + rec.height))
+    ) {
+        collision = true;
+    }
+
+    return collision;
 }
 
 get_rect_center :: (rect: Rectangle) -> Vector2 {
