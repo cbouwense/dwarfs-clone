@@ -354,6 +354,9 @@ main :: () {
                             break;
                         }
                     }
+
+                    // Teleport dwarf to tile we are hovering over
+                    game_state.dwarf_selected.rect = get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
                 }
             } else if drag_to_create_path_prev {
                 assert(game_state.dwarf_selected != null, "Tried to set dwarf's target but got null");
@@ -391,6 +394,8 @@ main :: () {
                 };
                 target_tile_id = get_tile_id_by_pos(get_rect_pos(target_tile_rect));
                 array_add(*game_state.dwarf_selected.tile_ids_on_path, target_tile_id);
+
+                game_state.dwarf_selected = null;
             }
         }
 
@@ -457,20 +462,6 @@ main :: () {
                                 if dwarf_reached_target {
                                     set_pos_of_thing_with_rect(dwarf, target_tile_pos);
                                     array_ordered_remove_by_index(*(dwarf.tile_ids_on_path), 0);
-                                    
-                                    // Find a new target by picking a random cardinal direction 1 tile away
-                                    // direction_index := cast(int) random_get_within_range(0, 3);
-                                    // dx := TILE_DIRECTION_DELTAS[direction_index][0];
-                                    // dy := TILE_DIRECTION_DELTAS[direction_index][1];
-
-                                    // new_target_tile_pos := Vector2.{
-                                    //     target_tile_pos.x + dx,
-                                    //     target_tile_pos.y + dy,
-                                    // };
-
-                                    // ok, new_target_tile_id := get_tile_id_by_pos(new_target_tile_pos);
-                                    // assert(ok);
-                                    // dwarf.target_tile_id = new_target_tile_id;
                                 } else {
                                     // If the dwarf has not reached its target yet, then simply continue on to the target
 
@@ -526,6 +517,19 @@ main :: () {
                                         assert(table_contains(*fully_mined_tile_ids_set, tile_id_dwarf_is_on), "dwarf is in rock or something lol wtf");
                                     }
                                 }
+                            } else {
+                                // Find a new target by picking a random cardinal direction 1 tile away
+                                direction_index := cast(int) random_get_within_range(0, 3);
+                                dx := TILE_DIRECTION_DELTAS[direction_index][0];
+                                dy := TILE_DIRECTION_DELTAS[direction_index][1];
+
+                                new_target_tile_pos := Vector2.{
+                                    dwarf.rect.x + dx,
+                                    dwarf.rect.y + dy,
+                                };
+
+                                new_target_tile_id := get_tile_id_by_pos(new_target_tile_pos);
+                                array_add(*dwarf.tile_ids_on_path, new_target_tile_id);
                             }
 
                         case .MINING;
