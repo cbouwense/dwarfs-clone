@@ -29,8 +29,8 @@ CAMERA_ZOOM_SPEED :: 0.3;
 
 DIRT_HEALTH :: 100;
 
-DWARF_MOVE_SPEED :: 15 * 3;
-DWARF_MINE_COOLDOWN_MS :: 1000;
+DWARF_MOVE_SPEED :: 15 * 5;
+DWARF_MINE_COOLDOWN_MS :: 25;
 DWARF_MINE_DAMAGE_PER_SWING :: 50;
 
 TILEMAP_GENERAL_MAP_WIDTH    :: 320;
@@ -174,10 +174,10 @@ DwarfState :: enum {
 Dwarf :: struct {
     rect               : Rectangle;
     state              : DwarfState;
-    velocity           : Vector2;
     tile_ids_on_path   : [..] s32;
     mining_cooldown_ms : s32;
     tile_id_mining     : s32;
+    direction          : Direction;
 }
 
 data_folder: string;
@@ -282,7 +282,7 @@ main :: () {
     }
 
     // Initialize dwarves
-    {
+    for 1..1_000 {
         first_dwarf := New(Dwarf);
 
         // Figure out where to spawn it based off of the home base
@@ -296,7 +296,6 @@ main :: () {
             TILEMAP_GENERAL_WORLD_WIDTH,
             TILEMAP_GENERAL_WORLD_HEIGHT,
         };
-        first_dwarf.velocity = Vector2.{ 0, 0 };
         first_dwarf.state = .MOVING;
         // first_dwarf.tile_ids_on_path intentionally not set
 
@@ -311,7 +310,6 @@ main :: () {
     camera.zoom     = 2;
 
     while !WindowShouldClose() {
-        // print_vars(edges);
         reset_temporary_storage();
 
         time  := GetTime();
@@ -446,7 +444,6 @@ main :: () {
             // Update dwarves
             {
                 for dwarf: dwarves {
-                    // print_vars(dwarf.tile_ids_on_path);
                     if #complete dwarf.state == {
                         case .MOVING;
                             dwarf_has_target := dwarf.tile_ids_on_path.count > 0;
@@ -518,10 +515,38 @@ main :: () {
                                     }
                                 }
                             } else {
-                                // Find a new target by picking a random cardinal direction 1 tile away
-                                direction_index := cast(int) random_get_within_range(0, 3);
-                                dx := TILE_DIRECTION_DELTAS[direction_index][0];
-                                dy := TILE_DIRECTION_DELTAS[direction_index][1];
+                            
+
+
+
+
+
+ 
+                                // TODO: you were figuring out how to get enums as numbers so you can randomly get them
+
+
+
+
+
+
+
+
+
+                                change_direction_rng := cast(int) random_get_within_range(0, 10);
+                                if change_direction_rng > 9 {
+                                    // Find a new target by picking a random cardinal direction 1 tile away
+                                    new_direction_index := cast(int) random_get_within_range(0, 4);
+                                    new_direction : s64 = 1;
+                                    for enum_values_as_enum {
+                                        if new_direction_index == it {
+                                            new_direction = it;
+                                        }
+                                    }
+                                    dwarf.direction = new_direction;
+                                }
+
+                                dx := TILE_DIRECTION_DELTAS[dwarf.direction][0];
+                                dy := TILE_DIRECTION_DELTAS[dwarf.direction][1];
 
                                 new_target_tile_pos := Vector2.{
                                     dwarf.rect.x + dx,
@@ -537,14 +562,14 @@ main :: () {
                             if dwarf.mining_cooldown_ms > 0 {
                                 dwarf.mining_cooldown_ms -= xx dt_ms;
                             } else {
-                                print("swing! %\n", dwarf.tile_id_mining);
+                                // print("swing! %\n", dwarf.tile_id_mining);
                                 // TODO: swing animation, I guess
                             
                                 // Decrease the tile health by the dwarf mining damage
                                 ok, current_health := table_find(*actively_mined_tile_ids_to_health_table, dwarf.tile_id_mining);
                                 assert(ok, "Tried mining a tile that doesn't exist");
                                 new_health := current_health - DWARF_MINE_DAMAGE_PER_SWING;
-                                print_vars(current_health, new_health);
+                                // print_vars(current_health, new_health);
                                 // If the tile is now fully mined, we need to remove it from the actively mined lists,
                                 // and add it to the fully mined lists
                                 if new_health <= 0 {
