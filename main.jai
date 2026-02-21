@@ -31,7 +31,7 @@ DIRT_HEALTH :: 100;
 
 DWARF_MOVE_SPEED :: 15 * 3;
 DWARF_MINE_COOLDOWN_MS :: 1000;
-DWARF_MINE_DAMAGE_PER_SWING :: 25;
+DWARF_MINE_DAMAGE_PER_SWING :: 50;
 
 TILEMAP_GENERAL_MAP_WIDTH    :: 320;
 TILEMAP_GENERAL_MAP_HEIGHT   :: 320;
@@ -87,6 +87,7 @@ init_sprites :: () {
 // Controls
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+select              : bool;
 drag_to_create_path : bool;
 drag_cam_pressed    : bool;
 drag_cam_down       : bool;
@@ -94,6 +95,8 @@ move_camera_up      : bool;
 move_camera_down    : bool;
 move_camera_left    : bool;
 move_camera_right   : bool;
+
+drag_to_create_path_prev : bool;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Other
@@ -111,6 +114,7 @@ global_tile_id_to_neighbors : Table(s32, *[..] *Tile);
 mouse_drag_began_at_pos : Vector2;
 
 GameState :: struct {
+    dwarf_selected : *Dwarf;
 }
 
 Direction :: enum u8 #specified {
@@ -246,7 +250,9 @@ main :: () {
     }
 
     // Initialize game
-    game_state := GameState.{};
+    game_state := GameState.{
+        dwarf_selected = null,
+    };
 
     // Initialize base
     {
@@ -292,7 +298,7 @@ main :: () {
         };
         first_dwarf.velocity = Vector2.{ 0, 0 };
         first_dwarf.state = .MOVING;
-        // first_dwarf.tile_ids_on_path
+        // first_dwarf.tile_ids_on_path intentionally not set
 
         array_add(*dwarves, first_dwarf);
     }
@@ -323,7 +329,11 @@ main :: () {
             if IsKeyPressed(.KEY_P) paused     = !paused;
             if IsKeyPressed(.KEY_G) debug_mode = !debug_mode;
 
+            // Previous controls
+            drag_to_create_path_prev = drag_to_create_path;
+
             // Game controls
+            select              = control_is_pressed(controls.drag_to_create_path);
             drag_to_create_path = control_is_down(controls.drag_to_create_path);
             drag_cam_pressed    = control_is_pressed(controls.drag_cam);
             drag_cam_down       = control_is_down(controls.drag_cam);
@@ -332,15 +342,29 @@ main :: () {
             move_camera_left    = control_is_down(controls.move_camera_left);
             move_camera_right   = control_is_down(controls.move_camera_right);
 
-            // TEMP: clicking to set new target tile for dwarf 0
-            if (drag_to_create_path) {
-                array_reset(*dwarves[0].tile_ids_on_path);
+            if drag_to_create_path {
+                if select {
+                    // TODO: really, what we should do here instead of iterating through every dwarf is
+                    // to have a mapping of tile rects to dwarves, and maintain that every frame by finding
+                    // the tile a dwarf's center is over, and setting it in the mapping. But, this is fine
+                    // for now.
+                    for dwarf: dwarves_viewable {
+                        if CheckCollisionPointRec(mouse_pos_in_world, dwarf.rect) {
+                            game_state.dwarf_selected = dwarf;
+                            break;
+                        }
+                    }
+                }
+            } else if drag_to_create_path_prev {
+                assert(game_state.dwarf_selected != null, "Tried to set dwarf's target but got null");
+                
+                array_reset(*(game_state.dwarf_selected.tile_ids_on_path));
 
                 new_target_tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
                 new_target_tile_pos := Vector2.{ new_target_tile_rect.x, new_target_tile_rect.y };
                 new_target_tile_id := get_tile_id_by_pos(new_target_tile_pos);
 
-                tile_rect_that_dwarf_is_currently_on := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, get_pos_from_thing_with_rect(dwarves[0]));
+                tile_rect_that_dwarf_is_currently_on := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, get_pos_from_thing_with_rect(game_state.dwarf_selected));
                 tile_id_dwarf_is_currently_on := get_tile_id_by_pos(get_rect_pos(tile_rect_that_dwarf_is_currently_on));
                 
                 // We need to separate the dx and dy
@@ -357,7 +381,7 @@ main :: () {
                     TILEMAP_GENERAL_WORLD_HEIGHT,
                 };
                 target_tile_id := get_tile_id_by_pos(get_rect_pos(target_tile_rect));
-                array_add(*dwarves[0].tile_ids_on_path, target_tile_id);
+                array_add(*game_state.dwarf_selected.tile_ids_on_path, target_tile_id);
                 
                 target_tile_rect = Rectangle.{
                     target_tile_rect.x + ifx x_is_larger then 0 else dx,
@@ -366,7 +390,7 @@ main :: () {
                     TILEMAP_GENERAL_WORLD_HEIGHT,
                 };
                 target_tile_id = get_tile_id_by_pos(get_rect_pos(target_tile_rect));
-                array_add(*dwarves[0].tile_ids_on_path, target_tile_id);
+                array_add(*game_state.dwarf_selected.tile_ids_on_path, target_tile_id);
             }
         }
 
@@ -432,9 +456,6 @@ main :: () {
 
                                 if dwarf_reached_target {
                                     set_pos_of_thing_with_rect(dwarf, target_tile_pos);
-
-                                    // TODO: Can I do this?...it'd be much faster
-                                    // dwarf.tile_ids_on_path.data += 1;
                                     array_ordered_remove_by_index(*(dwarf.tile_ids_on_path), 0);
                                     
                                     // Find a new target by picking a random cardinal direction 1 tile away
@@ -454,18 +475,41 @@ main :: () {
                                     // If the dwarf has not reached its target yet, then simply continue on to the target
 
                                     // Calculate the position change that the dwarf can accomplish this frame
-                                    current_pos := get_pos_from_thing_with_rect(dwarf);
-                                    target_pos  := get_tile_pos_by_id(dwarf.tile_ids_on_path[0]);
-                                    delta := Vector2Subtract(target_pos, current_pos);
-                                    direction := Vector2Normalize(delta);
+                                    current_pos     := get_pos_from_thing_with_rect(dwarf);
+                                    target_pos      := get_tile_pos_by_id(dwarf.tile_ids_on_path[0]);
+                                    delta           := Vector2Subtract(target_pos, current_pos);
+                                    direction       := Vector2Normalize(delta);
                                     movement_vector := Vector2Scale(direction, DWARF_MOVE_SPEED * dt_ms / 1000);
-                                    new_pos := Vector2Add(current_pos, movement_vector);
+                                    new_pos         := Vector2Add(current_pos, movement_vector);
+
+                                    // We need to check which point, considering the north west and south east points of
+                                    // the new_pos rectangle, remains outside of the dwarf's current rectangle. This pos
+                                    // will be used to determine which tile the dwarf wants to move to, without needing to
+                                    // do any crazy looping or whatever.
+                                    north_west_pos := new_pos;
+                                    south_east_pos := Vector2.{
+                                        new_pos.x + TILEMAP_GENERAL_WORLD_WIDTH  - 0.01,
+                                        new_pos.y + TILEMAP_GENERAL_WORLD_HEIGHT - 0.01
+                                    };
+
+                                    north_west_pos_is_outside_current_dwarf_rect := !CheckCollisionPointRec(north_west_pos, dwarf.rect);
+                                    south_east_pos_is_outside_current_dwarf_rect := !CheckCollisionPointRec(south_east_pos, dwarf.rect);
+
+                                    // Only one should be true
+                                    assert(
+                                        (north_west_pos_is_outside_current_dwarf_rect || south_east_pos_is_outside_current_dwarf_rect) &&
+                                        !(north_west_pos_is_outside_current_dwarf_rect && south_east_pos_is_outside_current_dwarf_rect),
+                                        "north_west: %, south_east: %", north_west_pos_is_outside_current_dwarf_rect, south_east_pos_is_outside_current_dwarf_rect
+                                    );
+
+                                    new_pos_to_check_for_new_tile := ifx north_west_pos_is_outside_current_dwarf_rect then north_west_pos else south_east_pos;
 
                                     // Check whether the rect the dwarf may be entering into. If it's dirt, then they'll
                                     // have to enter into the mining state before they can proceed.
-                                    tile_rect_dwarf_wants_to_move_to := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, new_pos);
+                                    tile_rect_dwarf_wants_to_move_to := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, new_pos_to_check_for_new_tile);
                                     tile_id_dwarf_wants_to_move_to   := get_tile_id_by_pos(get_rect_pos(tile_rect_dwarf_wants_to_move_to));
                                     tile_is_mined := table_contains(*fully_mined_tile_ids_set, tile_id_dwarf_wants_to_move_to);
+
                                     // TODO: Eventually we'll want to check whether the tile is mineable or not.
                                     if !tile_is_mined {
                                         dwarf.state = .MINING;
@@ -500,7 +544,6 @@ main :: () {
                                 // If the tile is now fully mined, we need to remove it from the actively mined lists,
                                 // and add it to the fully mined lists
                                 if new_health <= 0 {
-                                    // TODO: is this unordered remove ok?
                                     array_unordered_remove_by_value(*actively_mined_tile_ids, dwarf.tile_id_mining);
                                     table_remove(*actively_mined_tile_ids_to_health_table, dwarf.tile_id_mining);
 
