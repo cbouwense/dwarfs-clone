@@ -213,6 +213,7 @@ bases_in_viewport   : [..] *Base;
 dwarves             : [..] *Dwarf;
 dwarves_in_viewport : [..] *Dwarf;
 
+path_being_traced : Path;
 paths             : [..] Path;
 // paths_in_viewport : [..] Path;
 
@@ -373,51 +374,53 @@ main :: () {
                 if game_state.dwarf_selected != null {
                     // Remove its current pathing
                     array_reset(*(game_state.dwarf_selected.tile_ids_on_path));
+
+                    // Draw out the path that is currently being traced
+                    {
+                        new_target_tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
+                        new_target_tile_pos := Vector2.{ new_target_tile_rect.x, new_target_tile_rect.y };
+                        new_target_tile_id := get_tile_id_by_pos(new_target_tile_pos);
+
+                        tile_rect_that_dwarf_is_currently_on := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, get_pos_from_thing_with_rect(game_state.dwarf_selected));
+                        tile_id_dwarf_is_currently_on := get_tile_id_by_pos(get_rect_pos(tile_rect_that_dwarf_is_currently_on));
+                        
+                        // We need to separate the dx and dy
+                        dx := new_target_tile_rect.x - tile_rect_that_dwarf_is_currently_on.x;
+                        dy := new_target_tile_rect.y - tile_rect_that_dwarf_is_currently_on.y;
+
+                        // Check which one is larger, that'll be the first leg
+                        x_is_larger := abs(dx) > abs(dy);
+
+                        middle_tile_rect := Rectangle.{
+                            tile_rect_that_dwarf_is_currently_on.x + ifx x_is_larger then dx else 0,
+                            tile_rect_that_dwarf_is_currently_on.y + ifx x_is_larger then 0 else dy,
+                            TILEMAP_GENERAL_WORLD_WIDTH,
+                            TILEMAP_GENERAL_WORLD_HEIGHT,
+                        };
+                        middle_tile_id := get_tile_id_by_pos(get_rect_pos(middle_tile_rect));
+
+                        end_tile_rect := Rectangle.{
+                            middle_tile_rect.x + ifx x_is_larger then 0 else dx,
+                            middle_tile_rect.y + ifx x_is_larger then dy else 0,
+                            TILEMAP_GENERAL_WORLD_WIDTH,
+                            TILEMAP_GENERAL_WORLD_HEIGHT,
+                        };
+                        end_tile_id := get_tile_id_by_pos(get_rect_pos(end_tile_rect));
+
+                        path_being_traced = Path.{
+                            start_tile_id  = tile_id_dwarf_is_currently_on,
+                            middle_tile_id = middle_tile_id,
+                            end_tile_id    = end_tile_id,
+                        };
+                    }
                 }
             } else if drag_to_create_path_prev {
                 if game_state.dwarf_selected != null {
-                
                     array_reset(*(game_state.dwarf_selected.tile_ids_on_path));
+                    array_add(*game_state.dwarf_selected.tile_ids_on_path, path_being_traced.middle_tile_id);
+                    array_add(*game_state.dwarf_selected.tile_ids_on_path, path_being_traced.end_tile_id);
 
-                    new_target_tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
-                    new_target_tile_pos := Vector2.{ new_target_tile_rect.x, new_target_tile_rect.y };
-                    new_target_tile_id := get_tile_id_by_pos(new_target_tile_pos);
-
-                    tile_rect_that_dwarf_is_currently_on := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, get_pos_from_thing_with_rect(game_state.dwarf_selected));
-                    tile_id_dwarf_is_currently_on := get_tile_id_by_pos(get_rect_pos(tile_rect_that_dwarf_is_currently_on));
-                    
-                    // We need to separate the dx and dy
-                    dx := new_target_tile_rect.x - tile_rect_that_dwarf_is_currently_on.x;
-                    dy := new_target_tile_rect.y - tile_rect_that_dwarf_is_currently_on.y;
-
-                    // Check which one is larger, that'll be the first leg
-                    x_is_larger := abs(dx) > abs(dy);
-
-                    start_tile_rect := Rectangle.{
-                        tile_rect_that_dwarf_is_currently_on.x + ifx x_is_larger then dx else 0,
-                        tile_rect_that_dwarf_is_currently_on.y + ifx x_is_larger then 0 else dy,
-                        TILEMAP_GENERAL_WORLD_WIDTH,
-                        TILEMAP_GENERAL_WORLD_HEIGHT,
-                    };
-                    start_tile_id := get_tile_id_by_pos(get_rect_pos(start_tile_rect));
-                    array_add(*game_state.dwarf_selected.tile_ids_on_path, start_tile_id);
-
-                    end_tile_rect := Rectangle.{
-                        start_tile_rect.x + ifx x_is_larger then 0 else dx,
-                        start_tile_rect.y + ifx x_is_larger then dy else 0,
-                        TILEMAP_GENERAL_WORLD_WIDTH,
-                        TILEMAP_GENERAL_WORLD_HEIGHT,
-                    };
-                    end_tile_id := get_tile_id_by_pos(get_rect_pos(end_tile_rect));
-                    array_add(*game_state.dwarf_selected.tile_ids_on_path, end_tile_id);
-
-                    // Add the path to the list of paths
-                    new_path := Path.{
-                        start_tile_id = tile_id_dwarf_is_currently_on,
-                        middle_tile_id = start_tile_id,
-                        end_tile_id    = end_tile_id,
-                    };
-                    array_add(*paths, new_path);
+                    array_add(*paths, path_being_traced);
 
                     game_state.dwarf_selected.state = .MOVING;
                     game_state.dwarf_selected = null;
@@ -680,13 +683,8 @@ main :: () {
 
                 // Draw paths
                 {
-                     for path: paths {
-                        start_pos  := get_tile_pos_by_id(path.start_tile_id);
-                        middle_pos := get_tile_pos_by_id(path.middle_tile_id);
-                        end_pos    := get_tile_pos_by_id(path.end_tile_id);
-                        DrawLineEx(start_pos, middle_pos, 2.0, LIME);
-                        DrawLineEx(middle_pos, end_pos, 2.0, LIME);
-                     }                   
+                    if drag_to_create_path draw_path(path_being_traced);
+                    for path: paths draw_path(path);
                 }
 
                 // Draw hovered tile
@@ -721,6 +719,26 @@ main :: () {
             }
         }
     }
+}
+
+draw_path :: (path: Path) {
+    start_pos  := get_tile_pos_by_id(path.start_tile_id);
+    middle_pos := get_tile_pos_by_id(path.middle_tile_id);
+    end_pos    := get_tile_pos_by_id(path.end_tile_id);
+
+    DrawLineEx(
+        Vector2.{ start_pos.x  + TILEMAP_GENERAL_WORLD_WIDTH * 0.5,  start_pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 },
+        Vector2.{ middle_pos.x + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, middle_pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 },
+        2.0,
+        GREEN
+    );
+
+    DrawLineEx(
+        Vector2.{ middle_pos.x + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, middle_pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 },
+        Vector2.{ end_pos.x    + TILEMAP_GENERAL_WORLD_WIDTH * 0.5,  end_pos.y   + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 },
+        2.0,
+        GREEN
+    );       
 }
 
 set_tile_as_mined :: (fully_mined_tile_ids: *[..] s32, fully_mined_tile_ids_set : *Table, tile_id: s32) {
