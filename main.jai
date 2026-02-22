@@ -467,10 +467,23 @@ main :: () {
                     camera.target = Vector2Add(camera.target, world_delta);
                 }
 
-                camera.zoom += mouse_wheel_move * CAMERA_ZOOM_INCREMENT;
-                camera.zoom = clamp(camera.zoom, CAMERA_ZOOM_MIN, CAMERA_ZOOM_MAX);
+                // Make sure the camera zooms in towards the mouse pos
+                if mouse_wheel_move != 0 {
+                    // Grab the world space position of the mouse before the zoom
+                    mouse_world_pos_before := GetScreenToWorld2D(GetMousePosition(), camera);
 
-                camera.offset = Vector2.{ GetScreenWidth() / 2.0, GetScreenHeight() / 2.0 };
+                    // Apply the zoom
+                    camera.zoom += mouse_wheel_move * CAMERA_ZOOM_INCREMENT;
+                    camera.zoom = clamp(camera.zoom, CAMERA_ZOOM_MIN, CAMERA_ZOOM_MAX);
+
+                    // Grab the world space position of the mouse AFTER the zoom
+                    // (Raylib uses the new camera.zoom but the old camera.target here)
+                    mouse_world_pos_after := GetScreenToWorld2D(GetMousePosition(), camera);
+
+                    // Calculate the shift caused by the zoom, and move the target to cancel it out
+                    zoom_delta := Vector2Subtract(mouse_world_pos_before, mouse_world_pos_after);
+                    camera.target = Vector2Add(camera.target, zoom_delta);
+                }
             }
 
             // Update dwarves
