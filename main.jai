@@ -749,19 +749,25 @@ draw_path :: (path: Path) {
     };
 
     start_arrow_dest := Rectangle.{
-        start_pos.x, start_pos.y,
+        start_pos.x + TILEMAP_GENERAL_WORLD_WIDTH  * 0.5,
+        start_pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5,
         TILEMAP_GENERAL_WORLD_WIDTH,
         TILEMAP_GENERAL_WORLD_HEIGHT,
     };
 
     middle_arrow_dest := Rectangle.{
-        middle_pos.x, middle_pos.y,
+        middle_pos.x + TILEMAP_GENERAL_WORLD_WIDTH  * 0.5,
+        middle_pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5,
         TILEMAP_GENERAL_WORLD_WIDTH,
         TILEMAP_GENERAL_WORLD_HEIGHT,
     };
 
-    DrawTexturePro(tilemap_texture_general, arrow_source, start_arrow_dest,  Vector2.{0,0}, 0.0, WHITE);
-    DrawTexturePro(tilemap_texture_general, arrow_source, middle_arrow_dest, Vector2.{0,0}, 0.0, WHITE);
+    // Determine which way the arrows should point
+    start_arrow_rotation  := get_arrow_rotation(start_pos,  middle_pos);
+    middle_arrow_rotation := get_arrow_rotation(middle_pos, end_pos);
+
+    DrawTexturePro(tilemap_texture_general, arrow_source, start_arrow_dest,  Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH * 0.5, TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 }, start_arrow_rotation,  WHITE);
+    DrawTexturePro(tilemap_texture_general, arrow_source, middle_arrow_dest, Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH * 0.5, TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 }, middle_arrow_rotation, WHITE);
 
     DrawLineEx(
         Vector2.{ start_pos.x  + TILEMAP_GENERAL_WORLD_WIDTH * 0.5,  start_pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 },
@@ -776,6 +782,15 @@ draw_path :: (path: Path) {
         2.0,
         GREEN
     );       
+}
+
+get_arrow_rotation :: (start_pos: Vector2, end_pos: Vector2) -> float32 {
+    print_vars(start_pos, end_pos);
+    if      start_pos.x == end_pos.x && start_pos.y > end_pos.y return 0.0;   // north
+    else if start_pos.x == end_pos.x && start_pos.y < end_pos.y return 180.0; // south
+    else if start_pos.x < end_pos.x  && start_pos.y == end_pos.y return 90.0;  // east
+    else if start_pos.x > end_pos.x  && start_pos.y == end_pos.y return 270.0; // west
+    else return 0.0;
 }
 
 set_tile_as_mined :: (fully_mined_tile_ids: *[..] s32, fully_mined_tile_ids_set : *Table, tile_id: s32) {
