@@ -31,7 +31,7 @@ DIRT_HEALTH :: 100;
 
 DWARF_START_COUNT :: 1;
 DWARF_MOVE_SPEED :: 15 * 2;
-DWARF_MINE_COOLDOWN_MS :: 25;
+DWARF_MINE_COOLDOWN_MS :: 250;
 DWARF_MINE_DAMAGE_PER_SWING :: 50;
 DWARF_SPAWN_MS :: 5000;
 
@@ -183,6 +183,12 @@ Dwarf :: struct {
     direction          : Direction;
 }
 
+Path :: struct {
+    start_tile_id  : s32;
+    middle_tile_id : s32;
+    end_tile_id    : s32;
+}
+
 data_folder: string;
 
 // Tile ID's will go row-wise, starting at 1 (zero means invalid or whatever)
@@ -193,18 +199,22 @@ data_folder: string;
 // This means that to get the position of a tile you just have to do some math,
 // which also means that we don't need to store that anywhere. Check out
 // get_tile_pos_by_id.
-fully_mined_tile_ids          : [..] s32;
-fully_mined_tile_ids_set      : Table(s32, Any); // for fast lookups
-fully_mined_tile_ids_viewable : [..] s32;
+fully_mined_tile_ids             : [..] s32;
+fully_mined_tile_ids_set         : Table(s32, Any); // for fast lookups
+fully_mined_tile_ids_in_viewport : [..] s32;
 
 actively_mined_tile_ids                 : [..] s32;
 actively_mined_tile_ids_to_health_table : Table(s32, s32);
-actively_mined_tile_ids_viewable        : [..] s32;
+actively_mined_tile_ids_in_viewport     : [..] s32;
 
-bases            : [..] *Base;
-bases_viewable   : [..] *Base;
-dwarves          : [..] *Dwarf;
-dwarves_viewable : [..] *Dwarf;
+bases               : [..] *Base;
+bases_in_viewport   : [..] *Base;
+
+dwarves             : [..] *Dwarf;
+dwarves_in_viewport : [..] *Dwarf;
+
+paths             : [..] Path;
+// paths_in_viewport : [..] Path;
 
 edges : [..] Edge; // List of edges between tiles for pathfinding
 
@@ -345,67 +355,83 @@ main :: () {
 
             if drag_to_create_path {
                 if select {
-                    // TODO: really, what we should do here instead of iterating through every dwarf is
-                    // to have a mapping of tile rects to dwarves, and maintain that every frame by finding
-                    // the tile a dwarf's center is over, and setting it in the mapping. But, this is fine
-                    // for now.
-                    for dwarf: dwarves_viewable {
+                    game_state.dwarf_selected = null;
+                    for dwarf: dwarves_in_viewport {
                         if CheckCollisionPointRec(mouse_pos_in_world, dwarf.rect) {
                             game_state.dwarf_selected = dwarf;
                             break;
                         }
                     }
 
-                    // Teleport dwarf to tile we are hovering over
-                    game_state.dwarf_selected.rect = get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
+                    if game_state.dwarf_selected != null {
+                        // Teleport dwarf to tile we are hovering over and keep it there
+                        game_state.dwarf_selected.rect = get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
+                        game_state.dwarf_selected.state = .IDLE;
+                    }
+                }
+
+                if game_state.dwarf_selected != null {
+                    // Remove its current pathing
+                    array_reset(*(game_state.dwarf_selected.tile_ids_on_path));
                 }
             } else if drag_to_create_path_prev {
-                assert(game_state.dwarf_selected != null, "Tried to set dwarf's target but got null");
+                if game_state.dwarf_selected != null {
                 
-                array_reset(*(game_state.dwarf_selected.tile_ids_on_path));
+                    array_reset(*(game_state.dwarf_selected.tile_ids_on_path));
 
-                new_target_tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
-                new_target_tile_pos := Vector2.{ new_target_tile_rect.x, new_target_tile_rect.y };
-                new_target_tile_id := get_tile_id_by_pos(new_target_tile_pos);
+                    new_target_tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
+                    new_target_tile_pos := Vector2.{ new_target_tile_rect.x, new_target_tile_rect.y };
+                    new_target_tile_id := get_tile_id_by_pos(new_target_tile_pos);
 
-                tile_rect_that_dwarf_is_currently_on := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, get_pos_from_thing_with_rect(game_state.dwarf_selected));
-                tile_id_dwarf_is_currently_on := get_tile_id_by_pos(get_rect_pos(tile_rect_that_dwarf_is_currently_on));
-                
-                // We need to separate the dx and dy
-                dx := new_target_tile_rect.x - tile_rect_that_dwarf_is_currently_on.x;
-                dy := new_target_tile_rect.y - tile_rect_that_dwarf_is_currently_on.y;
+                    tile_rect_that_dwarf_is_currently_on := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, get_pos_from_thing_with_rect(game_state.dwarf_selected));
+                    tile_id_dwarf_is_currently_on := get_tile_id_by_pos(get_rect_pos(tile_rect_that_dwarf_is_currently_on));
+                    
+                    // We need to separate the dx and dy
+                    dx := new_target_tile_rect.x - tile_rect_that_dwarf_is_currently_on.x;
+                    dy := new_target_tile_rect.y - tile_rect_that_dwarf_is_currently_on.y;
 
-                // Check which one is larger, that'll be the first leg
-                x_is_larger := abs(dx) > abs(dy);
+                    // Check which one is larger, that'll be the first leg
+                    x_is_larger := abs(dx) > abs(dy);
 
-                target_tile_rect := Rectangle.{
-                    tile_rect_that_dwarf_is_currently_on.x + ifx x_is_larger then dx else 0,
-                    tile_rect_that_dwarf_is_currently_on.y + ifx x_is_larger then 0 else dy,
-                    TILEMAP_GENERAL_WORLD_WIDTH,
-                    TILEMAP_GENERAL_WORLD_HEIGHT,
-                };
-                target_tile_id := get_tile_id_by_pos(get_rect_pos(target_tile_rect));
-                array_add(*game_state.dwarf_selected.tile_ids_on_path, target_tile_id);
-                
-                target_tile_rect = Rectangle.{
-                    target_tile_rect.x + ifx x_is_larger then 0 else dx,
-                    target_tile_rect.y + ifx x_is_larger then dy else 0,
-                    TILEMAP_GENERAL_WORLD_WIDTH,
-                    TILEMAP_GENERAL_WORLD_HEIGHT,
-                };
-                target_tile_id = get_tile_id_by_pos(get_rect_pos(target_tile_rect));
-                array_add(*game_state.dwarf_selected.tile_ids_on_path, target_tile_id);
+                    start_tile_rect := Rectangle.{
+                        tile_rect_that_dwarf_is_currently_on.x + ifx x_is_larger then dx else 0,
+                        tile_rect_that_dwarf_is_currently_on.y + ifx x_is_larger then 0 else dy,
+                        TILEMAP_GENERAL_WORLD_WIDTH,
+                        TILEMAP_GENERAL_WORLD_HEIGHT,
+                    };
+                    start_tile_id := get_tile_id_by_pos(get_rect_pos(start_tile_rect));
+                    array_add(*game_state.dwarf_selected.tile_ids_on_path, start_tile_id);
 
-                game_state.dwarf_selected = null;
+                    end_tile_rect := Rectangle.{
+                        start_tile_rect.x + ifx x_is_larger then 0 else dx,
+                        start_tile_rect.y + ifx x_is_larger then dy else 0,
+                        TILEMAP_GENERAL_WORLD_WIDTH,
+                        TILEMAP_GENERAL_WORLD_HEIGHT,
+                    };
+                    end_tile_id := get_tile_id_by_pos(get_rect_pos(end_tile_rect));
+                    array_add(*game_state.dwarf_selected.tile_ids_on_path, end_tile_id);
+
+                    // Add the path to the list of paths
+                    new_path := Path.{
+                        start_tile_id = tile_id_dwarf_is_currently_on,
+                        middle_tile_id = start_tile_id,
+                        end_tile_id    = end_tile_id,
+                    };
+                    array_add(*paths, new_path);
+
+                    game_state.dwarf_selected.state = .MOVING;
+                    game_state.dwarf_selected = null;
+                }
             }
         }
 
-        derive_viewable_entities(
+        derive_in_viewport_entities(
             camera,
-            fully_mined_tile_ids,    *fully_mined_tile_ids_viewable,
-            actively_mined_tile_ids, *actively_mined_tile_ids_viewable,
-            bases,                   *bases_viewable,
-            dwarves,                 *dwarves_viewable
+            fully_mined_tile_ids,    *fully_mined_tile_ids_in_viewport,
+            actively_mined_tile_ids, *actively_mined_tile_ids_in_viewport,
+            bases,                   *bases_in_viewport,
+            dwarves,                 *dwarves_in_viewport,
+            // paths,                   *paths_in_viewport
         );
 
         //
@@ -628,7 +654,7 @@ main :: () {
 
                 // Then draw any mined tiles over the base layer
                 {
-                    for fully_mined_tile_ids_viewable {
+                    for fully_mined_tile_ids_in_viewport {
                         DrawRectangleV(
                             get_tile_pos_by_id(it),
                             Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
@@ -639,7 +665,7 @@ main :: () {
 
                 // Draw bases
                 {
-                    for base: bases_viewable {
+                    for base: bases_in_viewport {
                         source := Rectangle.{
                             0, 0,
                             TILEMAP_GENERAL_TILE_WIDTH  - TILEMAP_GENERAL_TILE_PADDING,
@@ -652,6 +678,17 @@ main :: () {
                     }
                 }
 
+                // Draw paths
+                {
+                     for path: paths {
+                        start_pos  := get_tile_pos_by_id(path.start_tile_id);
+                        middle_pos := get_tile_pos_by_id(path.middle_tile_id);
+                        end_pos    := get_tile_pos_by_id(path.end_tile_id);
+                        DrawLineEx(start_pos, middle_pos, 2.0, LIME);
+                        DrawLineEx(middle_pos, end_pos, 2.0, LIME);
+                     }                   
+                }
+
                 // Draw hovered tile
                 {
                     hovered_tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
@@ -662,7 +699,7 @@ main :: () {
 
                 // Draw dwarves
                 {
-                    for dwarf: dwarves_viewable {
+                    for dwarf: dwarves_in_viewport {
                         source := Rectangle.{
                             1 * TILEMAP_GENERAL_TILE_WIDTH,
                             0 * TILEMAP_GENERAL_TILE_HEIGHT,
@@ -716,20 +753,21 @@ things_with_rects_are_at_the_same_pos :: (rect_enjoyer1: $T/interface HasRect, r
     );
 }
 
-derive_viewable_entities :: (
+derive_in_viewport_entities :: (
     camera: Camera2D,
-    fully_mined_tile_ids: [..] s32, fully_mined_tile_ids_viewable: *[..] s32, 
-    actively_mined_tile_ids: [..] s32, actively_mined_tile_ids_viewable: *[..] s32, 
-    bases: [..] *Base, bases_viewable: *[..] *Base,
-    dwarves: [..] *Dwarf, dwarves_viewable: *[..] *Dwarf
+    fully_mined_tile_ids: [..] s32, fully_mined_tile_ids_in_viewport: *[..] s32, 
+    actively_mined_tile_ids: [..] s32, actively_mined_tile_ids_in_viewport: *[..] s32, 
+    bases: [..] *Base, bases_in_viewport: *[..] *Base,
+    dwarves: [..] *Dwarf, dwarves_in_viewport: *[..] *Dwarf
+    // paths: [..] Path, paths_in_viewport: *[..] Path
 ) {
     window_start := GetScreenToWorld2D(Vector2.{ 0, 0 }, camera);
     window_end   := GetScreenToWorld2D(Vector2.{ cast(float) GetScreenWidth(), cast(float) GetScreenHeight()}, camera);
 
-    array_reset(fully_mined_tile_ids_viewable);
-    array_reset(actively_mined_tile_ids_viewable);
-    array_reset(bases_viewable);
-    array_reset(dwarves_viewable);
+    array_reset(fully_mined_tile_ids_in_viewport);
+    array_reset(actively_mined_tile_ids_in_viewport);
+    array_reset(bases_in_viewport);
+    array_reset(dwarves_in_viewport);
     
     // Derive viewable tiles
     // NOTE: The order in which tiles are added to viewable_tiles matters!
@@ -744,7 +782,7 @@ derive_viewable_entities :: (
             if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y continue;
             if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-            array_add(fully_mined_tile_ids_viewable, tile_id);
+            array_add(fully_mined_tile_ids_in_viewport, tile_id);
             // array_add(collidable_blocks, block);
         }
     }
@@ -759,7 +797,7 @@ derive_viewable_entities :: (
             if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y continue;
             if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-            array_add(actively_mined_tile_ids_viewable, tile_id);
+            array_add(actively_mined_tile_ids_in_viewport, tile_id);
         }
     }
 
@@ -774,7 +812,7 @@ derive_viewable_entities :: (
             if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y continue;
             if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-            array_add(bases_viewable, base);
+            array_add(bases_in_viewport, base);
             // array_add(collidable_blocks, block);
         }
     }
@@ -790,10 +828,26 @@ derive_viewable_entities :: (
             if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y continue;
             if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-            array_add(dwarves_viewable, dwarf);
-            // array_add(collidable_blocks, block);
+            array_add(dwarves_in_viewport, dwarf);
         }
     }
+
+    // TODO: Derive viewable paths
+    // {
+    //     for path: paths {
+    //         start_tile_pos := get_tile_pos_by_id(path.start_tile_id);
+
+    //         if start_tile_pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x continue;
+    //         if start_tile_pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x continue;
+            
+    //         if start_tile_pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y continue;
+    //         if start_tile_pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+
+    //         end_tile_pos := get_tile_pos_by_id(path.end_tile_id);
+
+    //         array_add(dwarves_in_viewport, path);
+    //     }
+    // }
 }
 
 get_rect_center :: (rect: Rectangle) -> Vector2 {
