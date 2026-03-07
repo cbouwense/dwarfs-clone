@@ -298,12 +298,17 @@ main :: () {
 
     // Initialize iron
     {
-        IRON_SPAWN_CHANCE :: 1; // 1%
+        IRON_SPAWN_CHANCE_NUMERATOR   :: 1;
+        IRON_SPAWN_CHANCE_DENOMINATOR :: 10000;
+        IRON_VEIN_SIZE_MIN :: 8;
+        IRON_VEIN_SIZE_MAX :: 15;
         for col: 0..WORLD_COLS-1 {
             for row: 0..WORLD_ROWS-1 {
-                iron_spawn_dice_roll := random_get_within_range(1, 100);
-                if iron_spawn_dice_roll <= IRON_SPAWN_CHANCE {
+                tile_id := (row * WORLD_COLS) + col + 1;
 
+                iron_spawn_dice_roll := cast(int) random_get_within_range(IRON_SPAWN_CHANCE_NUMERATOR, IRON_SPAWN_CHANCE_DENOMINATOR);
+                if iron_spawn_dice_roll <= IRON_SPAWN_CHANCE_NUMERATOR {
+                    spawn_iron(xx tile_id, IRON_VEIN_SIZE_MIN, IRON_VEIN_SIZE_MAX, WORLD_COLS, WORLD_ROWS, *iron_tile_ids, *iron_tile_ids_set);
                 }
             }
         }
@@ -450,6 +455,7 @@ main :: () {
             camera,
             fully_mined_tile_ids,    *fully_mined_tile_ids_in_viewport,
             actively_mined_tile_ids, *actively_mined_tile_ids_in_viewport,
+            iron_tile_ids,           *iron_tile_ids_in_viewport,
             bases,                   *bases_in_viewport,
             dwarves,                 *dwarves_in_viewport,
             // paths,                   *paths_in_viewport
@@ -720,6 +726,17 @@ main :: () {
                     }
                 }
 
+                // Draw iron
+                {
+                    for iron_tile_ids_in_viewport {
+                        DrawRectangleV(
+                            get_tile_pos_by_id(it),
+                            Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
+                            RED, // TODO: texture
+                        );
+                    }
+                }
+
                 // Draw bases
                 {
                     for base: bases_in_viewport {
@@ -863,8 +880,16 @@ set_tile_as_mined :: (fully_mined_tile_ids: *[..] s32, fully_mined_tile_ids_set 
     }
 }
 
-spawn_iron :: (starting_tile_id: s32, vein_size_min: s32, vein_size_max: s32, world_columns: s32, world_rows: s32, iron_tile_ids: *[..] s32, iron_tile_ids_set : *Table) {
-    size := cast(int) random_get_within_range(vein_size_min, vein_size_max);
+spawn_iron :: (
+    starting_tile_id: s32, 
+    vein_size_min: s32, 
+    vein_size_max: s32, 
+    world_columns: s32, 
+    world_rows: s32, 
+    iron_tile_ids: *[..] s32, 
+    iron_tile_ids_set : *Table
+) {
+    size := cast(int) random_get_within_range(xx vein_size_min, xx vein_size_max);
     max_tile_id := world_columns * world_rows;
 
     ids_to_process : [..] s32;
@@ -890,10 +915,10 @@ spawn_iron :: (starting_tile_id: s32, vein_size_min: s32, vein_size_max: s32, wo
         size -= 1;
 
         // Add neighbors as needing to be processed
-        array_add(*ids_to_process, );
-        array_add(*ids_to_process, );
-        array_add(*ids_to_process, );
-        array_add(*ids_to_process, );
+        array_add(*ids_to_process, id - world_columns);
+        array_add(*ids_to_process, id + world_columns);
+        array_add(*ids_to_process, id + 1);
+        array_add(*ids_to_process, id - 1);
     }
 }
 
@@ -908,6 +933,7 @@ derive_in_viewport_entities :: (
     camera: Camera2D,
     fully_mined_tile_ids: [..] s32, fully_mined_tile_ids_in_viewport: *[..] s32, 
     actively_mined_tile_ids: [..] s32, actively_mined_tile_ids_in_viewport: *[..] s32, 
+    iron_tile_ids: [..] s32, iron_tile_ids_in_viewport: *[..] s32, 
     bases: [..] Base, bases_in_viewport: *[..] Base,
     dwarves: [..] Dwarf, dwarves_in_viewport: *[..] Dwarf
     // paths: [..] Path, paths_in_viewport: *[..] Path
@@ -917,6 +943,7 @@ derive_in_viewport_entities :: (
 
     array_reset(fully_mined_tile_ids_in_viewport);
     array_reset(actively_mined_tile_ids_in_viewport);
+    array_reset(iron_tile_ids_in_viewport);
     array_reset(bases_in_viewport);
     array_reset(dwarves_in_viewport);
     
@@ -949,6 +976,20 @@ derive_in_viewport_entities :: (
             if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
             array_add(actively_mined_tile_ids_in_viewport, tile_id);
+        }
+    }
+
+    {
+        for tile_id: iron_tile_ids {
+            pos := get_tile_pos_by_id(tile_id);
+
+            if pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x continue;
+            if pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x continue;
+            
+            if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y continue;
+            if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+
+            array_add(iron_tile_ids_in_viewport, tile_id);
         }
     }
 

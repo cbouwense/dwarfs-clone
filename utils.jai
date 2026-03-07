@@ -149,9 +149,3 @@ pop_front :: (array: *[] $T) -> T {
     array_ordered_remove_by_index(array, 0);
     return result;
 }
-
-// Scratchpad
-main :: () {
-
-
-}
