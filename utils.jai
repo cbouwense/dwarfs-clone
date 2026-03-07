@@ -144,6 +144,14 @@ table_print :: (table: Table, table_name: string = "") {
     print("}\n");
 }
 
-// values_are_close :: (a: Vector2, b: Vector2, epsilon := EPSILON) -> bool {
-//     return values_are_close(a.x, b.x, epsilon) && values_are_close(a.y, b.y, epsilon);
-// }
+pop_front :: (array: *[] $T) -> T {
+    result := array.*[0];
+    array_ordered_remove_by_index(array, 0);
+    return result;
+}
+
+// Scratchpad
+main :: () {
+
+
+}

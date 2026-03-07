@@ -200,13 +200,17 @@ data_folder: string;
 // This means that to get the position of a tile you just have to do some math,
 // which also means that we don't need to store that anywhere. Check out
 // get_tile_pos_by_id.
+actively_mined_tile_ids                 : [..] s32;
+actively_mined_tile_ids_to_health_table : Table(s32, s32);
+actively_mined_tile_ids_in_viewport     : [..] s32;
+
 fully_mined_tile_ids             : [..] s32;
 fully_mined_tile_ids_set         : Table(s32, Any); // for fast lookups
 fully_mined_tile_ids_in_viewport : [..] s32;
 
-actively_mined_tile_ids                 : [..] s32;
-actively_mined_tile_ids_to_health_table : Table(s32, s32);
-actively_mined_tile_ids_in_viewport     : [..] s32;
+iron_tile_ids             : [..] s32;
+iron_tile_ids_set         : Table(s32, Any);
+iron_tile_ids_in_viewport : [..] s32;
 
 bases               : [..] Base;
 bases_in_viewport   : [..] Base;
@@ -289,6 +293,19 @@ main :: () {
             neighbor_id := get_tile_id_by_pos(neighbor_pos);
 
             set_tile_as_mined(*fully_mined_tile_ids, *fully_mined_tile_ids_set, neighbor_id);
+        }
+    }
+
+    // Initialize iron
+    {
+        IRON_SPAWN_CHANCE :: 1; // 1%
+        for col: 0..WORLD_COLS-1 {
+            for row: 0..WORLD_ROWS-1 {
+                iron_spawn_dice_roll := random_get_within_range(1, 100);
+                if iron_spawn_dice_roll <= IRON_SPAWN_CHANCE {
+
+                }
+            }
         }
     }
 
@@ -843,6 +860,40 @@ set_tile_as_mined :: (fully_mined_tile_ids: *[..] s32, fully_mined_tile_ids_set 
             array_add(*edges, Edge.{ from = tile_id,     to = neighbor_id, distance = 1 });
             array_add(*edges, Edge.{ from = neighbor_id, to = tile_id, distance = 1 });
         }
+    }
+}
+
+spawn_iron :: (starting_tile_id: s32, vein_size_min: s32, vein_size_max: s32, world_columns: s32, world_rows: s32, iron_tile_ids: *[..] s32, iron_tile_ids_set : *Table) {
+    size := cast(int) random_get_within_range(vein_size_min, vein_size_max);
+    max_tile_id := world_columns * world_rows;
+
+    ids_to_process : [..] s32;
+    array_add(*ids_to_process, starting_tile_id);
+    ids_processed  : [..] s32;
+
+    while ids_to_process.count > 0 && size > 0 {
+        // Get the next id to process
+        id := pop_front(*ids_to_process);
+
+        // Make sure the id is valid and hasn't already been processed
+        id_already_processed := array_find(ids_processed, id);
+        if id_already_processed continue;
+        if id <= 0 continue;
+        if id > max_tile_id continue;
+
+        // Mark the tile id as iron
+        array_add(iron_tile_ids, id);
+        table_add(iron_tile_ids_set, id, 0);
+
+        // Mark it as processed
+        array_add(*ids_processed, id);
+        size -= 1;
+
+        // Add neighbors as needing to be processed
+        array_add(*ids_to_process, );
+        array_add(*ids_to_process, );
+        array_add(*ids_to_process, );
+        array_add(*ids_to_process, );
     }
 }
 
