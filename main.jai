@@ -210,8 +210,8 @@ actively_mined_tile_ids_in_viewport     : [..] s32;
 bases               : [..] *Base;
 bases_in_viewport   : [..] *Base;
 
-dwarves             : [..] *Dwarf;
-dwarves_in_viewport : [..] *Dwarf;
+dwarves             : [..] Dwarf;
+dwarves_in_viewport : [..] Dwarf;
 
 path_being_traced : Path;
 paths             : [..] Path;
@@ -296,22 +296,22 @@ main :: () {
 
     // Initialize dwarves
     for 1..DWARF_START_COUNT {
-        first_dwarf := New(Dwarf);
-
-        // Figure out where to spawn it based off of the home base
+         // Figure out where to spawn it based off of the home base
         dx := TILE_DIRECTION_DELTAS[0][0];
         dy := TILE_DIRECTION_DELTAS[0][1];
         home_base_pos := get_pos_from_thing_with_rect(bases[0]);
         neighbor_pos  := Vector2.{ home_base_pos.x + dx, home_base_pos.y + dy };
 
-        first_dwarf.rect = Rectangle.{
-            neighbor_pos.x, neighbor_pos.y,
-            TILEMAP_GENERAL_WORLD_WIDTH,
-            TILEMAP_GENERAL_WORLD_HEIGHT,
+        first_dwarf := Dwarf.{
+            rect = Rectangle.{
+                neighbor_pos.x, neighbor_pos.y,
+                TILEMAP_GENERAL_WORLD_WIDTH,
+                TILEMAP_GENERAL_WORLD_HEIGHT,
+            },
+            state     = .MOVING,
+            direction = cast(Direction) cast(int) random_get_within_range(0, 4),
+            // tile_ids_on_path intentionally not set
         };
-        first_dwarf.state     = .MOVING;
-        first_dwarf.direction = cast(Direction) cast(int) random_get_within_range(0, 4);
-        // first_dwarf.tile_ids_on_path intentionally not set
 
         array_add(*dwarves, first_dwarf);
     }
@@ -338,8 +338,8 @@ main :: () {
         //
         {
             // Metagame controls
-            if IsKeyPressed(.KEY_P) paused     = !paused;
-            if IsKeyPressed(.KEY_G) debug_mode = !debug_mode;
+            if IsKeyPressed(.KEY_SPACE) paused = !paused;
+            if IsKeyPressed(.KEY_G) debug_mode    = !debug_mode;
 
             // Previous controls
             dragging_to_create_path_prev = dragging_to_create_path;
@@ -359,7 +359,7 @@ main :: () {
                     game_state.dwarf_selected = null;
                     for dwarf: dwarves_in_viewport {
                         if CheckCollisionPointRec(mouse_pos_in_world, dwarf.rect) {
-                            game_state.dwarf_selected = dwarf;
+                            game_state.dwarf_selected = *dwarf;
                             break;
                         }
                     }
@@ -490,7 +490,7 @@ main :: () {
 
             // Update dwarves
             {
-                for dwarf: dwarves {
+                for *dwarf: dwarves {
                     if #complete dwarf.state == {
                         case .MOVING;
                             dwarf_has_target := dwarf.tile_ids_on_path.count > 0;
@@ -612,18 +612,18 @@ main :: () {
             {
                 for base: bases {
                     if base.spawn_dwarf_cooldown_ms <= 0 {
-                        dwarf := New(Dwarf);
-
                         home_base_pos := get_pos_from_thing_with_rect(bases[0]);
 
-                        dwarf.rect = Rectangle.{
-                            home_base_pos.x, home_base_pos.y,
-                            TILEMAP_GENERAL_WORLD_WIDTH,
-                            TILEMAP_GENERAL_WORLD_HEIGHT,
+                        dwarf := Dwarf.{
+                            rect = Rectangle.{
+                                home_base_pos.x, home_base_pos.y,
+                                TILEMAP_GENERAL_WORLD_WIDTH,
+                                TILEMAP_GENERAL_WORLD_HEIGHT,
+                            },
+                            state     = .MOVING,
+                            direction = cast(Direction) cast(int) random_get_within_range(0, 4),
+                            // tile_ids_on_path intentionally not set
                         };
-                        dwarf.state     = .MOVING;
-                        dwarf.direction = cast(Direction) cast(int) random_get_within_range(0, 4);
-                        // dwarf.tile_ids_on_path intentionally not set
 
                         array_add(*dwarves, dwarf);
 
@@ -727,9 +727,13 @@ main :: () {
                 }
             }
 
-            // Draw debug
+            // Draw UI
             DrawFPS(10, 10);
             if debug_mode {
+
+            }
+
+            if paused {
 
             }
         }
@@ -828,7 +832,7 @@ derive_in_viewport_entities :: (
     fully_mined_tile_ids: [..] s32, fully_mined_tile_ids_in_viewport: *[..] s32, 
     actively_mined_tile_ids: [..] s32, actively_mined_tile_ids_in_viewport: *[..] s32, 
     bases: [..] *Base, bases_in_viewport: *[..] *Base,
-    dwarves: [..] *Dwarf, dwarves_in_viewport: *[..] *Dwarf
+    dwarves: [..] Dwarf, dwarves_in_viewport: *[..] Dwarf
     // paths: [..] Path, paths_in_viewport: *[..] Path
 ) {
     window_start := GetScreenToWorld2D(Vector2.{ 0, 0 }, camera);
