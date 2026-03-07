@@ -834,7 +834,7 @@ draw_path :: (path: Path) {
     DrawTexturePro(tilemap_texture_general, arrow_source, middle_arrow_dest, Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH * 0.5, TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 }, middle_arrow_rotation, WHITE);
 
     DrawLineEx(
-        Vector2.{ start_pos.x  + TILEMAP_GENERAL_WORLD_WIDTH * 0.5,  start_pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 },
+        Vector2.{ start_pos.x  + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, start_pos.y  + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 },
         Vector2.{ middle_pos.x + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, middle_pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 },
         2.0,
         GREEN
@@ -842,16 +842,15 @@ draw_path :: (path: Path) {
 
     DrawLineEx(
         Vector2.{ middle_pos.x + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, middle_pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 },
-        Vector2.{ end_pos.x    + TILEMAP_GENERAL_WORLD_WIDTH * 0.5,  end_pos.y   + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 },
+        Vector2.{ end_pos.x    + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, end_pos.y    + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 },
         2.0,
         GREEN
     );       
 }
 
 get_arrow_rotation :: (start_pos: Vector2, end_pos: Vector2) -> float32 {
-    print_vars(start_pos, end_pos);
-    if      start_pos.x == end_pos.x && start_pos.y > end_pos.y return 0.0;   // north
-    else if start_pos.x == end_pos.x && start_pos.y < end_pos.y return 180.0; // south
+    if      start_pos.x == end_pos.x && start_pos.y > end_pos.y  return 0.0;   // north
+    else if start_pos.x == end_pos.x && start_pos.y < end_pos.y  return 180.0; // south
     else if start_pos.x < end_pos.x  && start_pos.y == end_pos.y return 90.0;  // east
     else if start_pos.x > end_pos.x  && start_pos.y == end_pos.y return 270.0; // west
     else return 0.0;
