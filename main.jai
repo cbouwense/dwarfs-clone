@@ -116,7 +116,7 @@ mouse_drag_began_at_pos : Vector2;
 mouse_pos_when_path_creation_started : Vector2;
 
 GameState :: struct {
-    dwarf_selected : *Dwarf;
+    selected_dwarf_index : int;
 }
 
 Direction :: enum u8 #specified {
@@ -265,7 +265,7 @@ main :: () {
 
     // Initialize game
     game_state := GameState.{
-        dwarf_selected = null,
+        selected_dwarf_index = -1,
     };
 
     // Initialize base
@@ -339,7 +339,7 @@ main :: () {
         {
             // Metagame controls
             if IsKeyPressed(.KEY_SPACE) paused = !paused;
-            if IsKeyPressed(.KEY_G) debug_mode    = !debug_mode;
+            if IsKeyPressed(.KEY_G) debug_mode = !debug_mode;
 
             // Previous controls
             dragging_to_create_path_prev = dragging_to_create_path;
@@ -356,23 +356,23 @@ main :: () {
 
             if dragging_to_create_path {
                 if started_to_create_path {
-                    game_state.dwarf_selected = null;
                     for dwarf: dwarves_in_viewport {
                         if CheckCollisionPointRec(mouse_pos_in_world, dwarf.rect) {
-                            game_state.dwarf_selected = *dwarf;
+                            game_state.selected_dwarf_index = it_index;
                             break;
                         }
                     }
 
-                    if game_state.dwarf_selected != null {
+                    // If a dwarf was found being clicked
+                    if game_state.selected_dwarf_index > -1 {
                         // Teleport dwarf to tile we are hovering over and keep it there
-                        game_state.dwarf_selected.rect = get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
+                        dwarves[game_state.selected_dwarf_index].rect = get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
                         
                         // Stop the dwarf from moving so you can think while dragging a path
-                        game_state.dwarf_selected.state = .IDLE;
+                        dwarves[game_state.selected_dwarf_index].state = .IDLE;
 
                         // Remove its current pathing
-                        array_reset(*(game_state.dwarf_selected.tile_ids_on_path));
+                        array_reset(*(dwarves[game_state.selected_dwarf_index].tile_ids_on_path));
                     }
 
                     mouse_pos_when_path_creation_started = mouse_pos_in_world;
@@ -381,8 +381,8 @@ main :: () {
                 // Draw out the path that is currently being traced
                 {
                     new_target_tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
-                    new_target_tile_pos := Vector2.{ new_target_tile_rect.x, new_target_tile_rect.y };
-                    new_target_tile_id := get_tile_id_by_pos(new_target_tile_pos);
+                    new_target_tile_pos  := Vector2.{ new_target_tile_rect.x, new_target_tile_rect.y };
+                    new_target_tile_id   := get_tile_id_by_pos(new_target_tile_pos);
 
                     tile_rect_mouse_started_on := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_when_path_creation_started);
                     tile_id_mouse_started_on   := get_tile_id_by_pos(get_rect_pos(tile_rect_mouse_started_on));
@@ -419,13 +419,13 @@ main :: () {
             } else if dragging_to_create_path_prev {
                 array_add(*paths, path_being_traced);
 
-                if game_state.dwarf_selected != null {
-                    array_reset(*(game_state.dwarf_selected.tile_ids_on_path));
-                    array_add(*game_state.dwarf_selected.tile_ids_on_path, path_being_traced.middle_tile_id);
-                    array_add(*game_state.dwarf_selected.tile_ids_on_path, path_being_traced.end_tile_id);
+                if game_state.selected_dwarf_index != -1 {
+                    array_reset(*(dwarves[game_state.selected_dwarf_index].tile_ids_on_path));
+                    array_add(*dwarves[game_state.selected_dwarf_index].tile_ids_on_path, path_being_traced.middle_tile_id);
+                    array_add(*dwarves[game_state.selected_dwarf_index].tile_ids_on_path, path_being_traced.end_tile_id);
 
-                    game_state.dwarf_selected.state = .MOVING;
-                    game_state.dwarf_selected = null;
+                    dwarves[game_state.selected_dwarf_index].state = .MOVING;
+                    game_state.selected_dwarf_index = -1;
                 }
             }
         }
