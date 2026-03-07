@@ -88,14 +88,15 @@ init_sprites :: () {
 // Controls
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+add_base                : bool;
 started_to_create_path  : bool;
 dragging_to_create_path : bool;
-drag_cam_pressed    : bool;
-drag_cam_down       : bool;
-move_camera_up      : bool;
-move_camera_down    : bool;
-move_camera_left    : bool;
-move_camera_right   : bool;
+drag_cam_pressed        : bool;
+drag_cam_down           : bool;
+move_camera_up          : bool;
+move_camera_down        : bool;
+move_camera_left        : bool;
+move_camera_right       : bool;
 
 dragging_to_create_path_prev : bool;
 
@@ -207,8 +208,8 @@ actively_mined_tile_ids                 : [..] s32;
 actively_mined_tile_ids_to_health_table : Table(s32, s32);
 actively_mined_tile_ids_in_viewport     : [..] s32;
 
-bases               : [..] *Base;
-bases_in_viewport   : [..] *Base;
+bases               : [..] Base;
+bases_in_viewport   : [..] Base;
 
 dwarves             : [..] Dwarf;
 dwarves_in_viewport : [..] Dwarf;
@@ -245,22 +246,18 @@ main :: () {
     // Initialize controls
     controls: Controls;
     {
-        controls.drag_to_create_path[0] = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_LEFT  };
-
+        controls.add_base[0]            = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_B               };
+        controls.drag_to_create_path[0] = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_LEFT   };
         controls.drag_cam[0]            = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_RIGHT  };
         controls.drag_cam[1]            = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_MIDDLE };
-
-        controls.move_camera_up[0]      = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_UP    };
-        controls.move_camera_up[1]      = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_W     };
-
-        controls.move_camera_down[0]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_DOWN  };
-        controls.move_camera_down[1]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_S     };
-
-        controls.move_camera_left[0]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT  };
-        controls.move_camera_left[1]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_A     };
-
-        controls.move_camera_right[0]   = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT };
-        controls.move_camera_right[1]   = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_D     };
+        controls.move_camera_up[0]      = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_UP              };
+        controls.move_camera_up[1]      = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_W               };
+        controls.move_camera_down[0]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_DOWN            };
+        controls.move_camera_down[1]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_S               };
+        controls.move_camera_left[0]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT            };
+        controls.move_camera_left[1]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_A               };
+        controls.move_camera_right[0]   = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT           };
+        controls.move_camera_right[1]   = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_D               };
     }
 
     // Initialize game
@@ -270,14 +267,15 @@ main :: () {
 
     // Initialize base
     {
-        home_base := New(Base);
-        home_base.rect = Rectangle.{
-            WORLD_COLS * TILEMAP_GENERAL_WORLD_WIDTH  / 2,
-            WORLD_ROWS * TILEMAP_GENERAL_WORLD_HEIGHT / 2,
-            TILEMAP_GENERAL_WORLD_WIDTH,
-            TILEMAP_GENERAL_WORLD_HEIGHT,
+        home_base := Base.{
+            rect = Rectangle.{
+                WORLD_COLS * TILEMAP_GENERAL_WORLD_WIDTH  / 2,
+                WORLD_ROWS * TILEMAP_GENERAL_WORLD_HEIGHT / 2,
+                TILEMAP_GENERAL_WORLD_WIDTH,
+                TILEMAP_GENERAL_WORLD_HEIGHT,
+            },
+            spawn_dwarf_cooldown_ms = DWARF_SPAWN_MS,
         };
-        home_base.spawn_dwarf_cooldown_ms = DWARF_SPAWN_MS;
 
         array_add(*bases, home_base);
 
@@ -345,6 +343,7 @@ main :: () {
             dragging_to_create_path_prev = dragging_to_create_path;
 
             // Game controls
+            add_base                = control_is_pressed(controls.add_base);
             started_to_create_path  = control_is_pressed(controls.drag_to_create_path);
             dragging_to_create_path = control_is_down(controls.drag_to_create_path);
             drag_cam_pressed        = control_is_pressed(controls.drag_cam);
@@ -610,13 +609,36 @@ main :: () {
 
             // Update bases
             {
-                for base: bases {
+                // TODO: cooldown
+                // TODO: probably good to make this a function
+                if add_base {
+                    base := Base.{
+                        rect = get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world),
+                        spawn_dwarf_cooldown_ms = DWARF_SPAWN_MS,
+                    };
+
+                    array_add(*bases, base);
+
+                    // Carve out some tiles around the base
+                    for TILE_DIRECTION_DELTAS {
+                        dx := it[0];
+                        dy := it[1];
+
+                        home_base_pos := get_pos_from_thing_with_rect(base);
+                        neighbor_pos := Vector2.{ home_base_pos.x + dx, home_base_pos.y + dy };
+                        neighbor_id := get_tile_id_by_pos(neighbor_pos);
+
+                        set_tile_as_mined(*fully_mined_tile_ids, *fully_mined_tile_ids_set, neighbor_id);
+                    }
+                }
+
+                for *base: bases {
                     if base.spawn_dwarf_cooldown_ms <= 0 {
-                        home_base_pos := get_pos_from_thing_with_rect(bases[0]);
+                        base_pos := get_pos_from_thing_with_rect(base);
 
                         dwarf := Dwarf.{
                             rect = Rectangle.{
-                                home_base_pos.x, home_base_pos.y,
+                                base_pos.x, base_pos.y,
                                 TILEMAP_GENERAL_WORLD_WIDTH,
                                 TILEMAP_GENERAL_WORLD_HEIGHT,
                             },
@@ -706,8 +728,10 @@ main :: () {
                 {
                     hovered_tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
                     DrawRectangleRec(hovered_tile_rect, TRANSPARENT_WHITE);
-                    tile_id := get_tile_id_by_pos(get_rect_pos(hovered_tile_rect));
-                    DrawText(tprint("%\0", tile_id).data, xx hovered_tile_rect.x, xx hovered_tile_rect.y, 12, WHITE);
+                    if debug_mode {
+                        tile_id := get_tile_id_by_pos(get_rect_pos(hovered_tile_rect));
+                        DrawText(tprint("%\0", tile_id).data, xx hovered_tile_rect.x, xx hovered_tile_rect.y, 12, WHITE);
+                    }
                 }
 
                 // Draw dwarves
@@ -728,9 +752,11 @@ main :: () {
             }
 
             // Draw UI
-            DrawFPS(10, 10);
+            debug_text_y : s32 = 10;
+            INCREMENT_Y :: 20;
             if debug_mode {
-
+                DrawFPS(10, read_then_increment(*debug_text_y, INCREMENT_Y));
+                DrawText(tprint("%\0", dwarves.count).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 12, WHITE);
             }
 
             if paused {
@@ -831,7 +857,7 @@ derive_in_viewport_entities :: (
     camera: Camera2D,
     fully_mined_tile_ids: [..] s32, fully_mined_tile_ids_in_viewport: *[..] s32, 
     actively_mined_tile_ids: [..] s32, actively_mined_tile_ids_in_viewport: *[..] s32, 
-    bases: [..] *Base, bases_in_viewport: *[..] *Base,
+    bases: [..] Base, bases_in_viewport: *[..] Base,
     dwarves: [..] Dwarf, dwarves_in_viewport: *[..] Dwarf
     // paths: [..] Path, paths_in_viewport: *[..] Path
 ) {
