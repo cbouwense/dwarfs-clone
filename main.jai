@@ -289,7 +289,12 @@ main :: () {
             neighbor_pos := Vector2.{ home_base.pos.x + dx, home_base.pos.y + dy };
             neighbor_id  := get_tile_id_by_pos(neighbor_pos);
 
-            set_tile_as_mined(*fully_mined_tile_ids, *fully_mined_tile_ids_set, neighbor_id);
+            set_tile_as_mined(
+                neighbor_id,
+                *fully_mined_tile_ids,    *fully_mined_tile_ids_set,
+                *actively_mined_tile_ids, *actively_mined_tile_ids_to_health_table,
+                *iron_tile_ids,           *iron_tile_ids_set
+            );
         }
     }
 
@@ -596,13 +601,13 @@ main :: () {
                                 assert(ok, "Tried mining a tile that doesn't exist");
                                 new_health := current_health - DWARF_MINE_DAMAGE_PER_SWING;
 
-                                // If the tile is now fully mined, we need to remove it from the actively mined lists,
-                                // and add it to the fully mined lists
                                 if new_health <= 0 {
-                                    array_unordered_remove_by_value(*actively_mined_tile_ids, dwarf.tile_id_mining);
-                                    table_remove(*actively_mined_tile_ids_to_health_table, dwarf.tile_id_mining);
-
-                                    set_tile_as_mined(*fully_mined_tile_ids, *fully_mined_tile_ids_set, dwarf.tile_id_mining);
+                                    set_tile_as_mined(
+                                        dwarf.tile_id_mining,
+                                        *fully_mined_tile_ids,    *fully_mined_tile_ids_set,
+                                        *actively_mined_tile_ids, *actively_mined_tile_ids_to_health_table,
+                                        *iron_tile_ids,           *iron_tile_ids_set
+                                    );
 
                                     dwarf.state = .MOVING;
                                     dwarf.tile_id_mining = 0;
@@ -642,7 +647,12 @@ main :: () {
                         neighbor_pos := Vector2.{ base.pos.x + dx, base.pos.y + dy };
                         neighbor_id := get_tile_id_by_pos(neighbor_pos);
 
-                        set_tile_as_mined(*fully_mined_tile_ids, *fully_mined_tile_ids_set, neighbor_id);
+                        set_tile_as_mined(
+                            neighbor_id,
+                            *fully_mined_tile_ids,    *fully_mined_tile_ids_set,
+                            *actively_mined_tile_ids, *actively_mined_tile_ids_to_health_table,
+                            *iron_tile_ids,           *iron_tile_ids_set
+                        );
                     }
                 }
 
@@ -848,7 +858,26 @@ get_arrow_rotation :: (start_pos: Vector2, end_pos: Vector2) -> float32 {
     else return 0.0;
 }
 
-set_tile_as_mined :: (fully_mined_tile_ids: *[..] s32, fully_mined_tile_ids_set : *Table, tile_id: s32) {
+set_tile_as_mined :: (
+    tile_id: s32,
+    fully_mined_tile_ids    : *[..] s32, fully_mined_tile_ids_set    : *Table,
+    actively_mined_tile_ids : *[..] s32, actively_mined_tile_ids_to_health_table : *Table,
+    iron_tile_ids           : *[..] s32, iron_tile_ids_set           : *Table
+) {
+    // If the tile was a resource, then keep track of the gain and also remove the resource
+    // from the map
+    tile_was_iron := table_find(iron_tile_ids_set, tile_id);
+    if tile_was_iron {
+        print("ayy lmao\n"); // TODO: actually do something interesting here
+        array_unordered_remove_by_value(iron_tile_ids, tile_id);
+        table_remove(iron_tile_ids_set, tile_id);
+    }
+
+    // Remove the tile from the actively mined lists if applicable
+    array_unordered_remove_by_value(actively_mined_tile_ids, tile_id);
+    table_remove(actively_mined_tile_ids_to_health_table, tile_id);
+
+    // Add the tile to the fully mined lists
     array_add(fully_mined_tile_ids, tile_id);
     table_add(fully_mined_tile_ids_set, tile_id, 0); // 0 is just a throwaway value since Sets don't need values.
 
@@ -1075,26 +1104,21 @@ get_tile_pos_by_id :: (id: s32) -> Vector2 {
 }
 
 get_tile_id_by_pos :: (pos: Vector2) -> s32 {
+    found_tile, tile_id := find_tile_id_by_pos(pos);
+    assert(found_tile);
+    return tile_id;
+}
+
+find_tile_id_by_pos :: (pos: Vector2) -> found_tile: bool, tile_id: s32 {
     grid_x := cast(s32) (pos.x / TILEMAP_GENERAL_WORLD_WIDTH);
     grid_y := cast(s32) (pos.y / TILEMAP_GENERAL_WORLD_HEIGHT);
 
-    if grid_x < 0 || grid_x >= WORLD_COLS assert(false);
-    if grid_y < 0 || grid_y >= WORLD_ROWS assert(false);
+    if grid_x < 0 || grid_x >= WORLD_COLS return false, 0;
+    if grid_y < 0 || grid_y >= WORLD_ROWS return false, 0;
 
     index := (grid_y * WORLD_COLS) + grid_x;
 
-    return index + 1;
-}
-
-find_tile_by_pos :: (pos: Vector2) -> (tile_exists: bool, tile: *Tile) {
-    tile_exists, tile := table_find(*global_tile_pos_to_tile, vector2_to_string_temp(pos));
-    return tile_exists, tile;
-}
-
-get_tile_by_pos :: (pos: Vector2) -> *Tile {
-    tile_exists, tile := table_find(*global_tile_pos_to_tile, vector2_to_string_temp(pos));
-    assert(tile_exists);
-    return tile;
+    return true, index + 1;
 }
 
 get_rect_pos :: (rect: Rectangle) -> Vector2 {
