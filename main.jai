@@ -42,10 +42,15 @@ TILEMAP_GENERAL_TILE_HEIGHT  :: 16;
 TILEMAP_GENERAL_WORLD_WIDTH  :: TILEMAP_GENERAL_TILE_WIDTH * SCALE;
 TILEMAP_GENERAL_WORLD_HEIGHT :: TILEMAP_GENERAL_TILE_HEIGHT * SCALE;
 
-WORLD_COLS :: 10000;
-WORLD_ROWS :: 10000;
+WORLD_COLS :: 8192;
+WORLD_ROWS :: 8192;
 WORLD_WIDTH  :: WORLD_COLS * TILEMAP_GENERAL_WORLD_WIDTH;
 WORLD_HEIGHT :: WORLD_ROWS * TILEMAP_GENERAL_WORLD_HEIGHT;
+WORLD_COLS_MASK :: WORLD_COLS - 1;
+WORLD_ROWS_MASK :: WORLD_ROWS - 1;
+WORLD_COLS_SHIFT :: 13;
+TILE_WIDTH_F  :: cast(float32) TILEMAP_GENERAL_WORLD_WIDTH;
+TILE_HEIGHT_F :: cast(float32) TILEMAP_GENERAL_WORLD_HEIGHT;
 
 SCALE :: 1;
 
@@ -212,15 +217,12 @@ data_folder: string;
 // This means that to get the position of a tile you just have to do some math,
 // which also means that we don't need to store that anywhere. Check out
 // get_tile_pos_by_id.
-actively_mined_tile_ids                 : [..] s32;
 actively_mined_tile_ids_to_health_table : Table(s32, s32);
 actively_mined_tile_ids_in_viewport     : [..] s32;
 
-fully_mined_tile_ids             : [..] s32;
 fully_mined_tile_ids_set         : Table(s32, Any); // for fast lookups
 fully_mined_tile_ids_in_viewport : [..] s32;
 
-iron_tile_ids             : [..] s32;
 iron_tile_ids_set         : Table(s32, Any);
 iron_tile_ids_in_viewport : [..] s32;
 
@@ -325,7 +327,7 @@ main :: () {
 
                 iron_spawn_dice_roll := cast(int) random_get_within_range(IRON_SPAWN_CHANCE_NUMERATOR, IRON_SPAWN_CHANCE_DENOMINATOR);
                 if iron_spawn_dice_roll <= IRON_SPAWN_CHANCE_NUMERATOR {
-                    spawn_iron(xx tile_id, IRON_VEIN_SIZE_MIN, IRON_VEIN_SIZE_MAX, WORLD_COLS, WORLD_ROWS, *iron_tile_ids, *iron_tile_ids_set);
+                    spawn_iron(xx tile_id, IRON_VEIN_SIZE_MIN, IRON_VEIN_SIZE_MAX, WORLD_COLS, WORLD_ROWS, *active_chunks, *iron_tile_ids_set);
                 }
             }
         }
@@ -568,7 +570,9 @@ main :: () {
                                     if !tile_is_mined {
                                         dwarf.state = .MINING;
                                         dwarf.tile_id_mining = tile_id_dwarf_wants_to_move_to;
-                                        array_add(*actively_mined_tile_ids, tile_id_dwarf_wants_to_move_to);
+
+                                        chunk := get_chunk_ptr_by_tile_id(tile_id_dwarf_wants_to_move_to);
+                                        array_add(*chunk.actively_mined_tile_ids, tile_id_dwarf_wants_to_move_to);
                                         table_add(*actively_mined_tile_ids_to_health_table, tile_id_dwarf_wants_to_move_to, DIRT_HEALTH);
                                     } else {
                                         dwarf.pos = new_pos;
@@ -903,6 +907,13 @@ get_arrow_rotation :: (start_pos: Vector2, end_pos: Vector2) -> float32 {
     else return 0.0;
 }
 
+get_chunk_ptr_by_tile_id :: (tile_id: s32) -> *Chunk {
+    world_pos := get_tile_pos_by_id(tile_id);
+    chunk_x   := world_to_chunk_coord(world_pos.x, TILEMAP_GENERAL_WORLD_WIDTH);
+    chunk_y   := world_to_chunk_coord(world_pos.y, TILEMAP_GENERAL_WORLD_HEIGHT);
+    return get_or_create_chunk(chunk_x, chunk_y);
+}    
+
 set_tile_as_mined :: (
     tile_id: s32,
     fully_mined_tile_ids_set : *Table,
@@ -910,11 +921,7 @@ set_tile_as_mined :: (
     iron_tile_ids_set : *Table,
     active_chunks: *Table
 ) {
-    // Get the chunk this happened in
-    world_pos := get_tile_pos_by_id(tile_id);
-    chunk_x   := world_to_chunk_coord(world_pos.x, TILEMAP_GENERAL_WORLD_WIDTH);
-    chunk_y   := world_to_chunk_coord(world_pos.y, TILEMAP_GENERAL_WORLD_HEIGHT);
-    chunk     := get_or_create_chunk(chunk_x, chunk_y);
+    chunk := get_chunk_ptr_by_tile_id(tile_id);
 
     // If the tile was a resource, then keep track of the gain and also remove the resource
     // from the map
@@ -922,7 +929,7 @@ set_tile_as_mined :: (
     if tile_was_iron {
         // TODO: give the player resources or something
 
-        array_add(*chunk.iron_tile_ids, tile_id);
+        array_unordered_remove_by_value(*chunk.iron_tile_ids, tile_id);
         table_remove(iron_tile_ids_set, tile_id);
     }
 
@@ -961,7 +968,7 @@ spawn_iron :: (
     vein_size_max: s32, 
     world_columns: s32, 
     world_rows: s32, 
-    iron_tile_ids: *[..] s32, 
+    active_chunks: *Table,
     iron_tile_ids_set : *Table
 ) {
     size := cast(int) random_get_within_range(xx vein_size_min, xx vein_size_max);
@@ -982,10 +989,7 @@ spawn_iron :: (
         if id > max_tile_id continue;
 
         // Get the chunk this happened in
-        world_pos := get_tile_pos_by_id(id);
-        chunk_x   := world_to_chunk_coord(world_pos.x, TILEMAP_GENERAL_WORLD_WIDTH);
-        chunk_y   := world_to_chunk_coord(world_pos.y, TILEMAP_GENERAL_WORLD_HEIGHT);
-        chunk     := get_or_create_chunk(chunk_x, chunk_y);
+        chunk := get_chunk_ptr_by_tile_id(id);
 
         // Mark the tile id as iron
         array_add(*chunk.iron_tile_ids, id);
@@ -1167,7 +1171,7 @@ get_tile_rect_that_pos_is_within :: (world_width: int, world_height: int, tile_w
     return Rectangle.{ xx tile_x, xx tile_y, xx tile_width, xx tile_height };
 }
 
-get_tile_pos_by_id :: (id: s32) -> Vector2 {
+get_tile_pos_by_id_slow :: (id: s32) -> Vector2 {
     index := id - 1; 
 
     grid_x := index % WORLD_COLS; // Remainder = Column
@@ -1175,6 +1179,21 @@ get_tile_pos_by_id :: (id: s32) -> Vector2 {
 
     pixel_x := cast(float32) grid_x * TILEMAP_GENERAL_WORLD_WIDTH;
     pixel_y := cast(float32) grid_y * TILEMAP_GENERAL_WORLD_HEIGHT;
+
+    return Vector2.{ pixel_x, pixel_y };
+}
+
+get_tile_pos_by_id :: inline (id: s32) -> Vector2 {
+    index := id - 1;
+
+    // Bitwise AND (&) acts as Modulo to get the X column
+    grid_x := index & WORLD_COLS_MASK; 
+    
+    // Right Shift (>>) acts as Division to get the Y row
+    grid_y := index >> WORLD_COLS_SHIFT; 
+
+    pixel_x := cast(float32) grid_x * TILE_WIDTH_F;
+    pixel_y := cast(float32) grid_y * TILE_HEIGHT_F;
 
     return Vector2.{ pixel_x, pixel_y };
 }
