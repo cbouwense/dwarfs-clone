@@ -37,9 +37,9 @@ DWARF_SPAWN_MS :: 5000;
 
 TILEMAP_GENERAL_MAP_WIDTH    :: 320;
 TILEMAP_GENERAL_MAP_HEIGHT   :: 320;
-TILEMAP_GENERAL_TILE_WIDTH   :: 16;
-TILEMAP_GENERAL_TILE_HEIGHT  :: 16;
-TILEMAP_GENERAL_WORLD_WIDTH  :: TILEMAP_GENERAL_TILE_WIDTH * SCALE;
+TILEMAP_GENERAL_TILE_WIDTH   :: 32;
+TILEMAP_GENERAL_TILE_HEIGHT  :: 32;
+TILEMAP_GENERAL_WORLD_WIDTH  :: TILEMAP_GENERAL_TILE_WIDTH  * SCALE;
 TILEMAP_GENERAL_WORLD_HEIGHT :: TILEMAP_GENERAL_TILE_HEIGHT * SCALE;
 
 WORLD_COLS :: 8192;
@@ -717,15 +717,15 @@ main :: () {
                     source := Rectangle.{ 
                         0, 
                         0, 
-                        xx (dirt_texture.width * WORLD_COLS),  // Repeat 10,000 times horizontally
-                        xx (dirt_texture.height * WORLD_ROWS),   // Repeat 10,000 times vertically
+                        xx (TILEMAP_GENERAL_WORLD_WIDTH  * WORLD_COLS), // Repeat 10,000 times horizontally
+                        xx (TILEMAP_GENERAL_WORLD_HEIGHT * WORLD_ROWS), // Repeat 10,000 times vertically
                     };
 
                     dest := Rectangle.{ 
                         0, 
                         0, 
-                        xx (dirt_texture.width * WORLD_COLS),
-                        xx (dirt_texture.height * WORLD_ROWS),
+                        xx (TILEMAP_GENERAL_WORLD_WIDTH  * WORLD_COLS),
+                        xx (TILEMAP_GENERAL_WORLD_HEIGHT * WORLD_ROWS),
                     };
                     
                     DrawTexturePro(dirt_texture, source, dest, Vector2.{0,0}, 0.0, WHITE);
