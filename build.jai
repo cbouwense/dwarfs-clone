@@ -1,5 +1,8 @@
 
 #import "Basic";
+Compiler :: #import "Compiler";
+Metaprogram_Plugin :: Compiler.Metaprogram_Plugin;
+#import "Metaprogram_Plugins";
 #import "String";
 #import "System";
 
@@ -10,86 +13,84 @@
 
 #import "Process";
 
-Compiler :: #import "Compiler";
-
-#run build_simple_examples();
-
-make_return_statement :: (expression: *Compiler.Code_Node) -> *Compiler.Code_Return {
-    ret := New(Compiler.Code_Return);
-    ret.kind = .RETURN;
-
-    arguments_unsorted: [..] Compiler.Code_Argument;
-
-    arg: Compiler.Code_Argument;
-    arg.expression = expression;
-    arg.name = null;
-
-    array_add(*arguments_unsorted, arg);
-    ret.arguments_unsorted = arguments_unsorted;
-
-    arguments_sorted: [..] *Compiler.Code_Node;
-    array_add(*arguments_sorted, expression);
-    ret.arguments_sorted = arguments_sorted;
-
-    return ret;
+create_workspace :: (opts: Compiler.Build_Options, workspace_name := "") -> Workspace {
+    w := Compiler.compiler_create_workspace(workspace_name);
+    Compiler.set_build_options(opts, w);
+    return w;
 }
 
-build_simple_examples :: () {
-    create_workspace :: (opts: Compiler.Build_Options, workspace_name := "") -> Workspace {
-        w := Compiler.compiler_create_workspace(workspace_name);
-        Compiler.set_build_options(opts, w);
-        return w;
-    }
-
+#run {
     opts := Compiler.get_build_options();
+    intercept_flags: Compiler.Intercept_Flags;
 
-    // Disable executable generation for the current workspace.
-    // This makes this workspace compile-time metaprogramming
-    // only.
+    // Make this workspace compile-time metaprogramming only.
     Compiler.set_build_options_dc(.{do_output=false});
 
     set_working_directory(#filepath);
 
-    {
-        opts.output_type = .EXECUTABLE;
-        opts.use_custom_link_command = true;
-        opts.output_executable_name = "Dwarfs Clone";
+    opts.output_type = .EXECUTABLE;
+    opts.use_custom_link_command = true;
+    opts.output_executable_name = "Dwarfs Clone";
+    opts.backend = .LLVM;
+    Compiler.set_optimization(*opts, .VERY_OPTIMIZED);
 
-        ws := create_workspace(opts);
-        Compiler.compiler_begin_intercept(ws);
+    ws := create_workspace(opts);
 
-        Compiler.add_build_file("main.jai", ws);
+    // Initialize plugins
+    tracy_plugin_to_create := Plugin_To_Create.{ name = "tracy" };
+    
+    plugins : [..] *Metaprogram_Plugin;
+    success := init_plugins(.[tracy_plugin_to_create], *plugins, ws);
+    if !success {
+        log_error("A plugin init() failed. Exiting.\n");
+        exit(0);
+    }
 
-        while true {
-            message := Compiler.compiler_wait_for_message();
-            if message.kind == .COMPLETE break;
+    for plugins it.workspace = ws;
+    for plugins if it.before_intercept it.before_intercept(it, *intercept_flags);
 
-            if message.kind == .PHASE {
-                phase_message := cast(*Compiler.Message_Phase) message;
-                phase := phase_message.phase;
-        
-                if phase == .READY_FOR_CUSTOM_LINK_COMMAND {
-                    use_system_linker_if_able := true; // Use link.exe on Windows, ld on Linux/MacOS
-                    run_custom_link_command(message.workspace, phase_message, use_system_linker_if_able=use_system_linker_if_able);
-                }
+    Compiler.compiler_begin_intercept(ws);
+
+    for plugins if it.add_source it.add_source(it);
+
+    Compiler.add_build_file("main.jai", ws);
+
+    while true {
+        message := Compiler.compiler_wait_for_message();
+
+        // Forward the messages to our plugins
+        for plugins it.message(it, message);
+
+        if message.kind == .COMPLETE break;
+
+        if message.kind == .PHASE {
+            phase_message := cast(*Compiler.Message_Phase) message;
+            phase := phase_message.phase;
+    
+            if phase == .READY_FOR_CUSTOM_LINK_COMMAND {
+                use_system_linker_if_able := true; // Use link.exe on Windows, ld on Linux/MacOS
+                run_custom_link_command(message.workspace, phase_message, use_system_linker_if_able=use_system_linker_if_able);
             }
         }
+    }
 
-        Compiler.compiler_end_intercept(ws);
+    for plugins if it.finish   it.finish  (it);
+    for plugins if it.shutdown it.shutdown(it);
 
-        // Using Windows_Resources and Ico_File to set the icon and manifest data for example2.
-        #if OS == .WINDOWS {
-            exe_name := sprint("%.exe", opts.output_executable_name);
-            defer free(exe_name);
+    Compiler.compiler_end_intercept(ws);
 
-            // TODO
-            // ico_data := Ico_File.create_ico_file_from_bitmap_filename("data/Terraria2/Item_54.png");
-            // defer free(ico_data);
-            // Windows_Resources.set_icon_by_data(exe_name, ico_data);
+    // Using Windows_Resources and Ico_File to set the icon and manifest data for example2.
+    #if OS == .WINDOWS {
+        exe_name := sprint("%.exe", opts.output_executable_name);
+        defer free(exe_name);
 
-            manifest_options: Windows_Resources.Manifest_Options;
-            Windows_Resources.add_manifest_to_executable(exe_name, manifest_options);
-        }
+        // TODO
+        // ico_data := Ico_File.create_ico_file_from_bitmap_filename("data/Terraria2/Item_54.png");
+        // defer free(ico_data);
+        // Windows_Resources.set_icon_by_data(exe_name, ico_data);
+
+        manifest_options: Windows_Resources.Manifest_Options;
+        Windows_Resources.add_manifest_to_executable(exe_name, manifest_options);
     }
 }
 
@@ -237,6 +238,8 @@ run_custom_link_command :: (w: Workspace, m: *Compiler.Message_Phase, use_system
 
     for m.user_libraries      array_add(*arguments, it);
     for m.system_libraries    array_add(*arguments, it);
+
+    array_add(*arguments, "oldnames.lib");
 
     print("Link line: %\n", get_quoted_command_string(arguments));
     process_result := run_command(..arguments);

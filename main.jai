@@ -51,6 +51,8 @@ SCALE :: 1;
 
 TRANSPARENT_WHITE :: Color.{ 255, 255, 255, 100 };
 
+CHUNK_SIZE :: 32; // 32 x 32 tiles
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Metagame state
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -190,6 +192,16 @@ Path :: struct {
     end_tile_id    : s32;
 }
 
+Chunk :: struct {
+    fully_mined_tile_ids    : [..] s32;
+    actively_mined_tile_ids : [..] s32;
+    iron_tile_ids           : [..] s32;
+    
+    // TODO: Will probably want these
+    // bases   : [..] Base;
+    // dwarves : [..] Dwarf;
+}
+
 data_folder: string;
 
 // Tile ID's will go row-wise, starting at 1 (zero means invalid or whatever)
@@ -221,6 +233,8 @@ dwarves_in_viewport : [..] Dwarf;
 path_being_traced : Path;
 paths             : [..] Path;
 // paths_in_viewport : [..] Path;
+
+active_chunks: Table(u64, *Chunk);
 
 edges : [..] Edge; // List of edges between tiles for pathfinding
 
@@ -291,9 +305,10 @@ main :: () {
 
             set_tile_as_mined(
                 neighbor_id,
-                *fully_mined_tile_ids,    *fully_mined_tile_ids_set,
-                *actively_mined_tile_ids, *actively_mined_tile_ids_to_health_table,
-                *iron_tile_ids,           *iron_tile_ids_set
+                *fully_mined_tile_ids_set,
+                *actively_mined_tile_ids_to_health_table,
+                *iron_tile_ids_set,
+                *active_chunks,
             );
         }
     }
@@ -452,12 +467,12 @@ main :: () {
 
         derive_in_viewport_entities(
             camera,
-            fully_mined_tile_ids,    *fully_mined_tile_ids_in_viewport,
-            actively_mined_tile_ids, *actively_mined_tile_ids_in_viewport,
-            iron_tile_ids,           *iron_tile_ids_in_viewport,
-            bases,                   *bases_in_viewport,
-            dwarves,                 *dwarves_in_viewport,
-            // paths,                   *paths_in_viewport
+            *fully_mined_tile_ids_in_viewport,
+            *actively_mined_tile_ids_in_viewport,
+            *iron_tile_ids_in_viewport,
+            bases,   *bases_in_viewport,
+            dwarves, *dwarves_in_viewport,
+            // paths, *paths_in_viewport
         );
 
         //
@@ -604,9 +619,10 @@ main :: () {
                                 if new_health <= 0 {
                                     set_tile_as_mined(
                                         dwarf.tile_id_mining,
-                                        *fully_mined_tile_ids,    *fully_mined_tile_ids_set,
-                                        *actively_mined_tile_ids, *actively_mined_tile_ids_to_health_table,
-                                        *iron_tile_ids,           *iron_tile_ids_set
+                                        *fully_mined_tile_ids_set,
+                                        *actively_mined_tile_ids_to_health_table,
+                                        *iron_tile_ids_set,
+                                        *active_chunks,
                                     );
 
                                     dwarf.state = .MOVING;
@@ -649,9 +665,10 @@ main :: () {
 
                         set_tile_as_mined(
                             neighbor_id,
-                            *fully_mined_tile_ids,    *fully_mined_tile_ids_set,
-                            *actively_mined_tile_ids, *actively_mined_tile_ids_to_health_table,
-                            *iron_tile_ids,           *iron_tile_ids_set
+                            *fully_mined_tile_ids_set,
+                            *actively_mined_tile_ids_to_health_table,
+                            *iron_tile_ids_set,
+                            *active_chunks,
                         );
                     }
                 }
@@ -795,6 +812,34 @@ main :: () {
     }
 }
 
+get_or_create_chunk :: (chunk_x: s32, chunk_y: s32) -> *Chunk {
+    key := get_chunk_key(chunk_x, chunk_y);
+    
+    found, chunk := table_find(*active_chunks, key);
+    if found return chunk;
+
+    // The chunk doesn't exist yet, so let's make a new one.
+    new_chunk := New(Chunk);
+    
+    table_add(*active_chunks, key, new_chunk);
+    
+    return new_chunk;
+}
+
+get_chunk_key :: (chunk_x: s32, chunk_y: s32) -> u64 {
+    x_u64 := cast(u64) cast(u32) chunk_x;
+    y_u64 := cast(u64) cast(u32) chunk_y;
+    
+    // TODO: does endian-ness matter? Probably not?...
+    // x occupies the top 32 bits, y occupies the bottom 32 bits.
+    return (x_u64 << 32) | y_u64;
+}
+
+world_to_chunk_coord :: (world_pos: float, tile_pixel_size: float) -> s32 {
+    chunk_size_in_pixels := cast(float)(CHUNK_SIZE) * tile_pixel_size;
+    return cast(s32) floor(world_pos / chunk_size_in_pixels);
+}
+
 // Helper function that just uses the default width and height from globals
 get_world_rect_from_pos :: (pos: Vector2) -> Rectangle {
     return Rectangle.{
@@ -860,27 +905,36 @@ get_arrow_rotation :: (start_pos: Vector2, end_pos: Vector2) -> float32 {
 
 set_tile_as_mined :: (
     tile_id: s32,
-    fully_mined_tile_ids    : *[..] s32, fully_mined_tile_ids_set    : *Table,
-    actively_mined_tile_ids : *[..] s32, actively_mined_tile_ids_to_health_table : *Table,
-    iron_tile_ids           : *[..] s32, iron_tile_ids_set           : *Table
+    fully_mined_tile_ids_set : *Table,
+    actively_mined_tile_ids_to_health_table : *Table,
+    iron_tile_ids_set : *Table,
+    active_chunks: *Table
 ) {
+    // Get the chunk this happened in
+    world_pos := get_tile_pos_by_id(tile_id);
+    chunk_x   := world_to_chunk_coord(world_pos.x, TILEMAP_GENERAL_WORLD_WIDTH);
+    chunk_y   := world_to_chunk_coord(world_pos.y, TILEMAP_GENERAL_WORLD_HEIGHT);
+    chunk     := get_or_create_chunk(chunk_x, chunk_y);
+
     // If the tile was a resource, then keep track of the gain and also remove the resource
     // from the map
     tile_was_iron := table_find(iron_tile_ids_set, tile_id);
     if tile_was_iron {
-        print("ayy lmao\n"); // TODO: actually do something interesting here
-        array_unordered_remove_by_value(iron_tile_ids, tile_id);
+        // TODO: give the player resources or something
+
+        array_add(*chunk.iron_tile_ids, tile_id);
         table_remove(iron_tile_ids_set, tile_id);
     }
 
-    // Remove the tile from the actively mined lists if applicable
-    array_unordered_remove_by_value(actively_mined_tile_ids, tile_id);
+    // Remove the tile from the actively mined list if applicable
+    array_add(*chunk.actively_mined_tile_ids, tile_id);
     table_remove(actively_mined_tile_ids_to_health_table, tile_id);
 
     // Add the tile to the fully mined lists
-    array_add(fully_mined_tile_ids, tile_id);
+    array_add(*chunk.fully_mined_tile_ids, tile_id);
     table_add(fully_mined_tile_ids_set, tile_id, 0); // 0 is just a throwaway value since Sets don't need values.
 
+    // Add edges for pathing to any neighbors who are also mined
     dx, dy : float;
     tile_pos := get_tile_pos_by_id(tile_id);
 
@@ -900,6 +954,7 @@ set_tile_as_mined :: (
     }
 }
 
+// Flood fill
 spawn_iron :: (
     starting_tile_id: s32, 
     vein_size_min: s32, 
@@ -926,8 +981,14 @@ spawn_iron :: (
         if id <= 0 continue;
         if id > max_tile_id continue;
 
+        // Get the chunk this happened in
+        world_pos := get_tile_pos_by_id(id);
+        chunk_x   := world_to_chunk_coord(world_pos.x, TILEMAP_GENERAL_WORLD_WIDTH);
+        chunk_y   := world_to_chunk_coord(world_pos.y, TILEMAP_GENERAL_WORLD_HEIGHT);
+        chunk     := get_or_create_chunk(chunk_x, chunk_y);
+
         // Mark the tile id as iron
-        array_add(iron_tile_ids, id);
+        array_add(*chunk.iron_tile_ids, id);
         table_add(iron_tile_ids_set, id, 0);
 
         // Mark it as processed
@@ -942,18 +1003,11 @@ spawn_iron :: (
     }
 }
 
-things_with_rects_are_at_the_same_pos :: (rect_enjoyer1: $T/interface HasPos, rect_enjoyer2: T) -> bool {
-    return (
-        values_are_close(rect_enjoyer1.rect.x, rect_enjoyer2.rect.x) &&
-        values_are_close(rect_enjoyer1.rect.y, rect_enjoyer2.rect.y)
-    );
-}
-
 derive_in_viewport_entities :: (
     camera: Camera2D,
-    fully_mined_tile_ids: [..] s32, fully_mined_tile_ids_in_viewport: *[..] s32, 
-    actively_mined_tile_ids: [..] s32, actively_mined_tile_ids_in_viewport: *[..] s32, 
-    iron_tile_ids: [..] s32, iron_tile_ids_in_viewport: *[..] s32, 
+    fully_mined_tile_ids_in_viewport: *[..] s32,
+    actively_mined_tile_ids_in_viewport: *[..] s32,
+    iron_tile_ids_in_viewport: *[..] s32,
     bases: [..] Base, bases_in_viewport: *[..] Base,
     dwarves: [..] Dwarf, dwarves_in_viewport: *[..] Dwarf
     // paths: [..] Path, paths_in_viewport: *[..] Path
@@ -967,49 +1021,88 @@ derive_in_viewport_entities :: (
     array_reset(bases_in_viewport);
     array_reset(dwarves_in_viewport);
     
-    // Derive viewable tiles
-    // NOTE: The order in which tiles are added to viewable_tiles matters!
-    // The first will be furthest away in the z ordering.
-    {
-        for tile_id: fully_mined_tile_ids {
-            pos := get_tile_pos_by_id(tile_id);
+    // Calculate chunk dimensions in pixels
+    chunk_pixel_width  := cast(float)(CHUNK_SIZE) * TILEMAP_GENERAL_WORLD_WIDTH;
+    chunk_pixel_height := cast(float)(CHUNK_SIZE) * TILEMAP_GENERAL_WORLD_HEIGHT;
 
-            if pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x continue;
-            if pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x continue;
+    // Convert camera world bounds to chunk coordinates
+    // NOTE Using floor() is critical here so negative world coordinates map to the correct chunks.
+    start_chunk_x := cast(s32) floor(window_start.x / chunk_pixel_width);
+    end_chunk_x   := cast(s32) floor(window_end.x   / chunk_pixel_width);
+    
+    start_chunk_y := cast(s32) floor(window_start.y / chunk_pixel_height);
+    end_chunk_y   := cast(s32) floor(window_end.y   / chunk_pixel_height);
+
+    for cy: start_chunk_y..end_chunk_y {
+        for cx: start_chunk_x..end_chunk_x {
             
-            if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y continue;
-            if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+            key := get_chunk_key(cx, cy);
+            found, chunk := table_find(*active_chunks, key);
+            // If the chunk doesn't exist, nobody has mined or walked here, so just move on.
+            if !found continue; 
 
-            array_add(fully_mined_tile_ids_in_viewport, tile_id);
-            // array_add(collidable_blocks, block);
-        }
-    }
+            // Fully mined tiles
+            for tile_id: chunk.fully_mined_tile_ids {
+                pos := get_tile_pos_by_id(xx tile_id);
 
-    {
-        for tile_id: actively_mined_tile_ids {
-            pos := get_tile_pos_by_id(tile_id);
+                // Precise Culling: Chunks overlap the screen edge, so we still 
+                // do a quick bounds check to avoid drawing slightly off-screen tiles.
+                if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+                if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+                if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+                if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-            if pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x continue;
-            if pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x continue;
-            
-            if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y continue;
-            if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+                array_add(fully_mined_tile_ids_in_viewport, tile_id);
+            }
 
-            array_add(actively_mined_tile_ids_in_viewport, tile_id);
-        }
-    }
+            // Actively mined tiles
+            for tile_id: chunk.actively_mined_tile_ids {
+                pos := get_tile_pos_by_id(tile_id);
 
-    {
-        for tile_id: iron_tile_ids {
-            pos := get_tile_pos_by_id(tile_id);
+                if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+                if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+                if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+                if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-            if pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x continue;
-            if pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x continue;
-            
-            if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y continue;
-            if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+                array_add(actively_mined_tile_ids_in_viewport, tile_id);
+            }
 
-            array_add(iron_tile_ids_in_viewport, tile_id);
+            // Iron tiles
+            for tile_id: chunk.iron_tile_ids {
+                pos := get_tile_pos_by_id(tile_id);
+
+                if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+                if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+                if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+                if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+
+                array_add(iron_tile_ids_in_viewport, tile_id);
+            }
+
+            // TODO: these are slightly harder
+            // Bases
+            // for base: chunk.bases {
+            //     pos := base.pos;
+
+            //     if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+            //     if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+            //     if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+            //     if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+
+            //     array_add(*bases_in_viewport, base);
+            // }
+
+            // // --- Dwarves ---
+            // for dwarf: chunk.dwarves {
+            //     pos := dwarf.pos;
+
+            //     if pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x continue;
+            //     if pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x continue;
+            //     if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y continue;
+            //     if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+
+            //     array_add(*dwarves_in_viewport, dwarf);
+            // }
         }
     }
 
@@ -1043,23 +1136,6 @@ derive_in_viewport_entities :: (
             array_add(dwarves_in_viewport, dwarf);
         }
     }
-
-    // TODO: Derive viewable paths
-    // {
-    //     for path: paths {
-    //         start_tile_pos := get_tile_pos_by_id(path.start_tile_id);
-
-    //         if start_tile_pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x continue;
-    //         if start_tile_pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x continue;
-            
-    //         if start_tile_pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y continue;
-    //         if start_tile_pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
-
-    //         end_tile_pos := get_tile_pos_by_id(path.end_tile_id);
-
-    //         array_add(dwarves_in_viewport, path);
-    //     }
-    // }
 }
 
 get_rect_center :: (rect: Rectangle) -> Vector2 {
