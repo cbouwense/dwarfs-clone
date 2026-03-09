@@ -30,7 +30,7 @@ CAMERA_ZOOM_SPEED :: 0.3;
 DIRT_HEALTH :: 100;
 
 DWARF_START_COUNT :: 1;
-DWARF_MOVE_SPEED :: 15 * 2;
+DWARF_MOVE_SPEED :: 100;
 DWARF_MINE_COOLDOWN_MS :: 250;
 DWARF_MINE_DAMAGE_PER_SWING :: 50;
 DWARF_SPAWN_MS :: 5000;
@@ -621,6 +621,10 @@ main :: () {
                                 new_health := current_health - DWARF_MINE_DAMAGE_PER_SWING;
 
                                 if new_health <= 0 {
+                                    // TODO: probably will want a function to determine if a tile has a resource
+                                    // instead of checking each table manually as we have more. idk.
+                                    is_mining_resource := table_find(*iron_tile_ids_set, dwarf.tile_id_mining);
+                                    
                                     set_tile_as_mined(
                                         dwarf.tile_id_mining,
                                         *fully_mined_tile_ids_set,
@@ -629,8 +633,27 @@ main :: () {
                                         *active_chunks,
                                     );
 
+                                    // If the dwarf is mining a resource, check if there are any others nearby.
+                                    if is_mining_resource {
+                                         for TILE_DIRECTION_DELTAS {
+                                            dx := it[0];
+                                            dy := it[1];
+
+                                            mined_tile_pos := get_tile_pos_by_id(dwarf.tile_id_mining);
+                                            neighbor_pos   := Vector2.{ mined_tile_pos.x + dx, mined_tile_pos.y + dy };
+                                            neighbor_id    := get_tile_id_by_pos(neighbor_pos);
+
+                                            is_neighbor_a_resource_tile := table_find(*iron_tile_ids_set, neighbor_id);
+                                            if is_neighbor_a_resource_tile {
+                                                dwarf.tile_id_mining = neighbor_id;
+                                                break;
+                                            }
+                                        }
+                                    } else {
+                                        dwarf.tile_id_mining = 0;
+                                    }
+
                                     dwarf.state = .MOVING;
-                                    dwarf.tile_id_mining = 0;
                                 } else {
                                     // If the tile just needs to take some damage, well, then damage it ya fuckin jallopy
                                     table_set(*actively_mined_tile_ids_to_health_table, dwarf.tile_id_mining, new_health);
