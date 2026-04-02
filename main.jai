@@ -419,43 +419,7 @@ main :: () {
                 }
 
                 // Draw out the path that is currently being traced
-                {
-                    new_target_tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
-                    new_target_tile_pos  := Vector2.{ new_target_tile_rect.x, new_target_tile_rect.y };
-                    new_target_tile_id   := get_tile_id_by_pos(new_target_tile_pos);
-
-                    tile_rect_mouse_started_on := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_when_path_creation_started);
-                    tile_id_mouse_started_on   := get_tile_id_by_pos(get_rect_pos(tile_rect_mouse_started_on));
-                    
-                    // We need to separate the dx and dy
-                    dx := new_target_tile_rect.x - tile_rect_mouse_started_on.x;
-                    dy := new_target_tile_rect.y - tile_rect_mouse_started_on.y;
-
-                    // Check which one is larger, that'll be the first leg
-                    x_is_larger := abs(dx) > abs(dy);
-
-                    middle_tile_rect := Rectangle.{
-                        tile_rect_mouse_started_on.x + ifx x_is_larger then dx else 0,
-                        tile_rect_mouse_started_on.y + ifx x_is_larger then 0 else dy,
-                        TILEMAP_GENERAL_WORLD_WIDTH,
-                        TILEMAP_GENERAL_WORLD_HEIGHT,
-                    };
-                    middle_tile_id := get_tile_id_by_pos(get_rect_pos(middle_tile_rect));
-
-                    end_tile_rect := Rectangle.{
-                        middle_tile_rect.x + ifx x_is_larger then 0 else dx,
-                        middle_tile_rect.y + ifx x_is_larger then dy else 0,
-                        TILEMAP_GENERAL_WORLD_WIDTH,
-                        TILEMAP_GENERAL_WORLD_HEIGHT,
-                    };
-                    end_tile_id := get_tile_id_by_pos(get_rect_pos(end_tile_rect));
-
-                    path_being_traced = Path.{
-                        start_tile_id  = tile_id_mouse_started_on,
-                        middle_tile_id = middle_tile_id,
-                        end_tile_id    = end_tile_id,
-                    };
-                }
+                path_being_traced = get_path(mouse_pos_when_path_creation_started, mouse_pos_in_world);
             } else if dragging_to_create_path_prev {
                 array_add(*paths, path_being_traced);
 
@@ -648,15 +612,19 @@ main :: () {
 
                                             is_neighbor_a_resource_tile := table_find(*iron_tile_ids_set, neighbor_id);
                                             if is_neighbor_a_resource_tile {
-                                                dwarf.tile_id_mining = neighbor_id;
+                                                // If the tile we mined was a resource like iron (as opposed to dirt),
+                                                // then we want to path towards it.
+                                                path_to_neighbor_resource := get_path(dwarf.pos, neighbor_pos);
+                                                array_reset(*(dwarf.tile_ids_on_path));
+                                                array_add(*(dwarf.tile_ids_on_path), path_to_neighbor_resource.middle_tile_id);
+                                                array_add(*(dwarf.tile_ids_on_path), path_to_neighbor_resource.end_tile_id);
                                                 break;
                                             }
                                         }
-                                    } else {
-                                        dwarf.tile_id_mining = 0;
-                                        dwarf.state = .MOVING;
                                     }
 
+                                    dwarf.tile_id_mining = 0;
+                                    dwarf.state = .MOVING;
                                 } else {
                                     // If the tile just needs to take some damage, well, then damage it ya fuckin jallopy
                                     table_set(*actively_mined_tile_ids_to_health_table, dwarf.tile_id_mining, new_health);
@@ -938,6 +906,44 @@ draw_path :: (path: Path) {
         2.0,
         GREEN
     );       
+}
+
+get_path :: (from_pos: Vector2, to_pos: Vector2) -> Path {
+    new_target_tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, to_pos);
+    new_target_tile_pos  := Vector2.{ new_target_tile_rect.x, new_target_tile_rect.y };
+    new_target_tile_id   := get_tile_id_by_pos(new_target_tile_pos);
+
+    tile_rect_mouse_started_on := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, from_pos);
+    tile_id_mouse_started_on   := get_tile_id_by_pos(get_rect_pos(tile_rect_mouse_started_on));
+    
+    // We need to separate the dx and dy
+    dx := new_target_tile_rect.x - tile_rect_mouse_started_on.x;
+    dy := new_target_tile_rect.y - tile_rect_mouse_started_on.y;
+
+    // Check which one is larger, that'll be the first leg
+    x_is_larger := abs(dx) > abs(dy);
+
+    middle_tile_rect := Rectangle.{
+        tile_rect_mouse_started_on.x + ifx x_is_larger then dx else 0,
+        tile_rect_mouse_started_on.y + ifx x_is_larger then 0 else dy,
+        TILEMAP_GENERAL_WORLD_WIDTH,
+        TILEMAP_GENERAL_WORLD_HEIGHT,
+    };
+    middle_tile_id := get_tile_id_by_pos(get_rect_pos(middle_tile_rect));
+
+    end_tile_rect := Rectangle.{
+        middle_tile_rect.x + ifx x_is_larger then 0 else dx,
+        middle_tile_rect.y + ifx x_is_larger then dy else 0,
+        TILEMAP_GENERAL_WORLD_WIDTH,
+        TILEMAP_GENERAL_WORLD_HEIGHT,
+    };
+    end_tile_id := get_tile_id_by_pos(get_rect_pos(end_tile_rect));
+
+    return Path.{
+        start_tile_id  = tile_id_mouse_started_on,
+        middle_tile_id = middle_tile_id,
+        end_tile_id    = end_tile_id,
+    };
 }
 
 get_arrow_rotation :: (start_pos: Vector2, end_pos: Vector2) -> float32 {
