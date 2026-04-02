@@ -96,6 +96,7 @@ init_sprites :: () {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 add_base                : bool;
+add_iron                : bool;
 started_to_create_path  : bool;
 dragging_to_create_path : bool;
 drag_cam_pressed        : bool;
@@ -267,6 +268,7 @@ main :: () {
     controls: Controls;
     {
         controls.add_base[0]            = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_B               };
+        controls.add_iron[0]            = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_I               };
         controls.drag_to_create_path[0] = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_LEFT   };
         controls.drag_cam[0]            = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_RIGHT  };
         controls.drag_cam[1]            = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_MIDDLE };
@@ -381,6 +383,7 @@ main :: () {
 
             // Game controls
             add_base                = control_is_pressed(controls.add_base);
+            add_iron                = control_is_pressed(controls.add_iron);
             started_to_create_path  = control_is_pressed(controls.drag_to_create_path);
             dragging_to_create_path = control_is_down(controls.drag_to_create_path);
             drag_cam_pressed        = control_is_pressed(controls.drag_cam);
@@ -467,7 +470,7 @@ main :: () {
             }
         }
 
-        derive_in_viewport_entities(
+        derive_entities_in_viewport(
             camera,
             *fully_mined_tile_ids_in_viewport,
             *actively_mined_tile_ids_in_viewport,
@@ -566,15 +569,7 @@ main :: () {
                                     tile_id_dwarf_wants_to_move_to   := get_tile_id_by_pos(get_rect_pos(tile_rect_dwarf_wants_to_move_to));
                                     tile_is_mined := table_contains(*fully_mined_tile_ids_set, tile_id_dwarf_wants_to_move_to);
 
-                                    // TODO: Eventually we'll want to check whether the tile is mineable or not.
-                                    if !tile_is_mined {
-                                        dwarf.state = .MINING;
-                                        dwarf.tile_id_mining = tile_id_dwarf_wants_to_move_to;
-
-                                        chunk := get_chunk_ptr_by_tile_id(tile_id_dwarf_wants_to_move_to);
-                                        array_add(*chunk.actively_mined_tile_ids, tile_id_dwarf_wants_to_move_to);
-                                        table_add(*actively_mined_tile_ids_to_health_table, tile_id_dwarf_wants_to_move_to, DIRT_HEALTH);
-                                    } else {
+                                    if tile_is_mined {
                                         dwarf.pos = new_pos;
 
                                         // center_of_dwarf       := get_rect_center(dwarf.rect);
@@ -582,6 +577,14 @@ main :: () {
                                         // tile_id_dwarf_is_on   := get_tile_id_by_pos(get_rect_pos(tile_rect_dwarf_is_on));
                                          
                                         // assert(table_contains(*fully_mined_tile_ids_set, tile_id_dwarf_is_on), "dwarf is in rock or something lol wtf");
+                                    } else {
+                                        // TODO: Eventually we'll want to check whether the tile is mineable or not.
+                                        dwarf.state = .MINING;
+                                        dwarf.tile_id_mining = tile_id_dwarf_wants_to_move_to;
+
+                                        chunk := get_chunk_ptr_by_tile_id(tile_id_dwarf_wants_to_move_to);
+                                        array_add(*chunk.actively_mined_tile_ids, tile_id_dwarf_wants_to_move_to);
+                                        table_add(*actively_mined_tile_ids_to_health_table, tile_id_dwarf_wants_to_move_to, DIRT_HEALTH);
                                     }
                                 }
                             } else {
@@ -651,9 +654,9 @@ main :: () {
                                         }
                                     } else {
                                         dwarf.tile_id_mining = 0;
+                                        dwarf.state = .MOVING;
                                     }
 
-                                    dwarf.state = .MOVING;
                                 } else {
                                     // If the tile just needs to take some damage, well, then damage it ya fuckin jallopy
                                     table_set(*actively_mined_tile_ids_to_health_table, dwarf.tile_id_mining, new_health);
@@ -715,6 +718,21 @@ main :: () {
                     } else {
                         base.spawn_dwarf_cooldown_ms -= xx (dt_seconds * 1000);
                     }
+                }
+            }
+
+            // Update iron
+            {
+                // IRON_SPAWN_CHANCE_NUMERATOR   :: 1;
+                // IRON_SPAWN_CHANCE_DENOMINATOR :: 10000;
+                IRON_VEIN_SIZE_MIN :: 8;
+                IRON_VEIN_SIZE_MAX :: 15;
+
+                if add_iron {
+                    iron_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
+                    tile_pos  := Vector2.{ iron_rect.x, iron_rect.y };
+                    tile_id   := get_tile_id_by_pos(tile_pos);
+                    spawn_iron(xx tile_id, IRON_VEIN_SIZE_MIN, IRON_VEIN_SIZE_MAX, WORLD_COLS, WORLD_ROWS, *active_chunks, *iron_tile_ids_set);
                 }
             }
         }
@@ -1030,7 +1048,7 @@ spawn_iron :: (
     }
 }
 
-derive_in_viewport_entities :: (
+derive_entities_in_viewport :: (
     camera: Camera2D,
     fully_mined_tile_ids_in_viewport: *[..] s32,
     actively_mined_tile_ids_in_viewport: *[..] s32,

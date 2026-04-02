@@ -5,6 +5,7 @@ Control :: struct {
 
 Controls :: struct {
     add_base            : [3] Control;
+    add_iron            : [3] Control;
     drag_to_create_path : [3] Control;
     drag_cam            : [3] Control;
     move_camera_up      : [3] Control;
