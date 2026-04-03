@@ -600,17 +600,14 @@ main :: () {
                                         *active_chunks,
                                     );
 
-                                    // If the dwarf is mining a resource, check if there are any others nearby.
+                                    // If the dwarf is mining a resource, check if there are any others nearby
                                     if is_mining_resource {
-                                         for TILE_DIRECTION_DELTAS {
-                                            dx := it[0];
-                                            dy := it[1];
-
+                                        check_for_resource_and_mind_if_present :: (dwarf: *Dwarf, dx: float32, dy: float32, iron_tile_ids_set: *Table) -> bool {
                                             mined_tile_pos := get_tile_pos_by_id(dwarf.tile_id_mining);
                                             neighbor_pos   := Vector2.{ mined_tile_pos.x + dx, mined_tile_pos.y + dy };
                                             neighbor_id    := get_tile_id_by_pos(neighbor_pos);
 
-                                            is_neighbor_a_resource_tile := table_find(*iron_tile_ids_set, neighbor_id);
+                                            is_neighbor_a_resource_tile := table_find(iron_tile_ids_set, neighbor_id);
                                             if is_neighbor_a_resource_tile {
                                                 // If the tile we mined was a resource like iron (as opposed to dirt),
                                                 // then we want to path towards it.
@@ -618,7 +615,24 @@ main :: () {
                                                 array_reset(*(dwarf.tile_ids_on_path));
                                                 array_add(*(dwarf.tile_ids_on_path), path_to_neighbor_resource.middle_tile_id);
                                                 array_add(*(dwarf.tile_ids_on_path), path_to_neighbor_resource.end_tile_id);
-                                                break;
+                                            }
+
+                                            return is_neighbor_a_resource_tile;
+                                        }
+
+                                        // TODO: clean this up if you're bored
+                                        for TILE_DIRECTION_DELTAS {
+                                            found := check_for_resource_and_mind_if_present(dwarf, it[0] * 1, it[1] * 1, *iron_tile_ids_set);
+                                            if found break;
+
+                                            for TILE_DIRECTION_DELTAS {
+                                                found = check_for_resource_and_mind_if_present(dwarf, it[0] * 2, it[1] * 2, *iron_tile_ids_set);
+                                                if found break;
+
+                                                for TILE_DIRECTION_DELTAS {
+                                                    found = check_for_resource_and_mind_if_present(dwarf, it[0] * 3, it[1] * 3, *iron_tile_ids_set);
+                                                    if found break;
+                                                }
                                             }
                                         }
                                     }
