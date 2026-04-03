@@ -31,7 +31,8 @@ create_workspace :: (opts: Compiler.Build_Options, workspace_name := "") -> Work
     opts.output_type = .EXECUTABLE;
     opts.use_custom_link_command = true;
     opts.output_executable_name = "Dwarfs Clone";
-    opts.backend = .X64;
+    Compiler.set_optimization(*opts, .DEBUG);
+    // opts.backend = .X64;
     // Compiler.set_optimization(*opts, .VERY_OPTIMIZED);
 
     ws := create_workspace(opts);

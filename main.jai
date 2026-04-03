@@ -364,7 +364,9 @@ main :: () {
         reset_temporary_storage();
 
         time  := GetTime();
-        dt_seconds := GetFrameTime();
+        dt_seconds_raw := GetFrameTime();
+        // Cap delta time to prevent teleporting or weird bullshit
+        dt_seconds := ifx dt_seconds_raw > 0.033 then 0.033 else dt_seconds_raw;
 
         mouse_pos_in_ui    := GetMousePosition();
         mouse_pos_in_world := GetScreenToWorld2D(mouse_pos_in_ui, camera);
