@@ -288,7 +288,7 @@ main :: () {
     };
 
     // Initialize base
-    GENERATE_BASE_ENABLED :: false;
+    GENERATE_BASE_ENABLED :: true;
     #if GENERATE_BASE_ENABLED {
         home_base := Base.{
             pos = Vector2.{
@@ -354,24 +354,20 @@ main :: () {
     }
 
     // Initialize iron
-    GENERATE_IRON_ENABLED :: false;
+    GENERATE_IRON_ENABLED :: true;
     #if GENERATE_IRON_ENABLED {
-        IRON_SPAWN_CHANCE_NUMERATOR   :: 1;
-        IRON_SPAWN_CHANCE_DENOMINATOR :: 10000;
+        IRON_SPAWN_CHANCE_NUMERATOR   :: 5;
+        IRON_SPAWN_CHANCE_DENOMINATOR :: 1000;
         IRON_VEIN_SIZE_MIN :: 8;
         IRON_VEIN_SIZE_MAX :: 15;
 
-        IRON_GEN_ENABLED :: true;
+        for col: 0..WORLD_COLS-1 {
+            for row: 0..WORLD_ROWS-1 {
+                tile_id := (row * WORLD_COLS) + col + 1;
 
-        #if IRON_GEN_ENABLED {
-            for col: 0..WORLD_COLS-1 {
-                for row: 0..WORLD_ROWS-1 {
-                    tile_id := (row * WORLD_COLS) + col + 1;
-
-                    iron_spawn_dice_roll := cast(int) random_get_within_range(IRON_SPAWN_CHANCE_NUMERATOR, IRON_SPAWN_CHANCE_DENOMINATOR);
-                    if iron_spawn_dice_roll <= IRON_SPAWN_CHANCE_NUMERATOR {
-                        spawn_iron(xx tile_id, IRON_VEIN_SIZE_MIN, IRON_VEIN_SIZE_MAX, WORLD_COLS, WORLD_ROWS, *active_chunks, *iron_tile_ids_set);
-                    }
+                iron_spawn_dice_roll := cast(int) random_get_within_range(IRON_SPAWN_CHANCE_NUMERATOR, IRON_SPAWN_CHANCE_DENOMINATOR);
+                if iron_spawn_dice_roll <= IRON_SPAWN_CHANCE_NUMERATOR {
+                    spawn_iron(xx tile_id, IRON_VEIN_SIZE_MIN, IRON_VEIN_SIZE_MAX, WORLD_COLS, WORLD_ROWS, *active_chunks, *iron_tile_ids_set);
                 }
             }
         }
@@ -1049,7 +1045,7 @@ set_tile_as_mined :: (
     }
 
     // Remove the tile from the actively mined list if applicable
-    array_add(*chunk.actively_mined_tile_ids, tile_id);
+    array_unordered_remove_by_value(*chunk.actively_mined_tile_ids, tile_id);
     table_remove(actively_mined_tile_ids_to_health_table, tile_id);
 
     // Add the tile to the fully mined lists
