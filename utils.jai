@@ -149,3 +149,13 @@ pop_front :: (array: *[] $T) -> T {
     array_ordered_remove_by_index(array, 0);
     return result;
 }
+
+integer_log2 :: (n : u32) -> s32 {
+    log : s32 = 0;
+    shifted := n >> 1;
+    while shifted > 0 {
+        shifted = shifted >> 1;
+        log += 1;
+    }
+    return log;
+}
