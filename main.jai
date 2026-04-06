@@ -200,6 +200,7 @@ Path :: struct {
 
 Chunk :: struct {
     fully_mined_tile_ids    : [..] s32;
+    cave_tile_ids           : [..] s32;
     actively_mined_tile_ids : [..] s32;
     iron_tile_ids           : [..] s32;
     
@@ -223,6 +224,9 @@ actively_mined_tile_ids_in_viewport     : [..] s32;
 
 fully_mined_tile_ids_set         : Table(s32, Any); // for fast lookups
 fully_mined_tile_ids_in_viewport : [..] s32;
+
+cave_tile_ids_set         : Table(s32, Any); // for fast lookups
+cave_tile_ids_in_viewport : [..] s32;
 
 iron_tile_ids_set         : Table(s32, Any);
 iron_tile_ids_in_viewport : [..] s32;
@@ -313,9 +317,11 @@ main :: () {
                     set_tile_as_mined(
                         xx tile_id,
                         *fully_mined_tile_ids_set,
+                        *cave_tile_ids_set,
                         *actively_mined_tile_ids_to_health_table,
                         *iron_tile_ids_set,
                         *active_chunks,
+                        true
                     );
                 }
             }
@@ -371,13 +377,12 @@ main :: () {
                 
                 found, neighbor_id := find_tile_id_by_pos(neighbor_pos);
                 if found {
-                    if table_contains(*fully_mined_tile_ids_set, neighbor_id) {
-                        set_tile_as_unmined(
-                            neighbor_id,
-                            *fully_mined_tile_ids_set,
-                            *active_chunks
-                        );
-                    }
+                    set_tile_as_unmined(
+                        neighbor_id,
+                        *fully_mined_tile_ids_set,
+                        *cave_tile_ids_set,
+                        *active_chunks
+                    );
                 }
             }
         }
@@ -393,9 +398,11 @@ main :: () {
             set_tile_as_mined(
                 neighbor_id,
                 *fully_mined_tile_ids_set,
+                *cave_tile_ids_set,
                 *actively_mined_tile_ids_to_health_table,
                 *iron_tile_ids_set,
                 *active_chunks,
+                false
             );
         }
     }
@@ -514,6 +521,7 @@ main :: () {
         derive_entities_in_viewport(
             camera,
             *fully_mined_tile_ids_in_viewport,
+            *cave_tile_ids_in_viewport,
             *actively_mined_tile_ids_in_viewport,
             *iron_tile_ids_in_viewport,
             bases,   *bases_in_viewport,
@@ -672,9 +680,11 @@ main :: () {
                                     set_tile_as_mined(
                                         dwarf.tile_id_mining,
                                         *fully_mined_tile_ids_set,
+                                        *cave_tile_ids_set,
                                         *actively_mined_tile_ids_to_health_table,
                                         *iron_tile_ids_set,
                                         *active_chunks,
+                                        false
                                     );
 
                                     // If the dwarf is mining a resource, check if there are any others nearby
@@ -755,9 +765,11 @@ main :: () {
                         set_tile_as_mined(
                             neighbor_id,
                             *fully_mined_tile_ids_set,
+                            *cave_tile_ids_set,
                             *actively_mined_tile_ids_to_health_table,
                             *iron_tile_ids_set,
                             *active_chunks,
+                            false
                         );
                     }
                 }
@@ -831,13 +843,21 @@ main :: () {
                     DrawTexturePro(dirt_texture, source, dest, Vector2.{0,0}, 0.0, WHITE);
                 }
 
-                // Then draw any mined tiles over the base layer
+                // Then draw any uncovered tiles over the base layer
                 {
                     for fully_mined_tile_ids_in_viewport {
                         DrawRectangleV(
                             get_tile_pos_by_id(it),
                             Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
                             BEIGE,
+                        );
+                    }
+
+                    for cave_tile_ids_in_viewport {
+                        DrawRectangleV(
+                            get_tile_pos_by_id(it),
+                            Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
+                            BLACK,
                         );
                     }
                 }
@@ -1055,10 +1075,14 @@ get_chunk_ptr_by_tile_id :: (tile_id: s32) -> *Chunk {
 set_tile_as_mined :: (
     tile_id: s32,
     fully_mined_tile_ids_set : *Table,
+    cave_tile_ids_set : *Table,
     actively_mined_tile_ids_to_health_table : *Table,
     iron_tile_ids_set : *Table,
-    active_chunks: *Table
+    active_chunks: *Table,
+    as_cave : bool
 ) {
+    tile_ids_set := ifx as_cave then cave_tile_ids_set else fully_mined_tile_ids_set;
+
     chunk := get_chunk_ptr_by_tile_id(tile_id);
 
     // If the tile was a resource, then keep track of the gain and also remove the resource
@@ -1075,8 +1099,9 @@ set_tile_as_mined :: (
     table_remove(actively_mined_tile_ids_to_health_table, tile_id);
 
     // Add the tile to the fully mined lists
-    array_add(*chunk.fully_mined_tile_ids, tile_id);
-    table_add(fully_mined_tile_ids_set, tile_id, 0); // 0 is just a throwaway value since Sets don't need values.
+    if as_cave array_add(*chunk.cave_tile_ids, tile_id);
+    else       array_add(*chunk.fully_mined_tile_ids, tile_id);
+    table_add(tile_ids_set, tile_id, 0); // 0 is just a throwaway value since Sets don't need values.
 
     // Add edges for pathing to any neighbors who are also mined
     dx, dy : float;
@@ -1092,7 +1117,7 @@ set_tile_as_mined :: (
             continue;
         }
 
-        neighbor_is_mined := table_contains(fully_mined_tile_ids_set, neighbor_id);
+        neighbor_is_mined := table_contains(tile_ids_set, neighbor_id);
 
         if neighbor_is_mined {
             // TODO: this is pretty fucked up to add these edges both ways, I think
@@ -1105,13 +1130,16 @@ set_tile_as_mined :: (
 set_tile_as_unmined :: (
     tile_id: s32,
     fully_mined_tile_ids_set : *Table,
+    cave_tile_ids_set : *Table,
     active_chunks: *Table
 ) {
     chunk := get_chunk_ptr_by_tile_id(tile_id);
 
     // Remove from the fully mined lists, turning it back into solid dirt
     array_unordered_remove_by_value(*chunk.fully_mined_tile_ids, tile_id);
+    array_unordered_remove_by_value(*chunk.cave_tile_ids, tile_id);
     table_remove(fully_mined_tile_ids_set, tile_id);
+    table_remove(cave_tile_ids_set, tile_id);
 
     // Clean up pathfinding edges connected to this tile.
     // We iterate backwards (`for <`) because we are removing elements from the array inline.
@@ -1171,6 +1199,7 @@ spawn_iron :: (
 derive_entities_in_viewport :: (
     camera: Camera2D,
     fully_mined_tile_ids_in_viewport: *[..] s32,
+    cave_tile_ids_in_viewport: *[..] s32,
     actively_mined_tile_ids_in_viewport: *[..] s32,
     iron_tile_ids_in_viewport: *[..] s32,
     bases: [..] Base, bases_in_viewport: *[..] Base,
@@ -1181,6 +1210,7 @@ derive_entities_in_viewport :: (
     window_end   := GetScreenToWorld2D(Vector2.{ cast(float) GetScreenWidth(), cast(float) GetScreenHeight()}, camera);
 
     array_reset(fully_mined_tile_ids_in_viewport);
+    array_reset(cave_tile_ids_in_viewport);
     array_reset(actively_mined_tile_ids_in_viewport);
     array_reset(iron_tile_ids_in_viewport);
     array_reset(bases_in_viewport);
@@ -1218,6 +1248,20 @@ derive_entities_in_viewport :: (
                 if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
                 array_add(fully_mined_tile_ids_in_viewport, tile_id);
+            }
+
+            // Cave tiles
+            for tile_id: chunk.cave_tile_ids {
+                pos := get_tile_pos_by_id(xx tile_id);
+
+                // Precise Culling: Chunks overlap the screen edge, so we still 
+                // do a quick bounds check to avoid drawing slightly off-screen tiles.
+                if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+                if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+                if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+                if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+
+                array_add(cave_tile_ids_in_viewport, tile_id);
             }
 
             // Actively mined tiles
