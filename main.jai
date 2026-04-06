@@ -287,37 +287,6 @@ main :: () {
         selected_dwarf_index = -1,
     };
 
-    // Initialize base
-    GENERATE_BASE_ENABLED :: true;
-    #if GENERATE_BASE_ENABLED {
-        home_base := Base.{
-            pos = Vector2.{
-                WORLD_COLS * TILEMAP_GENERAL_WORLD_WIDTH  / 2,
-                WORLD_ROWS * TILEMAP_GENERAL_WORLD_HEIGHT / 2,
-            },
-            spawn_dwarf_cooldown_ms = DWARF_SPAWN_MS,
-        };
-
-        array_add(*bases, home_base);
-
-        // Carve out some tiles around the base
-        for TILE_DIRECTION_DELTAS {
-            dx := it[0];
-            dy := it[1];
-
-            neighbor_pos := Vector2.{ home_base.pos.x + dx, home_base.pos.y + dy };
-            neighbor_id  := get_tile_id_by_pos(neighbor_pos);
-
-            set_tile_as_mined(
-                neighbor_id,
-                *fully_mined_tile_ids_set,
-                *actively_mined_tile_ids_to_health_table,
-                *iron_tile_ids_set,
-                *active_chunks,
-            );
-        }
-    }
-
     // Initialize caves
     GENERATE_CAVES_ENABLED :: true;
     #if GENERATE_CAVES_ENABLED {
@@ -370,6 +339,64 @@ main :: () {
                     spawn_iron(xx tile_id, IRON_VEIN_SIZE_MIN, IRON_VEIN_SIZE_MAX, WORLD_COLS, WORLD_ROWS, *active_chunks, *iron_tile_ids_set);
                 }
             }
+        }
+    }
+
+    // Initialize base
+    GENERATE_BASE_ENABLED :: true;
+    #if GENERATE_BASE_ENABLED {
+        home_base := Base.{
+            pos = Vector2.{
+                WORLD_COLS * TILEMAP_GENERAL_WORLD_WIDTH  / 2,
+                WORLD_ROWS * TILEMAP_GENERAL_WORLD_HEIGHT / 2,
+            },
+            spawn_dwarf_cooldown_ms = DWARF_SPAWN_MS,
+        };
+
+        array_add(*bases, home_base);
+
+        // Give a little breathing room with caves
+        BLOCKS_BEFORE_CAVES :: 10;
+        for dy_idx: -BLOCKS_BEFORE_CAVES..BLOCKS_BEFORE_CAVES {
+            for dx_idx: -BLOCKS_BEFORE_CAVES..BLOCKS_BEFORE_CAVES {
+                // A circular clearing looks more natural
+                if (dx_idx * dx_idx + dy_idx * dy_idx) > (BLOCKS_BEFORE_CAVES * BLOCKS_BEFORE_CAVES) {
+                    continue;
+                }
+
+                neighbor_pos := Vector2.{ 
+                    home_base.pos.x + (dx_idx * TILEMAP_GENERAL_WORLD_WIDTH), 
+                    home_base.pos.y + (dy_idx * TILEMAP_GENERAL_WORLD_HEIGHT) 
+                };
+                
+                found, neighbor_id := find_tile_id_by_pos(neighbor_pos);
+                if found {
+                    if table_contains(*fully_mined_tile_ids_set, neighbor_id) {
+                        set_tile_as_unmined(
+                            neighbor_id,
+                            *fully_mined_tile_ids_set,
+                            *active_chunks
+                        );
+                    }
+                }
+            }
+        }
+
+        // Carve out some tiles around the base
+        for TILE_DIRECTION_DELTAS {
+            dx := it[0];
+            dy := it[1];
+
+            neighbor_pos := Vector2.{ home_base.pos.x + dx, home_base.pos.y + dy };
+            neighbor_id  := get_tile_id_by_pos(neighbor_pos);
+
+            set_tile_as_mined(
+                neighbor_id,
+                *fully_mined_tile_ids_set,
+                *actively_mined_tile_ids_to_health_table,
+                *iron_tile_ids_set,
+                *active_chunks,
+            );
         }
     }
 
@@ -1039,7 +1066,6 @@ set_tile_as_mined :: (
     tile_was_iron := table_find(iron_tile_ids_set, tile_id);
     if tile_was_iron {
         // TODO: give the player resources or something
-
         array_unordered_remove_by_value(*chunk.iron_tile_ids, tile_id);
         table_remove(iron_tile_ids_set, tile_id);
     }
@@ -1072,6 +1098,26 @@ set_tile_as_mined :: (
             // TODO: this is pretty fucked up to add these edges both ways, I think
             array_add(*edges, Edge.{ from = tile_id,     to = neighbor_id, distance = 1 });
             array_add(*edges, Edge.{ from = neighbor_id, to = tile_id, distance = 1 });
+        }
+    }
+}
+
+set_tile_as_unmined :: (
+    tile_id: s32,
+    fully_mined_tile_ids_set : *Table,
+    active_chunks: *Table
+) {
+    chunk := get_chunk_ptr_by_tile_id(tile_id);
+
+    // Remove from the fully mined lists, turning it back into solid dirt
+    array_unordered_remove_by_value(*chunk.fully_mined_tile_ids, tile_id);
+    table_remove(fully_mined_tile_ids_set, tile_id);
+
+    // Clean up pathfinding edges connected to this tile.
+    // We iterate backwards (`for <`) because we are removing elements from the array inline.
+    for < i: 0..edges.count-1 {
+        if edges[i].from == tile_id || edges[i].to == tile_id {
+            array_unordered_remove_by_index(*edges, i);
         }
     }
 }
