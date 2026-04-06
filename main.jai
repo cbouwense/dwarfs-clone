@@ -42,8 +42,8 @@ TILEMAP_GENERAL_TILE_HEIGHT  :: 32;
 TILEMAP_GENERAL_WORLD_WIDTH  :: TILEMAP_GENERAL_TILE_WIDTH  * SCALE;
 TILEMAP_GENERAL_WORLD_HEIGHT :: TILEMAP_GENERAL_TILE_HEIGHT * SCALE;
 
-WORLD_COLS :: 4096;
-WORLD_ROWS :: 4096;
+WORLD_COLS :: 2048;
+WORLD_ROWS :: 2048;
 WORLD_WIDTH  :: WORLD_COLS * TILEMAP_GENERAL_WORLD_WIDTH;
 WORLD_HEIGHT :: WORLD_ROWS * TILEMAP_GENERAL_WORLD_HEIGHT;
 WORLD_COLS_MASK :: WORLD_COLS - 1;
@@ -288,7 +288,8 @@ main :: () {
     };
 
     // Initialize base
-    {
+    GENERATE_BASE_ENABLED :: false;
+    #if GENERATE_BASE_ENABLED {
         home_base := Base.{
             pos = Vector2.{
                 WORLD_COLS * TILEMAP_GENERAL_WORLD_WIDTH  / 2,
@@ -318,11 +319,10 @@ main :: () {
     }
 
     // Initialize caves
-    CAVE_GEN_ENABLED :: false;
-
-    #if CAVE_GEN_ENABLED {
-        CAVE_PERLIN_NOISE_FREQUENCY :: 64; // How many rows / columns
-        CAVE_PERLIN_NOISE_AMPLITUDE :: 4;
+    GENERATE_CAVES_ENABLED :: true;
+    #if GENERATE_CAVES_ENABLED {
+        CAVE_PERLIN_NOISE_FREQUENCY :: 256; // How many rows / columns
+        CAVE_PERLIN_NOISE_AMPLITUDE :: 2;
         CAVE_PERLIN_NOISE_OCTAVES   :: 1;
         CAVE_PERLIN_NOISE_MAX_THRESHOLD :: 0.95;
 
@@ -331,27 +331,13 @@ main :: () {
         for i: 0..(WORLD_COLS * WORLD_COLS)-1 {
             normalized := (cave_noise[i] + 1.0) / 2.0;
             // Clamp just in case floating point math slightly overshoots
-            clamped := clamp(normalized, 0.0, 1.0);
-            // if clamped >= THRESHOLD {
-            //     pixels[i] = Color.{255, 0, 0, 255}; 
-            // } else {
-            //     val := cast(u8) (clamped * 255.0);
-            //     pixels[i] = Color.{val, val, val, 255}; 
-            // }
+            cave_noise[i] = clamp(normalized, 0.0, 1.0);
         }
-
-        // cave_noise_sorted := array_copy(cave_noise);
-        // quick_sort(cave_noise_sorted, (x, y) => x - y);
-
-        // cave_cutoff_max_index := cave_noise.count * CAVE_PERLIN_NOISE_MAX_PERCENTILE / 100 - 1;
-        // // cave_cutoff_min_index := cave_noise.count * CAVE_PERLIN_NOISE_MIN_PERCENTILE / 100;
-        // cave_cutoff_max       := cave_noise_sorted[cave_cutoff_max_index];
-        // // cave_cutoff_min       := cave_noise_sorted[cave_cutoff_min_index];
 
         for col: 0..WORLD_COLS-1 {
             for row: 0..WORLD_ROWS-1 {
                 tile_id := (row * WORLD_COLS) + col + 1;
-                noise_index := row * (WORLD_COLS-1) + col;
+                noise_index := row * WORLD_COLS + col;
                 tile_should_be_part_of_cave := cave_noise[noise_index] >= CAVE_PERLIN_NOISE_MAX_THRESHOLD;
 
                 if tile_should_be_part_of_cave {
@@ -368,7 +354,8 @@ main :: () {
     }
 
     // Initialize iron
-    {
+    GENERATE_IRON_ENABLED :: false;
+    #if GENERATE_IRON_ENABLED {
         IRON_SPAWN_CHANCE_NUMERATOR   :: 1;
         IRON_SPAWN_CHANCE_DENOMINATOR :: 10000;
         IRON_VEIN_SIZE_MIN :: 8;
@@ -391,29 +378,39 @@ main :: () {
     }
 
     // Initialize dwarves
-    for 1..DWARF_START_COUNT {
-         // Figure out where to spawn it based off of the home base
-        dx := TILE_DIRECTION_DELTAS[0][0];
-        dy := TILE_DIRECTION_DELTAS[0][1];
-        home_base    := bases[0];
-        neighbor_pos := Vector2.{ home_base.pos.x + dx, home_base.pos.y + dy };
+    GENERATE_DWARVES_ENABLED :: false;
+    #if GENERATE_DWARVES_ENABLED {
+        for 1..DWARF_START_COUNT {
+            // Figure out where to spawn it based off of the home base
+            dx := TILE_DIRECTION_DELTAS[0][0];
+            dy := TILE_DIRECTION_DELTAS[0][1];
+            home_base    := bases[0];
+            neighbor_pos := Vector2.{ home_base.pos.x + dx, home_base.pos.y + dy };
 
-        first_dwarf := Dwarf.{
-            pos       = Vector2.{ neighbor_pos.x, neighbor_pos.y },
-            state     = .MOVING,
-            direction = cast(Direction) cast(int) random_get_within_range(0, 4),
-            // tile_ids_on_path intentionally not set
-        };
+            first_dwarf := Dwarf.{
+                pos       = Vector2.{ neighbor_pos.x, neighbor_pos.y },
+                state     = .MOVING,
+                direction = cast(Direction) cast(int) random_get_within_range(0, 4),
+                // tile_ids_on_path intentionally not set
+            };
 
-        array_add(*dwarves, first_dwarf);
+            array_add(*dwarves, first_dwarf);
+        }
     }
 
     // Initialize camera
     camera: Camera2D;
-    camera.target   = bases[0].pos;
+    #if GENERATE_BASE_ENABLED {
+        camera.target   = bases[0].pos;
+    } else {
+        camera.target   = Vector2.{
+            WORLD_COLS * TILEMAP_GENERAL_WORLD_WIDTH  / 2,
+            WORLD_ROWS * TILEMAP_GENERAL_WORLD_HEIGHT / 2,
+        };
+    }
     camera.offset   = Vector2.{ 800, 450 };
     camera.rotation = 0.0;
-    camera.zoom     = 2;
+    camera.zoom     = 0.2;
 
     while !WindowShouldClose() {
         reset_temporary_storage();
