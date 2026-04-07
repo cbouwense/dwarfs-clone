@@ -25,7 +25,6 @@ window_height := 800;
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 CAMERA_MOVE_SPEED_BASE :: 4;
-CAMERA_ZOOM_SPEED :: 0.3;
 
 DIRT_HEALTH :: 100;
 
@@ -292,7 +291,7 @@ main :: () {
     };
 
     // Initialize caves
-    GENERATE_CAVES_ENABLED :: true;
+    GENERATE_CAVES_ENABLED :: false;
     #if GENERATE_CAVES_ENABLED {
         CAVE_PERLIN_NOISE_FREQUENCY :: 256; // How many rows / columns
         CAVE_PERLIN_NOISE_AMPLITUDE :: 2;
@@ -329,7 +328,7 @@ main :: () {
     }
 
     // Initialize iron
-    GENERATE_IRON_ENABLED :: true;
+    GENERATE_IRON_ENABLED :: false;
     #if GENERATE_IRON_ENABLED {
         IRON_SPAWN_CHANCE_NUMERATOR   :: 5;
         IRON_SPAWN_CHANCE_DENOMINATOR :: 1000;
@@ -349,7 +348,7 @@ main :: () {
     }
 
     // Initialize base
-    GENERATE_BASE_ENABLED :: true;
+    GENERATE_BASE_ENABLED :: false;
     #if GENERATE_BASE_ENABLED {
         home_base := Base.{
             pos = Vector2.{
@@ -535,7 +534,6 @@ main :: () {
         if !paused {
             // Update camera
             {
-                CAMERA_ZOOM_INCREMENT :: 0.2;
                 CAMERA_ZOOM_MIN :: 0.01;
                 CAMERA_ZOOM_MAX :: 13.0;
 
@@ -565,7 +563,7 @@ main :: () {
                     mouse_world_pos_before := GetScreenToWorld2D(GetMousePosition(), camera);
 
                     // Apply the zoom
-                    camera.zoom += mouse_wheel_move * CAMERA_ZOOM_INCREMENT;
+                    camera.zoom = mouse_wheel_move + camera.zoom * 0.10;
                     camera.zoom = clamp(camera.zoom, CAMERA_ZOOM_MIN, CAMERA_ZOOM_MAX);
 
                     // Grab the world space position of the mouse AFTER the zoom
@@ -899,8 +897,10 @@ main :: () {
                     hovered_tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
                     DrawRectangleRec(hovered_tile_rect, TRANSPARENT_WHITE);
                     if debug_mode {
-                        tile_id := get_tile_id_by_pos(get_rect_pos(hovered_tile_rect));
-                        DrawText(tprint("%\0", tile_id).data, xx hovered_tile_rect.x, xx hovered_tile_rect.y, 12, WHITE);
+                        found_tile, tile_id := find_tile_id_by_pos(get_rect_pos(hovered_tile_rect));
+                        if found_tile {
+                            DrawText(tprint("%\0", tile_id).data, xx hovered_tile_rect.x, xx hovered_tile_rect.y, 12, WHITE);
+                        }
                     }
                 }
 
@@ -936,27 +936,43 @@ main :: () {
     }
 }
 
-get_or_create_chunk :: (chunk_x: s32, chunk_y: s32) -> *Chunk {
-    key := get_chunk_key(chunk_x, chunk_y);
-    
-    found, chunk := table_find(*active_chunks, key);
-    if found return chunk;
+FindOrCreateChunkReturnStatus :: enum u16 {
+    CHUNK_WOULD_BE_OUT_OF_BOUNDS;
+    CHUNK_CREATED;
+    CHUNK_FOUND;
+}
+
+find_or_create_chunk :: (chunk_x: s32, chunk_y: s32) -> (status: FindOrCreateChunkReturnStatus, chunk: *Chunk) {
+    key_is_within_map_bounds, key := find_chunk_key(chunk_x, chunk_y);
+    if !key_is_within_map_bounds return .CHUNK_WOULD_BE_OUT_OF_BOUNDS, null;
+
+    found_chunk, chunk := table_find(*active_chunks, key);
+    if found_chunk return .CHUNK_FOUND, chunk;
 
     // The chunk doesn't exist yet, so let's make a new one.
     new_chunk := New(Chunk);
     
     table_add(*active_chunks, key, new_chunk);
     
-    return new_chunk;
+    return .CHUNK_CREATED, new_chunk;
 }
 
-get_chunk_key :: (chunk_x: s32, chunk_y: s32) -> u64 {
+find_chunk_key :: (chunk_x: s32, chunk_y: s32) -> (found: bool, key: u64) {
+    if chunk_x < 0 return false, 0;
+    if chunk_y < 0 return false, 0;
+
     x_u64 := cast(u64) cast(u32) chunk_x;
     y_u64 := cast(u64) cast(u32) chunk_y;
     
     // TODO: does endian-ness matter? Probably not?...
     // x occupies the top 32 bits, y occupies the bottom 32 bits.
-    return (x_u64 << 32) | y_u64;
+    return true, (x_u64 << 32) | y_u64;
+}
+
+get_chunk_key :: (chunk_x: s32, chunk_y: s32) -> u64 {
+    found, key := find_chunk_key(chunk_x, chunk_y);
+    assert(found, "Expected to find chunk key, but didn't!");
+    return key;
 }
 
 world_to_chunk_coord :: (world_pos: float, tile_pixel_size: float) -> s32 {
@@ -1069,7 +1085,16 @@ get_chunk_ptr_by_tile_id :: (tile_id: s32) -> *Chunk {
     world_pos := get_tile_pos_by_id(tile_id);
     chunk_x   := world_to_chunk_coord(world_pos.x, TILEMAP_GENERAL_WORLD_WIDTH);
     chunk_y   := world_to_chunk_coord(world_pos.y, TILEMAP_GENERAL_WORLD_HEIGHT);
-    return get_or_create_chunk(chunk_x, chunk_y);
+    result, chunk := find_or_create_chunk(chunk_x, chunk_y);
+
+    if #complete result == {
+        case .CHUNK_WOULD_BE_OUT_OF_BOUNDS;
+            assert(false, "Expected to find chunk for tile id %, but didn't!", tile_id);
+            return null;
+        case .CHUNK_CREATED; #through;
+        case .CHUNK_FOUND;
+            return chunk;
+    }
 }    
 
 set_tile_as_mined :: (
@@ -1231,7 +1256,10 @@ derive_entities_in_viewport :: (
     for cy: start_chunk_y..end_chunk_y {
         for cx: start_chunk_x..end_chunk_x {
             
-            key := get_chunk_key(cx, cy);
+            key_was_valid, key := find_chunk_key(cx, cy);
+            // This happens if the camera is looking out of bounds.
+            if !key_was_valid continue;
+
             found, chunk := table_find(*active_chunks, key);
             // If the chunk doesn't exist, nobody has mined or walked here, so just move on.
             if !found continue; 
