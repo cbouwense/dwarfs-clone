@@ -1,6 +1,6 @@
 # In progress
 
-- zoom out is too aggressive
+- reveal caves
 
 # Game
 

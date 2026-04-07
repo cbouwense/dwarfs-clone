@@ -291,7 +291,7 @@ main :: () {
     };
 
     // Initialize caves
-    GENERATE_CAVES_ENABLED :: false;
+    GENERATE_CAVES_ENABLED :: true;
     #if GENERATE_CAVES_ENABLED {
         CAVE_PERLIN_NOISE_FREQUENCY :: 256; // How many rows / columns
         CAVE_PERLIN_NOISE_AMPLITUDE :: 2;
@@ -328,7 +328,7 @@ main :: () {
     }
 
     // Initialize iron
-    GENERATE_IRON_ENABLED :: false;
+    GENERATE_IRON_ENABLED :: true;
     #if GENERATE_IRON_ENABLED {
         IRON_SPAWN_CHANCE_NUMERATOR   :: 5;
         IRON_SPAWN_CHANCE_DENOMINATOR :: 1000;
@@ -348,7 +348,7 @@ main :: () {
     }
 
     // Initialize base
-    GENERATE_BASE_ENABLED :: false;
+    GENERATE_BASE_ENABLED :: true;
     #if GENERATE_BASE_ENABLED {
         home_base := Base.{
             pos = Vector2.{
@@ -534,6 +534,7 @@ main :: () {
         if !paused {
             // Update camera
             {
+                CAMERA_ZOOM_MULTIPLIER :: 1.2;
                 CAMERA_ZOOM_MIN :: 0.01;
                 CAMERA_ZOOM_MAX :: 13.0;
 
@@ -563,8 +564,9 @@ main :: () {
                     mouse_world_pos_before := GetScreenToWorld2D(GetMousePosition(), camera);
 
                     // Apply the zoom
-                    camera.zoom = mouse_wheel_move + camera.zoom * 0.10;
-                    camera.zoom = clamp(camera.zoom, CAMERA_ZOOM_MIN, CAMERA_ZOOM_MAX);
+                    zoom_factor := pow(CAMERA_ZOOM_MULTIPLIER, mouse_wheel_move);
+                    camera.zoom *= zoom_factor;
+                    camera.zoom  = clamp(camera.zoom, CAMERA_ZOOM_MIN, CAMERA_ZOOM_MAX);
 
                     // Grab the world space position of the mouse AFTER the zoom
                     // (Raylib uses the new camera.zoom but the old camera.target here)
