@@ -619,13 +619,18 @@ main :: () {
                                     tile_is_mined := table_contains(*fully_mined_tile_ids_set, tile_id_dwarf_wants_to_move_to);
 
                                     if tile_is_mined {
+                                        // If this tile is mined, then simply keep moving.
                                         dwarf.pos = new_pos;
 
-                                        // center_of_dwarf       := get_rect_center(dwarf.rect);
-                                        // tile_rect_dwarf_is_on := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, center_of_dwarf);
-                                        // tile_id_dwarf_is_on   := get_tile_id_by_pos(get_rect_pos(tile_rect_dwarf_is_on));
-                                         
-                                        // assert(table_contains(*fully_mined_tile_ids_set, tile_id_dwarf_is_on), "dwarf is in rock or something lol wtf");
+                                        // I feel like this sometimes gives false positives idk
+                                        CHECK_IF_DWARF_IS_IN_TILE :: false;
+                                        #if CHECK_IF_DWARF_IS_IN_TILE {
+                                            center_of_dwarf       := get_rect_center(dwarf.rect);
+                                            tile_rect_dwarf_is_on := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, center_of_dwarf);
+                                            tile_id_dwarf_is_on   := get_tile_id_by_pos(get_rect_pos(tile_rect_dwarf_is_on));
+                                            
+                                            assert(table_contains(*fully_mined_tile_ids_set, tile_id_dwarf_is_on), "dwarf is in rock or something lol wtf");
+                                        }
                                     } else {
                                         // TODO: Eventually we'll want to check whether the tile is mineable or not.
                                         dwarf.state = .MINING;
@@ -689,7 +694,7 @@ main :: () {
 
                                     // If the dwarf is mining a resource, check if there are any others nearby
                                     if is_mining_resource {
-                                        check_for_resource_and_mind_if_present :: (dwarf: *Dwarf, dx: float32, dy: float32, iron_tile_ids_set: *Table) -> bool {
+                                        check_for_resource_and_mine_if_present :: (dwarf: *Dwarf, dx: float32, dy: float32, iron_tile_ids_set: *Table) -> bool {
                                             mined_tile_pos := get_tile_pos_by_id(dwarf.tile_id_mining);
                                             neighbor_pos   := Vector2.{ mined_tile_pos.x + dx, mined_tile_pos.y + dy };
                                             neighbor_id    := get_tile_id_by_pos(neighbor_pos);
@@ -709,18 +714,51 @@ main :: () {
 
                                         // TODO: clean this up if you're bored
                                         for TILE_DIRECTION_DELTAS {
-                                            found := check_for_resource_and_mind_if_present(dwarf, it[0] * 1, it[1] * 1, *iron_tile_ids_set);
+                                            found := check_for_resource_and_mine_if_present(dwarf, it[0] * 1, it[1] * 1, *iron_tile_ids_set);
                                             if found break;
 
                                             for TILE_DIRECTION_DELTAS {
-                                                found = check_for_resource_and_mind_if_present(dwarf, it[0] * 2, it[1] * 2, *iron_tile_ids_set);
+                                                found = check_for_resource_and_mine_if_present(dwarf, it[0] * 2, it[1] * 2, *iron_tile_ids_set);
                                                 if found break;
 
                                                 for TILE_DIRECTION_DELTAS {
-                                                    found = check_for_resource_and_mind_if_present(dwarf, it[0] * 3, it[1] * 3, *iron_tile_ids_set);
+                                                    found = check_for_resource_and_mine_if_present(dwarf, it[0] * 3, it[1] * 3, *iron_tile_ids_set);
                                                     if found break;
                                                 }
                                             }
+                                        }
+                                    }
+
+                                    // If we just cracked into a cave, we'll need to reveal the cave and do anything
+                                    // that cave type needs (e.g. spawn water, lava, monsters, etc.).
+                                    {
+                                        check_is_neighbor_unreavealed_cave :: (tile_id: s32) -> found_cave_neighbor: bool, cave_neighbor_id: s32 {
+                                            for i: 0..3 {
+                                                dx := TILE_DIRECTION_DELTAS[i][0];
+                                                dy := TILE_DIRECTION_DELTAS[i][1];
+                                                
+                                                tile_pos     := get_tile_pos_by_id(tile_id);
+                                                neighbor_pos := Vector2.{ tile_pos.x + dx, tile_pos.y + dy };
+                                                neighbor_id  := get_tile_id_by_pos(neighbor_pos);
+
+                                                neighbor_is_unrevealed_cave := table_contains(*cave_tile_ids_set, neighbor_id);
+                                                if neighbor_is_unrevealed_cave return true, neighbor_id;
+                                            }
+
+                                            return false, 1738;
+                                        }
+
+                                        neighbor_is_unrevealed_cave, cave_tile_id := check_is_neighbor_unreavealed_cave(dwarf.tile_id_mining);
+                                        if neighbor_is_unrevealed_cave {
+                                            // First, recursively reveal the tiles of the cave.
+                                            set_cave_as_mined(
+                                                cave_tile_id,
+                                                *fully_mined_tile_ids_set,
+                                                *cave_tile_ids_set,
+                                                *actively_mined_tile_ids_to_health_table,
+                                                *iron_tile_ids_set,
+                                                *active_chunks
+                                            );
                                         }
                                     }
 
@@ -1099,6 +1137,52 @@ get_chunk_ptr_by_tile_id :: (tile_id: s32) -> *Chunk {
     }
 }    
 
+set_cave_as_mined :: (
+    tile_id: s32,
+    fully_mined_tile_ids_set : *Table,
+    cave_tile_ids_set : *Table,
+    actively_mined_tile_ids_to_health_table : *Table,
+    iron_tile_ids_set : *Table,
+    active_chunks: *Table
+) {
+    set_tile_as_mined(
+        tile_id,
+        fully_mined_tile_ids_set,
+        cave_tile_ids_set,
+        actively_mined_tile_ids_to_health_table,
+        iron_tile_ids_set,
+        active_chunks,
+        false
+    );
+
+    // Recursively go through neighbors and set them as mined as well.
+    dx, dy : float;
+    tile_pos := get_tile_pos_by_id(tile_id);
+
+    for i: 0..3 {
+        dx = TILE_DIRECTION_DELTAS[i][0];
+        dy = TILE_DIRECTION_DELTAS[i][1];
+        neighbor_pos := Vector2.{ tile_pos.x + dx, tile_pos.y + dy };
+        found_neighbor, neighbor_id := find_tile_id_by_pos(neighbor_pos);
+        if !found_neighbor {
+            print("WARN: Couldn't find neighbor for tile at pos (%,%). This either means it's on the edge of the world, or that something might be wrong.\n", neighbor_pos.x, neighbor_pos.y);
+            continue;
+        }
+
+        tile_is_unrevealed_cave := table_contains(cave_tile_ids_set, neighbor_id);
+        if !tile_is_unrevealed_cave continue;
+
+        set_cave_as_mined(
+            neighbor_id,
+            fully_mined_tile_ids_set,
+            cave_tile_ids_set,
+            actively_mined_tile_ids_to_health_table,
+            iron_tile_ids_set,
+            active_chunks
+        );
+    }
+}
+
 set_tile_as_mined :: (
     tile_id: s32,
     fully_mined_tile_ids_set : *Table,
@@ -1108,27 +1192,39 @@ set_tile_as_mined :: (
     active_chunks: *Table,
     as_cave : bool
 ) {
-    tile_ids_set := ifx as_cave then cave_tile_ids_set else fully_mined_tile_ids_set;
-
     chunk := get_chunk_ptr_by_tile_id(tile_id);
 
-    // If the tile was a resource, then keep track of the gain and also remove the resource
-    // from the map
-    tile_was_iron := table_find(iron_tile_ids_set, tile_id);
-    if tile_was_iron {
-        // TODO: give the player resources or something
-        array_unordered_remove_by_value(*chunk.iron_tile_ids, tile_id);
-        table_remove(iron_tile_ids_set, tile_id);
+    // Remove the tile from the various lists it should no longer be a part of.
+    {
+        // If the tile was a resource, then keep track of the gain and also remove the resource
+        // from the map
+        tile_was_iron := table_find(iron_tile_ids_set, tile_id);
+        if tile_was_iron {
+            // TODO: give the player resources or something
+            array_unordered_remove_by_value(*chunk.iron_tile_ids, tile_id);
+            table_remove(iron_tile_ids_set, tile_id);
+        }
+
+        array_unordered_remove_by_value(*chunk.actively_mined_tile_ids, tile_id);
+        table_remove(actively_mined_tile_ids_to_health_table, tile_id);
+        
+        if as_cave {
+            array_unordered_remove_by_value(*chunk.fully_mined_tile_ids, tile_id);
+            table_remove(fully_mined_tile_ids_set, tile_id);
+        } else {
+            array_unordered_remove_by_value(*chunk.cave_tile_ids, tile_id);
+            table_remove(cave_tile_ids_set, tile_id);
+        }
     }
 
-    // Remove the tile from the actively mined list if applicable
-    array_unordered_remove_by_value(*chunk.actively_mined_tile_ids, tile_id);
-    table_remove(actively_mined_tile_ids_to_health_table, tile_id);
-
-    // Add the tile to the fully mined lists
-    if as_cave array_add(*chunk.cave_tile_ids, tile_id);
-    else       array_add(*chunk.fully_mined_tile_ids, tile_id);
-    table_add(tile_ids_set, tile_id, 0); // 0 is just a throwaway value since Sets don't need values.
+    // Add the tile to whatever new list it should be a part of.
+    if as_cave {
+        array_add(*chunk.cave_tile_ids, tile_id);
+        table_add(cave_tile_ids_set, tile_id, 1738);
+    } else {
+        array_add(*chunk.fully_mined_tile_ids, tile_id);
+        table_add(fully_mined_tile_ids_set, tile_id, 1738);
+    }
 
     // Add edges for pathing to any neighbors who are also mined
     dx, dy : float;
@@ -1144,7 +1240,7 @@ set_tile_as_mined :: (
             continue;
         }
 
-        neighbor_is_mined := table_contains(tile_ids_set, neighbor_id);
+        neighbor_is_mined := table_contains(fully_mined_tile_ids_set, neighbor_id);
 
         if neighbor_is_mined {
             // TODO: this is pretty fucked up to add these edges both ways, I think
