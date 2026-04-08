@@ -1,11 +1,11 @@
 # In progress
 
+- water behavior
+- lava behavior
 
 # Game
 
 - paths on the ground should affect dwarves
-- water behavior
-- lava behavior
 - points tracker
 
 # Bugs

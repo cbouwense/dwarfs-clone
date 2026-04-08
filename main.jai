@@ -221,8 +221,10 @@ Chunk :: struct {
     cave_tile_ids           : [..] s32;
     actively_mined_tile_ids : [..] s32;
     iron_tile_ids           : [..] s32;
-    water_tile_ids          : [..] s32;
-    lava_tile_ids           : [..] s32;
+    water_still_tile_ids    : [..] s32;
+    water_flowing_tile_ids    : [..] s32;
+    lava_still_tile_ids     : [..] s32;
+    lava_flowing_tile_ids     : [..] s32;
     
     // TODO: Will probably want these
     // bases   : [..] Base;
@@ -251,11 +253,21 @@ cave_tile_ids_in_viewport : [..] s32;
 iron_tile_ids_set         : Table(s32, Any);
 iron_tile_ids_in_viewport : [..] s32;
 
-water_tile_ids_set         : Table(s32, Any);
-water_tile_ids_in_viewport : [..] s32;
+water_still_tile_ids             : [..] s32;
+water_still_tile_ids_set         : Table(s32, Any);
+water_still_tile_ids_in_viewport : [..] s32;
 
-lava_tile_ids_set         : Table(s32, Any);
-lava_tile_ids_in_viewport : [..] s32;
+water_flowing_tile_ids             : [..] s32;
+water_flowing_tile_ids_set         : Table(s32, Any);
+water_flowing_tile_ids_in_viewport : [..] s32;
+
+lava_still_tile_ids             : [..] s32;
+lava_still_tile_ids_set         : Table(s32, Any);
+lava_still_tile_ids_in_viewport : [..] s32;
+
+lava_flowing_tile_ids             : [..] s32;
+lava_flowing_tile_ids_set         : Table(s32, Any);
+lava_flowing_tile_ids_in_viewport : [..] s32;
 
 bases               : [..] Base;
 bases_in_viewport   : [..] Base;
@@ -346,8 +358,10 @@ main :: () {
                         *cave_tile_ids_set,
                         *actively_mined_tile_ids_to_health_table,
                         *iron_tile_ids_set,
-                        *water_tile_ids_set,
-                        *lava_tile_ids_set,
+                        *water_flowing_tile_ids,
+                        *water_flowing_tile_ids_set,
+                        *lava_flowing_tile_ids,
+                        *lava_flowing_tile_ids_set,
                         *active_chunks,
                         .CAVE
                     );
@@ -429,8 +443,10 @@ main :: () {
                 *cave_tile_ids_set,
                 *actively_mined_tile_ids_to_health_table,
                 *iron_tile_ids_set,
-                *water_tile_ids_set,
-                *lava_tile_ids_set,
+                *water_flowing_tile_ids,
+                *water_flowing_tile_ids_set,
+                *lava_flowing_tile_ids,
+                *lava_flowing_tile_ids_set,
                 *active_chunks,
                 .MINED
             );
@@ -499,7 +515,7 @@ main :: () {
             add_base                = control_is_pressed(controls.add_base);
             add_iron                = control_is_pressed(controls.add_iron);
             started_to_create_path  = control_is_pressed(controls.drag_to_create_path);
-            dragging_to_create_path = control_is_down(controls.drag_to_create_path);
+            dragging_to_create_path = control_is_down(controls.drag_to_create_path) && !IsKeyDown(KeyboardKey.KEY_LEFT_CONTROL); // TODO: just a little debug hack
             drag_cam_pressed        = control_is_pressed(controls.drag_cam);
             drag_cam_down           = control_is_down(controls.drag_cam);
             move_camera_up          = control_is_down(controls.move_camera_up);
@@ -554,10 +570,14 @@ main :: () {
             *cave_tile_ids_in_viewport,
             *actively_mined_tile_ids_in_viewport,
             *iron_tile_ids_in_viewport,
-            *water_tile_ids_in_viewport,
-            *lava_tile_ids_in_viewport,
-            bases,   *bases_in_viewport,
-            dwarves, *dwarves_in_viewport,
+            *water_still_tile_ids_in_viewport,
+            *water_flowing_tile_ids_in_viewport,
+            *lava_still_tile_ids_in_viewport,
+            *lava_flowing_tile_ids_in_viewport,
+            bases,
+            *bases_in_viewport,
+            dwarves,
+            *dwarves_in_viewport,
             // paths, *paths_in_viewport
         );
 
@@ -565,6 +585,33 @@ main :: () {
         // Update
         //
         if !paused {
+            // Debug break tiles
+            hovered_tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
+            if IsMouseButtonDown(MouseButton.MOUSE_BUTTON_LEFT) && IsKeyDown(KeyboardKey.KEY_LEFT_CONTROL) {
+                tile_id := get_tile_id_by_pos(Vector2.{ hovered_tile_rect.x, hovered_tile_rect.y });
+                tile_is_unrevealed_cave := table_contains(*cave_tile_ids_set, tile_id);
+                if tile_is_unrevealed_cave {
+                    try_to_reveal_cave(tile_id);
+                } else {
+                    tile_is_mined := table_contains(*fully_mined_tile_ids_set, tile_id);
+                    if !tile_is_mined {
+                        set_tile_as_mined(
+                            tile_id,
+                            *fully_mined_tile_ids_set,
+                            *cave_tile_ids_set,
+                            *actively_mined_tile_ids_to_health_table,
+                            *iron_tile_ids_set,
+                            *water_flowing_tile_ids,
+                            *water_flowing_tile_ids_set,
+                            *lava_flowing_tile_ids,
+                            *lava_flowing_tile_ids_set,
+                            *active_chunks,
+                            .MINED
+                        );
+                    }
+                }
+            }
+
             // Update camera
             {
                 CAMERA_ZOOM_MULTIPLIER :: 1.2;
@@ -721,8 +768,10 @@ main :: () {
                                         *cave_tile_ids_set,
                                         *actively_mined_tile_ids_to_health_table,
                                         *iron_tile_ids_set,
-                                        *water_tile_ids_set,
-                                        *lava_tile_ids_set,
+                                        *water_flowing_tile_ids,
+                                        *water_flowing_tile_ids_set,
+                                        *lava_flowing_tile_ids,
+                                        *lava_flowing_tile_ids_set,
                                         *active_chunks,
                                         .MINED
                                     );
@@ -766,42 +815,7 @@ main :: () {
 
                                     // If we just cracked into a cave, we'll need to reveal the cave and do anything
                                     // that cave type needs (e.g. spawn water, lava, monsters, etc.).
-                                    {
-                                        check_is_neighbor_unreavealed_cave :: (tile_id: s32) -> found_cave_neighbor: bool, cave_neighbor_id: s32 {
-                                            for i: 0..3 {
-                                                dx := TILE_DIRECTION_DELTAS[i][0];
-                                                dy := TILE_DIRECTION_DELTAS[i][1];
-                                                
-                                                tile_pos     := get_tile_pos_by_id(tile_id);
-                                                neighbor_pos := Vector2.{ tile_pos.x + dx, tile_pos.y + dy };
-                                                neighbor_id  := get_tile_id_by_pos(neighbor_pos);
-
-                                                neighbor_is_unrevealed_cave := table_contains(*cave_tile_ids_set, neighbor_id);
-                                                if neighbor_is_unrevealed_cave return true, neighbor_id;
-                                            }
-
-                                            return false, 1738;
-                                        }
-
-                                        neighbor_is_unrevealed_cave, cave_tile_id := check_is_neighbor_unreavealed_cave(dwarf.tile_id_mining);
-                                        if neighbor_is_unrevealed_cave {
-                                            // First, decide what kind of cave this will be.
-                                            cave_type : CaveType = cast(CaveType) cast(int) random_get_within_range(0, xx enum_count(CaveType));
-
-                                            // Second, recursively reveal the tiles of the cave.
-                                            set_cave_as_mined(
-                                                cave_tile_id,
-                                                *fully_mined_tile_ids_set,
-                                                *cave_tile_ids_set,
-                                                *actively_mined_tile_ids_to_health_table,
-                                                *iron_tile_ids_set,
-                                                *water_tile_ids_set,
-                                                *lava_tile_ids_set,
-                                                *active_chunks,
-                                                cave_type
-                                            );
-                                        }
-                                    }
+                                    try_to_reveal_cave(dwarf.tile_id_mining);
 
                                     dwarf.tile_id_mining = 0;
                                     dwarf.state = .MOVING;
@@ -847,8 +861,10 @@ main :: () {
                             *cave_tile_ids_set,
                             *actively_mined_tile_ids_to_health_table,
                             *iron_tile_ids_set,
-                            *water_tile_ids_set,
-                            *lava_tile_ids_set,
+                            *water_flowing_tile_ids,
+                            *water_flowing_tile_ids_set,
+                            *lava_flowing_tile_ids,
+                            *lava_flowing_tile_ids_set,
                             *active_chunks,
                             .MINED
                         );
@@ -874,9 +890,8 @@ main :: () {
             }
 
             // Update iron
-            {
-                // IRON_SPAWN_CHANCE_NUMERATOR   :: 1;
-                // IRON_SPAWN_CHANCE_DENOMINATOR :: 10000;
+            UPDATE_IRON :: true;
+            #if UPDATE_IRON {
                 IRON_VEIN_SIZE_MIN :: 8;
                 IRON_VEIN_SIZE_MAX :: 15;
 
@@ -885,6 +900,23 @@ main :: () {
                     tile_pos  := Vector2.{ iron_rect.x, iron_rect.y };
                     tile_id   := get_tile_id_by_pos(tile_pos);
                     spawn_iron(xx tile_id, IRON_VEIN_SIZE_MIN, IRON_VEIN_SIZE_MAX, WORLD_COLS, WORLD_ROWS, *active_chunks, *iron_tile_ids_set);
+                }
+            }
+
+            // Update water
+            UPDATE_WATER :: true;
+            #if UPDATE_WATER {
+                WATER_SPEED_MILLIS :: 250; // milliseconds it takes for the water to spread to its neighbor
+                for water_still_tile_ids {
+
+                }
+            }
+
+            // Update lava
+            UPDATE_LAVA :: true;
+            #if UPDATE_LAVA {
+                for lava_still_tile_ids {
+
                 }
             }
         }
@@ -951,7 +983,7 @@ main :: () {
                         );
                     }
 
-                    for water_tile_ids_in_viewport {
+                    for water_still_tile_ids_in_viewport {
                         DrawRectangleV(
                             get_tile_pos_by_id(it),
                             Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
@@ -959,11 +991,27 @@ main :: () {
                         );
                     }
 
-                    for lava_tile_ids_in_viewport {
+                    for water_flowing_tile_ids_in_viewport {
+                        DrawRectangleV(
+                            get_tile_pos_by_id(it),
+                            Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
+                            SKYBLUE, // TODO: texture
+                        );
+                    }
+
+                    for lava_still_tile_ids_in_viewport {
                         DrawRectangleV(
                             get_tile_pos_by_id(it),
                             Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
                             RED, // TODO: texture
+                        );
+                    }
+
+                    for lava_flowing_tile_ids_in_viewport {
+                        DrawRectangleV(
+                            get_tile_pos_by_id(it),
+                            Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
+                            ORANGE, // TODO: texture
                         );
                     }
                 }
@@ -1201,8 +1249,10 @@ set_cave_as_mined :: (
     cave_tile_ids_set : *Table,
     actively_mined_tile_ids_to_health_table : *Table,
     iron_tile_ids_set : *Table,
-    water_tile_ids_set : *Table,
-    lava_tile_ids_set : *Table,
+    water_flowing_tile_ids : *[..] s32,
+    water_flowing_tile_ids_set : *Table,
+    lava_flowing_tile_ids : *[..] s32,
+    lava_flowing_tile_ids_set : *Table,
     active_chunks: *Table,
     cave_type: CaveType
 ) {
@@ -1223,8 +1273,10 @@ set_cave_as_mined :: (
         cave_tile_ids_set,
         actively_mined_tile_ids_to_health_table,
         iron_tile_ids_set,
-        water_tile_ids_set,
-        lava_tile_ids_set,
+        water_flowing_tile_ids,
+        water_flowing_tile_ids_set,
+        lava_flowing_tile_ids,
+        lava_flowing_tile_ids_set,
         active_chunks,
         tile_type
     );
@@ -1252,8 +1304,10 @@ set_cave_as_mined :: (
             cave_tile_ids_set,
             actively_mined_tile_ids_to_health_table,
             iron_tile_ids_set,
-            water_tile_ids_set,
-            lava_tile_ids_set,
+            water_flowing_tile_ids,
+            water_flowing_tile_ids_set,
+            lava_flowing_tile_ids,
+            lava_flowing_tile_ids_set,
             active_chunks,
             cave_type
         );
@@ -1266,8 +1320,10 @@ set_tile_as_mined :: (
     cave_tile_ids_set : *Table,
     actively_mined_tile_ids_to_health_table : *Table,
     iron_tile_ids_set : *Table,
-    water_tile_ids_set : *Table,
-    lava_tile_ids_set : *Table,
+    water_flowing_tile_ids : *[..] s32,
+    water_flowing_tile_ids_set : *Table,
+    lava_flowing_tile_ids : *[..] s32,
+    lava_flowing_tile_ids_set : *Table,
     active_chunks: *Table,
     as_type : TileType
 ) {
@@ -1308,12 +1364,14 @@ set_tile_as_mined :: (
             table_add(fully_mined_tile_ids_set, tile_id, 1738);
         }
         case .WATER; {
-            array_add(*chunk.water_tile_ids, tile_id);
-            table_add(water_tile_ids_set, tile_id, 1738);
+            array_add(water_flowing_tile_ids, tile_id);
+            array_add(*chunk.water_flowing_tile_ids, tile_id);
+            table_add(water_flowing_tile_ids_set, tile_id, 1738);
         }
         case .LAVA; {
-            array_add(*chunk.lava_tile_ids, tile_id);
-            table_add(lava_tile_ids_set, tile_id, 1738);
+            array_add(lava_flowing_tile_ids, tile_id);
+            array_add(*chunk.lava_flowing_tile_ids, tile_id);
+            table_add(lava_flowing_tile_ids_set, tile_id, 1738);
         }
         case .DIRT; #through;
         case .IRON; {
@@ -1420,10 +1478,15 @@ derive_entities_in_viewport :: (
     cave_tile_ids_in_viewport: *[..] s32,
     actively_mined_tile_ids_in_viewport: *[..] s32,
     iron_tile_ids_in_viewport: *[..] s32,
-    water_tile_ids_in_viewport: *[..] s32,
-    lava_tile_ids_in_viewport: *[..] s32,
-    bases: [..] Base, bases_in_viewport: *[..] Base,
-    dwarves: [..] Dwarf, dwarves_in_viewport: *[..] Dwarf
+    water_still_tile_ids_in_viewport: *[..] s32,
+    water_flowing_tile_ids_in_viewport: *[..] s32,
+    lava_still_tile_ids_in_viewport: *[..] s32,
+    lava_flowing_tile_ids_in_viewport: *[..] s32,
+    // TODO: add bases and dwarves to chunks
+    bases: [..] Base,
+    bases_in_viewport: *[..] Base,
+    dwarves: [..] Dwarf,
+    dwarves_in_viewport: *[..] Dwarf
     // paths: [..] Path, paths_in_viewport: *[..] Path
 ) {
     window_start := GetScreenToWorld2D(Vector2.{ 0, 0 }, camera);
@@ -1433,8 +1496,10 @@ derive_entities_in_viewport :: (
     array_reset(cave_tile_ids_in_viewport);
     array_reset(actively_mined_tile_ids_in_viewport);
     array_reset(iron_tile_ids_in_viewport);
-    array_reset(water_tile_ids_in_viewport);
-    array_reset(lava_tile_ids_in_viewport);
+    array_reset(water_still_tile_ids_in_viewport);
+    array_reset(water_flowing_tile_ids_in_viewport);
+    array_reset(lava_still_tile_ids_in_viewport);
+    array_reset(lava_flowing_tile_ids_in_viewport);
     array_reset(bases_in_viewport);
     array_reset(dwarves_in_viewport);
     
@@ -1513,8 +1578,8 @@ derive_entities_in_viewport :: (
                 array_add(iron_tile_ids_in_viewport, tile_id);
             }
 
-            // Water tiles
-            for tile_id: chunk.water_tile_ids {
+            // Water still tiles
+            for tile_id: chunk.water_still_tile_ids {
                 pos := get_tile_pos_by_id(tile_id);
 
                 if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
@@ -1522,11 +1587,11 @@ derive_entities_in_viewport :: (
                 if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
                 if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-                array_add(water_tile_ids_in_viewport, tile_id);
+                array_add(water_still_tile_ids_in_viewport, tile_id);
             }
 
-            // Lava tiles
-            for tile_id: chunk.lava_tile_ids {
+            // Water flowing tiles
+            for tile_id: chunk.water_flowing_tile_ids {
                 pos := get_tile_pos_by_id(tile_id);
 
                 if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
@@ -1534,7 +1599,31 @@ derive_entities_in_viewport :: (
                 if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
                 if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-                array_add(lava_tile_ids_in_viewport, tile_id);
+                array_add(water_flowing_tile_ids_in_viewport, tile_id);
+            }
+
+            // Lava still tiles
+            for tile_id: chunk.lava_still_tile_ids {
+                pos := get_tile_pos_by_id(tile_id);
+
+                if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+                if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+                if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+                if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+
+                array_add(lava_still_tile_ids_in_viewport, tile_id);
+            }
+
+            // Lava flowing tiles
+            for tile_id: chunk.lava_flowing_tile_ids {
+                pos := get_tile_pos_by_id(tile_id);
+
+                if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+                if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+                if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+                if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+
+                array_add(lava_flowing_tile_ids_in_viewport, tile_id);
             }
 
             // TODO: these are slightly harder
@@ -1593,6 +1682,45 @@ derive_entities_in_viewport :: (
 
             array_add(dwarves_in_viewport, dwarf);
         }
+    }
+}
+
+try_to_reveal_cave :: (tile_id: s32) {
+    check_is_neighbor_unreavealed_cave :: (tile_id: s32) -> found_cave_neighbor: bool, cave_neighbor_id: s32 {
+        for i: 0..3 {
+            dx := TILE_DIRECTION_DELTAS[i][0];
+            dy := TILE_DIRECTION_DELTAS[i][1];
+            
+            tile_pos     := get_tile_pos_by_id(tile_id);
+            neighbor_pos := Vector2.{ tile_pos.x + dx, tile_pos.y + dy };
+            neighbor_id  := get_tile_id_by_pos(neighbor_pos);
+
+            neighbor_is_unrevealed_cave := table_contains(*cave_tile_ids_set, neighbor_id);
+            if neighbor_is_unrevealed_cave return true, neighbor_id;
+        }
+
+        return false, 1738;
+    }
+
+    neighbor_is_unrevealed_cave, cave_tile_id := check_is_neighbor_unreavealed_cave(tile_id);
+    if neighbor_is_unrevealed_cave {
+        // First, decide what kind of cave this will be.
+        cave_type : CaveType = cast(CaveType) cast(int) random_get_within_range(0, xx enum_count(CaveType));
+
+        // Second, recursively reveal the tiles of the cave.
+        set_cave_as_mined(
+            cave_tile_id,
+            *fully_mined_tile_ids_set,
+            *cave_tile_ids_set,
+            *actively_mined_tile_ids_to_health_table,
+            *iron_tile_ids_set,
+            *water_flowing_tile_ids,
+            *water_flowing_tile_ids_set,
+            *lava_flowing_tile_ids,
+            *lava_flowing_tile_ids_set,
+            *active_chunks,
+            cave_type
+        );
     }
 }
 
