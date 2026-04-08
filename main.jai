@@ -905,70 +905,20 @@ main :: () {
                 }
             }
 
-            // Update water
+            // Update flowing water
             UPDATE_WATER :: true;
             #if UPDATE_WATER {
-                WATER_SPEED_MILLIS :: 250; // milliseconds it takes for the water to spread to its neighbor
-                dx, dy : float;
-
+                // WATER_SPEED_MILLIS :: 250; // milliseconds it takes for the water to spread to its neighbor
                 for water_flowing_tile_ids {
-                    tile_pos := get_tile_pos_by_id(it);
-
-                    // Recursively go through neighbors and try to set them as flowing water
-                    for i: 0..3 {
-                        dx = TILE_DIRECTION_DELTAS[i][0];
-                        dy = TILE_DIRECTION_DELTAS[i][1];
-                        neighbor_pos := Vector2.{ tile_pos.x + dx, tile_pos.y + dy };
-                        found_neighbor, neighbor_id := find_tile_id_by_pos(neighbor_pos);
-                        if !found_neighbor {
-                            print("WARN: Couldn't find neighbor for tile at pos (%,%). This either means it's on the edge of the world, or that something might be wrong.\n", neighbor_pos.x, neighbor_pos.y);
-                            continue;
-                        }
-
-                        // TODO: this is kind of terrible because if/when I add new things, I'm going to have to remember
-                        // to add them here. Would be good to have this automated somehow.
-
-                        tile_is_still_water := table_contains(*water_still_tile_ids_set, neighbor_id);
-                        if tile_is_still_water continue;
-
-                        tile_is_still_lava := table_contains(*lava_still_tile_ids_set, neighbor_id);
-                        if tile_is_still_lava continue;
-
-                        tile_is_iron := table_contains(*iron_tile_ids_set, neighbor_id);
-                        if tile_is_iron continue;
-
-                        tile_is_being_mined := table_contains(*actively_mined_tile_ids_to_health_table, neighbor_id);
-                        if tile_is_being_mined continue;
-
-                        tile_is_empty := table_contains(*fully_mined_tile_ids_set, neighbor_id);
-                        if tile_is_empty continue;
-
-                        set_tile_as_type(
-                            neighbor_id,
-                            *fully_mined_tile_ids_set,
-                            *cave_tile_ids_set,
-                            *actively_mined_tile_ids_to_health_table,
-                            *iron_tile_ids_set,
-                            *water_still_tile_ids,
-                            *water_still_tile_ids_set,
-                            *water_flowing_tile_ids,
-                            *water_flowing_tile_ids_set,
-                            *lava_still_tile_ids,
-                            *lava_still_tile_ids_set,
-                            *lava_flowing_tile_ids,
-                            *lava_flowing_tile_ids_set,
-                            *active_chunks,
-                            .WATER_FLOWING
-                        );
-                    }
+                    try_to_set_cardinal_neighbors_as_flowing_tile_type(it, .WATER_FLOWING);
                 }
             }
 
-            // Update lava
+            // Update flowing lava
             UPDATE_LAVA :: true;
             #if UPDATE_LAVA {
-                for lava_still_tile_ids {
-
+                for lava_flowing_tile_ids {
+                    try_to_set_cardinal_neighbors_as_flowing_tile_type(it, .LAVA_FLOWING);
                 }
             }
         }
@@ -1131,6 +1081,58 @@ main :: () {
 
             }
         }
+    }
+}
+
+try_to_set_cardinal_neighbors_as_flowing_tile_type :: (tile_id: s32, as_type: TileType) {
+    tile_pos := get_tile_pos_by_id(tile_id);
+    dx, dy : float;
+
+    for i: 0..3 {
+        dx = TILE_DIRECTION_DELTAS[i][0];
+        dy = TILE_DIRECTION_DELTAS[i][1];
+        neighbor_pos := Vector2.{ tile_pos.x + dx, tile_pos.y + dy };
+        found_neighbor, neighbor_id := find_tile_id_by_pos(neighbor_pos);
+        if !found_neighbor {
+            print("WARN: Couldn't find neighbor for tile at pos (%,%). This either means it's on the edge of the world, or that something might be wrong.\n", neighbor_pos.x, neighbor_pos.y);
+            continue;
+        }
+
+        // TODO: this is kind of terrible because if/when I add new things, I'm going to have to remember
+        // to add them here. Would be good to have this automated somehow.
+
+        tile_is_still_water := table_contains(*water_still_tile_ids_set, neighbor_id);
+        if tile_is_still_water continue;
+
+        tile_is_still_lava := table_contains(*lava_still_tile_ids_set, neighbor_id);
+        if tile_is_still_lava continue;
+
+        tile_is_iron := table_contains(*iron_tile_ids_set, neighbor_id);
+        if tile_is_iron continue;
+
+        tile_is_being_mined := table_contains(*actively_mined_tile_ids_to_health_table, neighbor_id);
+        if tile_is_being_mined continue;
+
+        tile_is_empty := table_contains(*fully_mined_tile_ids_set, neighbor_id);
+        if !tile_is_empty continue;
+
+        set_tile_as_type(
+            neighbor_id,
+            *fully_mined_tile_ids_set,
+            *cave_tile_ids_set,
+            *actively_mined_tile_ids_to_health_table,
+            *iron_tile_ids_set,
+            *water_still_tile_ids,
+            *water_still_tile_ids_set,
+            *water_flowing_tile_ids,
+            *water_flowing_tile_ids_set,
+            *lava_still_tile_ids,
+            *lava_still_tile_ids_set,
+            *lava_flowing_tile_ids,
+            *lava_flowing_tile_ids_set,
+            *active_chunks,
+            as_type
+        );
     }
 }
 
@@ -1407,6 +1409,22 @@ set_tile_as_type :: (
 
         array_unordered_remove_by_value(*chunk.cave_tile_ids, tile_id);
         table_remove(cave_tile_ids_set, tile_id);
+
+        array_unordered_remove_by_value(water_still_tile_ids, tile_id);
+        array_unordered_remove_by_value(*chunk.water_still_tile_ids, tile_id);
+        table_remove(water_still_tile_ids_set, tile_id);
+
+        array_unordered_remove_by_value(water_flowing_tile_ids, tile_id);
+        array_unordered_remove_by_value(*chunk.water_flowing_tile_ids, tile_id);
+        table_remove(water_flowing_tile_ids_set, tile_id);
+
+        array_unordered_remove_by_value(lava_still_tile_ids, tile_id);
+        array_unordered_remove_by_value(*chunk.lava_still_tile_ids, tile_id);
+        table_remove(lava_still_tile_ids_set, tile_id);
+
+        array_unordered_remove_by_value(lava_flowing_tile_ids, tile_id);
+        array_unordered_remove_by_value(*chunk.lava_flowing_tile_ids, tile_id);
+        table_remove(lava_flowing_tile_ids_set, tile_id);
     }
 
     // Add the tile to whatever new list it should be a part of.
@@ -1445,26 +1463,28 @@ set_tile_as_type :: (
         }
     }
 
-    // Add edges for pathing to any neighbors who are also mined
-    dx, dy : float;
-    tile_pos := get_tile_pos_by_id(tile_id);
+    // Add edges for pathing to any neighbors who are also open
+    if as_type == .CAVE || as_type == .MINED {
+        dx, dy : float;
+        tile_pos := get_tile_pos_by_id(tile_id);
 
-    for i: 0..3 {
-        dx = TILE_DIRECTION_DELTAS[i][0];
-        dy = TILE_DIRECTION_DELTAS[i][1];
-        neighbor_pos := Vector2.{ tile_pos.x + dx, tile_pos.y + dy };
-        found_neighbor, neighbor_id := find_tile_id_by_pos(neighbor_pos);
-        if !found_neighbor {
-            print("WARN: Couldn't find neighbor for tile at pos (%,%). This either means it's on the edge of the world, or that something might be wrong.\n", neighbor_pos.x, neighbor_pos.y);
-            continue;
-        }
+        for i: 0..3 {
+            dx = TILE_DIRECTION_DELTAS[i][0];
+            dy = TILE_DIRECTION_DELTAS[i][1];
+            neighbor_pos := Vector2.{ tile_pos.x + dx, tile_pos.y + dy };
+            found_neighbor, neighbor_id := find_tile_id_by_pos(neighbor_pos);
+            if !found_neighbor {
+                print("WARN: Couldn't find neighbor for tile at pos (%,%). This either means it's on the edge of the world, or that something might be wrong.\n", neighbor_pos.x, neighbor_pos.y);
+                continue;
+            }
 
-        neighbor_is_mined := table_contains(fully_mined_tile_ids_set, neighbor_id);
+            neighbor_is_mined := table_contains(fully_mined_tile_ids_set, neighbor_id);
 
-        if neighbor_is_mined {
-            // TODO: this is pretty fucked up to add these edges both ways, I think
-            array_add(*edges, Edge.{ from = tile_id,     to = neighbor_id, distance = 1 });
-            array_add(*edges, Edge.{ from = neighbor_id, to = tile_id, distance = 1 });
+            if neighbor_is_mined {
+                // TODO: this is pretty fucked up to add these edges both ways, I think
+                array_add(*edges, Edge.{ from = tile_id,     to = neighbor_id, distance = 1 });
+                array_add(*edges, Edge.{ from = neighbor_id, to = tile_id, distance = 1 });
+            }
         }
     }
 }

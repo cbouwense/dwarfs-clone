@@ -17,6 +17,7 @@
 # Tech
 
 - Just use math to get neighboring tile ids
+- deprecate set_tile_as_mined to just a wrapper for set_tile_as_type
 - fullscreen and resizability
 - underclock cpu
 - hotreloading
