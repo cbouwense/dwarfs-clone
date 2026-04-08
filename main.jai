@@ -152,6 +152,25 @@ TILE_DIRECTION_DELTAS :: [2]float32.[
     .[0.0, 0.0], // center
 ];
 
+CaveType :: enum u8 {
+    EMPTY;
+    WATER;
+    LAVA;
+    TREASURE;
+    MINION;
+    SHAMAN;
+    SPIDER_QUEEN;
+}
+
+TileType :: enum u8 {
+    DIRT;
+    MINED;
+    CAVE; // Unrevealed cave
+    WATER;
+    LAVA;
+    IRON;
+}
+
 Entity :: struct {
     id   : s32;
     pos  : Vector2;
@@ -202,6 +221,8 @@ Chunk :: struct {
     cave_tile_ids           : [..] s32;
     actively_mined_tile_ids : [..] s32;
     iron_tile_ids           : [..] s32;
+    water_tile_ids          : [..] s32;
+    lava_tile_ids           : [..] s32;
     
     // TODO: Will probably want these
     // bases   : [..] Base;
@@ -229,6 +250,12 @@ cave_tile_ids_in_viewport : [..] s32;
 
 iron_tile_ids_set         : Table(s32, Any);
 iron_tile_ids_in_viewport : [..] s32;
+
+water_tile_ids_set         : Table(s32, Any);
+water_tile_ids_in_viewport : [..] s32;
+
+lava_tile_ids_set         : Table(s32, Any);
+lava_tile_ids_in_viewport : [..] s32;
 
 bases               : [..] Base;
 bases_in_viewport   : [..] Base;
@@ -319,8 +346,10 @@ main :: () {
                         *cave_tile_ids_set,
                         *actively_mined_tile_ids_to_health_table,
                         *iron_tile_ids_set,
+                        *water_tile_ids_set,
+                        *lava_tile_ids_set,
                         *active_chunks,
-                        true
+                        .CAVE
                     );
                 }
             }
@@ -400,8 +429,10 @@ main :: () {
                 *cave_tile_ids_set,
                 *actively_mined_tile_ids_to_health_table,
                 *iron_tile_ids_set,
+                *water_tile_ids_set,
+                *lava_tile_ids_set,
                 *active_chunks,
-                false
+                .MINED
             );
         }
     }
@@ -523,6 +554,8 @@ main :: () {
             *cave_tile_ids_in_viewport,
             *actively_mined_tile_ids_in_viewport,
             *iron_tile_ids_in_viewport,
+            *water_tile_ids_in_viewport,
+            *lava_tile_ids_in_viewport,
             bases,   *bases_in_viewport,
             dwarves, *dwarves_in_viewport,
             // paths, *paths_in_viewport
@@ -688,8 +721,10 @@ main :: () {
                                         *cave_tile_ids_set,
                                         *actively_mined_tile_ids_to_health_table,
                                         *iron_tile_ids_set,
+                                        *water_tile_ids_set,
+                                        *lava_tile_ids_set,
                                         *active_chunks,
-                                        false
+                                        .MINED
                                     );
 
                                     // If the dwarf is mining a resource, check if there are any others nearby
@@ -750,14 +785,20 @@ main :: () {
 
                                         neighbor_is_unrevealed_cave, cave_tile_id := check_is_neighbor_unreavealed_cave(dwarf.tile_id_mining);
                                         if neighbor_is_unrevealed_cave {
-                                            // First, recursively reveal the tiles of the cave.
+                                            // First, decide what kind of cave this will be.
+                                            cave_type : CaveType = cast(CaveType) cast(int) random_get_within_range(0, xx enum_count(CaveType));
+
+                                            // Second, recursively reveal the tiles of the cave.
                                             set_cave_as_mined(
                                                 cave_tile_id,
                                                 *fully_mined_tile_ids_set,
                                                 *cave_tile_ids_set,
                                                 *actively_mined_tile_ids_to_health_table,
                                                 *iron_tile_ids_set,
-                                                *active_chunks
+                                                *water_tile_ids_set,
+                                                *lava_tile_ids_set,
+                                                *active_chunks,
+                                                cave_type
                                             );
                                         }
                                     }
@@ -806,8 +847,10 @@ main :: () {
                             *cave_tile_ids_set,
                             *actively_mined_tile_ids_to_health_table,
                             *iron_tile_ids_set,
+                            *water_tile_ids_set,
+                            *lava_tile_ids_set,
                             *active_chunks,
-                            false
+                            .MINED
                         );
                     }
                 }
@@ -882,12 +925,13 @@ main :: () {
                 }
 
                 // Then draw any uncovered tiles over the base layer
-                {
+                DRAW_TILES :: true;
+                #if DRAW_TILES {
                     for fully_mined_tile_ids_in_viewport {
                         DrawRectangleV(
                             get_tile_pos_by_id(it),
                             Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
-                            BEIGE,
+                            BEIGE, // TODO: texture
                         );
                     }
 
@@ -895,14 +939,27 @@ main :: () {
                         DrawRectangleV(
                             get_tile_pos_by_id(it),
                             Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
-                            BLACK,
+                            BLACK, // TODO: texture
                         );
                     }
-                }
 
-                // Draw iron
-                {
                     for iron_tile_ids_in_viewport {
+                        DrawRectangleV(
+                            get_tile_pos_by_id(it),
+                            Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
+                            GRAY, // TODO: texture
+                        );
+                    }
+
+                    for water_tile_ids_in_viewport {
+                        DrawRectangleV(
+                            get_tile_pos_by_id(it),
+                            Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
+                            BLUE, // TODO: texture
+                        );
+                    }
+
+                    for lava_tile_ids_in_viewport {
                         DrawRectangleV(
                             get_tile_pos_by_id(it),
                             Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
@@ -912,7 +969,8 @@ main :: () {
                 }
 
                 // Draw bases
-                {
+                DRAW_BASES :: true;
+                #if DRAW_BASES {
                     for base: bases_in_viewport {
                         source := Rectangle.{
                             0, 0,
@@ -1143,16 +1201,32 @@ set_cave_as_mined :: (
     cave_tile_ids_set : *Table,
     actively_mined_tile_ids_to_health_table : *Table,
     iron_tile_ids_set : *Table,
-    active_chunks: *Table
+    water_tile_ids_set : *Table,
+    lava_tile_ids_set : *Table,
+    active_chunks: *Table,
+    cave_type: CaveType
 ) {
+    tile_type : TileType;
+    if #complete cave_type == {
+        case .EMPTY;        tile_type = .MINED;
+        case .WATER;        tile_type = .WATER;
+        case .LAVA;         tile_type = .LAVA;
+        case .TREASURE;     tile_type = .MINED;
+        case .MINION;       tile_type = .MINED;
+        case .SHAMAN;       tile_type = .MINED;
+        case .SPIDER_QUEEN; tile_type = .MINED;
+    }
+
     set_tile_as_mined(
         tile_id,
         fully_mined_tile_ids_set,
         cave_tile_ids_set,
         actively_mined_tile_ids_to_health_table,
         iron_tile_ids_set,
+        water_tile_ids_set,
+        lava_tile_ids_set,
         active_chunks,
-        false
+        tile_type
     );
 
     // Recursively go through neighbors and set them as mined as well.
@@ -1178,7 +1252,10 @@ set_cave_as_mined :: (
             cave_tile_ids_set,
             actively_mined_tile_ids_to_health_table,
             iron_tile_ids_set,
-            active_chunks
+            water_tile_ids_set,
+            lava_tile_ids_set,
+            active_chunks,
+            cave_type
         );
     }
 }
@@ -1189,12 +1266,17 @@ set_tile_as_mined :: (
     cave_tile_ids_set : *Table,
     actively_mined_tile_ids_to_health_table : *Table,
     iron_tile_ids_set : *Table,
+    water_tile_ids_set : *Table,
+    lava_tile_ids_set : *Table,
     active_chunks: *Table,
-    as_cave : bool
+    as_type : TileType
 ) {
     chunk := get_chunk_ptr_by_tile_id(tile_id);
 
-    // Remove the tile from the various lists it should no longer be a part of.
+    // Remove the tile from all of the tile trackers. We will even remove it from lists that it should
+    // stick around in. We put it into the one it should be right below this.
+    // TODO: maybe don't do it like this? For some reason, this seems like a good idea to me right now,
+    // but I could easily see this being stupid and wasteful. I guess we'll see.
     {
         // If the tile was a resource, then keep track of the gain and also remove the resource
         // from the map
@@ -1208,22 +1290,35 @@ set_tile_as_mined :: (
         array_unordered_remove_by_value(*chunk.actively_mined_tile_ids, tile_id);
         table_remove(actively_mined_tile_ids_to_health_table, tile_id);
         
-        if as_cave {
-            array_unordered_remove_by_value(*chunk.fully_mined_tile_ids, tile_id);
-            table_remove(fully_mined_tile_ids_set, tile_id);
-        } else {
-            array_unordered_remove_by_value(*chunk.cave_tile_ids, tile_id);
-            table_remove(cave_tile_ids_set, tile_id);
-        }
+        array_unordered_remove_by_value(*chunk.fully_mined_tile_ids, tile_id);
+        table_remove(fully_mined_tile_ids_set, tile_id);
+
+        array_unordered_remove_by_value(*chunk.cave_tile_ids, tile_id);
+        table_remove(cave_tile_ids_set, tile_id);
     }
 
     // Add the tile to whatever new list it should be a part of.
-    if as_cave {
-        array_add(*chunk.cave_tile_ids, tile_id);
-        table_add(cave_tile_ids_set, tile_id, 1738);
-    } else {
-        array_add(*chunk.fully_mined_tile_ids, tile_id);
-        table_add(fully_mined_tile_ids_set, tile_id, 1738);
+    if #complete as_type == {
+        case .CAVE; {
+            array_add(*chunk.cave_tile_ids, tile_id);
+            table_add(cave_tile_ids_set, tile_id, 1738);
+        }
+        case .MINED; {
+            array_add(*chunk.fully_mined_tile_ids, tile_id);
+            table_add(fully_mined_tile_ids_set, tile_id, 1738);
+        }
+        case .WATER; {
+            array_add(*chunk.water_tile_ids, tile_id);
+            table_add(water_tile_ids_set, tile_id, 1738);
+        }
+        case .LAVA; {
+            array_add(*chunk.lava_tile_ids, tile_id);
+            table_add(lava_tile_ids_set, tile_id, 1738);
+        }
+        case .DIRT; #through;
+        case .IRON; {
+            assert(false, "Tried setting block as type %, but that doesn't really make sense.", as_type);
+        }
     }
 
     // Add edges for pathing to any neighbors who are also mined
@@ -1325,6 +1420,8 @@ derive_entities_in_viewport :: (
     cave_tile_ids_in_viewport: *[..] s32,
     actively_mined_tile_ids_in_viewport: *[..] s32,
     iron_tile_ids_in_viewport: *[..] s32,
+    water_tile_ids_in_viewport: *[..] s32,
+    lava_tile_ids_in_viewport: *[..] s32,
     bases: [..] Base, bases_in_viewport: *[..] Base,
     dwarves: [..] Dwarf, dwarves_in_viewport: *[..] Dwarf
     // paths: [..] Path, paths_in_viewport: *[..] Path
@@ -1336,6 +1433,8 @@ derive_entities_in_viewport :: (
     array_reset(cave_tile_ids_in_viewport);
     array_reset(actively_mined_tile_ids_in_viewport);
     array_reset(iron_tile_ids_in_viewport);
+    array_reset(water_tile_ids_in_viewport);
+    array_reset(lava_tile_ids_in_viewport);
     array_reset(bases_in_viewport);
     array_reset(dwarves_in_viewport);
     
@@ -1412,6 +1511,30 @@ derive_entities_in_viewport :: (
                 if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
                 array_add(iron_tile_ids_in_viewport, tile_id);
+            }
+
+            // Water tiles
+            for tile_id: chunk.water_tile_ids {
+                pos := get_tile_pos_by_id(tile_id);
+
+                if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+                if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+                if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+                if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+
+                array_add(water_tile_ids_in_viewport, tile_id);
+            }
+
+            // Lava tiles
+            for tile_id: chunk.lava_tile_ids {
+                pos := get_tile_pos_by_id(tile_id);
+
+                if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+                if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+                if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+                if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+
+                array_add(lava_tile_ids_in_viewport, tile_id);
             }
 
             // TODO: these are slightly harder

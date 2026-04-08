@@ -159,3 +159,8 @@ integer_log2 :: (n : u32) -> s32 {
     }
     return log;
 }
+
+enum_count :: ($T: Type) -> int {
+    info := type_info(T);
+    return info.values.count;
+}
