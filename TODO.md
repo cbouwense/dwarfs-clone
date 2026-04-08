@@ -16,6 +16,7 @@
 
 # Tech
 
+- Just use math to get neighboring tile ids
 - fullscreen and resizability
 - underclock cpu
 - hotreloading

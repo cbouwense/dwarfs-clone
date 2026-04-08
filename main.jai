@@ -166,8 +166,10 @@ TileType :: enum u8 {
     DIRT;
     MINED;
     CAVE; // Unrevealed cave
-    WATER;
-    LAVA;
+    WATER_STILL;
+    WATER_FLOWING;
+    LAVA_STILL;
+    LAVA_FLOWING;
     IRON;
 }
 
@@ -907,8 +909,58 @@ main :: () {
             UPDATE_WATER :: true;
             #if UPDATE_WATER {
                 WATER_SPEED_MILLIS :: 250; // milliseconds it takes for the water to spread to its neighbor
-                for water_still_tile_ids {
+                dx, dy : float;
 
+                for water_flowing_tile_ids {
+                    tile_pos := get_tile_pos_by_id(it);
+
+                    // Recursively go through neighbors and try to set them as flowing water
+                    for i: 0..3 {
+                        dx = TILE_DIRECTION_DELTAS[i][0];
+                        dy = TILE_DIRECTION_DELTAS[i][1];
+                        neighbor_pos := Vector2.{ tile_pos.x + dx, tile_pos.y + dy };
+                        found_neighbor, neighbor_id := find_tile_id_by_pos(neighbor_pos);
+                        if !found_neighbor {
+                            print("WARN: Couldn't find neighbor for tile at pos (%,%). This either means it's on the edge of the world, or that something might be wrong.\n", neighbor_pos.x, neighbor_pos.y);
+                            continue;
+                        }
+
+                        // TODO: this is kind of terrible because if/when I add new things, I'm going to have to remember
+                        // to add them here. Would be good to have this automated somehow.
+
+                        tile_is_still_water := table_contains(*water_still_tile_ids_set, neighbor_id);
+                        if tile_is_still_water continue;
+
+                        tile_is_still_lava := table_contains(*lava_still_tile_ids_set, neighbor_id);
+                        if tile_is_still_lava continue;
+
+                        tile_is_iron := table_contains(*iron_tile_ids_set, neighbor_id);
+                        if tile_is_iron continue;
+
+                        tile_is_being_mined := table_contains(*actively_mined_tile_ids_to_health_table, neighbor_id);
+                        if tile_is_being_mined continue;
+
+                        tile_is_empty := table_contains(*fully_mined_tile_ids_set, neighbor_id);
+                        if tile_is_empty continue;
+
+                        set_tile_as_type(
+                            neighbor_id,
+                            *fully_mined_tile_ids_set,
+                            *cave_tile_ids_set,
+                            *actively_mined_tile_ids_to_health_table,
+                            *iron_tile_ids_set,
+                            *water_still_tile_ids,
+                            *water_still_tile_ids_set,
+                            *water_flowing_tile_ids,
+                            *water_flowing_tile_ids_set,
+                            *lava_still_tile_ids,
+                            *lava_still_tile_ids_set,
+                            *lava_flowing_tile_ids,
+                            *lava_flowing_tile_ids_set,
+                            *active_chunks,
+                            .WATER_FLOWING
+                        );
+                    }
                 }
             }
 
@@ -1259,8 +1311,8 @@ set_cave_as_mined :: (
     tile_type : TileType;
     if #complete cave_type == {
         case .EMPTY;        tile_type = .MINED;
-        case .WATER;        tile_type = .WATER;
-        case .LAVA;         tile_type = .LAVA;
+        case .WATER;        tile_type = .WATER_FLOWING;
+        case .LAVA;         tile_type = .LAVA_FLOWING;
         case .TREASURE;     tile_type = .MINED;
         case .MINION;       tile_type = .MINED;
         case .SHAMAN;       tile_type = .MINED;
@@ -1314,6 +1366,110 @@ set_cave_as_mined :: (
     }
 }
 
+set_tile_as_type :: (
+    tile_id: s32,
+    fully_mined_tile_ids_set : *Table,
+    cave_tile_ids_set : *Table,
+    actively_mined_tile_ids_to_health_table : *Table,
+    iron_tile_ids_set : *Table,
+    water_still_tile_ids : *[..] s32,
+    water_still_tile_ids_set : *Table,
+    water_flowing_tile_ids : *[..] s32,
+    water_flowing_tile_ids_set : *Table,
+    lava_still_tile_ids : *[..] s32,
+    lava_still_tile_ids_set : *Table,
+    lava_flowing_tile_ids : *[..] s32,
+    lava_flowing_tile_ids_set : *Table,
+    active_chunks: *Table,
+    as_type : TileType
+) {
+    chunk := get_chunk_ptr_by_tile_id(tile_id);
+
+    // Remove the tile from all of the tile trackers. We will even remove it from lists that it should
+    // stick around in. We put it into the one it should be right below this.
+    // TODO: maybe don't do it like this? For some reason, this seems like a good idea to me right now,
+    // but I could easily see this being stupid and wasteful. I guess we'll see.
+    {
+        // If the tile was a resource, then keep track of the gain and also remove the resource
+        // from the map
+        tile_was_iron := table_find(iron_tile_ids_set, tile_id);
+        if tile_was_iron {
+            // TODO: give the player resources or something
+            array_unordered_remove_by_value(*chunk.iron_tile_ids, tile_id);
+            table_remove(iron_tile_ids_set, tile_id);
+        }
+
+        array_unordered_remove_by_value(*chunk.actively_mined_tile_ids, tile_id);
+        table_remove(actively_mined_tile_ids_to_health_table, tile_id);
+        
+        array_unordered_remove_by_value(*chunk.fully_mined_tile_ids, tile_id);
+        table_remove(fully_mined_tile_ids_set, tile_id);
+
+        array_unordered_remove_by_value(*chunk.cave_tile_ids, tile_id);
+        table_remove(cave_tile_ids_set, tile_id);
+    }
+
+    // Add the tile to whatever new list it should be a part of.
+    if #complete as_type == {
+        case .CAVE; {
+            array_add(*chunk.cave_tile_ids, tile_id);
+            table_add(cave_tile_ids_set, tile_id, 1738);
+        }
+        case .MINED; {
+            array_add(*chunk.fully_mined_tile_ids, tile_id);
+            table_add(fully_mined_tile_ids_set, tile_id, 1738);
+        }
+        case .WATER_STILL; {
+            array_add(water_still_tile_ids, tile_id);
+            array_add(*chunk.water_still_tile_ids, tile_id);
+            table_add(water_still_tile_ids_set, tile_id, 1738);
+        }
+        case .WATER_FLOWING; {
+            array_add(water_flowing_tile_ids, tile_id);
+            array_add(*chunk.water_flowing_tile_ids, tile_id);
+            table_add(water_flowing_tile_ids_set, tile_id, 1738);
+        }
+        case .LAVA_STILL; {
+            array_add(lava_still_tile_ids, tile_id);
+            array_add(*chunk.lava_still_tile_ids, tile_id);
+            table_add(lava_still_tile_ids_set, tile_id, 1738);
+        }
+        case .LAVA_FLOWING; {
+            array_add(lava_flowing_tile_ids, tile_id);
+            array_add(*chunk.lava_flowing_tile_ids, tile_id);
+            table_add(lava_flowing_tile_ids_set, tile_id, 1738);
+        }
+        case .DIRT; #through;
+        case .IRON; {
+            assert(false, "Tried setting block as type %, but that doesn't really make sense.", as_type);
+        }
+    }
+
+    // Add edges for pathing to any neighbors who are also mined
+    dx, dy : float;
+    tile_pos := get_tile_pos_by_id(tile_id);
+
+    for i: 0..3 {
+        dx = TILE_DIRECTION_DELTAS[i][0];
+        dy = TILE_DIRECTION_DELTAS[i][1];
+        neighbor_pos := Vector2.{ tile_pos.x + dx, tile_pos.y + dy };
+        found_neighbor, neighbor_id := find_tile_id_by_pos(neighbor_pos);
+        if !found_neighbor {
+            print("WARN: Couldn't find neighbor for tile at pos (%,%). This either means it's on the edge of the world, or that something might be wrong.\n", neighbor_pos.x, neighbor_pos.y);
+            continue;
+        }
+
+        neighbor_is_mined := table_contains(fully_mined_tile_ids_set, neighbor_id);
+
+        if neighbor_is_mined {
+            // TODO: this is pretty fucked up to add these edges both ways, I think
+            array_add(*edges, Edge.{ from = tile_id,     to = neighbor_id, distance = 1 });
+            array_add(*edges, Edge.{ from = neighbor_id, to = tile_id, distance = 1 });
+        }
+    }
+}
+
+// TODO: deprecate this and use set_tile_as_type, or use this as a wrapper for that
 set_tile_as_mined :: (
     tile_id: s32,
     fully_mined_tile_ids_set : *Table,
@@ -1363,12 +1519,22 @@ set_tile_as_mined :: (
             array_add(*chunk.fully_mined_tile_ids, tile_id);
             table_add(fully_mined_tile_ids_set, tile_id, 1738);
         }
-        case .WATER; {
+        case .WATER_STILL; {
+            array_add(*water_still_tile_ids, tile_id);
+            array_add(*chunk.water_still_tile_ids, tile_id);
+            table_add(*water_still_tile_ids_set, tile_id, 1738);
+        }
+        case .WATER_FLOWING; {
             array_add(water_flowing_tile_ids, tile_id);
             array_add(*chunk.water_flowing_tile_ids, tile_id);
             table_add(water_flowing_tile_ids_set, tile_id, 1738);
         }
-        case .LAVA; {
+        case .LAVA_STILL; {
+            array_add(*lava_still_tile_ids, tile_id);
+            array_add(*chunk.lava_still_tile_ids, tile_id);
+            table_add(*lava_still_tile_ids_set, tile_id, 1738);
+        }
+        case .LAVA_FLOWING; {
             array_add(lava_flowing_tile_ids, tile_id);
             array_add(*chunk.lava_flowing_tile_ids, tile_id);
             table_add(lava_flowing_tile_ids_set, tile_id, 1738);
