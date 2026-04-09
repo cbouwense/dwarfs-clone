@@ -923,23 +923,28 @@ main :: () {
                         current_water_flowing_tile_ids := array_view(water_flowing_tile_ids, 0);
                         for current_water_flowing_tile_ids {
                             try_to_set_cardinal_neighbors_as_flowing_tile_type(it, .WATER_FLOWING);
-                            set_tile_as_type(
-                                it,
-                                *fully_mined_tile_ids_set,
-                                *cave_tile_ids_set,
-                                *actively_mined_tile_ids_to_health_table,
-                                *iron_tile_ids_set,
-                                *water_still_tile_ids,
-                                *water_still_tile_ids_set,
-                                *water_flowing_tile_ids,
-                                *water_flowing_tile_ids_set,
-                                *lava_still_tile_ids,
-                                *lava_still_tile_ids_set,
-                                *lava_flowing_tile_ids,
-                                *lava_flowing_tile_ids_set,
-                                *active_chunks,
-                                .WATER_STILL
-                            );
+
+                            // If all surrounding tiles are liquid, then we can mark this tile as
+                            // still liquid so we don't have to update it going forward.
+                            if are_all_neighbors_liquid(it) {
+                                set_tile_as_type(
+                                    it,
+                                    *fully_mined_tile_ids_set,
+                                    *cave_tile_ids_set,
+                                    *actively_mined_tile_ids_to_health_table,
+                                    *iron_tile_ids_set,
+                                    *water_still_tile_ids,
+                                    *water_still_tile_ids_set,
+                                    *water_flowing_tile_ids,
+                                    *water_flowing_tile_ids_set,
+                                    *lava_still_tile_ids,
+                                    *lava_still_tile_ids_set,
+                                    *lava_flowing_tile_ids,
+                                    *lava_flowing_tile_ids_set,
+                                    *active_chunks,
+                                    .WATER_STILL
+                                );
+                            }
                         }
                     } else {
                         game_state.water_flow_cooldown_ms -= xx (dt_seconds * 1000);
@@ -955,23 +960,28 @@ main :: () {
                         current_lava_flowing_tile_ids := array_view(lava_flowing_tile_ids, 0);
                         for current_lava_flowing_tile_ids {
                             try_to_set_cardinal_neighbors_as_flowing_tile_type(it, .LAVA_FLOWING);
-                            // set_tile_as_type(
-                            //     it,
-                            //     *fully_mined_tile_ids_set,
-                            //     *cave_tile_ids_set,
-                            //     *actively_mined_tile_ids_to_health_table,
-                            //     *iron_tile_ids_set,
-                            //     *water_still_tile_ids,
-                            //     *water_still_tile_ids_set,
-                            //     *water_flowing_tile_ids,
-                            //     *water_flowing_tile_ids_set,
-                            //     *lava_still_tile_ids,
-                            //     *lava_still_tile_ids_set,
-                            //     *lava_flowing_tile_ids,
-                            //     *lava_flowing_tile_ids_set,
-                            //     *active_chunks,
-                            //     .LAVA_STILL
-                            // );
+
+                            // If all surrounding tiles are liquid, then we can mark this tile as
+                            // still liquid so we don't have to update it going forward.
+                            if are_all_neighbors_liquid(it) {
+                                set_tile_as_type(
+                                    it,
+                                    *fully_mined_tile_ids_set,
+                                    *cave_tile_ids_set,
+                                    *actively_mined_tile_ids_to_health_table,
+                                    *iron_tile_ids_set,
+                                    *water_still_tile_ids,
+                                    *water_still_tile_ids_set,
+                                    *water_flowing_tile_ids,
+                                    *water_flowing_tile_ids_set,
+                                    *lava_still_tile_ids,
+                                    *lava_still_tile_ids_set,
+                                    *lava_flowing_tile_ids,
+                                    *lava_flowing_tile_ids_set,
+                                    *active_chunks,
+                                    .LAVA_STILL
+                                );
+                            }
                         }
                     } else {
                         game_state.lava_flow_cooldown_ms -= xx (dt_seconds * 1000);
@@ -1141,6 +1151,63 @@ main :: () {
     }
 }
 
+are_all_neighbors_liquid :: (tile_id: s32) -> bool {
+    north_tile_id := tile_id - WORLD_ROWS;
+    south_tile_id := tile_id + WORLD_ROWS;
+    east_tile_id  := tile_id + 1;
+    west_tile_id  := tile_id - 1;
+
+    is_neighbor_north_water_still := table_contains(*water_still_tile_ids_set, north_tile_id);
+    is_neighbor_south_water_still := table_contains(*water_still_tile_ids_set, south_tile_id);
+    is_neighbor_east_water_still  := table_contains(*water_still_tile_ids_set, east_tile_id);
+    is_neighbor_west_water_still  := table_contains(*water_still_tile_ids_set, west_tile_id);
+
+    is_neighbor_north_water_flowing := table_contains(*water_flowing_tile_ids_set, north_tile_id);
+    is_neighbor_south_water_flowing := table_contains(*water_flowing_tile_ids_set, south_tile_id);
+    is_neighbor_east_water_flowing  := table_contains(*water_flowing_tile_ids_set, east_tile_id);
+    is_neighbor_west_water_flowing  := table_contains(*water_flowing_tile_ids_set, west_tile_id);
+
+    is_neighbor_north_lava_still := table_contains(*lava_still_tile_ids_set, north_tile_id);
+    is_neighbor_south_lava_still := table_contains(*lava_still_tile_ids_set, south_tile_id);
+    is_neighbor_east_lava_still  := table_contains(*lava_still_tile_ids_set, east_tile_id);
+    is_neighbor_west_lava_still  := table_contains(*lava_still_tile_ids_set, west_tile_id);
+
+    is_neighbor_north_lava_flowing := table_contains(*lava_flowing_tile_ids_set, north_tile_id);
+    is_neighbor_south_lava_flowing := table_contains(*lava_flowing_tile_ids_set, south_tile_id);
+    is_neighbor_east_lava_flowing  := table_contains(*lava_flowing_tile_ids_set, east_tile_id);
+    is_neighbor_west_lava_flowing  := table_contains(*lava_flowing_tile_ids_set, west_tile_id);
+
+    is_neighbor_north_liquid := (
+        is_neighbor_north_water_still   ||
+        is_neighbor_north_water_flowing ||
+        is_neighbor_north_lava_still    ||
+        is_neighbor_north_lava_flowing
+    );
+
+    is_neighbor_south_liquid := (
+        is_neighbor_south_water_still   ||
+        is_neighbor_south_water_flowing ||
+        is_neighbor_south_lava_still    ||
+        is_neighbor_south_lava_flowing
+    );
+
+    is_neighbor_east_liquid := (
+        is_neighbor_east_water_still   ||
+        is_neighbor_east_water_flowing ||
+        is_neighbor_east_lava_still    ||
+        is_neighbor_east_lava_flowing
+    );
+
+    is_neighbor_west_liquid := (
+        is_neighbor_west_water_still   ||
+        is_neighbor_west_water_flowing ||
+        is_neighbor_west_lava_still    ||
+        is_neighbor_west_lava_flowing
+    );
+
+    return is_neighbor_north_liquid && is_neighbor_south_liquid && is_neighbor_east_liquid && is_neighbor_west_liquid;
+}
+
 try_to_set_cardinal_neighbors_as_flowing_tile_type :: (tile_id: s32, as_type: TileType) {
     tile_pos := get_tile_pos_by_id(tile_id);
     dx, dy : float;
@@ -1168,7 +1235,6 @@ try_to_set_cardinal_neighbors_as_flowing_tile_type :: (tile_id: s32, as_type: Ti
         if tile_is_flowing_water continue;
 
         tile_is_flowing_lava := table_contains(*lava_flowing_tile_ids_set, neighbor_id);
-        if tile_is_flowing_lava continue;
 
         tile_is_iron := table_contains(*iron_tile_ids_set, neighbor_id);
         if tile_is_iron continue;
