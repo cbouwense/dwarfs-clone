@@ -917,11 +917,21 @@ main :: () {
                 // Update water flowing
                 UPDATE_WATER :: true;
                 #if UPDATE_WATER {
-                    if game_state.water_flow_cooldown_ms <= 0 {
-                        game_state.water_flow_cooldown_ms = WATER_FLOW_COOLDOWN_MS;
+                    current_water_flowing_tile_ids := array_view(water_flowing_tile_ids, 0);
+                    for current_water_flowing_tile_ids {
+                        // Kill any dwarves you are coming in contact with
+                        water_pos  := get_tile_pos_by_id(it);
+                        water_rect := Rectangle.{ water_pos.x, water_pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
+                        for dwarf, dwarf_index: dwarves {
+                            dwarf_rect := Rectangle.{ dwarf.pos.x, dwarf.pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
+                            if CheckCollisionRecs(dwarf_rect, water_rect) {
+                                array_unordered_remove_by_index(*dwarves, dwarf_index);
+                            }
+                        }
 
-                        current_water_flowing_tile_ids := array_view(water_flowing_tile_ids, 0);
-                        for current_water_flowing_tile_ids {
+                        if game_state.water_flow_cooldown_ms <= 0 {
+                            game_state.water_flow_cooldown_ms = WATER_FLOW_COOLDOWN_MS;
+                        
                             try_to_set_cardinal_neighbors_as_flowing_tile_type(it, .WATER_FLOWING);
 
                             // If all surrounding tiles are liquid, then we can mark this tile as
@@ -945,20 +955,30 @@ main :: () {
                                     .WATER_STILL
                                 );
                             }
+                        } else {
+                            game_state.water_flow_cooldown_ms -= xx (dt_seconds * 1000);
                         }
-                    } else {
-                        game_state.water_flow_cooldown_ms -= xx (dt_seconds * 1000);
                     }
                 }
 
                 // Update lava flowing
                 UPDATE_LAVA :: true;
                 #if UPDATE_LAVA {
-                    if game_state.lava_flow_cooldown_ms <= 0 {
-                        game_state.lava_flow_cooldown_ms = LAVA_FLOW_COOLDOWN_MS;
+                    current_lava_flowing_tile_ids := array_view(lava_flowing_tile_ids, 0);
+                    for current_lava_flowing_tile_ids {
+                        // Kill any dwarves you are coming in contact with
+                        lava_pos  := get_tile_pos_by_id(it);
+                        lava_rect := Rectangle.{ lava_pos.x, lava_pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
+                        for dwarf, dwarf_index: dwarves {
+                            dwarf_rect := Rectangle.{ dwarf.pos.x, dwarf.pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
+                            if CheckCollisionRecs(dwarf_rect, lava_rect) {
+                                array_unordered_remove_by_index(*dwarves, dwarf_index);
+                            }
+                        }
 
-                        current_lava_flowing_tile_ids := array_view(lava_flowing_tile_ids, 0);
-                        for current_lava_flowing_tile_ids {
+                        if game_state.lava_flow_cooldown_ms <= 0 {
+                            game_state.lava_flow_cooldown_ms = LAVA_FLOW_COOLDOWN_MS;
+
                             try_to_set_cardinal_neighbors_as_flowing_tile_type(it, .LAVA_FLOWING);
 
                             // If all surrounding tiles are liquid, then we can mark this tile as
@@ -982,9 +1002,9 @@ main :: () {
                                     .LAVA_STILL
                                 );
                             }
+                        } else {
+                            game_state.lava_flow_cooldown_ms -= xx (dt_seconds * 1000);
                         }
-                    } else {
-                        game_state.lava_flow_cooldown_ms -= xx (dt_seconds * 1000);
                     }
                 }
             }
@@ -1304,7 +1324,7 @@ get_chunk_key :: (chunk_x: s32, chunk_y: s32) -> u64 {
     return key;
 }
 
-world_to_chunk_coord :: (world_pos: float, tile_pixel_size: float) -> s32 {
+world_to_chunk_pos :: (world_pos: float, tile_pixel_size: float) -> s32 {
     chunk_size_in_pixels := cast(float)(CHUNK_SIZE) * tile_pixel_size;
     return cast(s32) floor(world_pos / chunk_size_in_pixels);
 }
@@ -1412,8 +1432,8 @@ get_arrow_rotation :: (start_pos: Vector2, end_pos: Vector2) -> float32 {
 
 get_chunk_ptr_by_tile_id :: (tile_id: s32) -> *Chunk {
     world_pos := get_tile_pos_by_id(tile_id);
-    chunk_x   := world_to_chunk_coord(world_pos.x, TILEMAP_GENERAL_WORLD_WIDTH);
-    chunk_y   := world_to_chunk_coord(world_pos.y, TILEMAP_GENERAL_WORLD_HEIGHT);
+    chunk_x   := world_to_chunk_pos(world_pos.x, TILEMAP_GENERAL_WORLD_WIDTH);
+    chunk_y   := world_to_chunk_pos(world_pos.y, TILEMAP_GENERAL_WORLD_HEIGHT);
     result, chunk := find_or_create_chunk(chunk_x, chunk_y);
 
     if #complete result == {
