@@ -57,6 +57,9 @@ TRANSPARENT_WHITE :: Color.{ 255, 255, 255, 100 };
 
 CHUNK_SIZE :: 32; // 32 x 32 tiles
 
+WATER_FLOW_COOLDOWN_MS :: 1000;
+LAVA_FLOW_COOLDOWN_MS  :: 2500;
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Metagame state
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -111,9 +114,6 @@ dragging_to_create_path_prev : bool;
 // Other
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-global_id_counter      : s32;
-global_tile_id_counter : s32;
-
 global_tile_pos_to_tile     : Table(string, *Tile);
 global_tile_id_to_tile      : Table(s32, *Tile);
 // TODO: maybe...
@@ -124,7 +124,9 @@ mouse_drag_began_at_pos : Vector2;
 mouse_pos_when_path_creation_started : Vector2;
 
 GameState :: struct {
-    selected_dwarf_index : int;
+    selected_dwarf_index   : int;
+    water_flow_cooldown_ms : int;
+    lava_flow_cooldown_ms  : int;
 }
 
 Direction :: enum u8 #specified {
@@ -328,7 +330,9 @@ main :: () {
 
     // Initialize game
     game_state := GameState.{
-        selected_dwarf_index = -1,
+        selected_dwarf_index   = -1,
+        water_flow_cooldown_ms = WATER_FLOW_COOLDOWN_MS,
+        lava_flow_cooldown_ms  = LAVA_FLOW_COOLDOWN_MS,
     };
 
     // Initialize caves
@@ -586,339 +590,392 @@ main :: () {
         //
         // Update
         //
-        if !paused {
-            // Debug break tiles
-            hovered_tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
-            if IsMouseButtonDown(MouseButton.MOUSE_BUTTON_LEFT) && IsKeyDown(KeyboardKey.KEY_LEFT_CONTROL) {
-                tile_id := get_tile_id_by_pos(Vector2.{ hovered_tile_rect.x, hovered_tile_rect.y });
-                tile_is_unrevealed_cave := table_contains(*cave_tile_ids_set, tile_id);
-                if tile_is_unrevealed_cave {
-                    try_to_reveal_cave(tile_id);
-                } else {
-                    tile_is_mined := table_contains(*fully_mined_tile_ids_set, tile_id);
-                    if !tile_is_mined {
-                        set_tile_as_mined(
-                            tile_id,
-                            *fully_mined_tile_ids_set,
-                            *cave_tile_ids_set,
-                            *actively_mined_tile_ids_to_health_table,
-                            *iron_tile_ids_set,
-                            *water_flowing_tile_ids,
-                            *water_flowing_tile_ids_set,
-                            *lava_flowing_tile_ids,
-                            *lava_flowing_tile_ids_set,
-                            *active_chunks,
-                            .MINED
-                        );
+        {
+            // Update unpausable things
+            {
+                // Debug break tiles
+                hovered_tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
+                if IsMouseButtonDown(MouseButton.MOUSE_BUTTON_LEFT) && IsKeyDown(KeyboardKey.KEY_LEFT_CONTROL) {
+                    tile_id := get_tile_id_by_pos(Vector2.{ hovered_tile_rect.x, hovered_tile_rect.y });
+                    tile_is_unrevealed_cave := table_contains(*cave_tile_ids_set, tile_id);
+                    if tile_is_unrevealed_cave {
+                        try_to_reveal_cave(tile_id);
+                    } else {
+                        tile_is_mined := table_contains(*fully_mined_tile_ids_set, tile_id);
+                        if !tile_is_mined {
+                            set_tile_as_mined(
+                                tile_id,
+                                *fully_mined_tile_ids_set,
+                                *cave_tile_ids_set,
+                                *actively_mined_tile_ids_to_health_table,
+                                *iron_tile_ids_set,
+                                *water_flowing_tile_ids,
+                                *water_flowing_tile_ids_set,
+                                *lava_flowing_tile_ids,
+                                *lava_flowing_tile_ids_set,
+                                *active_chunks,
+                                .MINED
+                            );
+                        }
+                    }
+                }
+
+                // Update camera
+                {
+                    CAMERA_ZOOM_MULTIPLIER :: 1.2;
+                    CAMERA_ZOOM_MIN :: 0.01;
+                    CAMERA_ZOOM_MAX :: 13.0;
+
+                    if move_camera_up    camera.target.y -= CAMERA_MOVE_SPEED_BASE;
+                    if move_camera_down  camera.target.y += CAMERA_MOVE_SPEED_BASE;
+                    if move_camera_left  camera.target.x -= CAMERA_MOVE_SPEED_BASE;
+                    if move_camera_right camera.target.x += CAMERA_MOVE_SPEED_BASE;
+
+                    camera.offset = Vector2.{ GetScreenWidth() / 2.0, GetScreenHeight() / 2.0 };
+
+                    camera_move_speed := CAMERA_MOVE_SPEED_BASE / 2 * camera.zoom;
+                    if drag_cam_pressed {
+                        mouse_drag_began_at_pos = mouse_pos_in_world;
+                    }
+
+                    if drag_cam_down {
+                        world_delta := Vector2Subtract(mouse_drag_began_at_pos, mouse_pos_in_world);
+                        
+                        // Apply that difference to the camera target.
+                        // This effectively "pulls" the world back so the mouse stays where it began.
+                        camera.target = Vector2Add(camera.target, world_delta);
+                    }
+
+                    // Make sure the camera zooms in towards the mouse pos
+                    if mouse_wheel_move != 0 {
+                        // Grab the world space position of the mouse before the zoom
+                        mouse_world_pos_before := GetScreenToWorld2D(GetMousePosition(), camera);
+
+                        // Apply the zoom
+                        zoom_factor := pow(CAMERA_ZOOM_MULTIPLIER, mouse_wheel_move);
+                        camera.zoom *= zoom_factor;
+                        camera.zoom  = clamp(camera.zoom, CAMERA_ZOOM_MIN, CAMERA_ZOOM_MAX);
+
+                        // Grab the world space position of the mouse AFTER the zoom
+                        // (Raylib uses the new camera.zoom but the old camera.target here)
+                        mouse_world_pos_after := GetScreenToWorld2D(GetMousePosition(), camera);
+
+                        // Calculate the shift caused by the zoom, and move the target to cancel it out
+                        zoom_delta := Vector2Subtract(mouse_world_pos_before, mouse_world_pos_after);
+                        camera.target = Vector2Add(camera.target, zoom_delta);
                     }
                 }
             }
 
-            // Update camera
-            {
-                CAMERA_ZOOM_MULTIPLIER :: 1.2;
-                CAMERA_ZOOM_MIN :: 0.01;
-                CAMERA_ZOOM_MAX :: 13.0;
+            // Update pausable things
+            if !paused {
+                // Update dwarves
+                {
+                    for *dwarf: dwarves {
+                        if #complete dwarf.state == {
+                            case .MOVING;
+                                dwarf_has_target := dwarf.tile_ids_on_path.count > 0;
+                                if dwarf_has_target {
+                                    target_tile_pos := get_tile_pos_by_id(dwarf.tile_ids_on_path[0]);
 
-                if move_camera_up    camera.target.y -= CAMERA_MOVE_SPEED_BASE;
-                if move_camera_down  camera.target.y += CAMERA_MOVE_SPEED_BASE;
-                if move_camera_left  camera.target.x -= CAMERA_MOVE_SPEED_BASE;
-                if move_camera_right camera.target.x += CAMERA_MOVE_SPEED_BASE;
+                                    dwarf_reached_target := values_are_close(dwarf.pos, target_tile_pos, 1);
 
-                camera.offset = Vector2.{ GetScreenWidth() / 2.0, GetScreenHeight() / 2.0 };
-
-                camera_move_speed := CAMERA_MOVE_SPEED_BASE / 2 * camera.zoom;
-                if drag_cam_pressed {
-                    mouse_drag_began_at_pos = mouse_pos_in_world;
-                }
-
-                if drag_cam_down {
-                    world_delta := Vector2Subtract(mouse_drag_began_at_pos, mouse_pos_in_world);
-                    
-                    // Apply that difference to the camera target.
-                    // This effectively "pulls" the world back so the mouse stays where it began.
-                    camera.target = Vector2Add(camera.target, world_delta);
-                }
-
-                // Make sure the camera zooms in towards the mouse pos
-                if mouse_wheel_move != 0 {
-                    // Grab the world space position of the mouse before the zoom
-                    mouse_world_pos_before := GetScreenToWorld2D(GetMousePosition(), camera);
-
-                    // Apply the zoom
-                    zoom_factor := pow(CAMERA_ZOOM_MULTIPLIER, mouse_wheel_move);
-                    camera.zoom *= zoom_factor;
-                    camera.zoom  = clamp(camera.zoom, CAMERA_ZOOM_MIN, CAMERA_ZOOM_MAX);
-
-                    // Grab the world space position of the mouse AFTER the zoom
-                    // (Raylib uses the new camera.zoom but the old camera.target here)
-                    mouse_world_pos_after := GetScreenToWorld2D(GetMousePosition(), camera);
-
-                    // Calculate the shift caused by the zoom, and move the target to cancel it out
-                    zoom_delta := Vector2Subtract(mouse_world_pos_before, mouse_world_pos_after);
-                    camera.target = Vector2Add(camera.target, zoom_delta);
-                }
-            }
-
-            // Update dwarves
-            {
-                for *dwarf: dwarves {
-                    if #complete dwarf.state == {
-                        case .MOVING;
-                            dwarf_has_target := dwarf.tile_ids_on_path.count > 0;
-                            if dwarf_has_target {
-                                target_tile_pos := get_tile_pos_by_id(dwarf.tile_ids_on_path[0]);
-
-                                dwarf_reached_target := values_are_close(dwarf.pos, target_tile_pos, 1);
-
-                                if dwarf_reached_target {
-                                    dwarf.pos = target_tile_pos;
-                                    array_ordered_remove_by_index(*(dwarf.tile_ids_on_path), 0);
-                                } else {
-                                    // If the dwarf has not reached its target yet, then simply continue on to the target
-
-                                    // Calculate the position change that the dwarf can accomplish this frame
-                                    current_pos     := dwarf.pos;
-                                    target_pos      := get_tile_pos_by_id(dwarf.tile_ids_on_path[0]);
-                                    delta           := Vector2Subtract(target_pos, current_pos);
-                                    direction       := Vector2Normalize(delta);
-                                    movement_vector := Vector2Scale(direction, DWARF_MOVE_SPEED * dt_seconds);
-                                    new_pos         := Vector2Add(current_pos, movement_vector);
-
-                                    dwarf_center := get_rect_center(get_world_rect_from_pos(dwarf.pos));
-
-                                    // Create a probe point just outside the dwarf's bounding box.
-                                    // We multiply the normalized 'direction' by 8.0 (half the dwarf's size) 
-                                    // plus a tiny epsilon (0.1) so it pokes out into the next tile.
-                                    PROBE_DISTANCE :: TILEMAP_GENERAL_WORLD_WIDTH / 2 + 0.1; 
-                                    probe_offset   := Vector2Scale(direction, PROBE_DISTANCE);
-                                    probe_pos      := Vector2Add(dwarf_center, probe_offset);
-
-                                    // Check whether the rect the dwarf may be entering into. If it's dirt, then they'll
-                                    // have to enter into the mining state before they can proceed.
-                                    tile_rect_dwarf_wants_to_move_to := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, probe_pos);
-                                    tile_id_dwarf_wants_to_move_to   := get_tile_id_by_pos(get_rect_pos(tile_rect_dwarf_wants_to_move_to));
-                                    tile_is_mined := table_contains(*fully_mined_tile_ids_set, tile_id_dwarf_wants_to_move_to);
-
-                                    if tile_is_mined {
-                                        // If this tile is mined, then simply keep moving.
-                                        dwarf.pos = new_pos;
-
-                                        // I feel like this sometimes gives false positives idk
-                                        CHECK_IF_DWARF_IS_IN_TILE :: false;
-                                        #if CHECK_IF_DWARF_IS_IN_TILE {
-                                            center_of_dwarf       := get_rect_center(dwarf.rect);
-                                            tile_rect_dwarf_is_on := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, center_of_dwarf);
-                                            tile_id_dwarf_is_on   := get_tile_id_by_pos(get_rect_pos(tile_rect_dwarf_is_on));
-                                            
-                                            assert(table_contains(*fully_mined_tile_ids_set, tile_id_dwarf_is_on), "dwarf is in rock or something lol wtf");
-                                        }
+                                    if dwarf_reached_target {
+                                        dwarf.pos = target_tile_pos;
+                                        array_ordered_remove_by_index(*(dwarf.tile_ids_on_path), 0);
                                     } else {
-                                        // TODO: Eventually we'll want to check whether the tile is mineable or not.
-                                        dwarf.state = .MINING;
-                                        dwarf.tile_id_mining = tile_id_dwarf_wants_to_move_to;
+                                        // If the dwarf has not reached its target yet, then simply continue on to the target
 
-                                        chunk := get_chunk_ptr_by_tile_id(tile_id_dwarf_wants_to_move_to);
-                                        array_add(*chunk.actively_mined_tile_ids, tile_id_dwarf_wants_to_move_to);
-                                        table_add(*actively_mined_tile_ids_to_health_table, tile_id_dwarf_wants_to_move_to, DIRT_HEALTH);
+                                        // Calculate the position change that the dwarf can accomplish this frame
+                                        current_pos     := dwarf.pos;
+                                        target_pos      := get_tile_pos_by_id(dwarf.tile_ids_on_path[0]);
+                                        delta           := Vector2Subtract(target_pos, current_pos);
+                                        direction       := Vector2Normalize(delta);
+                                        movement_vector := Vector2Scale(direction, DWARF_MOVE_SPEED * dt_seconds);
+                                        new_pos         := Vector2Add(current_pos, movement_vector);
+
+                                        dwarf_center := get_rect_center(get_world_rect_from_pos(dwarf.pos));
+
+                                        // Create a probe point just outside the dwarf's bounding box.
+                                        // We multiply the normalized 'direction' by 8.0 (half the dwarf's size) 
+                                        // plus a tiny epsilon (0.1) so it pokes out into the next tile.
+                                        PROBE_DISTANCE :: TILEMAP_GENERAL_WORLD_WIDTH / 2 + 0.1; 
+                                        probe_offset   := Vector2Scale(direction, PROBE_DISTANCE);
+                                        probe_pos      := Vector2Add(dwarf_center, probe_offset);
+
+                                        // Check whether the rect the dwarf may be entering into. If it's dirt, then they'll
+                                        // have to enter into the mining state before they can proceed.
+                                        tile_rect_dwarf_wants_to_move_to := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, probe_pos);
+                                        tile_id_dwarf_wants_to_move_to   := get_tile_id_by_pos(get_rect_pos(tile_rect_dwarf_wants_to_move_to));
+                                        tile_is_mined := table_contains(*fully_mined_tile_ids_set, tile_id_dwarf_wants_to_move_to);
+
+                                        if tile_is_mined {
+                                            // If this tile is mined, then simply keep moving.
+                                            dwarf.pos = new_pos;
+
+                                            // I feel like this sometimes gives false positives idk
+                                            CHECK_IF_DWARF_IS_IN_TILE :: false;
+                                            #if CHECK_IF_DWARF_IS_IN_TILE {
+                                                center_of_dwarf       := get_rect_center(dwarf.rect);
+                                                tile_rect_dwarf_is_on := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, center_of_dwarf);
+                                                tile_id_dwarf_is_on   := get_tile_id_by_pos(get_rect_pos(tile_rect_dwarf_is_on));
+                                                
+                                                assert(table_contains(*fully_mined_tile_ids_set, tile_id_dwarf_is_on), "dwarf is in rock or something lol wtf");
+                                            }
+                                        } else {
+                                            // TODO: Eventually we'll want to check whether the tile is mineable or not.
+                                            dwarf.state = .MINING;
+                                            dwarf.tile_id_mining = tile_id_dwarf_wants_to_move_to;
+
+                                            chunk := get_chunk_ptr_by_tile_id(tile_id_dwarf_wants_to_move_to);
+                                            array_add(*chunk.actively_mined_tile_ids, tile_id_dwarf_wants_to_move_to);
+                                            table_add(*actively_mined_tile_ids_to_health_table, tile_id_dwarf_wants_to_move_to, DIRT_HEALTH);
+                                        }
                                     }
+                                } else {
+                                    // TODO: this is insanely inefficient. Really we should probably just pick an interval to change some dwarf directions or something.
+                                    change_direction_rng := random_get_within_range(0, 1);
+                                    // new_direction := ;
+                                    if change_direction_rng < 0.25 {
+                                        // Find a new target by picking a random cardinal direction 1 tile away
+                                        new_direction := cast(int) random_get_within_range(0, 4);
+                                        dwarf.direction = cast(Direction) new_direction;
+                                    }
+
+                                    dx := TILE_DIRECTION_DELTAS[dwarf.direction][0];
+                                    dy := TILE_DIRECTION_DELTAS[dwarf.direction][1];
+
+                                    assert(dx == 0 || dy == 0, "dx: %, dy: %", dx, dy);
+
+                                    new_target_tile_pos := Vector2.{
+                                        dwarf.pos.x + dx,
+                                        dwarf.pos.y + dy,
+                                    };
+
+                                    new_target_tile_id := get_tile_id_by_pos(new_target_tile_pos);
+                                    array_add(*dwarf.tile_ids_on_path, new_target_tile_id);
                                 }
-                            } else {
-                                // TODO: this is insanely inefficient. Really we should probably just pick an interval to change some dwarf directions or something.
-                                change_direction_rng := random_get_within_range(0, 1);
-                                // new_direction := ;
-                                if change_direction_rng < 0.25 {
-                                    // Find a new target by picking a random cardinal direction 1 tile away
-                                    new_direction := cast(int) random_get_within_range(0, 4);
-                                    dwarf.direction = cast(Direction) new_direction;
-                                }
 
-                                dx := TILE_DIRECTION_DELTAS[dwarf.direction][0];
-                                dy := TILE_DIRECTION_DELTAS[dwarf.direction][1];
+                            case .MINING;
+                                assert(dwarf.tile_id_mining > 0, "Dwarf tryna mine but he got no gotdamn tile to mine!!!!!!!");
+                                if dwarf.mining_cooldown_ms > 0 {
+                                    dwarf.mining_cooldown_ms -= xx (dt_seconds * 1000);
+                                } else {
+                                    // TODO: swing animation, I guess
+                                
+                                    // Decrease the tile health by the dwarf mining damage
+                                    ok, current_health := table_find(*actively_mined_tile_ids_to_health_table, dwarf.tile_id_mining);
+                                    assert(ok, "Tried mining a tile that doesn't exist");
+                                    new_health := current_health - DWARF_MINE_DAMAGE_PER_SWING;
 
-                                assert(dx == 0 || dy == 0, "dx: %, dy: %", dx, dy);
+                                    if new_health <= 0 {
+                                        // TODO: probably will want a function to determine if a tile has a resource
+                                        // instead of checking each table manually as we have more. idk.
+                                        is_mining_resource := table_find(*iron_tile_ids_set, dwarf.tile_id_mining);
+                                        
+                                        set_tile_as_mined(
+                                            dwarf.tile_id_mining,
+                                            *fully_mined_tile_ids_set,
+                                            *cave_tile_ids_set,
+                                            *actively_mined_tile_ids_to_health_table,
+                                            *iron_tile_ids_set,
+                                            *water_flowing_tile_ids,
+                                            *water_flowing_tile_ids_set,
+                                            *lava_flowing_tile_ids,
+                                            *lava_flowing_tile_ids_set,
+                                            *active_chunks,
+                                            .MINED
+                                        );
 
-                                new_target_tile_pos := Vector2.{
-                                    dwarf.pos.x + dx,
-                                    dwarf.pos.y + dy,
-                                };
+                                        // If the dwarf is mining a resource, check if there are any others nearby
+                                        if is_mining_resource {
+                                            check_for_resource_and_mine_if_present :: (dwarf: *Dwarf, dx: float32, dy: float32, iron_tile_ids_set: *Table) -> bool {
+                                                mined_tile_pos := get_tile_pos_by_id(dwarf.tile_id_mining);
+                                                neighbor_pos   := Vector2.{ mined_tile_pos.x + dx, mined_tile_pos.y + dy };
+                                                neighbor_id    := get_tile_id_by_pos(neighbor_pos);
 
-                                new_target_tile_id := get_tile_id_by_pos(new_target_tile_pos);
-                                array_add(*dwarf.tile_ids_on_path, new_target_tile_id);
-                            }
+                                                is_neighbor_a_resource_tile := table_find(iron_tile_ids_set, neighbor_id);
+                                                if is_neighbor_a_resource_tile {
+                                                    // If the tile we mined was a resource like iron (as opposed to dirt),
+                                                    // then we want to path towards it.
+                                                    path_to_neighbor_resource := get_path(dwarf.pos, neighbor_pos);
+                                                    array_reset(*(dwarf.tile_ids_on_path));
+                                                    array_add(*(dwarf.tile_ids_on_path), path_to_neighbor_resource.middle_tile_id);
+                                                    array_add(*(dwarf.tile_ids_on_path), path_to_neighbor_resource.end_tile_id);
+                                                }
 
-                        case .MINING;
-                            assert(dwarf.tile_id_mining > 0, "Dwarf tryna mine but he got no gotdamn tile to mine!!!!!!!");
-                            if dwarf.mining_cooldown_ms > 0 {
-                                dwarf.mining_cooldown_ms -= xx (dt_seconds * 1000);
-                            } else {
-                                // TODO: swing animation, I guess
-                            
-                                // Decrease the tile health by the dwarf mining damage
-                                ok, current_health := table_find(*actively_mined_tile_ids_to_health_table, dwarf.tile_id_mining);
-                                assert(ok, "Tried mining a tile that doesn't exist");
-                                new_health := current_health - DWARF_MINE_DAMAGE_PER_SWING;
-
-                                if new_health <= 0 {
-                                    // TODO: probably will want a function to determine if a tile has a resource
-                                    // instead of checking each table manually as we have more. idk.
-                                    is_mining_resource := table_find(*iron_tile_ids_set, dwarf.tile_id_mining);
-                                    
-                                    set_tile_as_mined(
-                                        dwarf.tile_id_mining,
-                                        *fully_mined_tile_ids_set,
-                                        *cave_tile_ids_set,
-                                        *actively_mined_tile_ids_to_health_table,
-                                        *iron_tile_ids_set,
-                                        *water_flowing_tile_ids,
-                                        *water_flowing_tile_ids_set,
-                                        *lava_flowing_tile_ids,
-                                        *lava_flowing_tile_ids_set,
-                                        *active_chunks,
-                                        .MINED
-                                    );
-
-                                    // If the dwarf is mining a resource, check if there are any others nearby
-                                    if is_mining_resource {
-                                        check_for_resource_and_mine_if_present :: (dwarf: *Dwarf, dx: float32, dy: float32, iron_tile_ids_set: *Table) -> bool {
-                                            mined_tile_pos := get_tile_pos_by_id(dwarf.tile_id_mining);
-                                            neighbor_pos   := Vector2.{ mined_tile_pos.x + dx, mined_tile_pos.y + dy };
-                                            neighbor_id    := get_tile_id_by_pos(neighbor_pos);
-
-                                            is_neighbor_a_resource_tile := table_find(iron_tile_ids_set, neighbor_id);
-                                            if is_neighbor_a_resource_tile {
-                                                // If the tile we mined was a resource like iron (as opposed to dirt),
-                                                // then we want to path towards it.
-                                                path_to_neighbor_resource := get_path(dwarf.pos, neighbor_pos);
-                                                array_reset(*(dwarf.tile_ids_on_path));
-                                                array_add(*(dwarf.tile_ids_on_path), path_to_neighbor_resource.middle_tile_id);
-                                                array_add(*(dwarf.tile_ids_on_path), path_to_neighbor_resource.end_tile_id);
+                                                return is_neighbor_a_resource_tile;
                                             }
 
-                                            return is_neighbor_a_resource_tile;
-                                        }
-
-                                        // TODO: clean this up if you're bored
-                                        for TILE_DIRECTION_DELTAS {
-                                            found := check_for_resource_and_mine_if_present(dwarf, it[0] * 1, it[1] * 1, *iron_tile_ids_set);
-                                            if found break;
-
+                                            // TODO: clean this up if you're bored
                                             for TILE_DIRECTION_DELTAS {
-                                                found = check_for_resource_and_mine_if_present(dwarf, it[0] * 2, it[1] * 2, *iron_tile_ids_set);
+                                                found := check_for_resource_and_mine_if_present(dwarf, it[0] * 1, it[1] * 1, *iron_tile_ids_set);
                                                 if found break;
 
                                                 for TILE_DIRECTION_DELTAS {
-                                                    found = check_for_resource_and_mine_if_present(dwarf, it[0] * 3, it[1] * 3, *iron_tile_ids_set);
+                                                    found = check_for_resource_and_mine_if_present(dwarf, it[0] * 2, it[1] * 2, *iron_tile_ids_set);
                                                     if found break;
+
+                                                    for TILE_DIRECTION_DELTAS {
+                                                        found = check_for_resource_and_mine_if_present(dwarf, it[0] * 3, it[1] * 3, *iron_tile_ids_set);
+                                                        if found break;
+                                                    }
                                                 }
                                             }
                                         }
+
+                                        // If we just cracked into a cave, we'll need to reveal the cave and do anything
+                                        // that cave type needs (e.g. spawn water, lava, monsters, etc.).
+                                        try_to_reveal_cave(dwarf.tile_id_mining);
+
+                                        dwarf.tile_id_mining = 0;
+                                        dwarf.state = .MOVING;
+                                    } else {
+                                        // If the tile just needs to take some damage, well, then damage it ya fuckin jallopy
+                                        table_set(*actively_mined_tile_ids_to_health_table, dwarf.tile_id_mining, new_health);
                                     }
 
-                                    // If we just cracked into a cave, we'll need to reveal the cave and do anything
-                                    // that cave type needs (e.g. spawn water, lava, monsters, etc.).
-                                    try_to_reveal_cave(dwarf.tile_id_mining);
-
-                                    dwarf.tile_id_mining = 0;
-                                    dwarf.state = .MOVING;
-                                } else {
-                                    // If the tile just needs to take some damage, well, then damage it ya fuckin jallopy
-                                    table_set(*actively_mined_tile_ids_to_health_table, dwarf.tile_id_mining, new_health);
+                                    // Reset cooldown
+                                    dwarf.mining_cooldown_ms = DWARF_MINE_COOLDOWN_MS;
                                 }
 
-                                // Reset cooldown
-                                dwarf.mining_cooldown_ms = DWARF_MINE_COOLDOWN_MS;
-                            }
-
-                        case .IDLE;
-                    }
-                }
-            }
-
-            // Update bases
-            {
-                // TODO: cooldown
-                // TODO: probably good to make this a function
-                if add_base {
-                    base_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
-
-                    base := Base.{
-                        pos = Vector2.{ base_rect.x, base_rect.y },
-                        spawn_dwarf_cooldown_ms = DWARF_SPAWN_MS,
-                    };
-
-                    array_add(*bases, base);
-
-                    // Carve out some tiles around the base
-                    for TILE_DIRECTION_DELTAS {
-                        dx := it[0];
-                        dy := it[1];
-
-                        neighbor_pos := Vector2.{ base.pos.x + dx, base.pos.y + dy };
-                        neighbor_id := get_tile_id_by_pos(neighbor_pos);
-
-                        set_tile_as_mined(
-                            neighbor_id,
-                            *fully_mined_tile_ids_set,
-                            *cave_tile_ids_set,
-                            *actively_mined_tile_ids_to_health_table,
-                            *iron_tile_ids_set,
-                            *water_flowing_tile_ids,
-                            *water_flowing_tile_ids_set,
-                            *lava_flowing_tile_ids,
-                            *lava_flowing_tile_ids_set,
-                            *active_chunks,
-                            .MINED
-                        );
+                            case .IDLE;
+                        }
                     }
                 }
 
-                for *base: bases {
-                    if base.spawn_dwarf_cooldown_ms <= 0 {
-                        dwarf := Dwarf.{
-                            pos       = Vector2.{ base.pos.x, base.pos.y },
-                            state     = .MOVING,
-                            direction = cast(Direction) cast(int) random_get_within_range(0, 4),
-                            // tile_ids_on_path intentionally not set
+                // Update bases
+                {
+                    // TODO: cooldown
+                    // TODO: probably good to make this a function
+                    if add_base {
+                        base_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
+
+                        base := Base.{
+                            pos = Vector2.{ base_rect.x, base_rect.y },
+                            spawn_dwarf_cooldown_ms = DWARF_SPAWN_MS,
                         };
 
-                        array_add(*dwarves, dwarf);
+                        array_add(*bases, base);
 
-                        base.spawn_dwarf_cooldown_ms = DWARF_SPAWN_MS;
-                    } else {
-                        base.spawn_dwarf_cooldown_ms -= xx (dt_seconds * 1000);
+                        // Carve out some tiles around the base
+                        for TILE_DIRECTION_DELTAS {
+                            dx := it[0];
+                            dy := it[1];
+
+                            neighbor_pos := Vector2.{ base.pos.x + dx, base.pos.y + dy };
+                            neighbor_id := get_tile_id_by_pos(neighbor_pos);
+
+                            set_tile_as_mined(
+                                neighbor_id,
+                                *fully_mined_tile_ids_set,
+                                *cave_tile_ids_set,
+                                *actively_mined_tile_ids_to_health_table,
+                                *iron_tile_ids_set,
+                                *water_flowing_tile_ids,
+                                *water_flowing_tile_ids_set,
+                                *lava_flowing_tile_ids,
+                                *lava_flowing_tile_ids_set,
+                                *active_chunks,
+                                .MINED
+                            );
+                        }
+                    }
+
+                    for *base: bases {
+                        if base.spawn_dwarf_cooldown_ms <= 0 {
+                            dwarf := Dwarf.{
+                                pos       = Vector2.{ base.pos.x, base.pos.y },
+                                state     = .MOVING,
+                                direction = cast(Direction) cast(int) random_get_within_range(0, 4),
+                                // tile_ids_on_path intentionally not set
+                            };
+
+                            array_add(*dwarves, dwarf);
+
+                            base.spawn_dwarf_cooldown_ms = DWARF_SPAWN_MS;
+                        } else {
+                            base.spawn_dwarf_cooldown_ms -= xx (dt_seconds * 1000);
+                        }
                     }
                 }
-            }
 
-            // Update iron
-            UPDATE_IRON :: true;
-            #if UPDATE_IRON {
-                IRON_VEIN_SIZE_MIN :: 8;
-                IRON_VEIN_SIZE_MAX :: 15;
+                // Update iron
+                UPDATE_IRON :: true;
+                #if UPDATE_IRON {
+                    IRON_VEIN_SIZE_MIN :: 8;
+                    IRON_VEIN_SIZE_MAX :: 15;
 
-                if add_iron {
-                    iron_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
-                    tile_pos  := Vector2.{ iron_rect.x, iron_rect.y };
-                    tile_id   := get_tile_id_by_pos(tile_pos);
-                    spawn_iron(xx tile_id, IRON_VEIN_SIZE_MIN, IRON_VEIN_SIZE_MAX, WORLD_COLS, WORLD_ROWS, *active_chunks, *iron_tile_ids_set);
+                    if add_iron {
+                        iron_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
+                        tile_pos  := Vector2.{ iron_rect.x, iron_rect.y };
+                        tile_id   := get_tile_id_by_pos(tile_pos);
+                        spawn_iron(xx tile_id, IRON_VEIN_SIZE_MIN, IRON_VEIN_SIZE_MAX, WORLD_COLS, WORLD_ROWS, *active_chunks, *iron_tile_ids_set);
+                    }
                 }
-            }
 
-            // Update flowing water
-            UPDATE_WATER :: true;
-            #if UPDATE_WATER {
-                // WATER_SPEED_MILLIS :: 250; // milliseconds it takes for the water to spread to its neighbor
-                for water_flowing_tile_ids {
-                    try_to_set_cardinal_neighbors_as_flowing_tile_type(it, .WATER_FLOWING);
+                // Update water flowing
+                UPDATE_WATER :: true;
+                #if UPDATE_WATER {
+                    if game_state.water_flow_cooldown_ms <= 0 {
+                        game_state.water_flow_cooldown_ms = WATER_FLOW_COOLDOWN_MS;
+
+                        current_water_flowing_tile_ids := array_view(water_flowing_tile_ids, 0);
+                        for current_water_flowing_tile_ids {
+                            try_to_set_cardinal_neighbors_as_flowing_tile_type(it, .WATER_FLOWING);
+                            set_tile_as_type(
+                                it,
+                                *fully_mined_tile_ids_set,
+                                *cave_tile_ids_set,
+                                *actively_mined_tile_ids_to_health_table,
+                                *iron_tile_ids_set,
+                                *water_still_tile_ids,
+                                *water_still_tile_ids_set,
+                                *water_flowing_tile_ids,
+                                *water_flowing_tile_ids_set,
+                                *lava_still_tile_ids,
+                                *lava_still_tile_ids_set,
+                                *lava_flowing_tile_ids,
+                                *lava_flowing_tile_ids_set,
+                                *active_chunks,
+                                .WATER_STILL
+                            );
+                        }
+                    } else {
+                        game_state.water_flow_cooldown_ms -= xx (dt_seconds * 1000);
+                    }
                 }
-            }
 
-            // Update flowing lava
-            UPDATE_LAVA :: true;
-            #if UPDATE_LAVA {
-                for lava_flowing_tile_ids {
-                    try_to_set_cardinal_neighbors_as_flowing_tile_type(it, .LAVA_FLOWING);
+                // Update lava flowing
+                UPDATE_LAVA :: true;
+                #if UPDATE_LAVA {
+                    if game_state.lava_flow_cooldown_ms <= 0 {
+                        game_state.lava_flow_cooldown_ms = LAVA_FLOW_COOLDOWN_MS;
+
+                        current_lava_flowing_tile_ids := array_view(lava_flowing_tile_ids, 0);
+                        for current_lava_flowing_tile_ids {
+                            try_to_set_cardinal_neighbors_as_flowing_tile_type(it, .LAVA_FLOWING);
+                            // set_tile_as_type(
+                            //     it,
+                            //     *fully_mined_tile_ids_set,
+                            //     *cave_tile_ids_set,
+                            //     *actively_mined_tile_ids_to_health_table,
+                            //     *iron_tile_ids_set,
+                            //     *water_still_tile_ids,
+                            //     *water_still_tile_ids_set,
+                            //     *water_flowing_tile_ids,
+                            //     *water_flowing_tile_ids_set,
+                            //     *lava_still_tile_ids,
+                            //     *lava_still_tile_ids_set,
+                            //     *lava_flowing_tile_ids,
+                            //     *lava_flowing_tile_ids_set,
+                            //     *active_chunks,
+                            //     .LAVA_STILL
+                            // );
+                        }
+                    } else {
+                        game_state.lava_flow_cooldown_ms -= xx (dt_seconds * 1000);
+                    }
                 }
             }
         }
@@ -1106,6 +1163,12 @@ try_to_set_cardinal_neighbors_as_flowing_tile_type :: (tile_id: s32, as_type: Ti
 
         tile_is_still_lava := table_contains(*lava_still_tile_ids_set, neighbor_id);
         if tile_is_still_lava continue;
+
+        tile_is_flowing_water := table_contains(*water_flowing_tile_ids_set, neighbor_id);
+        if tile_is_flowing_water continue;
+
+        tile_is_flowing_lava := table_contains(*lava_flowing_tile_ids_set, neighbor_id);
+        if tile_is_flowing_lava continue;
 
         tile_is_iron := table_contains(*iron_tile_ids_set, neighbor_id);
         if tile_is_iron continue;
