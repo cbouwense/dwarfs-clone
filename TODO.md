@@ -1,7 +1,5 @@
 # In progress
 
-
-
 # Game
 
 - paths on the ground should affect dwarves
@@ -9,11 +7,6 @@
 
 # Bugs
 
-- paths have an arrow at the end
-    - reproducible on 8e9702b
-    - cause:
-    - correction:
-    - confirmation:
 - dwarves can go diagonal while harvesting
     - reproducible on 8f940f1
     - cause:
@@ -40,3 +33,6 @@
 - fullscreen and resizability
 - underclock cpu
 - hotreloading
+
+# Done
+

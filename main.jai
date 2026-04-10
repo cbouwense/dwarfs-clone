@@ -1124,6 +1124,7 @@ main :: () {
                 // Draw paths
                 {
                     if dragging_to_create_path draw_path(path_being_traced);
+                    
                     for path: paths draw_path(path);
                 }
 
@@ -1355,20 +1356,10 @@ draw_path :: (path: Path) {
         TILEMAP_GENERAL_WORLD_HEIGHT,
     };
 
-    middle_arrow_dest := Rectangle.{
-        middle_pos.x + TILEMAP_GENERAL_WORLD_WIDTH  * 0.5,
-        middle_pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5,
-        TILEMAP_GENERAL_WORLD_WIDTH,
-        TILEMAP_GENERAL_WORLD_HEIGHT,
-    };
-
-    // Determine which way the arrows should point
     start_arrow_rotation  := get_arrow_rotation(start_pos,  middle_pos);
-    middle_arrow_rotation := get_arrow_rotation(middle_pos, end_pos);
 
     DrawTexturePro(tilemap_texture_general, arrow_source, start_arrow_dest,  Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH * 0.5, TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 }, start_arrow_rotation,  WHITE);
-    DrawTexturePro(tilemap_texture_general, arrow_source, middle_arrow_dest, Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH * 0.5, TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 }, middle_arrow_rotation, WHITE);
-
+    
     DrawLineEx(
         Vector2.{ start_pos.x  + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, start_pos.y  + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 },
         Vector2.{ middle_pos.x + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, middle_pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 },
@@ -1376,12 +1367,37 @@ draw_path :: (path: Path) {
         GREEN
     );
 
-    DrawLineEx(
-        Vector2.{ middle_pos.x + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, middle_pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 },
-        Vector2.{ end_pos.x    + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, end_pos.y    + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 },
-        2.0,
+    is_path_straight := Vector2Equals(middle_pos, end_pos);
+
+    if !is_path_straight {
+        middle_arrow_dest := Rectangle.{
+            middle_pos.x + TILEMAP_GENERAL_WORLD_WIDTH  * 0.5,
+            middle_pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5,
+            TILEMAP_GENERAL_WORLD_WIDTH,
+            TILEMAP_GENERAL_WORLD_HEIGHT,
+        };
+
+        middle_arrow_rotation := get_arrow_rotation(middle_pos, end_pos);
+
+        DrawTexturePro(tilemap_texture_general, arrow_source, middle_arrow_dest, Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH * 0.5, TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 }, middle_arrow_rotation, WHITE);
+
+        DrawLineEx(
+            Vector2.{ middle_pos.x + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, middle_pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 },
+            Vector2.{ end_pos.x    + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, end_pos.y    + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 },
+            2.0,
+            GREEN
+        );
+    }
+
+    END_SIDE_LENGTH :: 6.5;
+    DrawRectangleV(
+        Vector2.{
+            end_pos.x + TILEMAP_GENERAL_WORLD_WIDTH * 0.5 - END_SIDE_LENGTH * 0.5,
+            end_pos.y + TILEMAP_GENERAL_WORLD_WIDTH * 0.5 - END_SIDE_LENGTH * 0.5,
+        },
+        Vector2.{ END_SIDE_LENGTH, END_SIDE_LENGTH },
         GREEN
-    );       
+    );
 }
 
 get_path :: (from_pos: Vector2, to_pos: Vector2) -> Path {
