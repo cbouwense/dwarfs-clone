@@ -2,7 +2,6 @@
 
 # Game
 
-- paths on the ground should affect dwarves
 - points tracker
 
 # Bugs

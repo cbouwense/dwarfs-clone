@@ -676,13 +676,39 @@ main :: () {
                             case .MOVING;
                                 dwarf_has_target := dwarf.tile_ids_on_path.count > 0;
                                 if dwarf_has_target {
-                                    target_tile_pos := get_tile_pos_by_id(dwarf.tile_ids_on_path[0]);
+                                    target_tile_id  := dwarf.tile_ids_on_path[0];
+                                    target_tile_pos := get_tile_pos_by_id(target_tile_id);
 
-                                    dwarf_reached_target := values_are_close(dwarf.pos, target_tile_pos, 1);
+                                    assert(
+                                        dwarf.pos.x == target_tile_pos.x || dwarf.pos.y == target_tile_pos.y,
+                                        "Dwarf % is going at an angle", it_index
+                                    );
 
-                                    if dwarf_reached_target {
+                                    dwarf_pretty_much_reached_target := values_are_close(dwarf.pos, target_tile_pos, 1);
+
+                                    if dwarf_pretty_much_reached_target {
                                         dwarf.pos = target_tile_pos;
                                         array_ordered_remove_by_index(*(dwarf.tile_ids_on_path), 0);
+
+                                        // TODO: faster walk and mine speed when on a path, I think
+                                        // Check if the dwarf just landed on an arrow
+                                        for path: paths {
+                                            tile_id_with_start_arrow := get_tile_id_with_start_arrow_on_path(path);
+                                            if target_tile_id == tile_id_with_start_arrow {
+                                                // If the dwarf just stepped on a start arrow, then we want him to go to the path's middle pos.
+                                                array_add(*(dwarf.tile_ids_on_path), path.middle_tile_id);
+                                                break;
+                                            }
+
+                                            path_has_middle_arrow, tile_id_with_middle_arrow := find_tile_id_with_middle_arrow_on_path(path);
+                                            if path_has_middle_arrow && target_tile_id == tile_id_with_middle_arrow {
+                                                // If the dwarf just stepped on a middle arrow, then we want him to go to the path's end pos.
+                                                // Note that if there is a middle arrow, then that means there is a bend in the path and the
+                                                // end pos is necessarily different than the middle pos.
+                                                array_add(*(dwarf.tile_ids_on_path), path.end_tile_id);
+                                                break;
+                                            }
+                                        }
                                     } else {
                                         // If the dwarf has not reached its target yet, then simply continue on to the target
 
@@ -1337,6 +1363,19 @@ get_world_rect_from_pos :: (pos: Vector2) -> Rectangle {
     };
 }
 
+get_tile_id_with_start_arrow_on_path :: (path: Path) -> s32{
+    return path.start_tile_id;
+}
+
+find_tile_id_with_middle_arrow_on_path :: (path: Path) -> path_has_middle_arrow: bool, tile_id: s32 {
+    is_path_straight := path.middle_tile_id == path.end_tile_id;
+    if is_path_straight {
+        return false, -1;
+    } else {
+        return true, path.middle_tile_id;
+    }
+}
+
 draw_path :: (path: Path) {
     start_pos  := get_tile_pos_by_id(path.start_tile_id);
     middle_pos := get_tile_pos_by_id(path.middle_tile_id);
@@ -1358,7 +1397,7 @@ draw_path :: (path: Path) {
 
     start_arrow_rotation  := get_arrow_rotation(start_pos,  middle_pos);
 
-    DrawTexturePro(tilemap_texture_general, arrow_source, start_arrow_dest,  Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH * 0.5, TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 }, start_arrow_rotation,  WHITE);
+    DrawTexturePro(tilemap_texture_general, arrow_source, start_arrow_dest, Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH * 0.5, TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 }, start_arrow_rotation,  WHITE);
     
     DrawLineEx(
         Vector2.{ start_pos.x  + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, start_pos.y  + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 },
