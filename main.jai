@@ -732,7 +732,15 @@ main :: () {
                                                 tile_id_with_start_arrow := get_tile_id_with_start_arrow_on_path(path);
                                                 if target_tile_id == tile_id_with_start_arrow {
                                                     // If the dwarf just stepped on a start arrow, then we want him to go to the path's middle pos.
-                                                    array_add(*(dwarf.tile_ids_on_path), path.middle_tile_id);
+                                                    start_pos := get_tile_pos_by_id(path.start_tile_id);
+                                                    end_pos   := get_tile_pos_by_id(path.middle_tile_id);
+                                                    tile_ids_on_path := get_tile_ids_along_path(start_pos, end_pos);
+                                                    // Don't include the tile with the arrow on it, because then we softlock.
+                                                    tile_ids_on_path.data  += 1;
+                                                    tile_ids_on_path.count -= 1;
+
+                                                    array_reset(*(dwarf.tile_ids_on_path));
+                                                    array_copy(*(dwarf.tile_ids_on_path), tile_ids_on_path);
                                                     break;
                                                 }
 
@@ -741,7 +749,15 @@ main :: () {
                                                     // If the dwarf just stepped on a middle arrow, then we want him to go to the path's end pos.
                                                     // Note that if there is a middle arrow, then that means there is a bend in the path and the
                                                     // end pos is necessarily different than the middle pos.
-                                                    array_add(*(dwarf.tile_ids_on_path), path.end_tile_id);
+                                                    start_pos := get_tile_pos_by_id(path.middle_tile_id);
+                                                    end_pos   := get_tile_pos_by_id(path.end_tile_id);
+                                                    tile_ids_on_path := get_tile_ids_along_path(start_pos, end_pos);
+                                                    // Don't include the tile with the arrow on it, because then we softlock.
+                                                    tile_ids_on_path.data  += 1;
+                                                    tile_ids_on_path.count -= 1;
+
+                                                    array_reset(*(dwarf.tile_ids_on_path));
+                                                    array_copy(*(dwarf.tile_ids_on_path), tile_ids_on_path);
                                                     break;
                                                 }
                                             }
@@ -754,7 +770,7 @@ main :: () {
                                         direction       := Vector2Normalize(delta);
                                         movement_vector := Vector2Scale(direction, DWARF_MOVE_SPEED * dt_seconds);
                                         new_pos         := Vector2Add(current_pos, movement_vector);
-                                        
+
                                         dwarf.pos = new_pos;
 
                                         // PERF: Instead of having the full list of tile ids that a dwarf needs to go to, only have
