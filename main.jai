@@ -27,6 +27,7 @@ window_height := 800;
 CAMERA_MOVE_SPEED_BASE :: 4;
 
 DIRT_HEALTH :: 100;
+IRON_HEALTH :: 200;
 
 DWARF_START_COUNT :: 1;
 DWARF_MOVE_SPEED :: 100;
@@ -560,9 +561,12 @@ main :: () {
                 array_add(*paths, path_being_traced);
 
                 if game_state.selected_dwarf_index != -1 {
+                    start_pos := get_tile_pos_by_id(path_being_traced.start_tile_id);
+                    end_pos   := get_tile_pos_by_id(path_being_traced.end_tile_id);
+                    tile_ids_on_path := get_tile_ids_along_path(start_pos, end_pos);
+
                     array_reset(*(dwarves[game_state.selected_dwarf_index].tile_ids_on_path));
-                    array_add(*dwarves[game_state.selected_dwarf_index].tile_ids_on_path, path_being_traced.middle_tile_id);
-                    array_add(*dwarves[game_state.selected_dwarf_index].tile_ids_on_path, path_being_traced.end_tile_id);
+                    array_copy(*(dwarves[game_state.selected_dwarf_index].tile_ids_on_path), tile_ids_on_path);
 
                     dwarves[game_state.selected_dwarf_index].state = .MOVING;
                     game_state.selected_dwarf_index = -1;
@@ -674,97 +678,11 @@ main :: () {
                     for *dwarf: dwarves {
                         if #complete dwarf.state == {
                             case .MOVING;
+                                // Add a new target if dwarf does not have one.
                                 dwarf_has_target := dwarf.tile_ids_on_path.count > 0;
-                                if dwarf_has_target {
-                                    target_tile_id  := dwarf.tile_ids_on_path[0];
-                                    target_tile_pos := get_tile_pos_by_id(target_tile_id);
-
-                                    // assert(
-                                    //     dwarf.pos.x == target_tile_pos.x || dwarf.pos.y == target_tile_pos.y,
-                                    //     "Dwarf % is going at an angle", it_index
-                                    // );
-
-                                    dwarf_pretty_much_reached_target := values_are_close(dwarf.pos, target_tile_pos, 1);
-
-                                    if dwarf_pretty_much_reached_target {
-                                        dwarf.pos = target_tile_pos;
-                                        array_ordered_remove_by_index(*(dwarf.tile_ids_on_path), 0);
-
-                                        // TODO: faster walk and mine speed when on a path, I think
-                                        // Check if the dwarf just landed on an arrow
-                                        for path: paths {
-                                            tile_id_with_start_arrow := get_tile_id_with_start_arrow_on_path(path);
-                                            if target_tile_id == tile_id_with_start_arrow {
-                                                // If the dwarf just stepped on a start arrow, then we want him to go to the path's middle pos.
-                                                array_add(*(dwarf.tile_ids_on_path), path.middle_tile_id);
-                                                break;
-                                            }
-
-                                            path_has_middle_arrow, tile_id_with_middle_arrow := find_tile_id_with_middle_arrow_on_path(path);
-                                            if path_has_middle_arrow && target_tile_id == tile_id_with_middle_arrow {
-                                                // If the dwarf just stepped on a middle arrow, then we want him to go to the path's end pos.
-                                                // Note that if there is a middle arrow, then that means there is a bend in the path and the
-                                                // end pos is necessarily different than the middle pos.
-                                                array_add(*(dwarf.tile_ids_on_path), path.end_tile_id);
-                                                break;
-                                            }
-                                        }
-                                    } else {
-                                        // If the dwarf has not reached its target yet, then simply continue on to the target
-
-                                        // Calculate the position change that the dwarf can accomplish this frame
-                                        current_pos     := dwarf.pos;
-                                        target_pos      := get_tile_pos_by_id(dwarf.tile_ids_on_path[0]);
-                                        delta           := Vector2Subtract(target_pos, current_pos);
-                                        direction       := Vector2Normalize(delta);
-                                        movement_vector := Vector2Scale(direction, DWARF_MOVE_SPEED * dt_seconds);
-                                        new_pos         := Vector2Add(current_pos, movement_vector);
-                                        new_rect        := get_world_rect_from_pos(new_pos);
-
-                                        dwarf_center    := get_rect_center(get_world_rect_from_pos(dwarf.pos));
-                                        current_tile_id := get_tile_id_by_pos(dwarf_center);
-
-                                        tile_id_next_in_dwarfs_path : s32;
-                                        if      values_are_close(direction, Vector2.{ 0.0, -1.0 }) tile_id_next_in_dwarfs_path = current_tile_id - WORLD_COLS; // North
-                                        else if values_are_close(direction, Vector2.{ 0.0,  1.0 }) tile_id_next_in_dwarfs_path = current_tile_id + WORLD_COLS; // South
-                                        else if values_are_close(direction, Vector2.{ 1.0,  0.0 }) tile_id_next_in_dwarfs_path = current_tile_id + 1;          // East
-                                        else if values_are_close(direction, Vector2.{ -1.0, 0.0 }) tile_id_next_in_dwarfs_path = current_tile_id - 1;          // West
-                                        else    assert(false, "Normalized direction (%,%) did not map to a direction", direction.x, direction.y);
-                                        tile_pos_next_in_dwarfs_path  := get_tile_pos_by_id(tile_id_next_in_dwarfs_path);
-                                        tile_rect_next_in_dwarfs_path := get_world_rect_from_pos(tile_pos_next_in_dwarfs_path);
-
-                                        // If dwarf would collide with the next tile in its path if we just moved it, then we need to check whether
-                                        // it has to be mined or not.
-                                        if CheckCollisionRecs(new_rect, tile_rect_next_in_dwarfs_path) {
-                                            // If it's dirt, then they'll have to enter into the mining state before they can proceed.
-                                            tile_is_mined := table_contains(*fully_mined_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                            if tile_is_mined {
-                                                // If this tile is mined, then simply keep moving.
-                                                dwarf.pos = new_pos;
-
-                                                CHECK_IF_DWARF_IS_IN_TILE :: true;
-                                                #if CHECK_IF_DWARF_IS_IN_TILE {
-                                                    center_of_dwarf       := get_rect_center(get_world_rect_from_pos(dwarf.pos));
-                                                    tile_rect_dwarf_is_on := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, center_of_dwarf);
-                                                    tile_id_dwarf_is_on   := get_tile_id_by_pos(get_rect_pos(tile_rect_dwarf_is_on));
-                                                    
-                                                    assert(table_contains(*fully_mined_tile_ids_set, tile_id_dwarf_is_on), "dwarf is in rock or something lol wtf");
-                                                }
-                                            } else {
-                                                // TODO: Eventually we'll want to check whether the tile is mineable or not.
-                                                dwarf.state = .MINING;
-                                                dwarf.tile_id_mining = tile_id_next_in_dwarfs_path;
-
-                                                chunk := get_chunk_ptr_by_tile_id(tile_id_next_in_dwarfs_path);
-                                                array_add(*chunk.actively_mined_tile_ids, tile_id_next_in_dwarfs_path);
-                                                table_add(*actively_mined_tile_ids_to_health_table, tile_id_next_in_dwarfs_path, DIRT_HEALTH);
-                                            }
-                                        }
-                                    }
-                                } else {
+                                if !dwarf_has_target {
                                     // TODO: this is insanely inefficient. Really we should probably just pick an interval to change some dwarf directions or something.
                                     change_direction_rng := random_get_within_range(0, 1);
-                                    // new_direction := ;
                                     if change_direction_rng < 0.25 {
                                         // Find a new target by picking a random cardinal direction 1 tile away
                                         new_direction := cast(int) random_get_within_range(0, 4);
@@ -783,6 +701,117 @@ main :: () {
 
                                     new_target_tile_id := get_tile_id_by_pos(new_target_tile_pos);
                                     array_add(*dwarf.tile_ids_on_path, new_target_tile_id);
+                                }
+
+                                assert(dwarf.tile_ids_on_path.count > 0);
+                                target_tile_id  := dwarf.tile_ids_on_path[0];
+                                target_tile_pos := get_tile_pos_by_id(target_tile_id);
+
+                                assert(
+                                    dwarf.pos.x == target_tile_pos.x || dwarf.pos.y == target_tile_pos.y,
+                                    "Dwarf % is going at an angle", it_index
+                                );
+
+                                tile_id_next_in_dwarfs_path := dwarf.tile_ids_on_path[0];
+
+                                tile_is_mined := table_contains(*fully_mined_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                if tile_is_mined {
+                                    dwarf_pretty_much_reached_target := values_are_close(dwarf.pos, target_tile_pos, 1);
+                                    if dwarf_pretty_much_reached_target {
+                                        // Teleport dwarf to the target tile to remove any floating point weirdness.
+                                        dwarf.pos = target_tile_pos;
+
+                                        // Remove the target from the tile ids on path
+                                        array_ordered_remove_by_index(*(dwarf.tile_ids_on_path), 0);
+
+                                        // Check what the dwarf just stepped on, and deal with it.
+                                        {
+                                            // TODO: faster walk and mine speed when on a path, I think
+                                            // Check if the dwarf just landed on an arrow
+                                            for path: paths {
+                                                tile_id_with_start_arrow := get_tile_id_with_start_arrow_on_path(path);
+                                                if target_tile_id == tile_id_with_start_arrow {
+                                                    // If the dwarf just stepped on a start arrow, then we want him to go to the path's middle pos.
+                                                    array_add(*(dwarf.tile_ids_on_path), path.middle_tile_id);
+                                                    break;
+                                                }
+
+                                                path_has_middle_arrow, tile_id_with_middle_arrow := find_tile_id_with_middle_arrow_on_path(path);
+                                                if path_has_middle_arrow && target_tile_id == tile_id_with_middle_arrow {
+                                                    // If the dwarf just stepped on a middle arrow, then we want him to go to the path's end pos.
+                                                    // Note that if there is a middle arrow, then that means there is a bend in the path and the
+                                                    // end pos is necessarily different than the middle pos.
+                                                    array_add(*(dwarf.tile_ids_on_path), path.end_tile_id);
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        // If the dwarf has not reached its target yet, then simply continue on to the target
+                                        current_pos     := dwarf.pos;
+                                        target_pos      := get_tile_pos_by_id(dwarf.tile_ids_on_path[0]);
+                                        delta           := Vector2Subtract(target_pos, current_pos);
+                                        direction       := Vector2Normalize(delta);
+                                        movement_vector := Vector2Scale(direction, DWARF_MOVE_SPEED * dt_seconds);
+                                        new_pos         := Vector2Add(current_pos, movement_vector);
+                                        
+                                        dwarf.pos = new_pos;
+
+                                        // PERF: Instead of having the full list of tile ids that a dwarf needs to go to, only have
+                                        // the middle and end positions.
+                                        #if false {
+                                            dwarf_center    := get_rect_center(get_world_rect_from_pos(dwarf.pos));
+                                            current_tile_id := get_tile_id_by_pos(dwarf_center);
+
+                                            // Get the rect of the tile the dwarf wants to go to next. Importantly, this is not a tile
+                                            // in the dwarf's actual stack of tile ids to visit, it's one that's in between 
+                                            tile_id_next_in_dwarfs_path : s32;
+                                            if      values_are_close(direction, Vector2.{ 0.0, -1.0 }) tile_id_next_in_dwarfs_path = current_tile_id - WORLD_COLS; // North
+                                            else if values_are_close(direction, Vector2.{ 0.0,  1.0 }) tile_id_next_in_dwarfs_path = current_tile_id + WORLD_COLS; // South
+                                            else if values_are_close(direction, Vector2.{ 1.0,  0.0 }) tile_id_next_in_dwarfs_path = current_tile_id + 1;          // East
+                                            else if values_are_close(direction, Vector2.{ -1.0, 0.0 }) tile_id_next_in_dwarfs_path = current_tile_id - 1;          // West
+                                            else    assert(false, "Normalized direction (%,%) did not map to a direction", direction.x, direction.y);
+                                            tile_pos_next_in_dwarfs_path  := get_tile_pos_by_id(tile_id_next_in_dwarfs_path);
+                                            tile_rect_next_in_dwarfs_path := get_world_rect_from_pos(tile_pos_next_in_dwarfs_path);
+
+                                            // If dwarf would collide with the next tile in its path if we just moved it, then we need to check whether
+                                            // it has to be mined or not.
+                                            if CheckCollisionRecs(new_rect, tile_rect_next_in_dwarfs_path) {
+                                                // If it's dirt, then they'll have to enter into the mining state before they can proceed.
+                                                tile_is_mined := table_contains(*fully_mined_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                                if tile_is_mined {
+                                                    // If this tile is mined, then simply keep moving.
+                                                    dwarf.pos = new_pos;
+
+                                                    CHECK_IF_DWARF_IS_IN_TILE :: true;
+                                                    #if CHECK_IF_DWARF_IS_IN_TILE {
+                                                        center_of_dwarf       := get_rect_center(get_world_rect_from_pos(dwarf.pos));
+                                                        tile_rect_dwarf_is_on := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, center_of_dwarf);
+                                                        tile_id_dwarf_is_on   := get_tile_id_by_pos(get_rect_pos(tile_rect_dwarf_is_on));
+                                                        
+                                                        assert(table_contains(*fully_mined_tile_ids_set, tile_id_dwarf_is_on), "dwarf is in rock or something lol wtf");
+                                                    }
+                                                } else {
+                                                    // TODO: Eventually we'll want to check whether the tile is mineable or not.
+                                                    dwarf.state = .MINING;
+                                                    dwarf.tile_id_mining = tile_id_next_in_dwarfs_path;
+
+                                                    chunk := get_chunk_ptr_by_tile_id(tile_id_next_in_dwarfs_path);
+                                                    array_add(*chunk.actively_mined_tile_ids, tile_id_next_in_dwarfs_path);
+                                                    table_add(*actively_mined_tile_ids_to_health_table, tile_id_next_in_dwarfs_path, DIRT_HEALTH);
+                                                }
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    // If it's unmined, then they'll have to enter into the mining state before they can proceed.
+                                    // TODO: iron?...
+                                    dwarf.state = .MINING;
+                                    dwarf.tile_id_mining = tile_id_next_in_dwarfs_path;
+
+                                    chunk := get_chunk_ptr_by_tile_id(tile_id_next_in_dwarfs_path);
+                                    array_add(*chunk.actively_mined_tile_ids, tile_id_next_in_dwarfs_path);
+                                    table_add(*actively_mined_tile_ids_to_health_table, tile_id_next_in_dwarfs_path, IRON_HEALTH);
                                 }
 
                             case .MINING;
@@ -827,11 +856,11 @@ main :: () {
                                                 if is_neighbor_a_resource_tile {
                                                     // If the tile we mined was a resource like iron (as opposed to dirt),
                                                     // then we want to path towards it.
-                                                    path_to_neighbor_resource := get_path(dwarf.pos, neighbor_pos);
+                                                    tile_ids_on_path := get_tile_ids_along_path(dwarf.pos, neighbor_pos);
                                                     array_reset(*(dwarf.tile_ids_on_path));
-                                                    // array_add(*(dwarf.tile_ids_on_path), path_to_neighbor_resource.start_tile_id);
-                                                    array_add(*(dwarf.tile_ids_on_path), path_to_neighbor_resource.middle_tile_id);
-                                                    array_add(*(dwarf.tile_ids_on_path), path_to_neighbor_resource.end_tile_id);
+                                                    // PERF
+                                                    // TODO: Am I leaking stuff here, or...
+                                                    array_copy(*(dwarf.tile_ids_on_path), tile_ids_on_path);
                                                 }
 
                                                 return is_neighbor_a_resource_tile;
@@ -1450,11 +1479,11 @@ get_path :: (from_pos: Vector2, to_pos: Vector2) -> Path {
 
     tile_rect_mouse_started_on := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, from_pos);
     tile_id_mouse_started_on   := get_tile_id_by_pos(get_rect_pos(tile_rect_mouse_started_on));
-    
+
     // We need to separate the dx and dy
     dx := new_target_tile_rect.x - tile_rect_mouse_started_on.x;
     dy := new_target_tile_rect.y - tile_rect_mouse_started_on.y;
-
+    
     // Check which one is larger, that'll be the first leg
     x_is_larger := abs(dx) > abs(dy);
 
@@ -1479,6 +1508,60 @@ get_path :: (from_pos: Vector2, to_pos: Vector2) -> Path {
         middle_tile_id = middle_tile_id,
         end_tile_id    = end_tile_id,
     };
+}
+
+get_tile_ids_along_path :: (from_pos: Vector2, to_pos: Vector2) -> [..] s32 {
+    path_ids: [..] s32;
+
+    target_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, to_pos);
+    from_rect   := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, from_pos);
+
+    dx := target_rect.x - from_rect.x;
+    dy := target_rect.y - from_rect.y;
+
+    // Determine the step directions in world units
+    step_x := ifx dx > 0 then TILEMAP_GENERAL_WORLD_WIDTH  else -TILEMAP_GENERAL_WORLD_WIDTH;
+    step_y := ifx dy > 0 then TILEMAP_GENERAL_WORLD_HEIGHT else -TILEMAP_GENERAL_WORLD_HEIGHT;
+
+    // Calculate the number of discrete tile steps required 
+    // (+ 0.5 prevents float truncation issues if your tile widths aren't perfect integers)
+    steps_x := cast(int)(abs(dx) / TILEMAP_GENERAL_WORLD_WIDTH + 0.5);
+    steps_y := cast(int)(abs(dy) / TILEMAP_GENERAL_WORLD_HEIGHT + 0.5);
+
+    x_is_larger := abs(dx) > abs(dy);
+
+    // Start traversing from the origin of the initial tile
+    current_pos := Vector2.{from_rect.x, from_rect.y};
+
+    // 1. Add the starting tile
+    array_add(*path_ids, get_tile_id_by_pos(current_pos));
+
+    // 2. Traverse the grid, maintaining your L-shaped path preference
+    if x_is_larger {
+        // Move along X axis first
+        for 1..steps_x {
+            current_pos.x += step_x;
+            array_add(*path_ids, get_tile_id_by_pos(current_pos));
+        }
+        // Then move along Y axis
+        for 1..steps_y {
+            current_pos.y += step_y;
+            array_add(*path_ids, get_tile_id_by_pos(current_pos));
+        }
+    } else {
+        // Move along Y axis first
+        for 1..steps_y {
+            current_pos.y += step_y;
+            array_add(*path_ids, get_tile_id_by_pos(current_pos));
+        }
+        // Then move along X axis
+        for 1..steps_x {
+            current_pos.x += step_x;
+            array_add(*path_ids, get_tile_id_by_pos(current_pos));
+        }
+    }
+
+    return path_ids;
 }
 
 get_arrow_rotation :: (start_pos: Vector2, end_pos: Vector2) -> float32 {
