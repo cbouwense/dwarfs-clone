@@ -322,23 +322,23 @@ main :: () {
     // Initialize controls
     controls: Controls;
     {
-        controls.select[0]                = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_LEFT   };
-        controls.add_base[0]              = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_B               };
-        controls.add_iron[0]              = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_I               };
-        controls.add_as_obsidian[0] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_Q               };
-        controls.add_as_obsidian[1] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT_SHIFT      };
-        controls.add_as_obsidian[2] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT_SHIFT     };
-        controls.drag_as_create_path[0]   = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_LEFT   };
-        controls.drag_cam[0]              = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_RIGHT  };
-        controls.drag_cam[1]              = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_MIDDLE };
-        controls.move_camera_up[0]        = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_UP              };
-        controls.move_camera_up[1]        = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_W               };
-        controls.move_camera_down[0]      = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_DOWN            };
-        controls.move_camera_down[1]      = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_S               };
-        controls.move_camera_left[0]      = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT            };
-        controls.move_camera_left[1]      = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_A               };
-        controls.move_camera_right[0]     = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT           };
-        controls.move_camera_right[1]     = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_D               };
+        controls.select[0]              = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_LEFT   };
+        controls.add_base[0]            = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_B               };
+        controls.add_iron[0]            = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_I               };
+        controls.add_as_obsidian[0]     = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_Q               };
+        controls.add_as_obsidian[1]     = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT_SHIFT      };
+        controls.add_as_obsidian[2]     = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT_SHIFT     };
+        controls.drag_as_create_path[0] = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_LEFT   };
+        controls.drag_cam[0]            = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_RIGHT  };
+        controls.drag_cam[1]            = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_MIDDLE };
+        controls.move_camera_up[0]      = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_UP              };
+        controls.move_camera_up[1]      = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_W               };
+        controls.move_camera_down[0]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_DOWN            };
+        controls.move_camera_down[1]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_S               };
+        controls.move_camera_left[0]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT            };
+        controls.move_camera_left[1]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_A               };
+        controls.move_camera_right[0]   = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT           };
+        controls.move_camera_right[1]   = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_D               };
     }
 
     // Initialize game
@@ -552,15 +552,17 @@ main :: () {
 
                     tile_is_iron            := table_contains(*iron_tile_ids_set, tile_id);
                     tile_is_being_mined     := table_contains(*actively_mined_tile_ids_to_health_table, tile_id);
-                    tile_is_unrevealed_cave := table_contains(*cave_tile_ids_set, tile_id);
                     tile_is_mined           := table_contains(*fully_mined_tile_ids_set, tile_id);
+                    tile_is_mineable        := tile_is_iron || tile_is_being_mined || !tile_is_mined;
+
+                    tile_is_unrevealed_cave := table_contains(*cave_tile_ids_set, tile_id);
                     tile_is_water_still     := table_contains(*water_still_tile_ids_set, tile_id);
                     tile_is_water_flowing   := table_contains(*water_flowing_tile_ids_set, tile_id);
                     tile_is_lava_still      := table_contains(*lava_still_tile_ids_set, tile_id);
                     tile_is_lava_flowing    := table_contains(*lava_flowing_tile_ids_set, tile_id);
-                    tile_is_empty           := tile_is_unrevealed_cave && !tile_is_mined && !tile_is_water_still && !tile_is_water_flowing && !tile_is_lava_still && !tile_is_lava_flowing;
+                    tile_is_empty           := tile_is_unrevealed_cave || tile_is_water_still || tile_is_water_flowing || tile_is_lava_still || tile_is_lava_flowing;
 
-                    if tile_is_iron || tile_is_being_mined || !tile_is_empty {
+                    if tile_is_mineable && !tile_is_empty {
                         set_tile_as_type(
                             tile_id,
                             *fully_mined_tile_ids_set,
