@@ -216,7 +216,7 @@ Dwarf :: struct {
     tile_ids_on_path   : [..] s32;
     mining_cooldown_ms : s32;
     tile_id_mining     : s32;
-    direction          : Direction;
+    direction          : Direction; // TODO: pretty sure I can remove this
 }
 
 Path :: struct {
@@ -895,80 +895,89 @@ main :: () {
                                     // TODO: swing animation, I guess
                                 
                                     // Decrease the tile health by the dwarf mining damage
-                                    ok, current_health := table_find(*actively_mined_tile_ids_to_health_table, dwarf.tile_id_mining);
-                                    assert(ok, "Tried mining a tile that doesn't exist");
-                                    new_health := current_health - DWARF_MINE_DAMAGE_PER_SWING;
+                                    found_tile_dwarf_is_mining, current_health := table_find(*actively_mined_tile_ids_to_health_table, dwarf.tile_id_mining);
+                                    
+                                    if found_tile_dwarf_is_mining {
+                                        new_health := current_health - DWARF_MINE_DAMAGE_PER_SWING;
 
-                                    if new_health <= 0 {
-                                        // TODO: probably will want a function to determine if a tile has a resource
-                                        // instead of checking each table manually as we have more. idk.
-                                        is_mining_resource := table_find(*iron_tile_ids_set, dwarf.tile_id_mining);
-                                        
-                                        set_tile_as_mined(
-                                            dwarf.tile_id_mining,
-                                            *fully_mined_tile_ids_set,
-                                            *cave_tile_ids_set,
-                                            *actively_mined_tile_ids_to_health_table,
-                                            *iron_tile_ids_set,
-                                            *water_flowing_tile_ids,
-                                            *water_flowing_tile_ids_set,
-                                            *lava_flowing_tile_ids,
-                                            *lava_flowing_tile_ids_set,
-                                            *active_chunks,
-                                            .MINED
-                                        );
+                                        if new_health <= 0 {
+                                            // TODO: probably will want a function to determine if a tile has a resource
+                                            // instead of checking each table manually as we have more. idk.
+                                            is_mining_resource := table_find(*iron_tile_ids_set, dwarf.tile_id_mining);
+                                            
+                                            set_tile_as_mined(
+                                                dwarf.tile_id_mining,
+                                                *fully_mined_tile_ids_set,
+                                                *cave_tile_ids_set,
+                                                *actively_mined_tile_ids_to_health_table,
+                                                *iron_tile_ids_set,
+                                                *water_flowing_tile_ids,
+                                                *water_flowing_tile_ids_set,
+                                                *lava_flowing_tile_ids,
+                                                *lava_flowing_tile_ids_set,
+                                                *active_chunks,
+                                                .MINED
+                                            );
 
-                                        // If the dwarf is mining a resource, check if there are any others nearby
-                                        if is_mining_resource {
-                                            check_for_resource_and_mine_if_present :: (dwarf: *Dwarf, dx: float32, dy: float32, iron_tile_ids_set: *Table) -> bool {
-                                                mined_tile_pos := get_tile_pos_by_id(dwarf.tile_id_mining);
-                                                neighbor_pos   := Vector2.{ mined_tile_pos.x + dx, mined_tile_pos.y + dy };
-                                                neighbor_id    := get_tile_id_by_pos(neighbor_pos);
+                                            // If the dwarf is mining a resource, check if there are any others nearby
+                                            if is_mining_resource {
+                                                check_for_resource_and_mine_if_present :: (dwarf: *Dwarf, dx: float32, dy: float32, iron_tile_ids_set: *Table) -> bool {
+                                                    mined_tile_pos := get_tile_pos_by_id(dwarf.tile_id_mining);
+                                                    neighbor_pos   := Vector2.{ mined_tile_pos.x + dx, mined_tile_pos.y + dy };
+                                                    neighbor_id    := get_tile_id_by_pos(neighbor_pos);
 
-                                                is_neighbor_a_resource_tile := table_find(iron_tile_ids_set, neighbor_id);
-                                                if is_neighbor_a_resource_tile {
-                                                    // If the tile we mined was a resource like iron (as opposed to dirt),
-                                                    // then we want to path towards it.
-                                                    tile_ids_on_path := get_tile_ids_along_path(dwarf.pos, neighbor_pos);
-                                                    array_reset(*(dwarf.tile_ids_on_path));
-                                                    // PERF
-                                                    // TODO: Am I leaking stuff here, or...
-                                                    array_copy(*(dwarf.tile_ids_on_path), tile_ids_on_path);
+                                                    is_neighbor_a_resource_tile := table_find(iron_tile_ids_set, neighbor_id);
+                                                    if is_neighbor_a_resource_tile {
+                                                        // If the tile we mined was a resource like iron (as opposed to dirt),
+                                                        // then we want to path towards it.
+                                                        tile_ids_on_path := get_tile_ids_along_path(dwarf.pos, neighbor_pos);
+                                                        array_reset(*(dwarf.tile_ids_on_path));
+                                                        // PERF
+                                                        // TODO: Am I leaking stuff here, or...
+                                                        array_copy(*(dwarf.tile_ids_on_path), tile_ids_on_path);
+                                                    }
+
+                                                    return is_neighbor_a_resource_tile;
                                                 }
 
-                                                return is_neighbor_a_resource_tile;
-                                            }
-
-                                            // TODO: clean this up if you're bored
-                                            for TILE_DIRECTION_DELTAS {
-                                                found := check_for_resource_and_mine_if_present(dwarf, it[0] * 1, it[1] * 1, *iron_tile_ids_set);
-                                                if found break;
-
+                                                // TODO: clean this up if you're bored
                                                 for TILE_DIRECTION_DELTAS {
-                                                    found = check_for_resource_and_mine_if_present(dwarf, it[0] * 2, it[1] * 2, *iron_tile_ids_set);
+                                                    found := check_for_resource_and_mine_if_present(dwarf, it[0] * 1, it[1] * 1, *iron_tile_ids_set);
                                                     if found break;
 
                                                     for TILE_DIRECTION_DELTAS {
-                                                        found = check_for_resource_and_mine_if_present(dwarf, it[0] * 3, it[1] * 3, *iron_tile_ids_set);
+                                                        found = check_for_resource_and_mine_if_present(dwarf, it[0] * 2, it[1] * 2, *iron_tile_ids_set);
                                                         if found break;
+
+                                                        for TILE_DIRECTION_DELTAS {
+                                                            found = check_for_resource_and_mine_if_present(dwarf, it[0] * 3, it[1] * 3, *iron_tile_ids_set);
+                                                            if found break;
+                                                        }
                                                     }
                                                 }
                                             }
+
+                                            // If we just cracked into a cave, we'll need to reveal the cave and do anything
+                                            // that cave type needs (e.g. spawn water, lava, monsters, etc.).
+                                            try_to_reveal_cave(dwarf.tile_id_mining);
+
+                                            dwarf.tile_id_mining = 0;
+                                            dwarf.state = .MOVING;
+                                        } else {
+                                            // If the tile just needs to take some damage, well, then damage it ya fuckin jallopy
+                                            table_set(*actively_mined_tile_ids_to_health_table, dwarf.tile_id_mining, new_health);
                                         }
 
-                                        // If we just cracked into a cave, we'll need to reveal the cave and do anything
-                                        // that cave type needs (e.g. spawn water, lava, monsters, etc.).
-                                        try_to_reveal_cave(dwarf.tile_id_mining);
-
+                                        // Reset cooldown
+                                        dwarf.mining_cooldown_ms = DWARF_MINE_COOLDOWN_MS;
+                                    } else {
+                                        if debug_mode print("INFO: Dwarf was mining tile % but suddenly it was removed from the table of actively mined tiles.\n", dwarf.tile_id_mining);
+                                        // It's possible for the tile the dwarf is mining to suddenly be changed, like into obsidian.
+                                        // In this case, the dwarf should abandon the idea of mining its current tile.
+                                        array_reset(*(dwarf.tile_ids_on_path));
                                         dwarf.tile_id_mining = 0;
                                         dwarf.state = .MOVING;
-                                    } else {
-                                        // If the tile just needs to take some damage, well, then damage it ya fuckin jallopy
-                                        table_set(*actively_mined_tile_ids_to_health_table, dwarf.tile_id_mining, new_health);
                                     }
-
-                                    // Reset cooldown
-                                    dwarf.mining_cooldown_ms = DWARF_MINE_COOLDOWN_MS;
                                 }
 
                             case .IDLE;
@@ -1861,29 +1870,61 @@ set_tile_as_type :: (
         }
     }
 
-    // Add edges for pathing to any neighbors who are also open
-    if as_type == .CAVE || as_type == .MINED {
-        dx, dy : float;
-        tile_pos := get_tile_pos_by_id(tile_id);
+    if #complete as_type == {
+        // Add edges for pathing to any neighbors who are also open
+        case .CAVE; #through;
+        case .MINED;
+            dx, dy : float;
+            tile_pos := get_tile_pos_by_id(tile_id);
 
-        for i: 0..3 {
-            dx = TILE_DIRECTION_DELTAS[i][0];
-            dy = TILE_DIRECTION_DELTAS[i][1];
-            neighbor_pos := Vector2.{ tile_pos.x + dx, tile_pos.y + dy };
-            found_neighbor, neighbor_id := find_tile_id_by_pos(neighbor_pos);
-            if !found_neighbor {
-                print("WARN: Couldn't find neighbor for tile at pos (%,%). This either means it's on the edge of the world, or that something might be wrong.\n", neighbor_pos.x, neighbor_pos.y);
-                continue;
+            for i: 0..3 {
+                dx = TILE_DIRECTION_DELTAS[i][0];
+                dy = TILE_DIRECTION_DELTAS[i][1];
+                neighbor_pos := Vector2.{ tile_pos.x + dx, tile_pos.y + dy };
+                found_neighbor, neighbor_id := find_tile_id_by_pos(neighbor_pos);
+                if !found_neighbor {
+                    print("WARN: Couldn't find neighbor for tile at pos (%,%). This either means it's on the edge of the world, or that something might be wrong.\n", neighbor_pos.x, neighbor_pos.y);
+                    continue;
+                }
+
+                neighbor_is_mined := table_contains(fully_mined_tile_ids_set, neighbor_id);
+
+                if neighbor_is_mined {
+                    // TODO: this is pretty fucked up to add these edges both ways, I think
+                    array_add(*edges, Edge.{ from = tile_id,     to = neighbor_id, distance = 1 });
+                    array_add(*edges, Edge.{ from = neighbor_id, to = tile_id, distance = 1 });
+                }
             }
 
-            neighbor_is_mined := table_contains(fully_mined_tile_ids_set, neighbor_id);
+        // Remove edges for pathing to all neighbors
+        case .OBSIDIAN; #through;
+        case .DIRT;     #through;
+        case .IRON;
+            dx, dy : float;
+            tile_pos := get_tile_pos_by_id(tile_id);
 
-            if neighbor_is_mined {
-                // TODO: this is pretty fucked up to add these edges both ways, I think
-                array_add(*edges, Edge.{ from = tile_id,     to = neighbor_id, distance = 1 });
-                array_add(*edges, Edge.{ from = neighbor_id, to = tile_id, distance = 1 });
+            for i: 0..3 {
+                dx = TILE_DIRECTION_DELTAS[i][0];
+                dy = TILE_DIRECTION_DELTAS[i][1];
+                neighbor_pos := Vector2.{ tile_pos.x + dx, tile_pos.y + dy };
+                found_neighbor, neighbor_id := find_tile_id_by_pos(neighbor_pos);
+                if !found_neighbor {
+                    print("WARN: Couldn't find neighbor for tile at pos (%,%). This either means it's on the edge of the world, or that something might be wrong.\n", neighbor_pos.x, neighbor_pos.y);
+                    continue;
+                }
+
+                for edges {
+                    if it.from == tile_id || it.to == tile_id {
+                        array_unordered_remove_by_index(*edges, it_index);
+                    }
+                }
             }
-        }
+
+        // No op
+        case .WATER_STILL;   #through;
+        case .WATER_FLOWING; #through;
+        case .LAVA_STILL;    #through;
+        case .LAVA_FLOWING;
     }
 }
 
