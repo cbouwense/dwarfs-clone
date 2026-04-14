@@ -3,8 +3,11 @@
 - water flow / conversion to still is choppy
     - condition:
         - reproducible on 78db461, 8e0a223
+        - it seems to either get hung up or happen in spurts
     - cause:
+        - I'm ticking the cooldown for every water tile
     - correction:
+        - Only do it once per frame
     - confirmation:
 
 # Game

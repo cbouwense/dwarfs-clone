@@ -992,6 +992,16 @@ main :: () {
                 // Update water flowing
                 UPDATE_WATER :: true;
                 #if UPDATE_WATER {
+                    should_spread_this_frame := game_state.water_flow_cooldown_ms <= 0;
+
+                    if should_spread_this_frame {
+                        game_state.water_flow_cooldown_ms = WATER_FLOW_COOLDOWN_MS;
+                    } else {
+                        game_state.water_flow_cooldown_ms -= xx (dt_seconds * 1000);
+                    }
+
+                    // Take an array view of the actual state because we mutate the state during the loop
+                    // and can cause self referential problems when looping on the actual state.
                     current_water_flowing_tile_ids := array_view(water_flowing_tile_ids, 0);
                     for current_water_flowing_tile_ids {
                         // Kill any dwarves you are coming in contact with
@@ -1004,9 +1014,7 @@ main :: () {
                             }
                         }
 
-                        if game_state.water_flow_cooldown_ms <= 0 {
-                            game_state.water_flow_cooldown_ms = WATER_FLOW_COOLDOWN_MS;
-                        
+                        if should_spread_this_frame {
                             try_to_set_cardinal_neighbors_as_flowing_tile_type(it, .WATER_FLOWING);
 
                             // If all surrounding tiles are liquid, then we can mark this tile as
@@ -1030,8 +1038,6 @@ main :: () {
                                     .WATER_STILL
                                 );
                             }
-                        } else {
-                            game_state.water_flow_cooldown_ms -= xx (dt_seconds * 1000);
                         }
                     }
                 }
@@ -1039,6 +1045,16 @@ main :: () {
                 // Update lava flowing
                 UPDATE_LAVA :: true;
                 #if UPDATE_LAVA {
+                    should_spread_water_this_frame := game_state.lava_flow_cooldown_ms <= 0;
+
+                    if should_spread_water_this_frame {
+                        game_state.lava_flow_cooldown_ms = LAVA_FLOW_COOLDOWN_MS;
+                    } else {
+                        game_state.lava_flow_cooldown_ms -= xx (dt_seconds * 1000);
+                    }
+
+                    // Take an array view of the actual state because we mutate the state during the loop
+                    // and can cause self referential problems when looping on the actual state.
                     current_lava_flowing_tile_ids := array_view(lava_flowing_tile_ids, 0);
                     for current_lava_flowing_tile_ids {
                         // Kill any dwarves you are coming in contact with
@@ -1051,9 +1067,7 @@ main :: () {
                             }
                         }
 
-                        if game_state.lava_flow_cooldown_ms <= 0 {
-                            game_state.lava_flow_cooldown_ms = LAVA_FLOW_COOLDOWN_MS;
-
+                        if should_spread_water_this_frame {
                             try_to_set_cardinal_neighbors_as_flowing_tile_type(it, .LAVA_FLOWING);
 
                             // If all surrounding tiles are liquid, then we can mark this tile as
@@ -1077,8 +1091,6 @@ main :: () {
                                     .LAVA_STILL
                                 );
                             }
-                        } else {
-                            game_state.lava_flow_cooldown_ms -= xx (dt_seconds * 1000);
                         }
                     }
                 }
