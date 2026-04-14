@@ -98,8 +98,10 @@ init_sprites :: () {
 // Controls
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+selected                : bool;
 add_base                : bool;
 add_iron                : bool;
+add_as_obsidian         : bool;
 started_to_create_path  : bool;
 dragging_to_create_path : bool;
 drag_cam_pressed        : bool;
@@ -174,6 +176,7 @@ TileType :: enum u8 {
     LAVA_STILL;
     LAVA_FLOWING;
     IRON;
+    OBSIDIAN;
 }
 
 Entity :: struct {
@@ -226,10 +229,11 @@ Chunk :: struct {
     cave_tile_ids           : [..] s32;
     actively_mined_tile_ids : [..] s32;
     iron_tile_ids           : [..] s32;
+    obsidian_tile_ids       : [..] s32;
     water_still_tile_ids    : [..] s32;
-    water_flowing_tile_ids    : [..] s32;
+    water_flowing_tile_ids  : [..] s32;
     lava_still_tile_ids     : [..] s32;
-    lava_flowing_tile_ids     : [..] s32;
+    lava_flowing_tile_ids   : [..] s32;
     
     // TODO: Will probably want these
     // bases   : [..] Base;
@@ -274,6 +278,9 @@ lava_flowing_tile_ids             : [..] s32;
 lava_flowing_tile_ids_set         : Table(s32, Any);
 lava_flowing_tile_ids_in_viewport : [..] s32;
 
+obsidian_tile_ids_set         : Table(s32, Any);
+obsidian_tile_ids_in_viewport : [..] s32;
+
 bases               : [..] Base;
 bases_in_viewport   : [..] Base;
 
@@ -314,19 +321,23 @@ main :: () {
     // Initialize controls
     controls: Controls;
     {
-        controls.add_base[0]            = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_B               };
-        controls.add_iron[0]            = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_I               };
-        controls.drag_to_create_path[0] = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_LEFT   };
-        controls.drag_cam[0]            = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_RIGHT  };
-        controls.drag_cam[1]            = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_MIDDLE };
-        controls.move_camera_up[0]      = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_UP              };
-        controls.move_camera_up[1]      = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_W               };
-        controls.move_camera_down[0]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_DOWN            };
-        controls.move_camera_down[1]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_S               };
-        controls.move_camera_left[0]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT            };
-        controls.move_camera_left[1]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_A               };
-        controls.move_camera_right[0]   = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT           };
-        controls.move_camera_right[1]   = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_D               };
+        controls.select[0]                = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_LEFT   };
+        controls.add_base[0]              = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_B               };
+        controls.add_iron[0]              = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_I               };
+        controls.add_as_obsidian[0] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_Q               };
+        controls.add_as_obsidian[1] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT_SHIFT      };
+        controls.add_as_obsidian[2] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT_SHIFT     };
+        controls.drag_as_create_path[0]   = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_LEFT   };
+        controls.drag_cam[0]              = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_RIGHT  };
+        controls.drag_cam[1]              = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_MIDDLE };
+        controls.move_camera_up[0]        = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_UP              };
+        controls.move_camera_up[1]        = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_W               };
+        controls.move_camera_down[0]      = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_DOWN            };
+        controls.move_camera_down[1]      = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_S               };
+        controls.move_camera_left[0]      = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT            };
+        controls.move_camera_left[1]      = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_A               };
+        controls.move_camera_right[0]     = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT           };
+        controls.move_camera_right[1]     = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_D               };
     }
 
     // Initialize game
@@ -519,10 +530,12 @@ main :: () {
             dragging_to_create_path_prev = dragging_to_create_path;
 
             // Game controls
+            selected                = control_is_pressed(controls.select);
             add_base                = control_is_pressed(controls.add_base);
             add_iron                = control_is_pressed(controls.add_iron);
-            started_to_create_path  = control_is_pressed(controls.drag_to_create_path);
-            dragging_to_create_path = control_is_down(controls.drag_to_create_path) && !IsKeyDown(KeyboardKey.KEY_LEFT_CONTROL); // TODO: just a little debug hack
+            add_as_obsidian         = control_is_down(controls.add_as_obsidian);
+            started_to_create_path  = control_is_pressed(controls.drag_as_create_path);
+            dragging_to_create_path = control_is_down(controls.drag_as_create_path) && !IsKeyDown(KeyboardKey.KEY_LEFT_CONTROL); // TODO: just a little debug hack
             drag_cam_pressed        = control_is_pressed(controls.drag_cam);
             drag_cam_down           = control_is_down(controls.drag_cam);
             move_camera_up          = control_is_down(controls.move_camera_up);
@@ -572,6 +585,38 @@ main :: () {
                     game_state.selected_dwarf_index = -1;
                 }
             }
+
+            if selected {
+                if add_as_obsidian {
+                    // Try to turn the selected tile into obsidian
+                    tile_id := get_tile_id_by_pos(mouse_pos_in_world);
+
+                    tile_is_iron        := table_contains(*iron_tile_ids_set, tile_id);
+                    tile_is_being_mined := table_contains(*actively_mined_tile_ids_to_health_table, tile_id);
+                    tile_is_empty       := table_contains(*fully_mined_tile_ids_set, tile_id);
+
+                    if tile_is_iron || tile_is_being_mined || !tile_is_empty {
+                        set_tile_as_type(
+                            tile_id,
+                            *fully_mined_tile_ids_set,
+                            *cave_tile_ids_set,
+                            *actively_mined_tile_ids_to_health_table,
+                            *iron_tile_ids_set,
+                            *obsidian_tile_ids_set,
+                            *water_still_tile_ids,
+                            *water_still_tile_ids_set,
+                            *water_flowing_tile_ids,
+                            *water_flowing_tile_ids_set,
+                            *lava_still_tile_ids,
+                            *lava_still_tile_ids_set,
+                            *lava_flowing_tile_ids,
+                            *lava_flowing_tile_ids_set,
+                            *active_chunks,
+                            TileType.OBSIDIAN
+                        );
+                    }
+                }
+            }
         }
 
         derive_entities_in_viewport(
@@ -580,6 +625,7 @@ main :: () {
             *cave_tile_ids_in_viewport,
             *actively_mined_tile_ids_in_viewport,
             *iron_tile_ids_in_viewport,
+            *obsidian_tile_ids_in_viewport,
             *water_still_tile_ids_in_viewport,
             *water_flowing_tile_ids_in_viewport,
             *lava_still_tile_ids_in_viewport,
@@ -588,7 +634,8 @@ main :: () {
             *bases_in_viewport,
             dwarves,
             *dwarves_in_viewport,
-            // paths, *paths_in_viewport
+            // paths,
+            // *paths_in_viewport
         );
 
         //
@@ -1026,6 +1073,7 @@ main :: () {
                                     *cave_tile_ids_set,
                                     *actively_mined_tile_ids_to_health_table,
                                     *iron_tile_ids_set,
+                                    *obsidian_tile_ids_set,
                                     *water_still_tile_ids,
                                     *water_still_tile_ids_set,
                                     *water_flowing_tile_ids,
@@ -1079,6 +1127,7 @@ main :: () {
                                     *cave_tile_ids_set,
                                     *actively_mined_tile_ids_to_health_table,
                                     *iron_tile_ids_set,
+                                    *obsidian_tile_ids_set,
                                     *water_still_tile_ids,
                                     *water_still_tile_ids_set,
                                     *water_flowing_tile_ids,
@@ -1155,7 +1204,15 @@ main :: () {
                         DrawRectangleV(
                             get_tile_pos_by_id(it),
                             Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
-                            GRAY, // TODO: texture
+                            LIGHTGRAY, // TODO: texture
+                        );
+                    }
+
+                    for obsidian_tile_ids_in_viewport {
+                        DrawRectangleV(
+                            get_tile_pos_by_id(it),
+                            Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
+                            DARKGRAY, // TODO: texture
                         );
                     }
 
@@ -1347,6 +1404,9 @@ try_to_set_cardinal_neighbors_as_flowing_tile_type :: (tile_id: s32, as_type: Ti
         tile_is_iron := table_contains(*iron_tile_ids_set, neighbor_id);
         if tile_is_iron continue;
 
+        tile_is_obsidian := table_contains(*obsidian_tile_ids_set, neighbor_id);
+        if tile_is_obsidian continue;
+
         tile_is_being_mined := table_contains(*actively_mined_tile_ids_to_health_table, neighbor_id);
         if tile_is_being_mined continue;
 
@@ -1359,6 +1419,7 @@ try_to_set_cardinal_neighbors_as_flowing_tile_type :: (tile_id: s32, as_type: Ti
             *cave_tile_ids_set,
             *actively_mined_tile_ids_to_health_table,
             *iron_tile_ids_set,
+            *obsidian_tile_ids_set,
             *water_still_tile_ids,
             *water_still_tile_ids_set,
             *water_flowing_tile_ids,
@@ -1693,6 +1754,7 @@ set_tile_as_type :: (
     cave_tile_ids_set : *Table,
     actively_mined_tile_ids_to_health_table : *Table,
     iron_tile_ids_set : *Table,
+    obsidian_tile_ids_set : *Table,
     water_still_tile_ids : *[..] s32,
     water_still_tile_ids_set : *Table,
     water_flowing_tile_ids : *[..] s32,
@@ -1720,6 +1782,9 @@ set_tile_as_type :: (
             table_remove(iron_tile_ids_set, tile_id);
         }
 
+        array_unordered_remove_by_value(*chunk.obsidian_tile_ids, tile_id);
+        table_remove(obsidian_tile_ids_set, tile_id);
+        
         array_unordered_remove_by_value(*chunk.actively_mined_tile_ids, tile_id);
         table_remove(actively_mined_tile_ids_to_health_table, tile_id);
         
@@ -1780,6 +1845,10 @@ set_tile_as_type :: (
         case .IRON; {
             assert(false, "Tried setting block as type %, but that doesn't really make sense.", as_type);
         }
+        case .OBSIDIAN; {
+            array_add(*chunk.obsidian_tile_ids, tile_id);
+            table_add(obsidian_tile_ids_set, tile_id, 1738);
+        }
     }
 
     // Add edges for pathing to any neighbors who are also open
@@ -1838,6 +1907,8 @@ set_tile_as_mined :: (
             table_remove(iron_tile_ids_set, tile_id);
         }
 
+        // Intentionally not adding obsidian here
+
         array_unordered_remove_by_value(*chunk.actively_mined_tile_ids, tile_id);
         table_remove(actively_mined_tile_ids_to_health_table, tile_id);
         
@@ -1879,7 +1950,8 @@ set_tile_as_mined :: (
             table_add(lava_flowing_tile_ids_set, tile_id, 1738);
         }
         case .DIRT; #through;
-        case .IRON; {
+        case .IRON; #through;
+        case .OBSIDIAN; {
             assert(false, "Tried setting block as type %, but that doesn't really make sense.", as_type);
         }
     }
@@ -1983,6 +2055,7 @@ derive_entities_in_viewport :: (
     cave_tile_ids_in_viewport: *[..] s32,
     actively_mined_tile_ids_in_viewport: *[..] s32,
     iron_tile_ids_in_viewport: *[..] s32,
+    obsidian_tile_ids_in_viewport: *[..] s32,
     water_still_tile_ids_in_viewport: *[..] s32,
     water_flowing_tile_ids_in_viewport: *[..] s32,
     lava_still_tile_ids_in_viewport: *[..] s32,
@@ -2001,6 +2074,7 @@ derive_entities_in_viewport :: (
     array_reset(cave_tile_ids_in_viewport);
     array_reset(actively_mined_tile_ids_in_viewport);
     array_reset(iron_tile_ids_in_viewport);
+    array_reset(obsidian_tile_ids_in_viewport);
     array_reset(water_still_tile_ids_in_viewport);
     array_reset(water_flowing_tile_ids_in_viewport);
     array_reset(lava_still_tile_ids_in_viewport);
@@ -2081,6 +2155,18 @@ derive_entities_in_viewport :: (
                 if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
                 array_add(iron_tile_ids_in_viewport, tile_id);
+            }
+
+            // Obsidian tiles
+            for tile_id: chunk.obsidian_tile_ids {
+                pos := get_tile_pos_by_id(tile_id);
+
+                if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+                if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+                if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+                if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+
+                array_add(obsidian_tile_ids_in_viewport, tile_id);
             }
 
             // Water still tiles
