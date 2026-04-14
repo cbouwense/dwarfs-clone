@@ -1,7 +1,5 @@
 # In progress
 
-- Placing obsidian
-
 # Bugs
 
 - dwarves seem to spawn on cursor when dragging near or on another dwarf
@@ -34,7 +32,7 @@
 - Liquid kills could be optimized by checking chunks
 - Just use math to get neighboring tile ids
 - underclock cpu
-- Use id math to pathing, not positions
+- Use id math for pathing, not positions
 
 # Refactor
 

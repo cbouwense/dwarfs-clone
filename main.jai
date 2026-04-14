@@ -771,8 +771,8 @@ main :: () {
 
                                 tile_id_next_in_dwarfs_path := dwarf.tile_ids_on_path[0];
 
-                                tile_is_mined := table_contains(*fully_mined_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                if tile_is_mined {
+                                // If it's mined, then proceed
+                                if table_contains(*fully_mined_tile_ids_set, tile_id_next_in_dwarfs_path) {
                                     dwarf_pretty_much_reached_target := values_are_close(dwarf.pos, target_tile_pos, 1);
                                     if dwarf_pretty_much_reached_target {
                                         // Teleport dwarf to the target tile to remove any floating point weirdness.
@@ -848,12 +848,11 @@ main :: () {
                                             tile_rect_next_in_dwarfs_path := get_world_rect_from_pos(tile_pos_next_in_dwarfs_path);
 
                                             // If dwarf would collide with the next tile in its path if we just moved it, then we need to check whether
-                                            // it has to be mined or not.
+                                            // it has to be dealt with or not.
                                             if CheckCollisionRecs(new_rect, tile_rect_next_in_dwarfs_path) {
-                                                // If it's dirt, then they'll have to enter into the mining state before they can proceed.
+                                                // If this tile is mined, then simply keep moving.
                                                 tile_is_mined := table_contains(*fully_mined_tile_ids_set, tile_id_next_in_dwarfs_path);
                                                 if tile_is_mined {
-                                                    // If this tile is mined, then simply keep moving.
                                                     dwarf.pos = new_pos;
 
                                                     CHECK_IF_DWARF_IS_IN_TILE :: true;
@@ -864,8 +863,13 @@ main :: () {
                                                         
                                                         assert(table_contains(*fully_mined_tile_ids_set, tile_id_dwarf_is_on), "dwarf is in rock or something lol wtf");
                                                     }
-                                                } else {
-                                                    // TODO: Eventually we'll want to check whether the tile is mineable or not.
+                                                }
+                                                // If it's obsidian, then they'll have to do something else, because they can't go through it
+                                                else if table_contains(*obsidian_tile_ids_set, tile_id_next_in_dwarfs_path) {
+                                                    array_reset(*(dwarf.tile_ids_on_path));
+                                                }
+                                                // If it's unmined, then they'll have to enter into the mining state before they can proceed.
+                                                else {
                                                     dwarf.state = .MINING;
                                                     dwarf.tile_id_mining = tile_id_next_in_dwarfs_path;
 
@@ -876,9 +880,13 @@ main :: () {
                                             }
                                         }
                                     }
-                                } else {
-                                    // If it's unmined, then they'll have to enter into the mining state before they can proceed.
-                                    // TODO: iron?...
+                                }
+                                // If it's obsidian, then they'll have to do something else, because they can't go through it
+                                else if table_contains(*obsidian_tile_ids_set, tile_id_next_in_dwarfs_path) {
+                                    array_reset(*(dwarf.tile_ids_on_path));
+                                }
+                                // If it's unmined, then they'll have to enter into the mining state before they can proceed.
+                                else {
                                     dwarf.state = .MINING;
                                     dwarf.tile_id_mining = tile_id_next_in_dwarfs_path;
 
@@ -1903,20 +1911,9 @@ set_tile_as_type :: (
             dx, dy : float;
             tile_pos := get_tile_pos_by_id(tile_id);
 
-            for i: 0..3 {
-                dx = TILE_DIRECTION_DELTAS[i][0];
-                dy = TILE_DIRECTION_DELTAS[i][1];
-                neighbor_pos := Vector2.{ tile_pos.x + dx, tile_pos.y + dy };
-                found_neighbor, neighbor_id := find_tile_id_by_pos(neighbor_pos);
-                if !found_neighbor {
-                    print("WARN: Couldn't find neighbor for tile at pos (%,%). This either means it's on the edge of the world, or that something might be wrong.\n", neighbor_pos.x, neighbor_pos.y);
-                    continue;
-                }
-
-                for edges {
-                    if it.from == tile_id || it.to == tile_id {
-                        array_unordered_remove_by_index(*edges, it_index);
-                    }
+            for edges {
+                if it.from == tile_id || it.to == tile_id {
+                    array_unordered_remove_by_index(*edges, it_index);
                 }
             }
 
