@@ -158,6 +158,18 @@ TILE_DIRECTION_DELTAS :: [2]float32.[
     .[0.0, 0.0], // center
 ];
 
+TILE_DIRECTION_ID_DELTAS :: [2]s32.[
+    .[0, -WORLD_COLS],  // north
+    .[0, +WORLD_COLS],  // south
+    .[+1, 0],           // east
+    .[-1, 0],           // west
+    .[+1, -WORLD_COLS], // north east
+    .[-1, -WORLD_COLS], // north west
+    .[+1, +WORLD_COLS], // south east
+    .[-1, +WORLD_COLS], // south west
+    .[0, 0],            // center
+];
+
 CaveType :: enum u8 {
     EMPTY;
     WATER;
@@ -481,7 +493,7 @@ main :: () {
     while !WindowShouldClose() {
         reset_temporary_storage();
 
-        time  := GetTime();
+        time := GetTime();
         dt_seconds_raw := GetFrameTime();
         // Cap delta time to prevent teleporting or weird bullshit
         dt_seconds := ifx dt_seconds_raw > 0.033 then 0.033 else dt_seconds_raw;
@@ -489,6 +501,8 @@ main :: () {
         mouse_pos_in_ui    := GetMousePosition();
         mouse_pos_in_world := GetScreenToWorld2D(mouse_pos_in_ui, camera);
         mouse_wheel_move   := GetMouseWheelMove();
+
+        derive_entities_in_viewport(camera);
 
         //
         // Input
@@ -515,75 +529,7 @@ main :: () {
             move_camera_down        = control_is_down(controls.move_camera_down);
             move_camera_left        = control_is_down(controls.move_camera_left);
             move_camera_right       = control_is_down(controls.move_camera_right);
-
-            if add_as_obsidian {
-                if select_is_held_down {
-                    // Try to turn the selected tile into obsidian
-                    tile_id := get_tile_id_by_pos(mouse_pos_in_world);
-
-                    tile_is_iron            := table_contains(*iron_tile_ids_set, tile_id);
-                    tile_is_being_mined     := table_contains(*actively_mined_tile_ids_to_health_table, tile_id);
-                    tile_is_mined           := table_contains(*fully_mined_tile_ids_set, tile_id);
-                    tile_is_mineable        := tile_is_iron || tile_is_being_mined || !tile_is_mined;
-
-                    tile_is_unrevealed_cave := table_contains(*cave_tile_ids_set, tile_id);
-                    tile_is_water_still     := table_contains(*water_still_tile_ids_set, tile_id);
-                    tile_is_water_flowing   := table_contains(*water_flowing_tile_ids_set, tile_id);
-                    tile_is_lava_still      := table_contains(*lava_still_tile_ids_set, tile_id);
-                    tile_is_lava_flowing    := table_contains(*lava_flowing_tile_ids_set, tile_id);
-                    tile_is_empty           := tile_is_unrevealed_cave || tile_is_water_still || tile_is_water_flowing || tile_is_lava_still || tile_is_lava_flowing;
-
-                    if tile_is_mineable && !tile_is_empty {
-                        set_tile_as_type(tile_id, TileType.OBSIDIAN);
-                    }
-                }
-            } else {
-                if dragging_to_create_path {
-                    if started_to_create_path {
-                        for dwarf: dwarves_in_viewport {
-                            if CheckCollisionPointRec(mouse_pos_in_world, get_world_rect_from_pos(dwarf.pos)) {
-                                game_state.selected_dwarf_index = it_index;
-                                break;
-                            }
-                        }
-
-                        // If a dwarf was found being clicked
-                        if game_state.selected_dwarf_index > -1 {
-                            // Teleport dwarf to tile we are hovering over and keep it there
-                            tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
-                            dwarves[game_state.selected_dwarf_index].pos = get_rect_pos(tile_rect);
-                            
-                            // Stop the dwarf from moving so you can think while dragging a path
-                            dwarves[game_state.selected_dwarf_index].state = .IDLE;
-
-                            // Remove its current pathing
-                            array_reset(*(dwarves[game_state.selected_dwarf_index].tile_ids_on_path));
-                        }
-
-                        mouse_pos_when_path_creation_started = mouse_pos_in_world;
-                    }
-
-                    // Draw out the path that is currently being traced
-                    path_being_traced = get_path(mouse_pos_when_path_creation_started, mouse_pos_in_world);
-                } else if dragging_to_create_path_prev {
-                    array_add(*paths, path_being_traced);
-
-                    if game_state.selected_dwarf_index != -1 {
-                        start_pos := get_tile_pos_by_id(path_being_traced.start_tile_id);
-                        end_pos   := get_tile_pos_by_id(path_being_traced.end_tile_id);
-                        tile_ids_on_path := get_tile_ids_along_path(start_pos, end_pos);
-
-                        array_reset(*(dwarves[game_state.selected_dwarf_index].tile_ids_on_path));
-                        array_copy(*(dwarves[game_state.selected_dwarf_index].tile_ids_on_path), tile_ids_on_path);
-
-                        dwarves[game_state.selected_dwarf_index].state = .MOVING;
-                        game_state.selected_dwarf_index = -1;
-                    }
-                }
-            }
         }
-
-        derive_entities_in_viewport(camera);
 
         //
         // Update
@@ -655,6 +601,81 @@ main :: () {
 
             // Update pausable things
             if !paused {
+                // Update user action
+                {        
+                    if add_as_obsidian {
+                        if select_is_held_down {
+                            // Try to turn the selected tile into obsidian
+                            tile_id := get_tile_id_by_pos(mouse_pos_in_world);
+
+                            tile_is_iron            := table_contains(*iron_tile_ids_set, tile_id);
+                            tile_is_being_mined     := table_contains(*actively_mined_tile_ids_to_health_table, tile_id);
+                            tile_is_mined           := table_contains(*fully_mined_tile_ids_set, tile_id);
+                            tile_is_mineable        := tile_is_iron || tile_is_being_mined || !tile_is_mined;
+
+                            tile_is_unrevealed_cave := table_contains(*cave_tile_ids_set, tile_id);
+                            tile_is_water_still     := table_contains(*water_still_tile_ids_set, tile_id);
+                            tile_is_water_flowing   := table_contains(*water_flowing_tile_ids_set, tile_id);
+                            tile_is_lava_still      := table_contains(*lava_still_tile_ids_set, tile_id);
+                            tile_is_lava_flowing    := table_contains(*lava_flowing_tile_ids_set, tile_id);
+                            tile_is_empty           := tile_is_unrevealed_cave || tile_is_water_still || tile_is_water_flowing || tile_is_lava_still || tile_is_lava_flowing;
+
+                            tile_is_obsidian        := table_contains(*obsidian_tile_ids_set, tile_id);
+
+                            if tile_is_mineable && !tile_is_empty && !tile_is_obsidian {
+                                set_tile_as_type(tile_id, .OBSIDIAN);
+
+                                // Check to see if we've just enclosed water or lava
+                                encased := check_encasement(tile_id);
+                                print_vars(encased);
+                            }
+                        }
+                    } else {
+                        if dragging_to_create_path {
+                            if started_to_create_path {
+                                for dwarf: dwarves_in_viewport {
+                                    if CheckCollisionPointRec(mouse_pos_in_world, get_world_rect_from_pos(dwarf.pos)) {
+                                        game_state.selected_dwarf_index = it_index;
+                                        break;
+                                    }
+                                }
+
+                                // If a dwarf was found being clicked
+                                if game_state.selected_dwarf_index > -1 {
+                                    // Teleport dwarf to tile we are hovering over and keep it there
+                                    tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
+                                    dwarves[game_state.selected_dwarf_index].pos = get_rect_pos(tile_rect);
+                                    
+                                    // Stop the dwarf from moving so you can think while dragging a path
+                                    dwarves[game_state.selected_dwarf_index].state = .IDLE;
+
+                                    // Remove its current pathing
+                                    array_reset(*(dwarves[game_state.selected_dwarf_index].tile_ids_on_path));
+                                }
+
+                                mouse_pos_when_path_creation_started = mouse_pos_in_world;
+                            }
+
+                            // Draw out the path that is currently being traced
+                            path_being_traced = get_path(mouse_pos_when_path_creation_started, mouse_pos_in_world);
+                        } else if dragging_to_create_path_prev {
+                            array_add(*paths, path_being_traced);
+
+                            if game_state.selected_dwarf_index != -1 {
+                                start_pos := get_tile_pos_by_id(path_being_traced.start_tile_id);
+                                end_pos   := get_tile_pos_by_id(path_being_traced.end_tile_id);
+                                tile_ids_on_path := get_tile_ids_along_path(start_pos, end_pos);
+
+                                array_reset(*(dwarves[game_state.selected_dwarf_index].tile_ids_on_path));
+                                array_copy(*(dwarves[game_state.selected_dwarf_index].tile_ids_on_path), tile_ids_on_path);
+
+                                dwarves[game_state.selected_dwarf_index].state = .MOVING;
+                                game_state.selected_dwarf_index = -1;
+                            }
+                        }
+                    }
+                }
+
                 // Update dwarves
                 {
                     for *dwarf: dwarves {
@@ -1208,6 +1229,41 @@ main :: () {
             }
         }
     }
+}
+
+check_encasement :: (tile_id: s32) -> bool {
+    visited_set : Table(s32, Any);
+    return check_encasement_step(tile_id, 0, tile_id, *visited_set);
+}
+
+check_encasement_step :: (curr_tile_id: s32, prev_tile_id: s32, initial_tile_id: s32, visited_set: *Table) -> bool {
+    dx, dy: s32;
+
+    for i: 0..7 {
+        dx = TILE_DIRECTION_ID_DELTAS[i][0];
+        dy = TILE_DIRECTION_ID_DELTAS[i][1];
+
+        neighbor_id := curr_tile_id + dx + dy;
+
+        // Don't go backwards.
+        if neighbor_id == prev_tile_id continue;
+
+        // If we ended up at the initial tile, then we've found a cycle.
+        if neighbor_id == initial_tile_id return true;
+
+        // Don't process visited tiles.
+        if table_contains(visited_set, neighbor_id) continue;
+
+        // If the neighbor is unvisited obsidian that is not the initial tile, continue the DFS.
+        if table_contains(*obsidian_tile_ids_set, neighbor_id) {
+            table_add(visited_set, curr_tile_id, 1738);
+            return check_encasement_step(neighbor_id, curr_tile_id, initial_tile_id, visited_set);
+        }
+    }
+
+    // If none of our neighbors are the initial tile or unvisited obsidian, we've come
+    // to the end of the line.
+    return false;
 }
 
 are_all_neighbors_liquid :: (tile_id: s32) -> bool {
