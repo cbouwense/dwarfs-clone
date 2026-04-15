@@ -1,5 +1,7 @@
 # In progress
 
+- encasement
+
 # Bugs
 
 - dwarves seem to spawn on cursor when dragging near or on another dwarf
@@ -18,13 +20,14 @@
     - correction:
     - confirmation:
 
-# Game core
+# Core
 
-- points tracker
-
-# Game nitpicks
-
-- Dwarves should move into the tiles they just mined before pathing to other resource tiles
+- dynamite
+- hole tiles
+- gold and points trackers
+- fullscreen and resizability
+- goblins
+- losing
 
 # Performance
 
@@ -32,11 +35,14 @@
 - Liquid kills could be optimized by checking chunks
 - Just use math to get neighboring tile ids
 - underclock cpu
-- Use id math for pathing, not positions
+- Use ids for stuff, not positions
+
+# Nitpicks
+
+- Dwarves should move into the tiles they just mined before pathing to other resource tiles
 
 # Refactor
 
 - Function to tell if a tile is moveable or not
-- deprecate set_tile_as_mined to just a wrapper for set_tile_as_type
-- fullscreen and resizability
+
 - hotreloading
