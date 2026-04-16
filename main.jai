@@ -633,7 +633,7 @@ main :: () {
                                 // Check to see if we've just enclosed water or lava
                                 encasing_obsidian_tile_ids_set: Table(s32, s32);
                                 did_encase := check_encasement(tile_id, *encasing_obsidian_tile_ids_set);
-                                // print_vars(did_encase);
+                                print_vars(did_encase);
 
                                 // If we did encase a section, find the inside portion that is encased.
                                 // Start by casting a ray north, we first need to find non-obsidian. If we don't,
@@ -643,7 +643,7 @@ main :: () {
                                 // of the encasement. If out of bounds, then this cardinal direction is outside of
                                 // the encasement, and we need to keep looking at other cardinal directions.
                                 if did_encase {
-                                    direction_of_encasement := Direction.CENTER; // Center, of course, means "not found"
+                                    directions_of_encasement : [..]Direction;
 
                                     tile_pos := get_tile_pos_by_id(tile_id);
                                     dx, dy: float32;
@@ -653,34 +653,31 @@ main :: () {
 
                                         multiplier := 1;
                                         already_hit_non_obsidian := false;
-                                        this_direction_is_encased := false;
                                         should_continue_looking_in_this_direction := true;
                                         while should_continue_looking_in_this_direction {
-                                            defer multiplier += 1;
                                             neighbor_pos := Vector2.{ tile_pos.x + dx * multiplier, tile_pos.y + dy * multiplier };
                                             found_neighbor, neighbor_id := find_tile_id_by_pos(neighbor_pos);
 
                                             if !found_neighbor { // Hit out of bounds
                                                 should_continue_looking_in_this_direction = false;
-                                            } else if table_contains(*encasing_obsidian_tile_ids_set, neighbor_id) {
+                                            } else if table_contains(*obsidian_tile_ids_set, neighbor_id) {
                                                 should_continue_looking_in_this_direction = false;
-                                                this_direction_is_encased = already_hit_non_obsidian;
-                                                direction_of_encasement = cast(Direction) i;
+                                                if already_hit_non_obsidian array_add(*directions_of_encasement, cast(Direction) i);
                                             } else {
                                                 already_hit_non_obsidian = true;
                                             }
+                                    
+                                            multiplier += 1;
                                         }
-
-                                        if this_direction_is_encased break;
                                     }
 
                                     // If we think we encased an area, we better be able to find it. Otherwise at least
                                     // one assumption / algorithm is wrong here.
-                                    assert(direction_of_encasement != .CENTER);
-                                    print_vars(direction_of_encasement);
+                                    assert(directions_of_encasement.count > 0);
+                                    print_vars(directions_of_encasement);
                                     table_print(encasing_obsidian_tile_ids_set);
 
-                                    encase_tiles :: (starting_tile_id: s32, encasing_obsidian_tile_ids_set: *Table) {
+                                    encase_tiles :: (starting_tile_id: s32) {
                                         ids_processed  : [..] s32;
                                         ids_to_process : [..] s32;
                                         array_add(*ids_to_process, starting_tile_id);
@@ -712,13 +709,15 @@ main :: () {
                                         }
                                     }
 
-                                    tile_to_start_encasing_id := tile_id;
-                                    if direction_of_encasement == .NORTH tile_to_start_encasing_id -= WORLD_COLS;
-                                    if direction_of_encasement == .SOUTH tile_to_start_encasing_id += WORLD_COLS;
-                                    if direction_of_encasement == .EAST  tile_to_start_encasing_id += 1;
-                                    if direction_of_encasement == .WEST  tile_to_start_encasing_id -= 1;
+                                    for directions_of_encasement {
+                                        tile_to_start_encasing_id := tile_id;
+                                        if it == .NORTH tile_to_start_encasing_id -= WORLD_COLS;
+                                        if it == .SOUTH tile_to_start_encasing_id += WORLD_COLS;
+                                        if it == .EAST  tile_to_start_encasing_id += 1;
+                                        if it == .WEST  tile_to_start_encasing_id -= 1;
 
-                                    encase_tiles(tile_to_start_encasing_id, *encasing_obsidian_tile_ids_set);
+                                        encase_tiles(tile_to_start_encasing_id);
+                                    }
                                 }
                             }
                         }
@@ -1334,13 +1333,37 @@ main :: () {
 
 // TODO: add hole checking?
 check_encasement :: (tile_id: s32, encasing_obsidian_tile_ids_set: *Table) -> (did_encase: bool) {
-    did_encase := check_encasement_step(tile_id, 0, tile_id, encasing_obsidian_tile_ids_set);
+    found_cycle := check_encasement_step(tile_id, 0, tile_id, encasing_obsidian_tile_ids_set);
+
+    if !found_cycle return false;
+
+    // The check_encasement_step can only tell us if we found a cycle, not if we actually technically encased anything.
+    // It is possible that we make a cycle by drawing a tight shape with obsidian. So, we need to check the breadth of
+    // the encasing tiles.
+    rows_cycle_inhabits_set    : Table(s32, s32);
+    columns_cycle_inhabits_set : Table(s32, s32);
+    for encasing_obsidian_tile_ids_set {
+        tile_id := it_index;
+        
+        row_this_tile_id_is_in := cast(s32) tile_id / WORLD_COLS;
+        col_this_tile_id_is_in := tile_id % WORLD_COLS;
+
+        // TODO: you were about to keep a count of the rows and columns to eventually do
+        // return columns > 2 && rows > 2;
+
+        table_add(*rows_cycle_inhabits_set, row_this_tile_id_is_in, 1738);
+        table_add(*columns_cycle_inhabits_set, col_this_tile_id_is_in, 1738);
+    }
+
+    table_print(columns_cycle_inhabits_set);
+    table_print(rows_cycle_inhabits_set);
+
     return did_encase;
 }
 
 check_encasement_step :: (curr_tile_id: s32, prev_tile_id: s32, initial_tile_id: s32, visited_set: *Table) -> bool {
     table_add(visited_set, curr_tile_id, 1738);
-    
+
     dx, dy: s32;
 
     for i: 0..7 {
