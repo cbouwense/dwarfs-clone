@@ -633,7 +633,7 @@ main :: () {
                                 // Check to see if we've just enclosed water or lava
                                 encasing_obsidian_tile_ids_set: Table(s32, s32);
                                 did_encase := check_encasement(tile_id, *encasing_obsidian_tile_ids_set);
-                                print_vars(did_encase);
+                                // print_vars(did_encase);
 
                                 // If we did encase a section, find the inside portion that is encased.
                                 // Start by casting a ray north, we first need to find non-obsidian. If we don't,
@@ -678,6 +678,7 @@ main :: () {
                                     // one assumption / algorithm is wrong here.
                                     assert(direction_of_encasement != .CENTER);
                                     print_vars(direction_of_encasement);
+                                    table_print(encasing_obsidian_tile_ids_set);
 
                                     encase_tiles :: (starting_tile_id: s32, encasing_obsidian_tile_ids_set: *Table) {
                                         ids_processed  : [..] s32;
@@ -1333,12 +1334,13 @@ main :: () {
 
 // TODO: add hole checking?
 check_encasement :: (tile_id: s32, encasing_obsidian_tile_ids_set: *Table) -> (did_encase: bool) {
-    table_add(encasing_obsidian_tile_ids_set, tile_id, 1738);
     did_encase := check_encasement_step(tile_id, 0, tile_id, encasing_obsidian_tile_ids_set);
     return did_encase;
 }
 
 check_encasement_step :: (curr_tile_id: s32, prev_tile_id: s32, initial_tile_id: s32, visited_set: *Table) -> bool {
+    table_add(visited_set, curr_tile_id, 1738);
+    
     dx, dy: s32;
 
     for i: 0..7 {
@@ -1358,7 +1360,6 @@ check_encasement_step :: (curr_tile_id: s32, prev_tile_id: s32, initial_tile_id:
 
         // If the neighbor is unvisited obsidian that is not the initial tile, continue the DFS.
         if table_contains(*obsidian_tile_ids_set, neighbor_id) {
-            table_add(visited_set, curr_tile_id, 1738);
             return check_encasement_step(neighbor_id, curr_tile_id, initial_tile_id, visited_set);
         }
     }
