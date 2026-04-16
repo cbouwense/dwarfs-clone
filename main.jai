@@ -274,7 +274,8 @@ fully_mined_tile_ids_in_viewport : [..] s32;
 cave_tile_ids_set         : Table(s32, Any);
 cave_tile_ids_in_viewport : [..] s32;
 
-encased_tile_ids_set : Table(s32, Any);
+encased_tile_ids_set         : Table(s32, Any);
+encased_tile_ids_in_viewport : [..] s32;
 
 iron_tile_ids_set         : Table(s32, Any);
 iron_tile_ids_in_viewport : [..] s32;
@@ -677,44 +678,47 @@ main :: () {
                                     // one assumption / algorithm is wrong here.
                                     assert(direction_of_encasement != .CENTER);
                                     print_vars(direction_of_encasement);
+
+                                    encase_tiles :: (starting_tile_id: s32, encasing_obsidian_tile_ids_set: *Table) {
+                                        ids_processed  : [..] s32;
+                                        ids_to_process : [..] s32;
+                                        array_add(*ids_to_process, starting_tile_id);
+
+                                        while ids_to_process.count > 0 {
+                                            // Get the next id to process
+                                            id := pop_front(*ids_to_process);
+
+                                            // Make sure the id is valid and hasn't already been processed
+                                            id_already_processed := array_find(ids_processed, id);
+                                            if id_already_processed continue;
+                                            if table_contains(*obsidian_tile_ids_set, id) continue;
+
+                                            // Get the chunk this happened in
+                                            chunk := get_chunk_ptr_by_tile_id(id);
+
+                                            // Mark the tile id as encased
+                                            array_add(*chunk.encased_tile_ids, id);
+                                            table_add(*encased_tile_ids_set, id, 1738);
+
+                                            // Mark it as processed
+                                            array_add(*ids_processed, id);
+
+                                            // Add neighbors as needing to be processed
+                                            array_add(*ids_to_process, id - WORLD_COLS);
+                                            array_add(*ids_to_process, id + WORLD_COLS);
+                                            array_add(*ids_to_process, id + 1);
+                                            array_add(*ids_to_process, id - 1);
+                                        }
+                                    }
+
+                                    tile_to_start_encasing_id := tile_id;
+                                    if direction_of_encasement == .NORTH tile_to_start_encasing_id -= WORLD_COLS;
+                                    if direction_of_encasement == .SOUTH tile_to_start_encasing_id += WORLD_COLS;
+                                    if direction_of_encasement == .EAST  tile_to_start_encasing_id += 1;
+                                    if direction_of_encasement == .WEST  tile_to_start_encasing_id -= 1;
+
+                                    encase_tiles(tile_to_start_encasing_id, *encasing_obsidian_tile_ids_set);
                                 }
-
-                                // get_encased_tile_ids_set :: (starting_tile_id: s32, encasing_obsidian_tile_ids_set: *Table) -> *Table {
-                                //     MIN_TILE_ID :: 1;
-                                //     MAX_TILE_ID :: WORLD_COLS * WORLD_ROWS;
-
-                                //     ids_to_process : [..] s32;
-                                //     array_add(*ids_to_process, starting_tile_id);
-                                //     ids_processed  : [..] s32;
-
-                                //     while ids_to_process.count > 0 && size > 0 {
-                                //         // Get the next id to process
-                                //         id := pop_front(*ids_to_process);
-
-                                //         // Make sure the id is valid and hasn't already been processed
-                                //         id_already_processed := array_find(ids_processed, id);
-                                //         if id_already_processed continue;
-                                //         if id < MIN_TILE_ID continue;
-                                //         if id > MAX_TILE_ID continue;
-                                //         if table_contains(*obsidian_tile_ids_set, id) continue;
-
-                                //         // Get the chunk this happened in
-                                //         chunk := get_chunk_ptr_by_tile_id(id);
-
-                                //         // Mark the tile id as iron
-                                //         array_add(*chunk.iron_tile_ids, id);
-                                //         table_add(iron_tile_ids_set, id, 0);
-
-                                //         // Mark it as processed
-                                //         array_add(*ids_processed, id);
-
-                                //         // Add neighbors as needing to be processed
-                                //         array_add(*ids_to_process, id - world_columns);
-                                //         array_add(*ids_to_process, id + world_columns);
-                                //         array_add(*ids_to_process, id + 1);
-                                //         array_add(*ids_to_process, id - 1);
-                                //     }
-                                // }
                             }
                         }
                     } else {
@@ -1184,6 +1188,7 @@ main :: () {
                 }
 
                 // Then draw any uncovered tiles over the base layer
+                // Draw tiles
                 DRAW_TILES :: true;
                 #if DRAW_TILES {
                     for fully_mined_tile_ids_in_viewport {
@@ -1192,14 +1197,6 @@ main :: () {
                             Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
                             BEIGE, // TODO: texture
                         );
-
-                        if table_contains(*encased_tile_ids_set, it) {
-                            DrawRectangleV(
-                                get_tile_pos_by_id(it),
-                                Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
-                                TRANSPARENT_WHITE
-                            );
-                        }
                     }
 
                     for cave_tile_ids_in_viewport {
@@ -1208,14 +1205,6 @@ main :: () {
                             Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
                             BLACK, // TODO: texture
                         );
-
-                        if table_contains(*encased_tile_ids_set, it) {
-                            DrawRectangleV(
-                                get_tile_pos_by_id(it),
-                                Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
-                                TRANSPARENT_WHITE
-                            );
-                        }
                     }
 
                     for iron_tile_ids_in_viewport {
@@ -1224,14 +1213,6 @@ main :: () {
                             Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
                             LIGHTGRAY, // TODO: texture
                         );
-
-                        if table_contains(*encased_tile_ids_set, it) {
-                            DrawRectangleV(
-                                get_tile_pos_by_id(it),
-                                Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
-                                TRANSPARENT_WHITE
-                            );
-                        }
                     }
 
                     for obsidian_tile_ids_in_viewport {
@@ -1240,14 +1221,6 @@ main :: () {
                             Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
                             DARKGRAY, // TODO: texture
                         );
-
-                        if table_contains(*encased_tile_ids_set, it) {
-                            DrawRectangleV(
-                                get_tile_pos_by_id(it),
-                                Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
-                                TRANSPARENT_WHITE
-                            );
-                        }
                     }
 
                     for water_still_tile_ids_in_viewport {
@@ -1256,14 +1229,6 @@ main :: () {
                             Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
                             BLUE, // TODO: texture
                         );
-
-                        if table_contains(*encased_tile_ids_set, it) {
-                            DrawRectangleV(
-                                get_tile_pos_by_id(it),
-                                Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
-                                TRANSPARENT_WHITE
-                            );
-                        }
                     }
 
                     for water_flowing_tile_ids_in_viewport {
@@ -1272,14 +1237,6 @@ main :: () {
                             Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
                             SKYBLUE, // TODO: texture
                         );
-
-                        if table_contains(*encased_tile_ids_set, it) {
-                            DrawRectangleV(
-                                get_tile_pos_by_id(it),
-                                Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
-                                TRANSPARENT_WHITE
-                            );
-                        }
                     }
 
                     for lava_still_tile_ids_in_viewport {
@@ -1288,14 +1245,6 @@ main :: () {
                             Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
                             RED, // TODO: texture
                         );
-
-                        if table_contains(*encased_tile_ids_set, it) {
-                            DrawRectangleV(
-                                get_tile_pos_by_id(it),
-                                Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
-                                TRANSPARENT_WHITE
-                            );
-                        }
                     }
 
                     for lava_flowing_tile_ids_in_viewport {
@@ -1304,14 +1253,14 @@ main :: () {
                             Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
                             ORANGE, // TODO: texture
                         );
+                    }
 
-                        if table_contains(*encased_tile_ids_set, it) {
-                            DrawRectangleV(
-                                get_tile_pos_by_id(it),
-                                Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
-                                TRANSPARENT_WHITE
-                            );
-                        }
+                    for encased_tile_ids_in_viewport {
+                        DrawRectangleV(
+                            get_tile_pos_by_id(it),
+                            Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
+                            TRANSPARENT_WHITE
+                        );
                     }
                 }
 
@@ -1382,7 +1331,9 @@ main :: () {
     }
 }
 
+// TODO: add hole checking?
 check_encasement :: (tile_id: s32, encasing_obsidian_tile_ids_set: *Table) -> (did_encase: bool) {
+    table_add(encasing_obsidian_tile_ids_set, tile_id, 1738);
     did_encase := check_encasement_step(tile_id, 0, tile_id, encasing_obsidian_tile_ids_set);
     return did_encase;
 }
@@ -2007,6 +1958,7 @@ derive_entities_in_viewport :: (camera: Camera2D) {
 
     array_reset(*fully_mined_tile_ids_in_viewport);
     array_reset(*cave_tile_ids_in_viewport);
+    array_reset(*encased_tile_ids_in_viewport);
     array_reset(*actively_mined_tile_ids_in_viewport);
     array_reset(*iron_tile_ids_in_viewport);
     array_reset(*obsidian_tile_ids_in_viewport);
@@ -2044,8 +1996,6 @@ derive_entities_in_viewport :: (camera: Camera2D) {
             for tile_id: chunk.fully_mined_tile_ids {
                 pos := get_tile_pos_by_id(xx tile_id);
 
-                // Precise Culling: Chunks overlap the screen edge, so we still 
-                // do a quick bounds check to avoid drawing slightly off-screen tiles.
                 if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
                 if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
                 if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
@@ -2058,8 +2008,6 @@ derive_entities_in_viewport :: (camera: Camera2D) {
             for tile_id: chunk.cave_tile_ids {
                 pos := get_tile_pos_by_id(xx tile_id);
 
-                // Precise Culling: Chunks overlap the screen edge, so we still 
-                // do a quick bounds check to avoid drawing slightly off-screen tiles.
                 if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
                 if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
                 if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
@@ -2068,8 +2016,17 @@ derive_entities_in_viewport :: (camera: Camera2D) {
                 array_add(*cave_tile_ids_in_viewport, tile_id);
             }
 
-            // NOTE: Encased tiles are just modifiers of existing tiles, so, no need
-            // to derive them here. We just use them to color existing tiles.
+            // Encased tiles
+            for tile_id: chunk.encased_tile_ids {
+                pos := get_tile_pos_by_id(xx tile_id);
+
+                if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+                if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+                if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+                if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+
+                array_add(*encased_tile_ids_in_viewport, tile_id);
+            }
 
             // Actively mined tiles
             for tile_id: chunk.actively_mined_tile_ids {
