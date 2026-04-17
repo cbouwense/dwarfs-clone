@@ -691,16 +691,16 @@ main :: () {
                                     // table_print(encasing_obsidian_tile_ids_set);
 
                                     encase_tiles :: (starting_tile_id: s32) {
-                                        ids_processed  : [..] s32;
+                                        ids_processed  : Table(s32, s32);
                                         ids_to_process : [..] s32;
                                         array_add(*ids_to_process, starting_tile_id);
 
                                         while ids_to_process.count > 0 {
                                             // Get the next id to process
-                                            id := pop_front(*ids_to_process);
+                                            id := pop_front_fast(*ids_to_process);
 
                                             // Make sure the id is valid and hasn't already been processed
-                                            id_already_processed := array_find(ids_processed, id);
+                                            id_already_processed := table_contains(*ids_processed, id);
                                             if id_already_processed continue;
                                             if table_contains(*obsidian_tile_ids_set, id) continue;
 
@@ -712,7 +712,7 @@ main :: () {
                                             table_set(*encased_tile_ids_set, id, 1738);
 
                                             // Mark it as processed
-                                            array_add(*ids_processed, id);
+                                            table_set(*ids_processed, id, 1738);
 
                                             // Add neighbors as needing to be processed
                                             array_add(*ids_to_process, id - WORLD_COLS);

@@ -150,6 +150,12 @@ pop_front :: (array: *[] $T) -> T {
     return result;
 }
 
+pop_front_fast :: (array: *[] $T) -> T {
+    result := array.*[0];
+    array_unordered_remove_by_index(array, 0);
+    return result;
+}
+
 integer_log2 :: (n : u32) -> s32 {
     log : s32 = 0;
     shifted := n >> 1;
