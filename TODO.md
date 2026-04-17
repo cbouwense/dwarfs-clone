@@ -19,6 +19,16 @@
     - cause:
     - correction:
     - confirmation:
+- dwarves can mine still water
+    - condition: reproducible on 6c2bb4d
+    - cause:
+    - correction:
+    - confirmation:
+- obsidian can be placed in encasement
+    - condition: reproducible on 6c2bb4d
+    - cause:
+    - correction:
+    - confirmation:
 
 # Core
 
@@ -31,6 +41,7 @@
 
 # Performance
 
+- Big encasements tank fps
 - Add dwarves and bases to chunks
 - Liquid kills could be optimized by checking chunks
 - Just use math to get neighboring tile ids

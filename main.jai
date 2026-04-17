@@ -495,6 +495,8 @@ main :: () {
     camera.rotation = 0.0;
     camera.zoom     = 0.2;
 
+    persistent_encasing_obsidian_tile_ids_set: Table(s32, Color);
+
     while !WindowShouldClose() {
         reset_temporary_storage();
 
@@ -506,6 +508,7 @@ main :: () {
         mouse_pos_in_ui    := GetMousePosition();
         mouse_pos_in_world := GetScreenToWorld2D(mouse_pos_in_ui, camera);
         mouse_wheel_move   := GetMouseWheelMove();
+
 
         derive_entities_in_viewport(camera);
 
@@ -632,17 +635,19 @@ main :: () {
 
                                 // Check to see if we've just enclosed water or lava
                                 encasing_obsidian_tile_ids_set: Table(s32, s32);
-                                did_encase := check_encasement(tile_id, *encasing_obsidian_tile_ids_set);
+                                did_encase := check_encasement(tile_id, *encasing_obsidian_tile_ids_set, *persistent_encasing_obsidian_tile_ids_set);
                                 print_vars(did_encase);
 
                                 // If we did encase a section, find the inside portion that is encased.
-                                // Start by casting a ray north, we first need to find non-obsidian. If we don't,
-                                // cast in the next cardinal direction. Once we find a cardinal direction that is
-                                // not obsidian, then we go until we either find a visited obsidian tile, or out of
-                                // bounds. If we get a visited obsidian tile, then this cardinal direction is inside
-                                // of the encasement. If out of bounds, then this cardinal direction is outside of
-                                // the encasement, and we need to keep looking at other cardinal directions.
+                                // Start by casting a ray north, the first tile *needs* to be non-obsidian. If we don't,
+                                // cast in the next cardinal direction. Once we find a cardinal direction that starts
+                                // with non-obsidian, go until out of bounds. Tally up the amount of times we intersect
+                                // *visited* obsidian tiles. If the crossings is odd, then this direction is inside the
+                                // encasement. If it is even, it is not.
                                 if did_encase {
+                                    // We may have multiple directions of encasement. Consider a block being placed in
+                                    // the middle of two, three, or even four diamonds that were only missing the spot
+                                    // that was just placed.
                                     directions_of_encasement : [..]Direction;
 
                                     tile_pos := get_tile_pos_by_id(tile_id);
@@ -652,30 +657,38 @@ main :: () {
                                         dy = TILE_DIRECTION_DELTAS[i][1];
 
                                         multiplier := 1;
-                                        already_hit_non_obsidian := false;
+                                        obsidian_hits := 0;
                                         should_continue_looking_in_this_direction := true;
+                                        is_intersecting_encasing_obsidian := false;
                                         while should_continue_looking_in_this_direction {
                                             neighbor_pos := Vector2.{ tile_pos.x + dx * multiplier, tile_pos.y + dy * multiplier };
                                             found_neighbor, neighbor_id := find_tile_id_by_pos(neighbor_pos);
 
                                             if !found_neighbor { // Hit out of bounds
                                                 should_continue_looking_in_this_direction = false;
-                                            } else if table_contains(*obsidian_tile_ids_set, neighbor_id) {
-                                                should_continue_looking_in_this_direction = false;
-                                                if already_hit_non_obsidian array_add(*directions_of_encasement, cast(Direction) i);
+                                            } else if table_contains(*encasing_obsidian_tile_ids_set, neighbor_id) {
+                                                if multiplier == 1 {
+                                                    // If we hit obsidian as the very first tile, it's cooked.
+                                                    should_continue_looking_in_this_direction = false;
+                                                } else if !is_intersecting_encasing_obsidian {
+                                                    is_intersecting_encasing_obsidian = true;
+                                                    obsidian_hits += 1;
+                                                }
                                             } else {
-                                                already_hit_non_obsidian = true;
+                                                is_intersecting_encasing_obsidian = false;
                                             }
                                     
                                             multiplier += 1;
                                         }
+
+                                        if obsidian_hits % 2 == 1 array_add(*directions_of_encasement, cast(Direction) i);
                                     }
 
                                     // If we think we encased an area, we better be able to find it. Otherwise at least
                                     // one assumption / algorithm is wrong here.
-                                    assert(directions_of_encasement.count > 0);
+                                    // assert(directions_of_encasement.count > 0);
                                     print_vars(directions_of_encasement);
-                                    table_print(encasing_obsidian_tile_ids_set);
+                                    // table_print(encasing_obsidian_tile_ids_set);
 
                                     encase_tiles :: (starting_tile_id: s32) {
                                         ids_processed  : [..] s32;
@@ -1255,12 +1268,24 @@ main :: () {
                         );
                     }
 
-                    for encased_tile_ids_in_viewport {
-                        DrawRectangleV(
-                            get_tile_pos_by_id(it),
-                            Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
-                            TRANSPARENT_WHITE
-                        );
+                    if !debug_mode {
+                        for encased_tile_ids_in_viewport {
+                            DrawRectangleV(
+                                get_tile_pos_by_id(it),
+                                Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
+                                TRANSPARENT_WHITE
+                            );
+                        }
+                    }
+
+                    if debug_mode {
+                        for persistent_encasing_obsidian_tile_ids_set {
+                            DrawRectangleV(
+                                get_tile_pos_by_id(it_index),
+                                Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
+                                it
+                            );
+                        }
                     }
                 }
 
@@ -1335,9 +1360,9 @@ get_neighbor_tile_ids :: (tile_id: s32) -> [..] s32 {
     neighbor_tile_ids : [..] s32;
     dx, dy : s32;
 
-    for TILE_DIRECTION_ID_DELTAS {
-        dx = it[i][0];
-        dy = it[i][1];
+    for i: 0..7 {
+        dx = TILE_DIRECTION_ID_DELTAS[i][0];
+        dy = TILE_DIRECTION_ID_DELTAS[i][1];
 
         array_add(*neighbor_tile_ids, tile_id + dx + dy);
     }
@@ -1349,9 +1374,9 @@ get_neighbor_tile_ids_of_type :: (tile_id: s32, tile_type: TileType) -> [..] s32
     neighbor_tile_ids : [..] s32;
     dx, dy : s32;
 
-    for TILE_DIRECTION_ID_DELTAS {
-        dx = it[i][0];
-        dy = it[i][1];
+    for i: 0..7 {
+        dx = TILE_DIRECTION_ID_DELTAS[i][0];
+        dy = TILE_DIRECTION_ID_DELTAS[i][1];
 
         neighbor_id := tile_id + dx + dy;
 
@@ -1368,7 +1393,7 @@ get_neighbor_tile_ids_of_type :: (tile_id: s32, tile_type: TileType) -> [..] s32
         // TODO: make utilities for these, probably
         should_add_neighbor_to_list := false;
         if #complete tile_type == {
-            case DIRT; {
+            case .DIRT; {
                 should_add_neighbor_to_list = (
                     !is_fully_mined && 
                     !is_cave && 
@@ -1380,67 +1405,71 @@ get_neighbor_tile_ids_of_type :: (tile_id: s32, tile_type: TileType) -> [..] s32
                     is_obsidian
                 );
             }
-            case MINED; {
+            case .MINED; {
                 should_add_neighbor_to_list = is_fully_mined;
             }
-            case CAVE; {
+            case .CAVE; {
                 should_add_neighbor_to_list = is_cave;
             }
-            case ENCASED; {
+            case .ENCASED; {
                 should_add_neighbor_to_list = is_encased;
             }
-            case WATER_STILL; {
+            case .WATER_STILL; {
                 should_add_neighbor_to_list = is_water_still;
             }
-            case WATER_FLOWING; {
+            case .WATER_FLOWING; {
                 should_add_neighbor_to_list = is_water_flowing;
             }
-            case LAVA_STILL; {
+            case .LAVA_STILL; {
                 should_add_neighbor_to_list = is_lava_still;
             }
-            case LAVA_FLOWING; {
+            case .LAVA_FLOWING; {
                 should_add_neighbor_to_list = is_lava_flowing;
             }
-            case IRON; {
+            case .IRON; {
                 should_add_neighbor_to_list = is_iron;
             }
-            case OBSIDIAN; {
+            case .OBSIDIAN; {
                 should_add_neighbor_to_list = is_obsidian;
             }
         }
 
-        if should_add_neighbor_to_list array_add(*neighbor_tile_ids, );
+        if should_add_neighbor_to_list array_add(*neighbor_tile_ids, neighbor_id);
     }
 
     return neighbor_tile_ids;
 }
 
 // TODO: add hole checking and water / lava?
-check_encasement :: (tile_id: s32) -> (did_encase: bool) {
-    obsidian_neighbors := get_neighbor_tile_ids_of_type(tile_id, TileType.OBSIDIAN);
+check_encasement_old :: (tile_id: s32, encasing_obsidian_tile_ids_set: *Table) -> (did_encase: bool) {
+    obsidian_neighbor_ids := get_neighbor_tile_ids_of_type(tile_id, TileType.OBSIDIAN);
 
     // We need at least 2 adjacent obsidian tiles to form a loop
-    if neighbors.count < 2 return false;
+    if obsidian_neighbor_ids.count < 2 return false;
 
-    // Check pairs of neighbors to see if they connect through the existing wall
-    for i: 0..neighbors.count-2 {
-        for j: i+1..neighbors.count-1 {
-            start_id := neighbors[i];
-            end_id   := neighbors[j];
+    // Check pairs of neighbors to see if they connect through the existing wall.
+    for i: 0..obsidian_neighbor_ids.count-2 {
+        // Exclude the second neighbor from being within the orbit of the first.
+        // This excludes neighbor patterns for which we couldn't have created a
+        // new encasement.
+        neighbor_ids_to_exclude := get_neighbor_tile_ids_of_type(obsidian_neighbor_ids[i], TileType.OBSIDIAN);
+
+        for j: i+1..obsidian_neighbor_ids.count-1 {
+            if array_find(neighbor_ids_to_exclude, obsidian_neighbor_ids[j]) continue;
+
+            start_id := obsidian_neighbor_ids[i];
+            end_id   := obsidian_neighbor_ids[j];
 
             // Run BFS to get an ordered array of tile IDs.
-            path := find_shortest_obsidian_path(start_id, end_id, new_tile_id);
+            // TODO: rename stuff here
+            path := find_shortest_obsidian_path(start_id, end_id, tile_id);
             if path.count > 0 {
                 cycle_points: [..] Vector2;
-                array_add(*cycle_points, get_tile_pos_by_id(new_tile_id));
+                array_add(*cycle_points, get_tile_pos_by_id(tile_id));
                 for tile: path {
+                    table_set(encasing_obsidian_tile_ids_set, tile, 1738);
                     array_add(*cycle_points, get_tile_pos_by_id(tile));
                 }
-
-                // WHAT I WAS DOING: Just started the change from the DFS to the BFS. Basically we check the encasement
-                // with math instead of flood fill. check_encasement, find_shortest_obsidian_path, and check_interior_volume
-                // are from gemini and should probably be mostly good to go. Go through any compilation errors and see
-                // if it works.
 
                 if check_interior_volume(cycle_points) > 0 {
                     return true;
@@ -1448,6 +1477,62 @@ check_encasement :: (tile_id: s32) -> (did_encase: bool) {
             }
         }
     }
+
+    // TODO:?
+    return false;
+}
+
+check_encasement :: (tile_id: s32, encasing_obsidian_tile_ids_set: *Table, persistent_encasing_obsidian_tile_ids_set: *Table) -> (did_encase: bool) {
+    obsidian_neighbor_ids := get_neighbor_tile_ids_of_type(tile_id, TileType.OBSIDIAN);
+
+    // We need at least 2 adjacent obsidian tiles to form a loop
+    if obsidian_neighbor_ids.count < 2 return false;
+
+    found_any_loop := false;
+
+    // Check pairs of neighbors to see if they connect through the existing wall.
+    for i: 0..obsidian_neighbor_ids.count-2 {
+        // Exclude the second neighbor from being within the orbit of the first.
+        // This excludes neighbor patterns for which we couldn't have created a
+        // new encasement.
+        neighbor_ids_to_exclude := get_neighbor_tile_ids_of_type(obsidian_neighbor_ids[i], TileType.OBSIDIAN);
+
+        for j: i+1..obsidian_neighbor_ids.count-1 {
+            if array_find(neighbor_ids_to_exclude, obsidian_neighbor_ids[j]) continue;
+
+            start_id := obsidian_neighbor_ids[i];
+            end_id   := obsidian_neighbor_ids[j];
+
+            // Run BFS to get an ordered array of tile IDs.
+            path := find_shortest_obsidian_path(start_id, end_id, tile_id);
+            if path.count > 0 {
+                cycle_points: [..] Vector2;
+                // array_add(*cycle_points, get_tile_pos_by_id(tile_id));
+                
+                // Only build the cycle points first
+                for tile: path {
+                    array_add(*cycle_points, get_tile_pos_by_id(tile));
+                }
+
+                // If it actually has volume, THEN add it to the encasement table
+                if check_interior_volume(cycle_points) > 0 {
+                    color := Color.{
+                        cast(u8) random_get_within_range(0, 255),
+                        cast(u8) random_get_within_range(0, 255),
+                        cast(u8) random_get_within_range(0, 255),
+                        255
+                    };
+                    for tile: path {
+                        table_set(encasing_obsidian_tile_ids_set, tile, 1738);
+                        table_add(persistent_encasing_obsidian_tile_ids_set, tile, color);
+                    }
+                    found_any_loop = true;
+                }
+            }
+        }
+    }
+
+    return found_any_loop;
 }
 
 // BFS of the two obsidian blocks neighboring 
@@ -1511,15 +1596,6 @@ find_shortest_obsidian_path :: (start_id: s32, end_id: s32, ignore_id: s32) -> [
             curr = parent;
         }
         array_add(*path, start_id);
-        
-        // Optional: Reverse the array so it reads from start to end.
-        // Shoelace actually doesn't care if it goes forwards or backwards 
-        // as long as the vertices are in perimeter order, but it's cleaner.
-        // for i: 0..(path.count / 2) - 1 {
-        //     temp := path[i];
-        //     path[i] = path[path.count - 1 - i];
-        //     path[path.count - 1 - i] = temp;
-        // }
     }
 
     return path;
@@ -1539,6 +1615,8 @@ check_interior_volume :: (cycle: [] Vector2) -> float {
     // Pick's Theorem
     boundary_points := cast(float) n;
     interior_points := area - (boundary_points / 2.0) + 1.0;
+
+    print_vars(area, boundary_points, interior_points);
 
     return interior_points;
 }
