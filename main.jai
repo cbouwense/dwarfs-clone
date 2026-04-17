@@ -696,7 +696,7 @@ main :: () {
 
                                             // Mark the tile id as encased
                                             array_add(*chunk.encased_tile_ids, id);
-                                            table_add(*encased_tile_ids_set, id, 1738);
+                                            table_set(*encased_tile_ids_set, id, 1738);
 
                                             // Mark it as processed
                                             array_add(*ids_processed, id);
@@ -912,7 +912,7 @@ main :: () {
 
                                                     chunk := get_chunk_ptr_by_tile_id(tile_id_next_in_dwarfs_path);
                                                     array_add(*chunk.actively_mined_tile_ids, tile_id_next_in_dwarfs_path);
-                                                    table_add(*actively_mined_tile_ids_to_health_table, tile_id_next_in_dwarfs_path, DIRT_HEALTH);
+                                                    table_set(*actively_mined_tile_ids_to_health_table, tile_id_next_in_dwarfs_path, DIRT_HEALTH);
                                                 }
                                             }
                                         }
@@ -929,7 +929,7 @@ main :: () {
 
                                     chunk := get_chunk_ptr_by_tile_id(tile_id_next_in_dwarfs_path);
                                     array_add(*chunk.actively_mined_tile_ids, tile_id_next_in_dwarfs_path);
-                                    table_add(*actively_mined_tile_ids_to_health_table, tile_id_next_in_dwarfs_path, IRON_HEALTH);
+                                    table_set(*actively_mined_tile_ids_to_health_table, tile_id_next_in_dwarfs_path, IRON_HEALTH);
                                 }
 
                             case .MINING;
@@ -1331,10 +1331,9 @@ main :: () {
     }
 }
 
-// TODO: add hole checking?
+// TODO: add hole checking and water / lava
 check_encasement :: (tile_id: s32, encasing_obsidian_tile_ids_set: *Table) -> (did_encase: bool) {
     found_cycle := check_encasement_step(tile_id, 0, tile_id, encasing_obsidian_tile_ids_set);
-
     if !found_cycle return false;
 
     // The check_encasement_step can only tell us if we found a cycle, not if we actually technically encased anything.
@@ -1351,18 +1350,18 @@ check_encasement :: (tile_id: s32, encasing_obsidian_tile_ids_set: *Table) -> (d
         // TODO: you were about to keep a count of the rows and columns to eventually do
         // return columns > 2 && rows > 2;
 
-        table_add(*rows_cycle_inhabits_set, row_this_tile_id_is_in, 1738);
-        table_add(*columns_cycle_inhabits_set, col_this_tile_id_is_in, 1738);
+        table_set(*rows_cycle_inhabits_set, row_this_tile_id_is_in, 1738);
+        table_set(*columns_cycle_inhabits_set, col_this_tile_id_is_in, 1738);
     }
 
     table_print(columns_cycle_inhabits_set);
     table_print(rows_cycle_inhabits_set);
 
-    return did_encase;
+    return rows_cycle_inhabits_set.count > 2 && columns_cycle_inhabits_set.count > 2;
 }
 
 check_encasement_step :: (curr_tile_id: s32, prev_tile_id: s32, initial_tile_id: s32, visited_set: *Table) -> bool {
-    table_add(visited_set, curr_tile_id, 1738);
+    table_set(visited_set, curr_tile_id, 1738);
 
     dx, dy: s32;
 
@@ -1509,7 +1508,7 @@ find_or_create_chunk :: (chunk_x: s32, chunk_y: s32) -> (status: FindOrCreateChu
     // The chunk doesn't exist yet, so let's make a new one.
     new_chunk := New(Chunk);
     
-    table_add(*active_chunks, key, new_chunk);
+    table_set(*active_chunks, key, new_chunk);
     
     return .CHUNK_CREATED, new_chunk;
 }
@@ -1824,35 +1823,35 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType) {
     if #complete as_type == {
         case .CAVE; {
             array_add(*chunk.cave_tile_ids, tile_id);
-            table_add(*cave_tile_ids_set, tile_id, 1738);
+            table_set(*cave_tile_ids_set, tile_id, 1738);
         }
         case .MINED; {
             array_add(*chunk.fully_mined_tile_ids, tile_id);
-            table_add(*fully_mined_tile_ids_set, tile_id, 1738);
+            table_set(*fully_mined_tile_ids_set, tile_id, 1738);
         }
         case .ENCASED; {
             array_add(*chunk.encased_tile_ids, tile_id);
-            table_add(*encased_tile_ids_set, tile_id, 1738);
+            table_set(*encased_tile_ids_set, tile_id, 1738);
         }
         case .WATER_STILL; {
             array_add(*water_still_tile_ids, tile_id);
             array_add(*chunk.water_still_tile_ids, tile_id);
-            table_add(*water_still_tile_ids_set, tile_id, 1738);
+            table_set(*water_still_tile_ids_set, tile_id, 1738);
         }
         case .WATER_FLOWING; {
             array_add(*water_flowing_tile_ids, tile_id);
             array_add(*chunk.water_flowing_tile_ids, tile_id);
-            table_add(*water_flowing_tile_ids_set, tile_id, 1738);
+            table_set(*water_flowing_tile_ids_set, tile_id, 1738);
         }
         case .LAVA_STILL; {
             array_add(*lava_still_tile_ids, tile_id);
             array_add(*chunk.lava_still_tile_ids, tile_id);
-            table_add(*lava_still_tile_ids_set, tile_id, 1738);
+            table_set(*lava_still_tile_ids_set, tile_id, 1738);
         }
         case .LAVA_FLOWING; {
             array_add(*lava_flowing_tile_ids, tile_id);
             array_add(*chunk.lava_flowing_tile_ids, tile_id);
-            table_add(*lava_flowing_tile_ids_set, tile_id, 1738);
+            table_set(*lava_flowing_tile_ids_set, tile_id, 1738);
         }
         case .DIRT; #through;
         case .IRON; {
@@ -1860,7 +1859,7 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType) {
         }
         case .OBSIDIAN; {
             array_add(*chunk.obsidian_tile_ids, tile_id);
-            table_add(*obsidian_tile_ids_set, tile_id, 1738);
+            table_set(*obsidian_tile_ids_set, tile_id, 1738);
         }
     }
 
@@ -1962,7 +1961,7 @@ spawn_iron :: (
 
         // Mark the tile id as iron
         array_add(*chunk.iron_tile_ids, id);
-        table_add(iron_tile_ids_set, id, 0);
+        table_set(iron_tile_ids_set, id, 0);
 
         // Mark it as processed
         array_add(*ids_processed, id);
