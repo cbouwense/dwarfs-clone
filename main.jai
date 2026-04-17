@@ -1331,64 +1331,216 @@ main :: () {
     }
 }
 
-// TODO: add hole checking and water / lava
-check_encasement :: (tile_id: s32, encasing_obsidian_tile_ids_set: *Table) -> (did_encase: bool) {
-    found_cycle := check_encasement_step(tile_id, 0, tile_id, encasing_obsidian_tile_ids_set);
-    if !found_cycle return false;
+get_neighbor_tile_ids :: (tile_id: s32) -> [..] s32 {
+    neighbor_tile_ids : [..] s32;
+    dx, dy : s32;
 
-    // The check_encasement_step can only tell us if we found a cycle, not if we actually technically encased anything.
-    // It is possible that we make a cycle by drawing a tight shape with obsidian. So, we need to check the breadth of
-    // the encasing tiles.
-    rows_cycle_inhabits_set    : Table(s32, s32);
-    columns_cycle_inhabits_set : Table(s32, s32);
-    for encasing_obsidian_tile_ids_set {
-        tile_id := it_index;
-        
-        row_this_tile_id_is_in := cast(s32) tile_id / WORLD_COLS;
-        col_this_tile_id_is_in := tile_id % WORLD_COLS;
+    for TILE_DIRECTION_ID_DELTAS {
+        dx = it[i][0];
+        dy = it[i][1];
 
-        // TODO: you were about to keep a count of the rows and columns to eventually do
-        // return columns > 2 && rows > 2;
-
-        table_set(*rows_cycle_inhabits_set, row_this_tile_id_is_in, 1738);
-        table_set(*columns_cycle_inhabits_set, col_this_tile_id_is_in, 1738);
+        array_add(*neighbor_tile_ids, tile_id + dx + dy);
     }
 
-    table_print(columns_cycle_inhabits_set);
-    table_print(rows_cycle_inhabits_set);
-
-    return rows_cycle_inhabits_set.count > 2 && columns_cycle_inhabits_set.count > 2;
+    return neighbor_tile_ids;
 }
 
-check_encasement_step :: (curr_tile_id: s32, prev_tile_id: s32, initial_tile_id: s32, visited_set: *Table) -> bool {
-    table_set(visited_set, curr_tile_id, 1738);
+get_neighbor_tile_ids_of_type :: (tile_id: s32, tile_type: TileType) -> [..] s32 {
+    neighbor_tile_ids : [..] s32;
+    dx, dy : s32;
 
-    dx, dy: s32;
+    for TILE_DIRECTION_ID_DELTAS {
+        dx = it[i][0];
+        dy = it[i][1];
 
-    for i: 0..7 {
-        dx = TILE_DIRECTION_ID_DELTAS[i][0];
-        dy = TILE_DIRECTION_ID_DELTAS[i][1];
+        neighbor_id := tile_id + dx + dy;
 
-        neighbor_id := curr_tile_id + dx + dy;
+        is_fully_mined   := table_contains(*fully_mined_tile_ids_set, neighbor_id);
+        is_cave          := table_contains(*cave_tile_ids_set, neighbor_id);
+        is_encased       := table_contains(*encased_tile_ids_set, neighbor_id);
+        is_iron          := table_contains(*iron_tile_ids_set, neighbor_id);
+        is_water_still   := table_contains(*water_still_tile_ids_set, neighbor_id);
+        is_water_flowing := table_contains(*water_flowing_tile_ids_set, neighbor_id);
+        is_lava_still    := table_contains(*lava_still_tile_ids_set, neighbor_id);
+        is_lava_flowing  := table_contains(*lava_flowing_tile_ids_set, neighbor_id);
+        is_obsidian      := table_contains(*obsidian_tile_ids_set, neighbor_id);
 
-        // Don't go backwards.
-        if neighbor_id == prev_tile_id continue;
+        // TODO: make utilities for these, probably
+        should_add_neighbor_to_list := false;
+        if #complete tile_type == {
+            case DIRT; {
+                should_add_neighbor_to_list = (
+                    !is_fully_mined && 
+                    !is_cave && 
+                    !is_iron && 
+                    is_water_still && 
+                    is_water_flowing && 
+                    is_lava_still && 
+                    is_lava_flowing && 
+                    is_obsidian
+                );
+            }
+            case MINED; {
+                should_add_neighbor_to_list = is_fully_mined;
+            }
+            case CAVE; {
+                should_add_neighbor_to_list = is_cave;
+            }
+            case ENCASED; {
+                should_add_neighbor_to_list = is_encased;
+            }
+            case WATER_STILL; {
+                should_add_neighbor_to_list = is_water_still;
+            }
+            case WATER_FLOWING; {
+                should_add_neighbor_to_list = is_water_flowing;
+            }
+            case LAVA_STILL; {
+                should_add_neighbor_to_list = is_lava_still;
+            }
+            case LAVA_FLOWING; {
+                should_add_neighbor_to_list = is_lava_flowing;
+            }
+            case IRON; {
+                should_add_neighbor_to_list = is_iron;
+            }
+            case OBSIDIAN; {
+                should_add_neighbor_to_list = is_obsidian;
+            }
+        }
 
-        // If we ended up at the initial tile, then we've found a cycle.
-        if neighbor_id == initial_tile_id return true;
+        if should_add_neighbor_to_list array_add(*neighbor_tile_ids, );
+    }
 
-        // Don't process visited tiles.
-        if table_contains(visited_set, neighbor_id) continue;
+    return neighbor_tile_ids;
+}
 
-        // If the neighbor is unvisited obsidian that is not the initial tile, continue the DFS.
-        if table_contains(*obsidian_tile_ids_set, neighbor_id) {
-            return check_encasement_step(neighbor_id, curr_tile_id, initial_tile_id, visited_set);
+// TODO: add hole checking and water / lava?
+check_encasement :: (tile_id: s32) -> (did_encase: bool) {
+    obsidian_neighbors := get_neighbor_tile_ids_of_type(tile_id, TileType.OBSIDIAN);
+
+    // We need at least 2 adjacent obsidian tiles to form a loop
+    if neighbors.count < 2 return false;
+
+    // Check pairs of neighbors to see if they connect through the existing wall
+    for i: 0..neighbors.count-2 {
+        for j: i+1..neighbors.count-1 {
+            start_id := neighbors[i];
+            end_id   := neighbors[j];
+
+            // Run BFS to get an ordered array of tile IDs.
+            path := find_shortest_obsidian_path(start_id, end_id, new_tile_id);
+            if path.count > 0 {
+                cycle_points: [..] Vector2;
+                array_add(*cycle_points, get_tile_pos_by_id(new_tile_id));
+                for tile: path {
+                    array_add(*cycle_points, get_tile_pos_by_id(tile));
+                }
+
+                // WHAT I WAS DOING: Just started the change from the DFS to the BFS. Basically we check the encasement
+                // with math instead of flood fill. check_encasement, find_shortest_obsidian_path, and check_interior_volume
+                // are from gemini and should probably be mostly good to go. Go through any compilation errors and see
+                // if it works.
+
+                if check_interior_volume(cycle_points) > 0 {
+                    return true;
+                }
+            }
+        }
+    }
+}
+
+// BFS of the two obsidian blocks neighboring 
+find_shortest_obsidian_path :: (start_id: s32, end_id: s32, ignore_id: s32) -> [..] s32 {
+    path: [..] s32;
+
+    // Track which tiles we've seen so we don't loop infinitely
+    visited: Table(s32, bool);
+    defer deinit(*visited);
+
+    // Track the "parent" of each tile to reconstruct the path later
+    came_from: Table(s32, s32);
+    defer deinit(*came_from);
+
+    // The BFS queue
+    queue: [..] s32;
+    defer array_free(queue);
+
+    // Initialize BFS with our starting neighbor
+    array_add(*queue, start_id);
+    table_set(*visited, start_id, true);
+
+    found_path := false;
+
+    while queue.count > 0 {
+        curr_id := pop_front(*queue);
+
+        // If we reached the target neighbor, we're done searching.
+        if curr_id == end_id {
+            found_path = true;
+            break;
+        }
+
+        for i: 0..7 {
+            dx := TILE_DIRECTION_ID_DELTAS[i][0];
+            dy := TILE_DIRECTION_ID_DELTAS[i][1];
+            
+            neighbor_id := curr_id + dx + dy; 
+
+            // Don't step on the tile we just placed. If we could, then we wouldn't actually
+            // be detecting any loops. Think about it.
+            if neighbor_id == ignore_id continue;
+            if !table_contains(*obsidian_tile_ids_set, neighbor_id) continue;
+            if table_contains(*visited, neighbor_id) continue;
+
+            table_set(*visited, neighbor_id, true);
+            table_set(*came_from, neighbor_id, curr_id);
+            array_add(*queue, neighbor_id);
         }
     }
 
-    // If none of our neighbors are the initial tile or unvisited obsidian, we've come
-    // to the end of the line.
-    return false;
+    // Reconstruct the path. This is important because the Shoelace thing needs the points to be in order.
+    if found_path {
+        // Walk backwards from end_id to start_id using our came_from map
+        curr := end_id;
+        while curr != start_id {
+            array_add(*path, curr);
+            
+            success, parent := table_find(*came_from, curr);
+            assert(success, "Path reconstruction failed to find parent!");
+            curr = parent;
+        }
+        array_add(*path, start_id);
+        
+        // Optional: Reverse the array so it reads from start to end.
+        // Shoelace actually doesn't care if it goes forwards or backwards 
+        // as long as the vertices are in perimeter order, but it's cleaner.
+        // for i: 0..(path.count / 2) - 1 {
+        //     temp := path[i];
+        //     path[i] = path[path.count - 1 - i];
+        //     path[path.count - 1 - i] = temp;
+        // }
+    }
+
+    return path;
+}
+
+check_interior_volume :: (cycle: [] Vector2) -> float {
+    area: float = 0;
+    n := cycle.count;
+    
+    // Shoelace Formula
+    for i: 0..n-1 {
+        j := (i + 1) % n;
+        area += (cycle[i].x * cycle[j].y) - (cycle[j].x * cycle[i].y);
+    }
+    area = abs(area) / 2.0;
+
+    // Pick's Theorem
+    boundary_points := cast(float) n;
+    interior_points := area - (boundary_points / 2.0) + 1.0;
+
+    return interior_points;
 }
 
 are_all_neighbors_liquid :: (tile_id: s32) -> bool {
