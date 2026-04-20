@@ -98,10 +98,11 @@ init_sprites :: () {
 // Controls
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-selected                : bool;
+select_is_pressed_once  : bool;
 select_is_held_down     : bool;
 add_base                : bool;
 add_iron                : bool;
+add_as_dynamite         : bool;
 add_as_obsidian         : bool;
 started_to_create_path  : bool;
 dragging_to_create_path : bool;
@@ -305,6 +306,9 @@ bases_in_viewport   : [..] Base;
 dwarves             : [..] Dwarf;
 dwarves_in_viewport : [..] Dwarf;
 
+tiles_with_dynamite_ids             : [..] s32;
+tiles_with_dynamite_ids_in_viewport : [..] s32;
+
 path_being_traced : Path;
 paths             : [..] Path;
 // paths_in_viewport : [..] Path;
@@ -342,6 +346,7 @@ main :: () {
         controls.select[0]              = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_LEFT   };
         controls.add_base[0]            = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_B               };
         controls.add_iron[0]            = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_I               };
+        controls.add_as_dynamite[0]     = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_E               };
         controls.add_as_obsidian[0]     = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_Q               };
         controls.add_as_obsidian[1]     = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT_SHIFT      };
         controls.add_as_obsidian[2]     = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT_SHIFT     };
@@ -524,10 +529,11 @@ main :: () {
             dragging_to_create_path_prev = dragging_to_create_path;
 
             // Game controls
-            selected                = control_is_pressed(controls.select);
+            select_is_pressed_once  = control_is_pressed(controls.select);
             select_is_held_down     = control_is_down(controls.select);
             add_base                = control_is_pressed(controls.add_base);
             add_iron                = control_is_pressed(controls.add_iron);
+            add_as_dynamite         = control_is_down(controls.add_as_dynamite);
             add_as_obsidian         = control_is_down(controls.add_as_obsidian);
             started_to_create_path  = control_is_pressed(controls.drag_as_create_path);
             dragging_to_create_path = control_is_down(controls.drag_as_create_path) && !IsKeyDown(KeyboardKey.KEY_LEFT_CONTROL); // TODO: just a little debug hack
@@ -754,7 +760,21 @@ main :: () {
                                 }
                             }
                         }
-                    } else {
+                    }
+                    else if add_as_dynamite {
+                        if select_is_pressed_once {
+                            // Try to add dynamite to the selected tile
+                            tile_id := get_tile_id_by_pos(mouse_pos_in_world);
+
+                            tile_is_mined   := table_contains(*fully_mined_tile_ids_set, tile_id);
+                            tile_is_encased := table_contains(*encased_tile_ids_set, tile_id);
+
+                            if tile_is_mined && !tile_is_encased {
+                                array_add(*tiles_with_dynamite_ids, tile_id);
+                            }
+                        }
+                    }
+                    else {
                         if dragging_to_create_path {
                             if started_to_create_path {
                                 for dwarf: dwarves_in_viewport {
@@ -1400,6 +1420,24 @@ main :: () {
                         };
 
                         dest := get_world_rect_from_pos(dwarf.pos);
+
+                        DrawTexturePro(tilemap_texture_general, source, dest, Vector2.{0,0}, 0.0, WHITE);
+                    }
+                }
+
+                // Draw dynamite
+                DRAW_DYNAMITE :: true;
+                #if DRAW_DYNAMITE {
+                    for tiles_with_dynamite_ids_in_viewport {
+                        source := Rectangle.{
+                            4 * TILEMAP_GENERAL_TILE_WIDTH,
+                            0 * TILEMAP_GENERAL_TILE_HEIGHT,
+                            TILEMAP_GENERAL_TILE_WIDTH,
+                            TILEMAP_GENERAL_TILE_HEIGHT,
+                        };
+
+                        pos  := get_tile_pos_by_id(it);
+                        dest := get_world_rect_from_pos(pos);
 
                         DrawTexturePro(tilemap_texture_general, source, dest, Vector2.{0,0}, 0.0, WHITE);
                     }
@@ -2286,6 +2324,7 @@ derive_entities_in_viewport :: (camera: Camera2D) {
     array_reset(*lava_flowing_tile_ids_in_viewport);
     array_reset(*bases_in_viewport);
     array_reset(*dwarves_in_viewport);
+    array_reset(*tiles_with_dynamite_ids_in_viewport);
     
     // Calculate chunk dimensions in pixels
     chunk_pixel_width  := cast(float)(CHUNK_SIZE) * TILEMAP_GENERAL_WORLD_WIDTH;
@@ -2454,6 +2493,17 @@ derive_entities_in_viewport :: (camera: Camera2D) {
 
             //     array_add(*dwarves_in_viewport, dwarf);
             // }
+            // // --- Dynamite ---
+            // for dwarf: chunk.dwarves {
+            //     pos := dwarf.pos;
+
+            //     if pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x continue;
+            //     if pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x continue;
+            //     if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y continue;
+            //     if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+
+            //     array_add(*dwarves_in_viewport, dwarf);
+            // }
         }
     }
 
@@ -2484,6 +2534,21 @@ derive_entities_in_viewport :: (camera: Camera2D) {
             if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
             array_add(*dwarves_in_viewport, dwarf);
+        }
+    }
+
+    // Derive viewable dynamite
+    {
+        for dynamite_tile_id: tiles_with_dynamite_ids {
+            pos := get_tile_pos_by_id(dynamite_tile_id);
+
+            if pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x continue;
+            if pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x continue;
+            
+            if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y continue;
+            if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+
+            array_add(*tiles_with_dynamite_ids_in_viewport, dynamite_tile_id);
         }
     }
 }

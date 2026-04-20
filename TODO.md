@@ -1,6 +1,6 @@
 # In progress
 
-
+- dynamite
 
 # Bugs
 
@@ -22,7 +22,6 @@
 
 # Core
 
-- dynamite
 - encasement only with holes
 - hole tiles
 - gold and points trackers
