@@ -192,6 +192,7 @@ TileType :: enum u8 {
     LAVA_FLOWING;
     IRON;
     OBSIDIAN;
+    HOLE;
 }
 
 Entity :: struct {
@@ -250,10 +251,12 @@ Chunk :: struct {
     water_flowing_tile_ids  : [..] s32;
     lava_still_tile_ids     : [..] s32;
     lava_flowing_tile_ids   : [..] s32;
+    hole_tile_ids           : [..] s32;
     
     // TODO: Will probably want these
-    // bases   : [..] Base;
-    // dwarves : [..] Dwarf;
+    // bases    : [..] Base;
+    // dwarves  : [..] Dwarf;
+    // dynamite : [..] Dwarf;
 }
 
 data_folder: string;
@@ -308,6 +311,10 @@ dwarves_in_viewport : [..] Dwarf;
 
 tiles_with_dynamite_ids             : [..] s32;
 tiles_with_dynamite_ids_in_viewport : [..] s32;
+
+hole_tile_ids             : [..] s32;
+hole_tile_ids_set         : Table(s32, s32);
+hole_tile_ids_in_viewport : [..] s32;
 
 path_being_traced : Path;
 paths             : [..] Path;
@@ -971,8 +978,11 @@ main :: () {
                                         }
                                     }
                                 }
-                                // If it's obsidian, then they'll have to do something else, because they can't go through it
-                                else if table_contains(*obsidian_tile_ids_set, tile_id_next_in_dwarfs_path) {
+                                // If it's unmineable, then they'll have to do something else, because they can't go through it
+                                else if (
+                                    table_contains(*obsidian_tile_ids_set, tile_id_next_in_dwarfs_path) ||
+                                    table_contains(*hole_tile_ids_set, tile_id_next_in_dwarfs_path)
+                                ) {
                                     array_reset(*(dwarf.tile_ids_on_path));
                                 }
                                 // If it's unmined, then they'll have to enter into the mining state before they can proceed.
@@ -1100,7 +1110,8 @@ main :: () {
                                 // as to-delete and have a delete pass.
                                 array_unordered_remove_by_index(*tiles_with_dynamite_ids, it_index);
 
-                                // TODO: Create a hole
+                                // Create a hole
+                                set_tile_as_type(it, .HOLE);
 
                                 // TODO: animation I guess
 
@@ -1381,6 +1392,14 @@ main :: () {
                         );
                     }
 
+                    for hole_tile_ids_in_viewport {
+                        DrawRectangleV(
+                            get_tile_pos_by_id(it),
+                            Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
+                            DARKGRAY, // TODO: texture
+                        );
+                    }
+
                     if !debug_mode {
                         for encased_tile_ids_in_viewport {
                             DrawRectangleV(
@@ -1520,6 +1539,7 @@ get_neighbor_tile_ids_of_type :: (tile_id: s32, tile_type: TileType) -> [..] s32
         is_lava_still    := table_contains(*lava_still_tile_ids_set, neighbor_id);
         is_lava_flowing  := table_contains(*lava_flowing_tile_ids_set, neighbor_id);
         is_obsidian      := table_contains(*obsidian_tile_ids_set, neighbor_id);
+        is_hole          := table_contains(*hole_tile_ids_set, neighbor_id);
 
         // TODO: make utilities for these, probably
         should_add_neighbor_to_list := false;
@@ -1562,6 +1582,9 @@ get_neighbor_tile_ids_of_type :: (tile_id: s32, tile_type: TileType) -> [..] s32
             }
             case .OBSIDIAN; {
                 should_add_neighbor_to_list = is_obsidian;
+            }
+            case .HOLE; {
+                should_add_neighbor_to_list = is_hole;
             }
         }
 
@@ -2178,6 +2201,10 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType) {
         array_unordered_remove_by_value(*lava_flowing_tile_ids, tile_id);
         array_unordered_remove_by_value(*chunk.lava_flowing_tile_ids, tile_id);
         table_remove(*lava_flowing_tile_ids_set, tile_id);
+
+        array_unordered_remove_by_value(*hole_tile_ids, tile_id);
+        array_unordered_remove_by_value(*chunk.hole_tile_ids, tile_id);
+        table_remove(*hole_tile_ids_set, tile_id);
     }
 
     // Add the tile to whatever new list it should be a part of.
@@ -2222,6 +2249,11 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType) {
             array_add(*chunk.obsidian_tile_ids, tile_id);
             table_set(*obsidian_tile_ids_set, tile_id, 1738);
         }
+        case .HOLE; {
+            array_add(*hole_tile_ids, tile_id);
+            array_add(*chunk.hole_tile_ids, tile_id);
+            table_set(*hole_tile_ids_set, tile_id, 1738);
+        }
     }
 
     if #complete as_type == {
@@ -2253,6 +2285,7 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType) {
         // Remove edges for pathing to all neighbors
         case .ENCASED;  #through;
         case .OBSIDIAN; #through;
+        case .HOLE; #through;
         case .DIRT;     #through;
         case .IRON;
             dx, dy : float;
@@ -2353,6 +2386,7 @@ derive_entities_in_viewport :: (camera: Camera2D) {
     array_reset(*bases_in_viewport);
     array_reset(*dwarves_in_viewport);
     array_reset(*tiles_with_dynamite_ids_in_viewport);
+    array_reset(*hole_tile_ids_in_viewport);
     
     // Calculate chunk dimensions in pixels
     chunk_pixel_width  := cast(float)(CHUNK_SIZE) * TILEMAP_GENERAL_WORLD_WIDTH;
@@ -2495,6 +2529,18 @@ derive_entities_in_viewport :: (camera: Camera2D) {
                 if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
                 array_add(*lava_flowing_tile_ids_in_viewport, tile_id);
+            }
+
+            // Hole tiles
+            for tile_id: chunk.hole_tile_ids {
+                pos := get_tile_pos_by_id(tile_id);
+
+                if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+                if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+                if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+                if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+
+                array_add(*hole_tile_ids_in_viewport, tile_id);
             }
 
             // TODO: these are slightly harder
