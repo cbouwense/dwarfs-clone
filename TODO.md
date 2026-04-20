@@ -1,6 +1,6 @@
 # In progress
 
-- encasement
+
 
 # Bugs
 
@@ -19,25 +19,18 @@
     - cause:
     - correction:
     - confirmation:
-- dwarves can mine still water
-    - condition: reproducible on 6c2bb4d
-    - cause:
-    - correction:
-    - confirmation:
-- obsidian can be placed in encasement
-    - condition: reproducible on 6c2bb4d
-    - cause:
-    - correction:
-    - confirmation:
 
 # Core
 
 - dynamite
+- encasement only with holes
 - hole tiles
 - gold and points trackers
 - fullscreen and resizability
 - goblins
 - losing
+- speed up time
+- temporarily pause time
 
 # Performance
 

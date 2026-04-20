@@ -630,7 +630,9 @@ main :: () {
 
                             tile_is_obsidian        := table_contains(*obsidian_tile_ids_set, tile_id);
 
-                            if tile_is_mineable && !tile_is_empty && !tile_is_obsidian {
+                            tile_is_encased         := table_contains(*encased_tile_ids_set, tile_id);
+
+                            if tile_is_mineable && !tile_is_empty && !tile_is_obsidian && !tile_is_encased {
                                 set_tile_as_type(tile_id, .OBSIDIAN);
 
                                 // Check to see if we've just enclosed water or lava
@@ -965,6 +967,17 @@ main :: () {
 
                             case .MINING;
                                 assert(dwarf.tile_id_mining > 0, "Dwarf tryna mine but he got no gotdamn tile to mine!!!!!!!");
+
+                                // If you try to mine liquid, you're fucking banned
+                                if (
+                                    table_contains(*water_still_tile_ids_set,   dwarf.tile_id_mining) ||
+                                    table_contains(*water_flowing_tile_ids_set, dwarf.tile_id_mining) ||
+                                    table_contains(*lava_still_tile_ids_set,    dwarf.tile_id_mining) ||
+                                    table_contains(*lava_flowing_tile_ids_set,  dwarf.tile_id_mining)
+                                ) {
+                                    array_unordered_remove_by_index(*dwarves, it_index);
+                                }
+
                                 if dwarf.mining_cooldown_ms > 0 {
                                     dwarf.mining_cooldown_ms -= xx (dt_seconds * 1000);
                                 } else {
@@ -1108,8 +1121,8 @@ main :: () {
                 }
 
                 // Update water flowing
-                UPDATE_WATER :: true;
-                #if UPDATE_WATER {
+                UPDATE_WATER_FLOWING :: true;
+                #if UPDATE_WATER_FLOWING {
                     should_spread_this_frame := game_state.water_flow_cooldown_ms <= 0;
 
                     if should_spread_this_frame {
@@ -1144,9 +1157,26 @@ main :: () {
                     }
                 }
 
+                // Update water still
+                UPDATE_WATER_STILL :: true;
+                #if UPDATE_WATER_STILL {
+                    for water_still_tile_ids {
+                        // TODO: function, probably
+                        // Kill any dwarves you are coming in contact with
+                        water_pos  := get_tile_pos_by_id(it);
+                        water_rect := Rectangle.{ water_pos.x, water_pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
+                        for dwarf, dwarf_index: dwarves {
+                            dwarf_rect := Rectangle.{ dwarf.pos.x, dwarf.pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
+                            if CheckCollisionRecs(dwarf_rect, water_rect) {
+                                array_unordered_remove_by_index(*dwarves, dwarf_index);
+                            }
+                        }
+                    }
+                }
+
                 // Update lava flowing
-                UPDATE_LAVA :: true;
-                #if UPDATE_LAVA {
+                UPDATE_LAVA_FLOWING :: true;
+                #if UPDATE_LAVA_FLOWING {
                     should_spread_water_this_frame := game_state.lava_flow_cooldown_ms <= 0;
 
                     if should_spread_water_this_frame {
@@ -1176,6 +1206,23 @@ main :: () {
                             // still liquid so we don't have to update it going forward.
                             if are_all_neighbors_liquid(it) {
                                 set_tile_as_type(it, .LAVA_STILL);
+                            }
+                        }
+                    }
+                }
+
+                // Update lava still
+                UPDATE_LAVA_STILL :: true;
+                #if UPDATE_LAVA_STILL {
+                    for lava_still_tile_ids {
+                        // TODO: function, probably
+                        // Kill any dwarves you are coming in contact with
+                        lava_pos  := get_tile_pos_by_id(it);
+                        lava_rect := Rectangle.{ lava_pos.x, lava_pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
+                        for dwarf, dwarf_index: dwarves {
+                            dwarf_rect := Rectangle.{ dwarf.pos.x, dwarf.pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
+                            if CheckCollisionRecs(dwarf_rect, lava_rect) {
+                                array_unordered_remove_by_index(*dwarves, dwarf_index);
                             }
                         }
                     }
