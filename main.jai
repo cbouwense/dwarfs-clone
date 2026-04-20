@@ -647,127 +647,7 @@ main :: () {
 
                             if tile_is_mineable && !tile_is_empty && !tile_is_obsidian && !tile_is_encased {
                                 set_tile_as_type(tile_id, .OBSIDIAN);
-
-                                // Check to see if we've just enclosed water or lava
-                                encasing_obsidian_tile_ids_set: Table(s32, s32);
-                                did_encase := check_encasement(tile_id, *encasing_obsidian_tile_ids_set, *persistent_encasing_obsidian_tile_ids_set);
-                                print_vars(did_encase);
-
-                                // If we did encase a section, find the inside portion that is encased.
-                                // Start by casting a ray north, the first tile *needs* to be non-obsidian. If we don't,
-                                // cast in the next cardinal direction. Once we find a cardinal direction that starts
-                                // with non-obsidian, go until out of bounds. Tally up the amount of times we intersect
-                                // *visited* obsidian tiles. If the crossings is odd, then this direction is inside the
-                                // encasement. If it is even, it is not.
-                                if did_encase {
-                                    // We may have multiple directions of encasement. Consider a block being placed in
-                                    // the middle of two, three, or even four diamonds that were only missing the spot
-                                    // that was just placed.
-                                    directions_of_encasement : [..]Direction;
-
-                                    tile_pos := get_tile_pos_by_id(tile_id);
-                                    dx, dy: float32;
-                                    for i: 0..3 {
-                                        dx = TILE_DIRECTION_DELTAS[i][0];
-                                        dy = TILE_DIRECTION_DELTAS[i][1];
-
-                                        multiplier := 1;
-                                        encasing_hits := 0;
-                                        should_continue_looking_in_this_direction := true;
-                                        is_intersecting_encasing_tile := false;
-                                        while should_continue_looking_in_this_direction {
-                                            neighbor_pos := Vector2.{ tile_pos.x + dx * multiplier, tile_pos.y + dy * multiplier };
-                                            found_neighbor, neighbor_id := find_tile_id_by_pos(neighbor_pos);
-
-                                            if !found_neighbor { // Hit out of bounds
-                                                should_continue_looking_in_this_direction = false;
-                                            } else if table_contains(*encasing_obsidian_tile_ids_set, neighbor_id) {
-                                                if multiplier == 1 {
-                                                    // If we hit obsidian as the very first tile, it's cooked.
-                                                    should_continue_looking_in_this_direction = false;
-                                                } else if !is_intersecting_encasing_tile {
-                                                    is_intersecting_encasing_tile = true;
-                                                    encasing_hits += 1;
-                                                }
-                                            } else {
-                                                is_intersecting_encasing_tile = false;
-                                            }
-                                    
-                                            multiplier += 1;
-                                        }
-
-                                        if encasing_hits % 2 == 1 array_add(*directions_of_encasement, cast(Direction) i);
-                                    }
-
-                                    try_to_encase_tiles :: (starting_tile_id: s32) {
-                                        found_liquid   : bool = false;
-                                        ids_processed  : Table(s32, s32);
-                                        ids_to_process : [..] s32;
-                                        encased_ids    : [..] s32;
-                                        array_add(*ids_to_process, starting_tile_id);
-
-                                        while ids_to_process.count > 0 {
-                                            // Get the next id to process
-                                            id := pop_front_fast(*ids_to_process);
-
-                                            // Make sure the id is valid and hasn't already been processed
-                                            id_already_processed := table_contains(*ids_processed, id);
-                                            if id_already_processed continue;
-                                            if table_contains(*obsidian_tile_ids_set, id) continue;
-                                            if table_contains(*hole_tile_ids_set, id) continue;
-
-                                            // Check if this tile is liquid
-                                            if table_contains(*water_still_tile_ids_set, id) {
-                                                found_liquid = true;
-                                            }
-
-                                            if table_contains(*water_flowing_tile_ids_set, id) {
-                                                found_liquid = true;
-                                                set_tile_as_type(id, .WATER_STILL);
-                                            }
-
-                                            if table_contains(*lava_still_tile_ids_set, id) {
-                                                found_liquid = true;
-                                            }
-
-                                            if table_contains(*lava_flowing_tile_ids_set, id) {
-                                                found_liquid = true;
-                                                set_tile_as_type(id, .LAVA_STILL);
-                                            }
-
-                                            // Mark it as processed and encased
-                                            array_add(*encased_ids, id);
-                                            table_set(*ids_processed, id, 1738);
-
-                                            // Add neighbors as needing to be processed
-                                            array_add(*ids_to_process, id - WORLD_COLS);
-                                            array_add(*ids_to_process, id + WORLD_COLS);
-                                            array_add(*ids_to_process, id + 1);
-                                            array_add(*ids_to_process, id - 1);
-                                        }
-
-                                        // If we found a liquid, mark the tiles as encased
-                                        if found_liquid {
-                                            for encased_ids {
-                                                chunk := get_chunk_ptr_by_tile_id(it);
-                                                array_add(*chunk.encased_tile_ids, it);
-                                                table_set(*encased_tile_ids_set, it, 1738);
-                                            }
-                                        }
-                                    }
-
-                                    print_vars(directions_of_encasement);
-
-                                    for directions_of_encasement {
-                                        tile_to_start_encasing_id := tile_id;
-                                        if it == .NORTH tile_to_start_encasing_id -= WORLD_COLS;
-                                        if it == .SOUTH tile_to_start_encasing_id += WORLD_COLS;
-                                        if it == .EAST  tile_to_start_encasing_id += 1;
-                                        if it == .WEST  tile_to_start_encasing_id -= 1;
-
-                                        try_to_encase_tiles(tile_to_start_encasing_id);
-                                    }
-                                }
+                                handle_encasement(tile_id, *persistent_encasing_obsidian_tile_ids_set);
                             }
                         }
                     }
@@ -1115,6 +995,7 @@ main :: () {
 
                                 // Create a hole
                                 set_tile_as_type(it, .HOLE);
+                                handle_encasement(it, *persistent_encasing_obsidian_tile_ids_set);
 
                                 // TODO: animation I guess
 
@@ -1597,13 +1478,75 @@ get_neighbor_tile_ids_of_type :: (tile_id: s32, tile_type: TileType) -> [..] s32
     return neighbor_tile_ids;
 }
 
+handle_encasement :: (tile_id: s32, persistent_encasing_obsidian_tile_ids_set: *Table) {
+    encasing_obsidian_tile_ids_set: Table(s32, s32);
+    did_encase := check_encasement(tile_id, *encasing_obsidian_tile_ids_set, persistent_encasing_obsidian_tile_ids_set);
+    print_vars(did_encase);
+
+    // If we did encase a section, find the inside portion that is encased.
+    // Start by casting a ray north, the first tile *needs* to be non-obsidian. If we don't,
+    // cast in the next cardinal direction. Once we find a cardinal direction that starts
+    // with non-obsidian, go until out of bounds. Tally up the amount of times we intersect
+    // *visited* obsidian tiles. If the crossings is odd, then this direction is inside the
+    // encasement. If it is even, it is not.
+    if did_encase {
+        // We may have multiple directions of encasement. Consider a block being placed in
+        // the middle of two, three, or even four diamonds that were only missing the spot
+        // that was just placed.
+        directions_of_encasement : [..]Direction;
+
+        tile_pos := get_tile_pos_by_id(tile_id);
+        dx, dy: float32;
+        for i: 0..3 {
+            dx = TILE_DIRECTION_DELTAS[i][0];
+            dy = TILE_DIRECTION_DELTAS[i][1];
+
+            multiplier := 1;
+            encasing_hits := 0;
+            should_continue_looking_in_this_direction := true;
+            is_intersecting_encasing_tile := false;
+            while should_continue_looking_in_this_direction {
+                neighbor_pos := Vector2.{ tile_pos.x + dx * multiplier, tile_pos.y + dy * multiplier };
+                found_neighbor, neighbor_id := find_tile_id_by_pos(neighbor_pos);
+
+                if !found_neighbor { // Hit out of bounds
+                    should_continue_looking_in_this_direction = false;
+                } else if table_contains(*encasing_obsidian_tile_ids_set, neighbor_id) {
+                    if multiplier == 1 {
+                        // If we hit obsidian as the very first tile, it's cooked.
+                        should_continue_looking_in_this_direction = false;
+                    } else if !is_intersecting_encasing_tile {
+                        is_intersecting_encasing_tile = true;
+                        encasing_hits += 1;
+                    }
+                } else {
+                    is_intersecting_encasing_tile = false;
+                }
+        
+                multiplier += 1;
+            }
+
+            if encasing_hits % 2 == 1 array_add(*directions_of_encasement, cast(Direction) i);
+        }
+
+        print_vars(directions_of_encasement);
+
+        for directions_of_encasement {
+            tile_to_start_encasing_id := tile_id;
+            if it == .NORTH tile_to_start_encasing_id -= WORLD_COLS;
+            if it == .SOUTH tile_to_start_encasing_id += WORLD_COLS;
+            if it == .EAST  tile_to_start_encasing_id += 1;
+            if it == .WEST  tile_to_start_encasing_id -= 1;
+
+            try_to_encase_tiles(tile_to_start_encasing_id);
+        }
+    }
+}
+
 check_encasement :: (tile_id: s32, encasing_obsidian_tile_ids_set: *Table, persistent_encasing_obsidian_tile_ids_set: *Table) -> (did_encase: bool) {
     encaseable_neighbor_ids := get_neighbor_tile_ids_of_type(tile_id, TileType.OBSIDIAN);
     hole_neighbor_ids       := get_neighbor_tile_ids_of_type(tile_id, TileType.HOLE);
-    for hole_neighbor_ids {
-        array_add(*encaseable_neighbor_ids, it);
-    }
-
+    for hole_neighbor_ids array_add(*encaseable_neighbor_ids, it);
 
     // We need at least 2 adjacent obsidian tiles to form a loop
     if encaseable_neighbor_ids.count < 2 return false;
@@ -1625,7 +1568,8 @@ check_encasement :: (tile_id: s32, encasing_obsidian_tile_ids_set: *Table, persi
 
             // Run BFS to get an ordered array of tile IDs.
             found_at_least_one_hole, path := find_shortest_obsidian_path(start_id, end_id, tile_id);
-            if path.count > 0 && found_at_least_one_hole {
+            path_has_hole := found_at_least_one_hole || table_contains(*hole_tile_ids_set, tile_id);
+            if path.count > 0 && path_has_hole {
                 cycle_points: [..] Vector2;
                 
                 // Only build the cycle points first
@@ -1740,6 +1684,63 @@ check_interior_volume :: (cycle: [] Vector2) -> float {
     print_vars(area, boundary_points, interior_points);
 
     return interior_points;
+}
+
+try_to_encase_tiles :: (starting_tile_id: s32) {
+    found_liquid   : bool = false;
+    ids_processed  : Table(s32, s32);
+    ids_to_process : [..] s32;
+    encased_ids    : [..] s32;
+    array_add(*ids_to_process, starting_tile_id);
+
+    while ids_to_process.count > 0 {
+        // Get the next id to process
+        id := pop_front_fast(*ids_to_process);
+
+        // Make sure the id is valid and hasn't already been processed
+        id_already_processed := table_contains(*ids_processed, id);
+        if id_already_processed continue;
+        if table_contains(*obsidian_tile_ids_set, id) continue;
+        if table_contains(*hole_tile_ids_set, id) continue;
+
+        // Check if this tile is liquid
+        if table_contains(*water_still_tile_ids_set, id) {
+            found_liquid = true;
+        }
+
+        if table_contains(*water_flowing_tile_ids_set, id) {
+            found_liquid = true;
+            set_tile_as_type(id, .WATER_STILL);
+        }
+
+        if table_contains(*lava_still_tile_ids_set, id) {
+            found_liquid = true;
+        }
+
+        if table_contains(*lava_flowing_tile_ids_set, id) {
+            found_liquid = true;
+            set_tile_as_type(id, .LAVA_STILL);
+        }
+
+        // Mark it as processed and encased
+        array_add(*encased_ids, id);
+        table_set(*ids_processed, id, 1738);
+
+        // Add neighbors as needing to be processed
+        array_add(*ids_to_process, id - WORLD_COLS);
+        array_add(*ids_to_process, id + WORLD_COLS);
+        array_add(*ids_to_process, id + 1);
+        array_add(*ids_to_process, id - 1);
+    }
+
+    // If we found a liquid, mark the tiles as encased
+    if found_liquid {
+        for encased_ids {
+            chunk := get_chunk_ptr_by_tile_id(it);
+            array_add(*chunk.encased_tile_ids, it);
+            table_set(*encased_tile_ids_set, it, 1738);
+        }
+    }
 }
 
 are_all_neighbors_liquid :: (tile_id: s32) -> bool {

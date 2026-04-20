@@ -1,7 +1,5 @@
 # In progress
 
-- dynamite
-
 # Bugs
 
 - dwarves seem to spawn on cursor when dragging near or on another dwarf
@@ -22,8 +20,6 @@
 
 # Core
 
-- encasement only with holes
-- hole tiles
 - gold and points trackers
 - fullscreen and resizability
 - goblins
@@ -33,7 +29,6 @@
 
 # Performance
 
-- Big encasements tank fps
 - Add dwarves and bases to chunks
 - Liquid kills could be optimized by checking chunks
 - Just use math to get neighboring tile ids
