@@ -1082,6 +1082,34 @@ main :: () {
                     }
                 }
 
+                // Update dynamite
+                {
+                    // Take an array view of the actual state because we mutate the state during the loop
+                    // and can cause self referential problems when looping on the actual state.
+                    current_tiles_with_dynamite_ids := array_view(tiles_with_dynamite_ids, 0);
+                    for current_tiles_with_dynamite_ids {
+                        // Kill any dwarves you are coming in contact with
+                        for dwarf, dwarf_index: dwarves {
+                            dynamite_pos := get_tile_pos_by_id(it);
+                            if Vector2Equals(dwarf.pos, dynamite_pos) {
+                                // Kill the dwarf
+                                array_unordered_remove_by_index(*dwarves, dwarf_index);
+
+                                // Destroy the dynamite
+                                // TODO: I have a feeling this might cause weird problems. If it does, just mark these
+                                // as to-delete and have a delete pass.
+                                array_unordered_remove_by_index(*tiles_with_dynamite_ids, it_index);
+
+                                // TODO: Create a hole
+
+                                // TODO: animation I guess
+
+                                continue;
+                            }
+                        }
+                    }
+                }
+
                 // Update bases
                 {
                     // TODO: cooldown
