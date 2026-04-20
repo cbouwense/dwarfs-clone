@@ -684,15 +684,11 @@ main :: () {
                                         if obsidian_hits % 2 == 1 array_add(*directions_of_encasement, cast(Direction) i);
                                     }
 
-                                    // If we think we encased an area, we better be able to find it. Otherwise at least
-                                    // one assumption / algorithm is wrong here.
-                                    // assert(directions_of_encasement.count > 0);
-                                    print_vars(directions_of_encasement);
-                                    // table_print(encasing_obsidian_tile_ids_set);
-
-                                    encase_tiles :: (starting_tile_id: s32) {
+                                    try_to_encase_tiles :: (starting_tile_id: s32) {
+                                        found_liquid   : bool = false;
                                         ids_processed  : Table(s32, s32);
                                         ids_to_process : [..] s32;
+                                        encased_ids    : [..] s32;
                                         array_add(*ids_to_process, starting_tile_id);
 
                                         while ids_to_process.count > 0 {
@@ -704,14 +700,27 @@ main :: () {
                                             if id_already_processed continue;
                                             if table_contains(*obsidian_tile_ids_set, id) continue;
 
-                                            // Get the chunk this happened in
-                                            chunk := get_chunk_ptr_by_tile_id(id);
+                                            // Check if this tile is liquid
+                                            if table_contains(*water_still_tile_ids_set, id) {
+                                                found_liquid = true;
+                                            }
 
-                                            // Mark the tile id as encased
-                                            array_add(*chunk.encased_tile_ids, id);
-                                            table_set(*encased_tile_ids_set, id, 1738);
+                                            if table_contains(*water_flowing_tile_ids_set, id) {
+                                                found_liquid = true;
+                                                set_tile_as_type(id, .WATER_STILL);
+                                            }
 
-                                            // Mark it as processed
+                                            if table_contains(*lava_still_tile_ids_set, id) {
+                                                found_liquid = true;
+                                            }
+
+                                            if table_contains(*lava_flowing_tile_ids_set, id) {
+                                                found_liquid = true;
+                                                set_tile_as_type(id, .LAVA_STILL);
+                                            }
+
+                                            // Mark it as processed and encased
+                                            array_add(*encased_ids, id);
                                             table_set(*ids_processed, id, 1738);
 
                                             // Add neighbors as needing to be processed
@@ -719,6 +728,15 @@ main :: () {
                                             array_add(*ids_to_process, id + WORLD_COLS);
                                             array_add(*ids_to_process, id + 1);
                                             array_add(*ids_to_process, id - 1);
+                                        }
+
+                                        // If we found a liquid, mark the tiles as encased
+                                        if found_liquid {
+                                            for encased_ids {
+                                                chunk := get_chunk_ptr_by_tile_id(it);
+                                                array_add(*chunk.encased_tile_ids, it);
+                                                table_set(*encased_tile_ids_set, it, 1738);
+                                            }
                                         }
                                     }
 
@@ -729,7 +747,7 @@ main :: () {
                                         if it == .EAST  tile_to_start_encasing_id += 1;
                                         if it == .WEST  tile_to_start_encasing_id -= 1;
 
-                                        encase_tiles(tile_to_start_encasing_id);
+                                        try_to_encase_tiles(tile_to_start_encasing_id);
                                     }
                                 }
                             }
