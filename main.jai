@@ -123,7 +123,8 @@ mouse_drag_began_at_pos : Vector2;
 mouse_pos_when_path_creation_started : Vector2;
 
 GameState :: struct {
-    selected_dwarf_index   : int;
+    hovered_dwarf_index    : int;
+    selected_dwarf_id      : s32;
     water_flow_cooldown_ms : int;
     lava_flow_cooldown_ms  : int;
 }
@@ -369,7 +370,8 @@ main :: () {
 
     // Initialize game
     game_state := GameState.{
-        selected_dwarf_index   = -1,
+        hovered_dwarf_index    = 0,
+        selected_dwarf_id   = 0,
         water_flow_cooldown_ms = WATER_FLOW_COOLDOWN_MS,
         lava_flow_cooldown_ms  = LAVA_FLOW_COOLDOWN_MS,
     };
@@ -618,22 +620,25 @@ main :: () {
                             if started_to_create_path {
                                 for dwarf: dwarves_in_viewport {
                                     if CheckCollisionPointRec(mouse_pos_in_world, get_world_rect_from_pos(dwarf.pos)) {
-                                        game_state.selected_dwarf_index = it_index;
+                                        game_state.selected_dwarf_id = dwarf.id;
                                         break;
                                     }
                                 }
 
                                 // If a dwarf was found being clicked
-                                if game_state.selected_dwarf_index > -1 {
+                                if game_state.selected_dwarf_id > 0 {
+                                    found, selected_dwarf_index := table_find(*dwarf_id_to_index, game_state.selected_dwarf_id);
+                                    assert(found);
+
                                     // Teleport dwarf to tile we are hovering over and keep it there
                                     tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
-                                    dwarves[game_state.selected_dwarf_index].pos = get_rect_pos(tile_rect);
+                                    dwarves[selected_dwarf_index].pos = get_rect_pos(tile_rect);
                                     
                                     // Stop the dwarf from moving so you can think while dragging a path
-                                    dwarves[game_state.selected_dwarf_index].state = .IDLE;
+                                    dwarves[selected_dwarf_index].state = .IDLE;
 
                                     // Remove its current pathing
-                                    array_reset(*(dwarves[game_state.selected_dwarf_index].tile_ids_on_path));
+                                    array_reset(*(dwarves[selected_dwarf_index].tile_ids_on_path));
                                 }
 
                                 mouse_pos_when_path_creation_started = mouse_pos_in_world;
@@ -644,16 +649,19 @@ main :: () {
                         } else if dragging_to_create_path_prev {
                             array_add(*paths, path_being_traced);
 
-                            if game_state.selected_dwarf_index != -1 {
+                            if game_state.selected_dwarf_id > 0 {
+                                found, selected_dwarf_index := table_find(*dwarf_id_to_index, game_state.selected_dwarf_id);
+                                assert(found);
+
                                 start_pos := get_tile_pos_by_id(path_being_traced.start_tile_id);
                                 end_pos   := get_tile_pos_by_id(path_being_traced.end_tile_id);
                                 tile_ids_on_path := get_tile_ids_along_path(start_pos, end_pos);
 
-                                array_reset(*(dwarves[game_state.selected_dwarf_index].tile_ids_on_path));
-                                array_copy(*(dwarves[game_state.selected_dwarf_index].tile_ids_on_path), tile_ids_on_path);
+                                array_reset(*(dwarves[selected_dwarf_index].tile_ids_on_path));
+                                array_copy(*(dwarves[selected_dwarf_index].tile_ids_on_path), tile_ids_on_path);
 
-                                dwarves[game_state.selected_dwarf_index].state = .MOVING;
-                                game_state.selected_dwarf_index = -1;
+                                dwarves[selected_dwarf_index].state = .MOVING;
+                                game_state.selected_dwarf_id = 0;
                             }
                         }
                     }
@@ -742,6 +750,9 @@ main :: () {
 
                                                     array_reset(*(dwarf.tile_ids_on_path));
                                                     array_copy(*(dwarf.tile_ids_on_path), tile_ids_on_path);
+
+                                                    set_dwarf_direction_to_face_next_target(dwarf);
+
                                                     break;
                                                 }
 
@@ -759,6 +770,9 @@ main :: () {
 
                                                     array_reset(*(dwarf.tile_ids_on_path));
                                                     array_copy(*(dwarf.tile_ids_on_path), tile_ids_on_path);
+
+                                                    set_dwarf_direction_to_face_next_target(dwarf);
+
                                                     break;
                                                 }
                                             }
@@ -1281,7 +1295,28 @@ main :: () {
             INCREMENT_Y :: 20;
             if debug_mode {
                 DrawFPS(10, read_then_increment(*debug_text_y, INCREMENT_Y));
-                DrawText(tprint("%\0", dwarves.count).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 12, WHITE);
+                DrawText(tprint("dwarf count: %\0", dwarves.count).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 12, WHITE);
+            
+                // Debug game state
+                {
+                    DrawText(tprint("hovered_dwarf_index: %\0", game_state.hovered_dwarf_index).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                    DrawText(tprint("selected_dwarf_id: %\0", game_state.selected_dwarf_id).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                    DrawText(tprint("water_flow_cooldown_ms: %\0", game_state.water_flow_cooldown_ms).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                    DrawText(tprint("lava_flow_cooldown_ms: %\0", game_state.lava_flow_cooldown_ms).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                }
+
+                debug_text_y = 0;
+                for dwarves {
+                    if CheckCollisionPointRec(mouse_pos_in_world, Rectangle.{ it.pos.x, it.pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT }) {
+                        DrawText(tprint("id: %\0", it.id).data,                                 xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                        DrawText(tprint("pos: %\0", it.pos).data,                               xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                        DrawText(tprint("state: %\0", it.state).data,                           xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                        DrawText(tprint("tile_ids_on_path: %\0", it.tile_ids_on_path).data,     xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                        DrawText(tprint("mining_cooldown_ms: %\0", it.mining_cooldown_ms).data, xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                        DrawText(tprint("tile_id_mining: %\0", it.tile_id_mining).data,         xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                        DrawText(tprint("direction: %\0", it.direction).data,                   xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                    }
+                }
             }
 
             if paused {
@@ -1289,6 +1324,19 @@ main :: () {
             }
         }
     }
+}
+
+set_dwarf_direction_to_face_next_target :: (dwarf: *Dwarf) {
+    assert(dwarf.tile_ids_on_path.count > 0);
+    target_tile_id := dwarf.tile_ids_on_path[0];
+    dwarf_tile_id  := get_tile_id_by_pos(dwarf.pos);
+    assert(target_tile_id != dwarf_tile_id, "dwarf is softlocked trying to get it the id it's already on, I think.");
+
+    if      target_tile_id == dwarf_tile_id - WORLD_ROWS dwarf.direction = .NORTH;
+    else if target_tile_id == dwarf_tile_id + WORLD_ROWS dwarf.direction = .SOUTH;
+    else if target_tile_id == dwarf_tile_id + 1          dwarf.direction = .EAST;
+    else if target_tile_id == dwarf_tile_id - 1          dwarf.direction = .WEST;
+    else assert(false);
 }
 
 create_dwarf :: (pos: Vector2) -> Dwarf {

@@ -1,7 +1,13 @@
 # In progress
 
 - dwarves seem to spawn on cursor when dragging near or on another dwarf
-    - condition: reproducible on 8e9702b, a9f528e
+    - condition:
+        - reproducible on 8e9702b, a9f528e
+        - it seems to be easier to reproduce the more dwarves there are
+        - after a while it seems to almost happen every time you select a dwarf, but not 100%
+        - it seems to actually teleport an existing dwarf, not create a new one
+        - it looks like the ids are being incorrectly selected into the game state
+        - changing the game state from an index to an id seems to have worked, need to confirm though
     - cause:
     - correction:
     - confirmation:
@@ -15,6 +21,11 @@
     - confirmation:
 - adding tons of bases at once makes dwarves go diagonal
     - condition: reproducible on 329b3b5
+    - cause:
+    - correction:
+    - confirmation:
+- paths can be drawn with one segment
+    - condition: reproducible on f232b3f
     - cause:
     - correction:
     - confirmation:

@@ -14,12 +14,12 @@ INFO:     > Screen size:  1600 x 900
 INFO:     > Render size:  1600 x 900
 INFO:     > Viewport offsets: 0, 0
 INFO: GLAD: OpenGL extensions loaded successfully
-INFO: GL: Supported extensions count: 403
+INFO: GL: Supported extensions count: 184
 INFO: GL: OpenGL device information:
-INFO:     > Vendor:   NVIDIA Corporation
-INFO:     > Renderer: NVIDIA GeForce RTX 3070/PCIe/SSE2
-INFO:     > Version:  3.3.0 NVIDIA 577.00
-INFO:     > GLSL:     3.30 NVIDIA via Cg compiler
+INFO:     > Vendor:   VMware, Inc.
+INFO:     > Renderer: llvmpipe (LLVM 8.0, 256 bits)
+INFO:     > Version:  3.3 (Core Profile) Mesa 20.1.8
+INFO:     > GLSL:     3.30
 INFO: GL: VAO extension detected, VAO functions loaded successfully
 INFO: GL: NPOT textures extension detected, full NPOT textures supported
 INFO: GL: DXT compressed textures supported
@@ -36,116 +36,416 @@ INFO: RLGL: Render batch vertex buffers loaded successfully in VRAM (GPU)
 INFO: RLGL: Default OpenGL state initialized successfully
 INFO: TEXTURE: [ID 2] Texture loaded successfully (128x128 | GRAY_ALPHA | 1 mipmaps)
 INFO: FONT: Default font loaded successfully (224 glyphs)
-INFO: SYSTEM: Working Directory: C:\Users\bouwe\Projects\xcom-clone
+INFO: SYSTEM: Working Directory: C:\Users\bouwe\Projects\dwarfs-clone
 INFO: TIMER: Target time per frame: 6.944 milliseconds
 INFO: FILEIO: [data/tilemap-general.png] File loaded successfully
 INFO: IMAGE: Data loaded successfully (320x320 | R8G8B8A8 | 1 mipmaps)
 INFO: TEXTURE: [ID 3] Texture loaded successfully (320x320 | R8G8B8A8 | 1 mipmaps)
-INFO: FILEIO: [data/tilemap-dishes.png] File loaded successfully
-INFO: IMAGE: Data loaded successfully (320x320 | R8G8B8A8 | 1 mipmaps)
-INFO: TEXTURE: [ID 4] Texture loaded successfully (320x320 | R8G8B8A8 | 1 mipmaps)
-game_state.active_entity.pos = {16, 304} (Vector2)
-
-{
-[128,48]: 2ac_024c_09e0
-[224,192]: 2ac_024c_14d0
-[288,160]: 2ac_024c_1ac0
-[128,272]: 2ac_024c_0c10
-[256,80]: 2ac_024c_16b0
-[32,96]: 2ac_024c_0120
-[160,320]: 2ac_024c_0fd0
-[288,128]: 2ac_024c_1a70
-[32,128]: 2ac_024c_0170
-[96,32]: 2ac_024c_06c0
-[256,144]: 2ac_024c_1750
-[96,224]: 2ac_024c_08a0
-[64,112]: 2ac_024c_0440
-[256,112]: 2ac_024c_1700
-[320,208]: 2ac_024c_1e30
-[224,128]: 2ac_024c_1430
-[160,288]: 2ac_024c_0f80
-[96,160]: 2ac_024c_0800
-[160,32]: 2ac_024c_0d00
-[288,224]: 2ac_024c_1b60
-[192,112]: 2ac_024c_10c0
-[96,128]: 2ac_024c_07b0
-[32,192]: 2ac_024c_0210
-[32,160]: 2ac_024c_01c0
-[256,304]: 2ac_024c_18e0
-[288,320]: 2ac_024c_1c50
-[96,288]: 2ac_024c_0940
-[64,240]: 2ac_024c_0580
-[320,272]: 2ac_024c_1ed0
-[224,224]: 2ac_024c_1520
-[224,160]: 2ac_024c_1480
-[32,32]: 2ac_024c_0080
-[32,64]: 2ac_024c_00d0
-[160,192]: 2ac_024c_0e90
-[320,48]: 2ac_024c_1ca0
-[320,176]: 2ac_024c_1de0
-[64,336]: 2ac_024c_0670
-[32,224]: 2ac_024c_0260
-[128,144]: 2ac_024c_0ad0
-[160,96]: 2ac_024c_0da0
-[64,272]: 2ac_024c_05d0
-[64,208]: 2ac_024c_0530
-[192,336]: 2ac_024c_12f0
-[320,80]: 2ac_024c_1cf0
-[160,64]: 2ac_024c_0d50
-[192,80]: 2ac_024c_1070
-[32,288]: 2ac_024c_0300
-[192,144]: 2ac_024c_1110
-[64,176]: 2ac_024c_04e0
-[256,176]: 2ac_024c_17a0
-[224,32]: 2ac_024c_1340
-[288,64]: 2ac_024c_19d0
-[64,304]: 2ac_024c_0620
-[96,64]: 2ac_024c_0710
-[288,32]: 2ac_024c_1980
-[224,320]: 2ac_024c_1610
-[32,256]: 2ac_024c_02b0
-[192,176]: 2ac_024c_1160
-[128,240]: 2ac_024c_0bc0
-[320,304]: 2ac_024c_1f20
-[192,304]: 2ac_024c_12a0
-[192,48]: 2ac_024c_1020
-[320,112]: 2ac_024c_1d40
-[96,192]: 2ac_024c_0850
-[288,288]: 2ac_024c_1c00
-[128,208]: 2ac_024c_0b70
-[288,256]: 2ac_024c_1bb0
-[32,320]: 2ac_024c_0350
-[64,80]: 2ac_024c_03f0
-[160,224]: 2ac_024c_0ee0
-[256,48]: 2ac_024c_1660
-[160,128]: 2ac_024c_0df0
-[320,144]: 2ac_024c_1d90
-[128,112]: 2ac_024c_0a80
-[160,160]: 2ac_024c_0e40
-[288,192]: 2ac_024c_1b10
-[64,48]: 2ac_024c_03a0
-[96,96]: 2ac_024c_0760
-[256,240]: 2ac_024c_1840
-[256,272]: 2ac_024c_1890
-[224,96]: 2ac_024c_13e0
-[128,304]: 2ac_024c_0c60
-[192,240]: 2ac_024c_1200
-[320,240]: 2ac_024c_1e80
-[64,144]: 2ac_024c_0490
-[160,256]: 2ac_024c_0f30
-[96,320]: 2ac_024c_0990
-[224,288]: 2ac_024c_15c0
-[288,96]: 2ac_024c_1a20
-[128,176]: 2ac_024c_0b20
-[224,256]: 2ac_024c_1570
-[256,336]: 2ac_024c_1930
-[320,336]: 2ac_024c_1f70
-[96,256]: 2ac_024c_08f0
-[256,208]: 2ac_024c_17f0
-[128,80]: 2ac_024c_0a30
-[192,272]: 2ac_024c_1250
-[192,208]: 2ac_024c_11b0
-[128,336]: 2ac_024c_0cb0
-[224,64]: 2ac_024c_1390
-}
-16,304
+INFO: FILEIO: [data/dirt.png] File loaded successfully
+INFO: IMAGE: Data loaded successfully (16x16 | R8G8B8A8 | 1 mipmaps)
+INFO: TEXTURE: [ID 4] Texture loaded successfully (16x16 | R8G8B8A8 | 1 mipmaps)
+WARN: Couldn't find neighbor for tile at pos (-32,864). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,896). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,2432). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,2464). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,5728). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,5760). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,5792). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,6496). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,6528). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,6560). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,7008). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,7040). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,7072). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,7808). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,7840). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,10848). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,10880). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,10912). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,14432). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,14464). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,16512). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,19328). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,22656). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,22688). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,24192). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,25728). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,26464). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,26496). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,26528). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,27488). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,27520). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,27552). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,28768). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,28800). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,28832). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,30048). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,30080). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,30112). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,33120). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,33152). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,33184). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,33888). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,33920). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,33952). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,35456). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,36192). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,36224). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,37248). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,39296). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,40288). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,40320). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,40352). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,43360). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,43392). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,43424). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,48992). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,49024). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,49056). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,50528). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,50560). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,50592). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,51040). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,51072). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,51104). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,53088). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,53120). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,53152). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,54624). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,54656). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,54688). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,57184). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,57216). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,57248). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,57952). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,57984). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,58016). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,60544). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,61056). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,61536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,61568). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,61600). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,62336). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,62368). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,64096). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,64128). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (-32,64160). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (96,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (128,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (160,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (1376,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (1408,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (1440,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (2656,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (2688,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (2720,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (3168,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (3200,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (3232,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (3680,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (3712,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (3744,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (4224,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (4256,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (5216,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (5248,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (5280,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (5472,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (5504,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (5536,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (5984,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (6016,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (6048,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (6272,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (7776,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (7808,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (7840,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (9088,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (9568,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (9600,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (10080,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (10112,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (10144,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (11104,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (11136,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (11872,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (11904,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (11936,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (12128,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (12160,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (12192,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (12896,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (12928,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (12960,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (12992,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (15712,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (15744,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (15776,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (16992,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (17024,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (17056,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (17504,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (17536,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (17568,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (18016,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (18048,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (18080,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (18528,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (18560,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (19808,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (19840,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (19872,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (22112,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (22144,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (22176,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (22368,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (22400,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (22432,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (22880,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (22912,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (22944,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (24928,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (24960,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (24992,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (27232,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (27264,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (27776,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (28288,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (28800,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (28832,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (30048,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (30080,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (30112,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (30560,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (30592,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (30816,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (30848,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (31072,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (31104,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (31136,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (31328,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (31360,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (31392,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (32640,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (32672,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (33632,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (33664,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (33888,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (33920,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (33952,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (34400,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (34400,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (34432,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (34464,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (34912,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (34912,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (34944,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (34944,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (34976,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (35424,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (35456,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (35488,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (36192,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (36224,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (36256,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (36448,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (36480,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (36512,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (37248,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (37248,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (37280,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (37280,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (38752,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (38752,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (38784,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (38784,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (38816,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (38816,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (40288,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (40320,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (40352,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (41056,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (41088,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (41120,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (41600,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (43136,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (43168,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (43392,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (43616,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (43648,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (43680,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (45152,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (45184,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (45216,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (45664,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (45696,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (45728,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (46432,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (46464,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (46496,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (47200,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (47232,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (47264,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (47456,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (47488,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (48032,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (48736,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (48768,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (48800,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (52064,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (52096,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (52128,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (52320,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (52352,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (52384,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (53120,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (53152,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (54624,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (54656,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (54688,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (56160,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (56192,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (56416,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (56448,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (56480,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (58208,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (58240,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (58976,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (59008,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (59040,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (59744,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (59744,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (59776,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (59776,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (59808,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (62816,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (62848,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (62880,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (63328,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (63360,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (63392,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (64384,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65120,65536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65376,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65408,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65440,-32). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,352). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,384). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,1152). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,1184). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,1952). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,2432). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,2464). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,4224). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,4256). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,4704). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,4736). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,4768). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,5472). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,5504). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,5536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,7264). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,7296). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,7328). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,8544). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,8576). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,8608). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,9312). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,9344). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,10848). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,10880). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,10912). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,10944). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,11360). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,11392). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,12384). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,12416). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,12448). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,13664). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,13696). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,13728). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,14944). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,14976). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,15008). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,15968). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,16000). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,16032). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,17248). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,18304). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,19296). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,19328). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,19360). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,20352). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,21344). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,21376). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,21408). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,22368). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,22400). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,23104). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,23136). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,23168). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,23200). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,24160). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,24192). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,26208). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,26240). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,26272). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,27232). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,27264). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,28512). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,28544). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,28576). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,30560). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,30592). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,31072). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,31104). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,34400). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,34432). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,34464). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,35424). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,35456). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,36992). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,37728). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,37760). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,37792). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,37824). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,39232). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,39264). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,39296). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,39328). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,40320). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,40352). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,40800). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,40832). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,42080). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,42112). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,42144). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,43648). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,43680). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,45408). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,45440). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,45472). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,46432). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,46464). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,47200). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,47232). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,47264). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,48480). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,48512). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,48544). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,49504). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,49536). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,49568). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,54368). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,54400). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,54432). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,54464). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,55168). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,60256). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,60288). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,60320). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,62304). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,62336). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,64640). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,65376). This either means it's on the edge of the world, or that something might be wrong.
+WARN: Couldn't find neighbor for tile at pos (65536,65408). This either means it's on the edge of the world, or that something might be wrong.
