@@ -1,5 +1,7 @@
 # In progress
 
+- Add dwarves and bases to chunks
+
 # Bugs
 
 - dwarves seem to spawn on cursor when dragging near or on another dwarf
@@ -12,8 +14,8 @@
     - cause:
     - correction:
     - confirmation:
-- revealing caves of one tile doesn't do anything
-    - condition: reproducible on a9f528e
+- dwarves bounce between the end of a path and the middle arrow
+    - condition: reproducible on 714a893
     - cause:
     - correction:
     - confirmation:
@@ -26,10 +28,10 @@
 - losing
 - speed up time
 - temporarily pause time
+- delete path arrows
 
 # Performance
 
-- Add dwarves and bases to chunks
 - Liquid kills could be optimized by checking chunks
 - Just use math to get neighboring tile ids
 - underclock cpu

@@ -521,7 +521,6 @@ main :: () {
         mouse_pos_in_world := GetScreenToWorld2D(mouse_pos_in_ui, camera);
         mouse_wheel_move   := GetMouseWheelMove();
 
-
         derive_entities_in_viewport(camera);
 
         //
@@ -562,15 +561,8 @@ main :: () {
                 hovered_tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
                 if IsMouseButtonDown(MouseButton.MOUSE_BUTTON_LEFT) && IsKeyDown(KeyboardKey.KEY_LEFT_CONTROL) {
                     tile_id := get_tile_id_by_pos(Vector2.{ hovered_tile_rect.x, hovered_tile_rect.y });
-                    tile_is_unrevealed_cave := table_contains(*cave_tile_ids_set, tile_id);
-                    if tile_is_unrevealed_cave {
-                        try_to_reveal_cave(tile_id);
-                    } else {
-                        tile_is_mined := table_contains(*fully_mined_tile_ids_set, tile_id);
-                        if !tile_is_mined {
-                            set_tile_as_type(tile_id, .MINED);
-                        }
-                    }
+                    set_tile_as_type(tile_id, .MINED);
+                    reveal_cave_if_necessary(tile_id);
                 }
 
                 // Update camera
@@ -949,7 +941,7 @@ main :: () {
 
                                             // If we just cracked into a cave, we'll need to reveal the cave and do anything
                                             // that cave type needs (e.g. spawn water, lava, monsters, etc.).
-                                            try_to_reveal_cave(dwarf.tile_id_mining);
+                                            reveal_cave_if_necessary(dwarf.tile_id_mining);
 
                                             dwarf.tile_id_mining = 0;
                                             dwarf.state = .MOVING;
@@ -1078,15 +1070,7 @@ main :: () {
                     // and can cause self referential problems when looping on the actual state.
                     current_water_flowing_tile_ids := array_view(water_flowing_tile_ids, 0);
                     for current_water_flowing_tile_ids {
-                        // Kill any dwarves you are coming in contact with
-                        water_pos  := get_tile_pos_by_id(it);
-                        water_rect := Rectangle.{ water_pos.x, water_pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
-                        for dwarf, dwarf_index: dwarves {
-                            dwarf_rect := Rectangle.{ dwarf.pos.x, dwarf.pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
-                            if CheckCollisionRecs(dwarf_rect, water_rect) {
-                                array_unordered_remove_by_index(*dwarves, dwarf_index);
-                            }
-                        }
+                        kill_any_dwarves_touching_tile_id(it);
 
                         if should_spread_this_frame {
                             try_to_set_cardinal_neighbors_as_flowing_tile_type(it, .WATER_FLOWING);
@@ -1103,18 +1087,7 @@ main :: () {
                 // Update water still
                 UPDATE_WATER_STILL :: true;
                 #if UPDATE_WATER_STILL {
-                    for water_still_tile_ids {
-                        // TODO: function, probably
-                        // Kill any dwarves you are coming in contact with
-                        water_pos  := get_tile_pos_by_id(it);
-                        water_rect := Rectangle.{ water_pos.x, water_pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
-                        for dwarf, dwarf_index: dwarves {
-                            dwarf_rect := Rectangle.{ dwarf.pos.x, dwarf.pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
-                            if CheckCollisionRecs(dwarf_rect, water_rect) {
-                                array_unordered_remove_by_index(*dwarves, dwarf_index);
-                            }
-                        }
-                    }
+                    for water_still_tile_ids kill_any_dwarves_touching_tile_id(it);
                 }
 
                 // Update lava flowing
@@ -1132,15 +1105,7 @@ main :: () {
                     // and can cause self referential problems when looping on the actual state.
                     current_lava_flowing_tile_ids := array_view(lava_flowing_tile_ids, 0);
                     for current_lava_flowing_tile_ids {
-                        // Kill any dwarves you are coming in contact with
-                        lava_pos  := get_tile_pos_by_id(it);
-                        lava_rect := Rectangle.{ lava_pos.x, lava_pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
-                        for dwarf, dwarf_index: dwarves {
-                            dwarf_rect := Rectangle.{ dwarf.pos.x, dwarf.pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
-                            if CheckCollisionRecs(dwarf_rect, lava_rect) {
-                                array_unordered_remove_by_index(*dwarves, dwarf_index);
-                            }
-                        }
+                        kill_any_dwarves_touching_tile_id(it);
 
                         if should_spread_water_this_frame {
                             try_to_set_cardinal_neighbors_as_flowing_tile_type(it, .LAVA_FLOWING);
@@ -1157,18 +1122,7 @@ main :: () {
                 // Update lava still
                 UPDATE_LAVA_STILL :: true;
                 #if UPDATE_LAVA_STILL {
-                    for lava_still_tile_ids {
-                        // TODO: function, probably
-                        // Kill any dwarves you are coming in contact with
-                        lava_pos  := get_tile_pos_by_id(it);
-                        lava_rect := Rectangle.{ lava_pos.x, lava_pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
-                        for dwarf, dwarf_index: dwarves {
-                            dwarf_rect := Rectangle.{ dwarf.pos.x, dwarf.pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
-                            if CheckCollisionRecs(dwarf_rect, lava_rect) {
-                                array_unordered_remove_by_index(*dwarves, dwarf_index);
-                            }
-                        }
-                    }
+                    for lava_still_tile_ids kill_any_dwarves_touching_tile_id(it);
                 }
             }
         }
@@ -1386,6 +1340,17 @@ main :: () {
             if paused {
 
             }
+        }
+    }
+}
+
+kill_any_dwarves_touching_tile_id :: (tile_id: s32) {
+    kill_pos  := get_tile_pos_by_id(tile_id);
+    kill_rect := Rectangle.{ kill_pos.x, kill_pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
+    for dwarf, dwarf_index: dwarves {
+        dwarf_rect := Rectangle.{ dwarf.pos.x, dwarf.pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
+        if CheckCollisionRecs(dwarf_rect, kill_rect) {
+            array_unordered_remove_by_index(*dwarves, dwarf_index);
         }
     }
 }
@@ -2595,7 +2560,7 @@ derive_entities_in_viewport :: (camera: Camera2D) {
     }
 }
 
-try_to_reveal_cave :: (tile_id: s32) {
+reveal_cave_if_necessary :: (tile_id: s32) {
     check_is_neighbor_unreavealed_cave :: (tile_id: s32) -> found_cave_neighbor: bool, cave_neighbor_id: s32 {
         for i: 0..3 {
             dx := TILE_DIRECTION_DELTAS[i][0];
