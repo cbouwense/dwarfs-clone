@@ -1,20 +1,13 @@
 # In progress
 
-- dwarves bounce between the end of a path and the middle arrow
-    - condition:
-        - reproducible on 714a893
-        - doesn't seem immediately reproducible on 9062ef0
+- dwarves seem to spawn on cursor when dragging near or on another dwarf
+    - condition: reproducible on 8e9702b, a9f528e
     - cause:
     - correction:
     - confirmation:
 
 # Bugs
 
-- dwarves seem to spawn on cursor when dragging near or on another dwarf
-    - condition: reproducible on 8e9702b, a9f528e
-    - cause:
-    - correction:
-    - confirmation:
 - flowing liquid can cause actively mined tiles to disappear and crashes game
     - condition: reproducible on c43b3f5
     - cause:

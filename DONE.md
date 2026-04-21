@@ -1,5 +1,16 @@
 # Done
 
+- dwarves bounce between the end of a path and the middle arrow
+    - condition:
+        - reproducible on 714a893
+        - doesn't seem immediately reproducible on 9062ef0
+    - cause:
+        - this was occurring because of the way in which dwarves decided where to go next. they would prefer staying on their current direction, and only had a 1 in 8 chance of changing direction per tile without a target. since a path would not change the dwarf's direction, it would have a 7 in 8 chance of going back towards the arrow they started at if their direction was pointed at the arrow.
+    - correction:
+        - this was no longer reproducible on 9062ef0 because the choice of target tile id was changed. although, I think I like the old one better, so I think I'll go back to the way it used to be (or, maybe a bit refactored).
+    - confirmation:
+        - fixed in aad2a85
+
 - water flow / conversion to still is choppy
     - condition:
         - reproducible on 78db461, 8e0a223

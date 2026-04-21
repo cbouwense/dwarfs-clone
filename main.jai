@@ -226,6 +226,7 @@ Dwarf :: struct {
     tile_ids_on_path   : [..] s32;
     mining_cooldown_ms : s32;
     tile_id_mining     : s32;
+    direction          : Direction;
 }
 
 Path :: struct {
@@ -666,17 +667,31 @@ main :: () {
                                 // Add a new target if dwarf does not have one.
                                 dwarf_has_target := dwarf.tile_ids_on_path.count > 0;
                                 if !dwarf_has_target {
-                                    dx, dy: float32;
-                                    // TODO: this is insanely inefficient. Really we should probably just pick an interval to change
-                                    // some dwarf directions or something. Pretty sure this is broken anyways.
-                                    //
+                                    new_direction := dwarf.direction;
+
                                     // Find a new target by picking a random cardinal direction 1 tile away
                                     change_direction_rng := random_get_within_range(0, 1);
-                                    if change_direction_rng < 0.25 {
-                                        new_direction := cast(int) random_get_within_range(0, 4);
-                                        dx = TILE_DIRECTION_DELTAS[new_direction][0];
-                                        dy = TILE_DIRECTION_DELTAS[new_direction][1];
+                                    if change_direction_rng < 0.1 {
+                                        go_left := change_direction_rng < 0.05;
+
+                                        if dwarf.direction == .NORTH {
+                                            new_direction = ifx go_left then .WEST  else .EAST;
+                                        }
+                                        else if dwarf.direction == .SOUTH {
+                                            new_direction = ifx go_left then .EAST  else .WEST;
+                                        }
+                                        else if dwarf.direction == .EAST  {
+                                            new_direction = ifx go_left then .NORTH else .SOUTH;
+                                        }
+                                        else if dwarf.direction == .WEST  {
+                                            new_direction = ifx go_left then .SOUTH else .NORTH;
+                                        }
+                                        else assert(false);
                                     }
+
+                                    dx := TILE_DIRECTION_DELTAS[new_direction][0];
+                                    dy := TILE_DIRECTION_DELTAS[new_direction][1];
+                                    dwarf.direction = new_direction;
 
                                     assert(dx == 0 || dy == 0, "dx: %, dy: %", dx, dy);
 
@@ -1277,12 +1292,14 @@ main :: () {
 }
 
 create_dwarf :: (pos: Vector2) -> Dwarf {
-    dwarf_id := increment_then_read(*dwarf_id_counter);
+    dwarf_id  := increment_then_read(*dwarf_id_counter);
+    direction := cast(Direction) cast(int) random_get_within_range(0, 3);
 
     dwarf := Dwarf.{
         id        = dwarf_id,
         pos       = pos,
         state     = .MOVING,
+        direction = direction,
         // tile_ids_on_path intentionally not set
     };
 
@@ -1353,12 +1370,10 @@ kill_any_dwarves_touching_tile_id :: (tile_id: s32) {
 }
 
 kill_dwarf_by_index :: (dwarf_index: s64) {
-    print("killing dwarf with index %\n", dwarf_index);
     dwarf_id_being_swapped := dwarves[dwarves.count - 1].id;
     dwarf_id_being_killed  := dwarves[dwarf_index].id;
 
     if dwarf_id_being_swapped != dwarf_id_being_killed {
-        print("swapping dwarf id % to index %\n", dwarf_id_being_swapped, dwarf_index);
         table_set(*dwarf_id_to_index, dwarf_id_being_swapped, dwarf_index);
     }
     table_remove(*dwarf_id_to_index, dwarf_id_being_killed);
@@ -1379,10 +1394,6 @@ kill_dwarf_by_index :: (dwarf_index: s64) {
     // assert(found);
 
     array_unordered_remove_by_index(*dwarves, dwarf_index);
-
-    print_vars(dwarves);
-    table_print(dwarf_id_to_index);
-    print("***\n");
 }
 
 kill_dwarf_by_id :: (dwarf_id: s32) {
@@ -1482,7 +1493,6 @@ get_neighbor_tile_ids_of_type :: (tile_id: s32, tile_type: TileType) -> [..] s32
 handle_encasement :: (tile_id: s32, persistent_encasing_obsidian_tile_ids_set: *Table) {
     encasing_obsidian_tile_ids_set: Table(s32, s32);
     did_encase := check_encasement(tile_id, *encasing_obsidian_tile_ids_set, persistent_encasing_obsidian_tile_ids_set);
-    print_vars(did_encase);
 
     // If we did encase a section, find the inside portion that is encased.
     // Start by casting a ray north, the first tile *needs* to be non-obsidian. If we don't,
@@ -1529,8 +1539,6 @@ handle_encasement :: (tile_id: s32, persistent_encasing_obsidian_tile_ids_set: *
 
             if encasing_hits % 2 == 1 array_add(*directions_of_encasement, cast(Direction) i);
         }
-
-        print_vars(directions_of_encasement);
 
         for directions_of_encasement {
             tile_to_start_encasing_id := tile_id;
@@ -1681,8 +1689,6 @@ check_interior_volume :: (cycle: [] Vector2) -> float {
     // Pick's Theorem
     boundary_points := cast(float) n;
     interior_points := area - (boundary_points / 2.0) + 1.0;
-
-    print_vars(area, boundary_points, interior_points);
 
     return interior_points;
 }
