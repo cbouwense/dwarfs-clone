@@ -226,6 +226,7 @@ DwarfState :: enum {
 }
 
 Dwarf :: struct {
+    id                 : s32;
     pos                : Vector2;
     state              : DwarfState;
     tile_ids_on_path   : [..] s32;
@@ -252,9 +253,9 @@ Chunk :: struct {
     lava_still_tile_ids     : [..] s32;
     lava_flowing_tile_ids   : [..] s32;
     hole_tile_ids           : [..] s32;
+    base_ids                : [..] s32;
     
     // TODO: Will probably want these
-    // bases    : [..] Base;
     // dwarves  : [..] Dwarf;
     // dynamite : [..] Dwarf;
 }
@@ -429,47 +430,13 @@ main :: () {
     // Initialize base
     GENERATE_BASE_ENABLED :: true;
     #if GENERATE_BASE_ENABLED {
-        home_base := Base.{
-            pos = Vector2.{
+        home_base := create_base(
+            Vector2.{
                 WORLD_COLS * TILEMAP_GENERAL_WORLD_WIDTH  / 2,
                 WORLD_ROWS * TILEMAP_GENERAL_WORLD_HEIGHT / 2,
             },
-            spawn_dwarf_cooldown_ms = DWARF_SPAWN_MS,
-        };
-
-        array_add(*bases, home_base);
-
-        // Give a little breathing room with caves
-        BLOCKS_BEFORE_CAVES :: 10;
-        for dy_idx: -BLOCKS_BEFORE_CAVES..BLOCKS_BEFORE_CAVES {
-            for dx_idx: -BLOCKS_BEFORE_CAVES..BLOCKS_BEFORE_CAVES {
-                // A circular clearing looks more natural
-                if (dx_idx * dx_idx + dy_idx * dy_idx) > (BLOCKS_BEFORE_CAVES * BLOCKS_BEFORE_CAVES) {
-                    continue;
-                }
-
-                neighbor_pos := Vector2.{ 
-                    home_base.pos.x + (dx_idx * TILEMAP_GENERAL_WORLD_WIDTH), 
-                    home_base.pos.y + (dy_idx * TILEMAP_GENERAL_WORLD_HEIGHT) 
-                };
-                
-                found, neighbor_id := find_tile_id_by_pos(neighbor_pos);
-                if found {
-                    set_tile_as_unmined(neighbor_id);
-                }
-            }
-        }
-
-        // Carve out some tiles around the base
-        for TILE_DIRECTION_DELTAS {
-            dx := it[0];
-            dy := it[1];
-
-            neighbor_pos := Vector2.{ home_base.pos.x + dx, home_base.pos.y + dy };
-            neighbor_id  := get_tile_id_by_pos(neighbor_pos);
-
-            set_tile_as_type(neighbor_id, .MINED);
-        }
+            true
+        );
     }
 
     // Initialize dwarves
@@ -845,7 +812,7 @@ main :: () {
                                                     dwarf.state = .MINING;
                                                     dwarf.tile_id_mining = tile_id_next_in_dwarfs_path;
 
-                                                    chunk := get_chunk_ptr_by_tile_id(tile_id_next_in_dwarfs_path);
+                                                    chunk := find_or_create_chunk_by_tile_id(tile_id_next_in_dwarfs_path);
                                                     array_add(*chunk.actively_mined_tile_ids, tile_id_next_in_dwarfs_path);
                                                     table_set(*actively_mined_tile_ids_to_health_table, tile_id_next_in_dwarfs_path, DIRT_HEALTH);
                                                 }
@@ -865,7 +832,7 @@ main :: () {
                                     dwarf.state = .MINING;
                                     dwarf.tile_id_mining = tile_id_next_in_dwarfs_path;
 
-                                    chunk := get_chunk_ptr_by_tile_id(tile_id_next_in_dwarfs_path);
+                                    chunk := find_or_create_chunk_by_tile_id(tile_id_next_in_dwarfs_path);
                                     array_add(*chunk.actively_mined_tile_ids, tile_id_next_in_dwarfs_path);
                                     table_set(*actively_mined_tile_ids_to_health_table, tile_id_next_in_dwarfs_path, IRON_HEALTH);
                                 }
@@ -999,28 +966,9 @@ main :: () {
 
                 // Update bases
                 {
-                    // TODO: cooldown
-                    // TODO: probably good to make this a function
                     if add_base {
                         base_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
-
-                        base := Base.{
-                            pos = Vector2.{ base_rect.x, base_rect.y },
-                            spawn_dwarf_cooldown_ms = DWARF_SPAWN_MS,
-                        };
-
-                        array_add(*bases, base);
-
-                        // Carve out some tiles around the base
-                        for TILE_DIRECTION_DELTAS {
-                            dx := it[0];
-                            dy := it[1];
-
-                            neighbor_pos := Vector2.{ base.pos.x + dx, base.pos.y + dy };
-                            neighbor_id := get_tile_id_by_pos(neighbor_pos);
-
-                            set_tile_as_type(neighbor_id, .MINED);
-                        }
+                        create_base(Vector2.{ base_rect.x, base_rect.y });
                     }
 
                     for *base: bases {
@@ -1342,6 +1290,54 @@ main :: () {
             }
         }
     }
+}
+
+create_base :: (pos: Vector2, is_home_base: bool = false) -> Base {
+    base := Base.{
+        pos = pos,
+        spawn_dwarf_cooldown_ms = DWARF_SPAWN_MS,
+    };
+
+    base_tile_id := get_tile_id_by_pos(base.pos);
+    chunk := find_or_create_chunk_by_tile_id(base_tile_id);
+    array_add(*chunk.base_ids, xx bases.count);
+    array_add(*bases, base);
+
+    if is_home_base {
+        // Give a little breathing room with caves
+        BLOCKS_BEFORE_CAVES :: 10;
+        for dy_idx: -BLOCKS_BEFORE_CAVES..BLOCKS_BEFORE_CAVES {
+            for dx_idx: -BLOCKS_BEFORE_CAVES..BLOCKS_BEFORE_CAVES {
+                // A circular clearing looks more natural
+                if (dx_idx * dx_idx + dy_idx * dy_idx) > (BLOCKS_BEFORE_CAVES * BLOCKS_BEFORE_CAVES) {
+                    continue;
+                }
+
+                neighbor_pos := Vector2.{ 
+                    base.pos.x + (dx_idx * TILEMAP_GENERAL_WORLD_WIDTH), 
+                    base.pos.y + (dy_idx * TILEMAP_GENERAL_WORLD_HEIGHT) 
+                };
+                
+                found, neighbor_id := find_tile_id_by_pos(neighbor_pos);
+                if found {
+                    set_tile_as_unmined(neighbor_id);
+                }
+            }
+        }
+    }
+
+    // Carve out some tiles around the base
+    for TILE_DIRECTION_DELTAS {
+        dx := it[0];
+        dy := it[1];
+
+        neighbor_pos := Vector2.{ base.pos.x + dx, base.pos.y + dy };
+        neighbor_id  := get_tile_id_by_pos(neighbor_pos);
+
+        set_tile_as_type(neighbor_id, .MINED);
+    }
+
+    return base;
 }
 
 kill_any_dwarves_touching_tile_id :: (tile_id: s32) {
@@ -1701,7 +1697,7 @@ try_to_encase_tiles :: (starting_tile_id: s32) {
     // If we found a liquid, mark the tiles as encased
     if found_liquid {
         for encased_ids {
-            chunk := get_chunk_ptr_by_tile_id(it);
+            chunk := find_or_create_chunk_by_tile_id(it);
             array_add(*chunk.encased_tile_ids, it);
             table_set(*encased_tile_ids_set, it, 1738);
         }
@@ -1813,6 +1809,22 @@ FindOrCreateChunkReturnStatus :: enum u16 {
     CHUNK_WOULD_BE_OUT_OF_BOUNDS;
     CHUNK_CREATED;
     CHUNK_FOUND;
+}
+
+find_or_create_chunk_by_tile_id :: (tile_id: s32) -> *Chunk {
+    world_pos := get_tile_pos_by_id(tile_id);
+    chunk_x   := world_to_chunk_pos(world_pos.x, TILEMAP_GENERAL_WORLD_WIDTH);
+    chunk_y   := world_to_chunk_pos(world_pos.y, TILEMAP_GENERAL_WORLD_HEIGHT);
+    result, chunk := find_or_create_chunk(chunk_x, chunk_y);
+
+    if #complete result == {
+        case .CHUNK_WOULD_BE_OUT_OF_BOUNDS;
+            assert(false, "Expected to find chunk for tile id %, but didn't!", tile_id);
+            return null;
+        case .CHUNK_CREATED; #through;
+        case .CHUNK_FOUND;
+            return chunk;
+    }
 }
 
 find_or_create_chunk :: (chunk_x: s32, chunk_y: s32) -> (status: FindOrCreateChunkReturnStatus, chunk: *Chunk) {
@@ -2000,7 +2012,7 @@ get_tile_ids_along_path :: (from_pos: Vector2, to_pos: Vector2) -> [..] s32 {
     // 1. Add the starting tile
     array_add(*path_ids, get_tile_id_by_pos(current_pos));
 
-    // 2. Traverse the grid, maintaining your L-shaped path preference
+    // 2. Traverse the grid, maintaining L-shaped path
     if x_is_larger {
         // Move along X axis first
         for 1..steps_x {
@@ -2034,22 +2046,6 @@ get_arrow_rotation :: (start_pos: Vector2, end_pos: Vector2) -> float32 {
     else if start_pos.x < end_pos.x  && start_pos.y == end_pos.y return 90.0;  // east
     else if start_pos.x > end_pos.x  && start_pos.y == end_pos.y return 270.0; // west
     else return 0.0;
-}
-
-get_chunk_ptr_by_tile_id :: (tile_id: s32) -> *Chunk {
-    world_pos := get_tile_pos_by_id(tile_id);
-    chunk_x   := world_to_chunk_pos(world_pos.x, TILEMAP_GENERAL_WORLD_WIDTH);
-    chunk_y   := world_to_chunk_pos(world_pos.y, TILEMAP_GENERAL_WORLD_HEIGHT);
-    result, chunk := find_or_create_chunk(chunk_x, chunk_y);
-
-    if #complete result == {
-        case .CHUNK_WOULD_BE_OUT_OF_BOUNDS;
-            assert(false, "Expected to find chunk for tile id %, but didn't!", tile_id);
-            return null;
-        case .CHUNK_CREATED; #through;
-        case .CHUNK_FOUND;
-            return chunk;
-    }
 }    
 
 set_cave_as_mined :: (tile_id: s32, cave_type: CaveType) {
@@ -2088,7 +2084,7 @@ set_cave_as_mined :: (tile_id: s32, cave_type: CaveType) {
 }
 
 set_tile_as_type :: (tile_id: s32, as_type : TileType) {
-    chunk := get_chunk_ptr_by_tile_id(tile_id);
+    chunk := find_or_create_chunk_by_tile_id(tile_id);
 
     // Remove the tile from all of the tile trackers. We will even remove it from lists that it should
     // stick around in. We put it into the one it should be right below this.
@@ -2239,7 +2235,7 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType) {
 }
 
 set_tile_as_unmined :: (tile_id: s32) {
-    chunk := get_chunk_ptr_by_tile_id(tile_id);
+    chunk := find_or_create_chunk_by_tile_id(tile_id);
 
     // Remove from the fully mined lists, turning it back into solid dirt
     array_unordered_remove_by_value(*chunk.fully_mined_tile_ids, tile_id);
@@ -2284,7 +2280,7 @@ spawn_iron :: (
         if id > max_tile_id continue;
 
         // Get the chunk this happened in
-        chunk := get_chunk_ptr_by_tile_id(id);
+        chunk := find_or_create_chunk_by_tile_id(id);
 
         // Mark the tile id as iron
         array_add(*chunk.iron_tile_ids, id);
@@ -2346,7 +2342,7 @@ derive_entities_in_viewport :: (camera: Camera2D) {
 
             // Fully mined tiles
             for tile_id: chunk.fully_mined_tile_ids {
-                pos := get_tile_pos_by_id(xx tile_id);
+                pos := get_tile_pos_by_id(tile_id);
 
                 if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
                 if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
@@ -2358,7 +2354,7 @@ derive_entities_in_viewport :: (camera: Camera2D) {
 
             // Cave tiles
             for tile_id: chunk.cave_tile_ids {
-                pos := get_tile_pos_by_id(xx tile_id);
+                pos := get_tile_pos_by_id(tile_id);
 
                 if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
                 if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
@@ -2370,7 +2366,7 @@ derive_entities_in_viewport :: (camera: Camera2D) {
 
             // Encased tiles
             for tile_id: chunk.encased_tile_ids {
-                pos := get_tile_pos_by_id(xx tile_id);
+                pos := get_tile_pos_by_id(tile_id);
 
                 if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
                 if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
@@ -2476,19 +2472,19 @@ derive_entities_in_viewport :: (camera: Camera2D) {
                 array_add(*hole_tile_ids_in_viewport, tile_id);
             }
 
-            // TODO: these are slightly harder
             // Bases
-            // for base: chunk.bases {
-            //     pos := base.pos;
+            for base_id: chunk.base_ids {
+                base := bases[base_id];
 
-            //     if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
-            //     if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
-            //     if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
-            //     if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+                if base.pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+                if base.pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+                if base.pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+                if base.pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-            //     array_add(*bases_in_viewport, base);
-            // }
+                array_add(*bases_in_viewport, base);
+            }
 
+            // TODO: these are slightly harder
             // // --- Dwarves ---
             // for dwarf: chunk.dwarves {
             //     pos := dwarf.pos;
@@ -2514,20 +2510,20 @@ derive_entities_in_viewport :: (camera: Camera2D) {
         }
     }
 
-    // Derive viewable bases
-    {
-        for base: bases {
-            pos := base.pos;
+    // // Derive viewable bases
+    // {
+    //     for base: bases {
+    //         pos := base.pos;
 
-            if pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x continue;
-            if pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x continue;
+    //         if pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x continue;
+    //         if pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x continue;
             
-            if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y continue;
-            if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+    //         if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y continue;
+    //         if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-            array_add(*bases_in_viewport, base);
-        }
-    }
+    //         array_add(*bases_in_viewport, base);
+    //     }
+    // }
 
     // Derive viewable dwarves
     {

@@ -1,6 +1,6 @@
 # In progress
 
-- Add dwarves and bases to chunks
+- Add dwarves to chunks
 
 # Bugs
 
@@ -19,15 +19,21 @@
     - cause:
     - correction:
     - confirmation:
+- adding tons of bases at once makes dwarves go diagonal
+    - condition: reproducible on 329b3b5
+    - cause:
+    - correction:
+    - confirmation:
 
 # Core
 
 - gold and points trackers
 - fullscreen and resizability
 - goblins
+- treasure caves
 - losing
-- speed up time
-- temporarily pause time
+- speed up time button
+- temporarily pause time button
 - delete path arrows
 
 # Performance
@@ -45,4 +51,3 @@
 
 - Function to tell if a tile is moveable or not
 - hotreloading
-- Extract flood fill as util
