@@ -1,6 +1,12 @@
 # In progress
 
-- Add dwarves to chunks
+- dwarves bounce between the end of a path and the middle arrow
+    - condition:
+        - reproducible on 714a893
+        - doesn't seem immediately reproducible on 9062ef0
+    - cause:
+    - correction:
+    - confirmation:
 
 # Bugs
 
@@ -11,11 +17,6 @@
     - confirmation:
 - flowing liquid can cause actively mined tiles to disappear and crashes game
     - condition: reproducible on c43b3f5
-    - cause:
-    - correction:
-    - confirmation:
-- dwarves bounce between the end of a path and the middle arrow
-    - condition: reproducible on 714a893
     - cause:
     - correction:
     - confirmation:
@@ -38,7 +39,6 @@
 
 # Performance
 
-- Liquid kills could be optimized by checking chunks
 - Just use math to get neighboring tile ids
 - underclock cpu
 - Use ids for stuff, not positions
