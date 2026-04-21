@@ -8,6 +8,11 @@ read_then_increment :: (x: *s32, increment: s32 = 1) -> s32 {
     return x.*;
 }
 
+increment_then_read :: (x: *s32, increment: s32 = 1) -> s32 {
+    x.* += increment;
+    return x.*;
+}
+
 round_to_int :: (f: float) -> int {
     i := cast(int) f;
     decimal_part := abs(f) - abs(i);

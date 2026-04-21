@@ -119,12 +119,6 @@ dragging_to_create_path_prev : bool;
 // Other
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-global_tile_pos_to_tile     : Table(string, *Tile);
-global_tile_id_to_tile      : Table(s32, *Tile);
-// TODO: maybe...
-// global_tile_id_to_entity    : Table(s32, *Entity);
-global_tile_id_to_neighbors : Table(s32, *[..] *Tile);
-
 mouse_drag_began_at_pos : Vector2;
 mouse_pos_when_path_creation_started : Vector2;
 
@@ -232,7 +226,6 @@ Dwarf :: struct {
     tile_ids_on_path   : [..] s32;
     mining_cooldown_ms : s32;
     tile_id_mining     : s32;
-    direction          : Direction; // TODO: pretty sure I can remove this
 }
 
 Path :: struct {
@@ -254,9 +247,9 @@ Chunk :: struct {
     lava_flowing_tile_ids   : [..] s32;
     hole_tile_ids           : [..] s32;
     base_ids                : [..] s32;
-    
+    // dwarf_ids               : [..] s32;
+
     // TODO: Will probably want these
-    // dwarves  : [..] Dwarf;
     // dynamite : [..] Dwarf;
 }
 
@@ -309,6 +302,8 @@ bases_in_viewport   : [..] Base;
 
 dwarves             : [..] Dwarf;
 dwarves_in_viewport : [..] Dwarf;
+dwarf_id_to_index   : Table(s32, s64);
+dwarf_id_counter    : s32 = 0;
 
 tiles_with_dynamite_ids             : [..] s32;
 tiles_with_dynamite_ids_in_viewport : [..] s32;
@@ -440,23 +435,17 @@ main :: () {
     }
 
     // Initialize dwarves
-    GENERATE_DWARVES_ENABLED :: false;
+    GENERATE_DWARVES_ENABLED :: true;
     #if GENERATE_DWARVES_ENABLED {
         for 1..DWARF_START_COUNT {
             // Figure out where to spawn it based off of the home base
             dx := TILE_DIRECTION_DELTAS[0][0];
             dy := TILE_DIRECTION_DELTAS[0][1];
+            assert(bases.count > 0);
             home_base    := bases[0];
             neighbor_pos := Vector2.{ home_base.pos.x + dx, home_base.pos.y + dy };
 
-            first_dwarf := Dwarf.{
-                pos       = Vector2.{ neighbor_pos.x, neighbor_pos.y },
-                state     = .MOVING,
-                direction = cast(Direction) cast(int) random_get_within_range(0, 4),
-                // tile_ids_on_path intentionally not set
-            };
-
-            array_add(*dwarves, first_dwarf);
+            create_dwarf(neighbor_pos);
         }
     }
 
@@ -677,16 +666,17 @@ main :: () {
                                 // Add a new target if dwarf does not have one.
                                 dwarf_has_target := dwarf.tile_ids_on_path.count > 0;
                                 if !dwarf_has_target {
-                                    // TODO: this is insanely inefficient. Really we should probably just pick an interval to change some dwarf directions or something.
+                                    dx, dy: float32;
+                                    // TODO: this is insanely inefficient. Really we should probably just pick an interval to change
+                                    // some dwarf directions or something. Pretty sure this is broken anyways.
+                                    //
+                                    // Find a new target by picking a random cardinal direction 1 tile away
                                     change_direction_rng := random_get_within_range(0, 1);
                                     if change_direction_rng < 0.25 {
-                                        // Find a new target by picking a random cardinal direction 1 tile away
                                         new_direction := cast(int) random_get_within_range(0, 4);
-                                        dwarf.direction = cast(Direction) new_direction;
+                                        dx = TILE_DIRECTION_DELTAS[new_direction][0];
+                                        dy = TILE_DIRECTION_DELTAS[new_direction][1];
                                     }
-
-                                    dx := TILE_DIRECTION_DELTAS[dwarf.direction][0];
-                                    dy := TILE_DIRECTION_DELTAS[dwarf.direction][1];
 
                                     assert(dx == 0 || dy == 0, "dx: %, dy: %", dx, dy);
 
@@ -769,6 +759,8 @@ main :: () {
 
                                         dwarf.pos = new_pos;
 
+                                        // TODO: delete this?...
+                                        //
                                         // PERF: Instead of having the full list of tile ids that a dwarf needs to go to, only have
                                         // the middle and end positions.
                                         #if false {
@@ -838,7 +830,7 @@ main :: () {
                                 }
 
                             case .MINING;
-                                assert(dwarf.tile_id_mining > 0, "Dwarf tryna mine but he got no gotdamn tile to mine!!!!!!!");
+                                assert(dwarf.tile_id_mining >= 0, "Dwarf tryna mine but he got no gotdamn tile to mine!!!!!!!");
 
                                 // If you try to mine liquid, you're fucking banned
                                 if (
@@ -847,7 +839,7 @@ main :: () {
                                     table_contains(*lava_still_tile_ids_set,    dwarf.tile_id_mining) ||
                                     table_contains(*lava_flowing_tile_ids_set,  dwarf.tile_id_mining)
                                 ) {
-                                    array_unordered_remove_by_index(*dwarves, it_index);
+                                    kill_dwarf_by_index(it_index);
                                 }
 
                                 if dwarf.mining_cooldown_ms > 0 {
@@ -944,8 +936,7 @@ main :: () {
                         for dwarf, dwarf_index: dwarves {
                             dynamite_pos := get_tile_pos_by_id(it);
                             if Vector2Equals(dwarf.pos, dynamite_pos) {
-                                // Kill the dwarf
-                                array_unordered_remove_by_index(*dwarves, dwarf_index);
+                                kill_dwarf_by_index(dwarf_index);
 
                                 // Destroy the dynamite
                                 // TODO: I have a feeling this might cause weird problems. If it does, just mark these
@@ -973,14 +964,7 @@ main :: () {
 
                     for *base: bases {
                         if base.spawn_dwarf_cooldown_ms <= 0 {
-                            dwarf := Dwarf.{
-                                pos       = Vector2.{ base.pos.x, base.pos.y },
-                                state     = .MOVING,
-                                direction = cast(Direction) cast(int) random_get_within_range(0, 4),
-                                // tile_ids_on_path intentionally not set
-                            };
-
-                            array_add(*dwarves, dwarf);
+                            create_dwarf(Vector2.{ base.pos.x, base.pos.y });
 
                             base.spawn_dwarf_cooldown_ms = DWARF_SPAWN_MS;
                         } else {
@@ -1292,6 +1276,25 @@ main :: () {
     }
 }
 
+create_dwarf :: (pos: Vector2) -> Dwarf {
+    dwarf_id := increment_then_read(*dwarf_id_counter);
+
+    dwarf := Dwarf.{
+        id        = dwarf_id,
+        pos       = pos,
+        state     = .MOVING,
+        // tile_ids_on_path intentionally not set
+    };
+
+    dwarf_tile_id := get_tile_id_by_pos(pos);
+    // chunk := find_or_create_chunk_by_tile_id(dwarf_tile_id);
+    // array_add(*chunk.dwarf_ids, dwarf_id);
+    table_set(*dwarf_id_to_index, dwarf_id, dwarves.count);
+    array_add(*dwarves, dwarf);
+
+    return dwarf;
+}
+
 create_base :: (pos: Vector2, is_home_base: bool = false) -> Base {
     base := Base.{
         pos = pos,
@@ -1345,10 +1348,47 @@ kill_any_dwarves_touching_tile_id :: (tile_id: s32) {
     kill_rect := Rectangle.{ kill_pos.x, kill_pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
     for dwarf, dwarf_index: dwarves {
         dwarf_rect := Rectangle.{ dwarf.pos.x, dwarf.pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
-        if CheckCollisionRecs(dwarf_rect, kill_rect) {
-            array_unordered_remove_by_index(*dwarves, dwarf_index);
-        }
+        if CheckCollisionRecs(dwarf_rect, kill_rect) kill_dwarf_by_index(dwarf_index);
     }
+}
+
+kill_dwarf_by_index :: (dwarf_index: s64) {
+    print("killing dwarf with index %\n", dwarf_index);
+    dwarf_id_being_swapped := dwarves[dwarves.count - 1].id;
+    dwarf_id_being_killed  := dwarves[dwarf_index].id;
+
+    if dwarf_id_being_swapped != dwarf_id_being_killed {
+        print("swapping dwarf id % to index %\n", dwarf_id_being_swapped, dwarf_index);
+        table_set(*dwarf_id_to_index, dwarf_id_being_swapped, dwarf_index);
+    }
+    table_remove(*dwarf_id_to_index, dwarf_id_being_killed);
+
+    // TODO: I kinda think we need something similar to derive_entities_in_viewport, but for chunk membership
+    // dwarf         := dwarves[dwarf_index];
+    // dwarf_center  := get_rect_center(get_world_rect_from_pos(dwarf.pos));
+    // dwarf_tile_id := get_tile_id_by_pos(dwarf_center);
+    // chunk         := find_or_create_chunk_by_tile_id(dwarf_tile_id);
+
+    // found := false;
+    // for chunk.dwarf_ids {
+    //     if it == dwarf.id {
+    //         found = true;
+    //         array_unordered_remove_by_index(*chunk.dwarf_ids, it_index);
+    //     }
+    // }
+    // assert(found);
+
+    array_unordered_remove_by_index(*dwarves, dwarf_index);
+
+    print_vars(dwarves);
+    table_print(dwarf_id_to_index);
+    print("***\n");
+}
+
+kill_dwarf_by_id :: (dwarf_id: s32) {
+    found, dwarf_index := table_find(*dwarf_id_to_index, dwarf_id);
+    assert(found);
+    kill_dwarf_by_index(dwarf_index);
 }
 
 get_neighbor_tile_ids :: (tile_id: s32) -> [..] s32 {
@@ -2484,18 +2524,21 @@ derive_entities_in_viewport :: (camera: Camera2D) {
                 array_add(*bases_in_viewport, base);
             }
 
-            // TODO: these are slightly harder
-            // // --- Dwarves ---
-            // for dwarf: chunk.dwarves {
-            //     pos := dwarf.pos;
+            // // Dwarves
+            // for dwarf_id: chunk.dwarf_ids {
+            //     found, dwarf_index := table_find(*dwarf_id_to_index, dwarf_id);
+            //     assert(found);
+            //     dwarf := dwarves[dwarf_index];
 
-            //     if pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x continue;
-            //     if pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x continue;
-            //     if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y continue;
-            //     if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+            //     if dwarf.pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x continue;
+            //     if dwarf.pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x continue;
+            //     if dwarf.pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y continue;
+            //     if dwarf.pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
             //     array_add(*dwarves_in_viewport, dwarf);
             // }
+
+            // TODO
             // // --- Dynamite ---
             // for dwarf: chunk.dwarves {
             //     pos := dwarf.pos;
