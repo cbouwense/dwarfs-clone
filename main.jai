@@ -61,6 +61,12 @@ CHUNK_SIZE :: 32; // 32 x 32 tiles
 WATER_FLOW_COOLDOWN_MS :: 1000;
 LAVA_FLOW_COOLDOWN_MS  :: 2500;
 
+GOLD_FROM_MINE_DIRT :: 1;
+GOLD_FROM_MINE_IRON :: 75;
+
+POINTS_FROM_MINE_DIRT :: 1;
+POINTS_FROM_MINE_IRON :: 50;
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Metagame state
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -142,6 +148,8 @@ GameState :: struct {
     selected_dwarf_id      : s32;
     water_flow_cooldown_ms : int;
     lava_flow_cooldown_ms  : int;
+    points : int;
+    gold   : int;
 }
 
 Direction :: enum u8 #specified {
@@ -390,6 +398,8 @@ main :: () {
         selected_dwarf_id      = 0,
         water_flow_cooldown_ms = WATER_FLOW_COOLDOWN_MS,
         lava_flow_cooldown_ms  = LAVA_FLOW_COOLDOWN_MS,
+        points = 0,
+        gold   = 0,
     };
 
     // Initialize caves
@@ -415,7 +425,7 @@ main :: () {
                 tile_should_be_part_of_cave := cave_noise[noise_index] >= CAVE_PERLIN_NOISE_MAX_THRESHOLD;
 
                 if tile_should_be_part_of_cave {
-                    set_tile_as_type(xx tile_id, .CAVE);
+                    set_tile_as_type(xx tile_id, .CAVE, false, *game_state);
                 }
             }
         }
@@ -449,7 +459,8 @@ main :: () {
                 WORLD_COLS * TILEMAP_GENERAL_WORLD_WIDTH  / 2,
                 WORLD_ROWS * TILEMAP_GENERAL_WORLD_HEIGHT / 2,
             },
-            true
+            true,
+            *game_state
         );
     }
 
@@ -563,8 +574,8 @@ main :: () {
                 hovered_tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
                 if IsMouseButtonDown(MouseButton.MOUSE_BUTTON_LEFT) && IsKeyDown(KeyboardKey.KEY_LEFT_CONTROL) {
                     tile_id := get_tile_id_by_pos(Vector2.{ hovered_tile_rect.x, hovered_tile_rect.y });
-                    set_tile_as_type(tile_id, .MINED);
-                    reveal_cave_if_necessary(tile_id);
+                    set_tile_as_type(tile_id, .MINED, false, *game_state);
+                    reveal_cave_if_necessary(tile_id, false, *game_state);
                 }
 
                 // Update camera
@@ -640,8 +651,8 @@ main :: () {
                             tile_is_encased         := table_contains(*encased_tile_ids_set, tile_id);
 
                             if tile_is_mineable && !tile_is_empty && !tile_is_obsidian && !tile_is_encased {
-                                set_tile_as_type(tile_id, .OBSIDIAN);
-                                handle_encasement(tile_id, *persistent_encasing_obsidian_tile_ids_set);
+                                set_tile_as_type(tile_id, .OBSIDIAN, false, *game_state);
+                                handle_encasement(tile_id, *persistent_encasing_obsidian_tile_ids_set, *game_state);
                             }
                         }
                     }
@@ -952,7 +963,7 @@ main :: () {
                                             // instead of checking each table manually as we have more. idk.
                                             is_mining_resource := table_find(*iron_tile_ids_set, dwarf.tile_id_mining);
                                             
-                                            set_tile_as_type(dwarf.tile_id_mining, .MINED);
+                                            set_tile_as_type(dwarf.tile_id_mining, .MINED, true, *game_state);
 
                                             // If the dwarf is mining a resource, check if there are any others nearby
                                             if is_mining_resource {
@@ -994,7 +1005,7 @@ main :: () {
 
                                             // If we just cracked into a cave, we'll need to reveal the cave and do anything
                                             // that cave type needs (e.g. spawn water, lava, monsters, etc.).
-                                            reveal_cave_if_necessary(dwarf.tile_id_mining);
+                                            reveal_cave_if_necessary(dwarf.tile_id_mining, true, *game_state);
 
                                             dwarf.tile_id_mining = 0;
                                             dwarf.state = .MOVING;
@@ -1038,8 +1049,8 @@ main :: () {
                                 array_unordered_remove_by_index(*tiles_with_dynamite_ids, it_index);
 
                                 // Create a hole
-                                set_tile_as_type(it, .HOLE);
-                                handle_encasement(it, *persistent_encasing_obsidian_tile_ids_set);
+                                set_tile_as_type(it, .HOLE, false, *game_state);
+                                handle_encasement(it, *persistent_encasing_obsidian_tile_ids_set, *game_state);
 
                                 // TODO: animation I guess
 
@@ -1053,7 +1064,7 @@ main :: () {
                 {
                     if add_base {
                         base_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
-                        create_base(Vector2.{ base_rect.x, base_rect.y });
+                        create_base(Vector2.{ base_rect.x, base_rect.y }, false, *game_state);
                     }
 
                     for *base: bases {
@@ -1099,12 +1110,12 @@ main :: () {
                         kill_any_dwarves_touching_tile_id(it);
 
                         if should_spread_this_frame {
-                            try_to_set_cardinal_neighbors_as_flowing_tile_type(it, .WATER_FLOWING);
+                            try_to_set_cardinal_neighbors_as_flowing_tile_type(it, .WATER_FLOWING, *game_state);
 
                             // If all surrounding tiles are liquid, then we can mark this tile as
                             // still liquid so we don't have to update it going forward.
                             if are_all_neighbors_liquid(it) {
-                                set_tile_as_type(it, .WATER_STILL);
+                                set_tile_as_type(it, .WATER_STILL, false, *game_state);
                             }
                         }
                     }
@@ -1134,12 +1145,12 @@ main :: () {
                         kill_any_dwarves_touching_tile_id(it);
 
                         if should_spread_water_this_frame {
-                            try_to_set_cardinal_neighbors_as_flowing_tile_type(it, .LAVA_FLOWING);
+                            try_to_set_cardinal_neighbors_as_flowing_tile_type(it, .LAVA_FLOWING, *game_state);
 
                             // If all surrounding tiles are liquid, then we can mark this tile as
                             // still liquid so we don't have to update it going forward.
                             if are_all_neighbors_liquid(it) {
-                                set_tile_as_type(it, .LAVA_STILL);
+                                set_tile_as_type(it, .LAVA_STILL, false, *game_state);
                             }
                         }
                     }
@@ -1367,6 +1378,8 @@ main :: () {
                     DrawText(tprint("selected_dwarf_id: %\0", game_state.selected_dwarf_id).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
                     DrawText(tprint("water_flow_cooldown_ms: %\0", game_state.water_flow_cooldown_ms).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
                     DrawText(tprint("lava_flow_cooldown_ms: %\0", game_state.lava_flow_cooldown_ms).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                    DrawText(tprint("gold: %\0", game_state.gold).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                    DrawText(tprint("points: %\0", game_state.points).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
                 }
 
                 // Debug controls
@@ -1443,7 +1456,7 @@ create_dwarf :: (pos: Vector2) -> Dwarf {
     return dwarf;
 }
 
-create_base :: (pos: Vector2, is_home_base: bool = false) -> Base {
+create_base :: (pos: Vector2, is_home_base: bool, game_state: *GameState) -> Base {
     base := Base.{
         pos = pos,
         spawn_dwarf_cooldown_ms = DWARF_SPAWN_MS,
@@ -1485,7 +1498,7 @@ create_base :: (pos: Vector2, is_home_base: bool = false) -> Base {
         neighbor_pos := Vector2.{ base.pos.x + dx, base.pos.y + dy };
         neighbor_id  := get_tile_id_by_pos(neighbor_pos);
 
-        set_tile_as_type(neighbor_id, .MINED);
+        set_tile_as_type(neighbor_id, .MINED, false, game_state);
     }
 
     return base;
@@ -1621,7 +1634,7 @@ get_neighbor_tile_ids_of_type :: (tile_id: s32, tile_type: TileType) -> [..] s32
     return neighbor_tile_ids;
 }
 
-handle_encasement :: (tile_id: s32, persistent_encasing_obsidian_tile_ids_set: *Table) {
+handle_encasement :: (tile_id: s32, persistent_encasing_obsidian_tile_ids_set: *Table, game_state: *GameState) {
     encasing_obsidian_tile_ids_set: Table(s32, s32);
     did_encase := check_encasement(tile_id, *encasing_obsidian_tile_ids_set, persistent_encasing_obsidian_tile_ids_set);
 
@@ -1678,7 +1691,7 @@ handle_encasement :: (tile_id: s32, persistent_encasing_obsidian_tile_ids_set: *
             if it == .EAST  tile_to_start_encasing_id += 1;
             if it == .WEST  tile_to_start_encasing_id -= 1;
 
-            try_to_encase_tiles(tile_to_start_encasing_id);
+            try_to_encase_tiles(tile_to_start_encasing_id, game_state);
         }
     }
 }
@@ -1824,7 +1837,7 @@ check_interior_volume :: (cycle: [] Vector2) -> float {
     return interior_points;
 }
 
-try_to_encase_tiles :: (starting_tile_id: s32) {
+try_to_encase_tiles :: (starting_tile_id: s32, game_state: *GameState) {
     found_liquid   : bool = false;
     ids_processed  : Table(s32, s32);
     ids_to_process : [..] s32;
@@ -1848,7 +1861,7 @@ try_to_encase_tiles :: (starting_tile_id: s32) {
 
         if table_contains(*water_flowing_tile_ids_set, id) {
             found_liquid = true;
-            set_tile_as_type(id, .WATER_STILL);
+            set_tile_as_type(id, .WATER_STILL, false, game_state);
         }
 
         if table_contains(*lava_still_tile_ids_set, id) {
@@ -1857,7 +1870,7 @@ try_to_encase_tiles :: (starting_tile_id: s32) {
 
         if table_contains(*lava_flowing_tile_ids_set, id) {
             found_liquid = true;
-            set_tile_as_type(id, .LAVA_STILL);
+            set_tile_as_type(id, .LAVA_STILL, false, game_state);
         }
 
         // Mark it as processed and encased
@@ -1938,7 +1951,7 @@ are_all_neighbors_liquid :: (tile_id: s32) -> bool {
     return is_neighbor_north_liquid && is_neighbor_south_liquid && is_neighbor_east_liquid && is_neighbor_west_liquid;
 }
 
-try_to_set_cardinal_neighbors_as_flowing_tile_type :: (tile_id: s32, as_type: TileType) {
+try_to_set_cardinal_neighbors_as_flowing_tile_type :: (tile_id: s32, as_type: TileType, game_state: *GameState) {
     tile_pos := get_tile_pos_by_id(tile_id);
     dx, dy : float;
 
@@ -1978,7 +1991,7 @@ try_to_set_cardinal_neighbors_as_flowing_tile_type :: (tile_id: s32, as_type: Ti
         tile_is_empty := table_contains(*fully_mined_tile_ids_set, neighbor_id);
         if !tile_is_empty continue;
 
-        set_tile_as_type(neighbor_id, as_type);
+        set_tile_as_type(neighbor_id, as_type, false, game_state);
     }
 }
 
@@ -2225,7 +2238,7 @@ get_arrow_rotation :: (start_pos: Vector2, end_pos: Vector2) -> float32 {
     else return 0.0;
 }    
 
-set_cave_as_mined :: (tile_id: s32, cave_type: CaveType) {
+set_cave_as_mined :: (tile_id: s32, cave_type: CaveType, grant_points: bool, game_state: *GameState) {
     tile_type : TileType;
     if #complete cave_type == {
         case .EMPTY;        tile_type = .MINED;
@@ -2237,7 +2250,7 @@ set_cave_as_mined :: (tile_id: s32, cave_type: CaveType) {
         case .SPIDER_QUEEN; tile_type = .MINED;
     }
 
-    set_tile_as_type(tile_id, tile_type);
+    set_tile_as_type(tile_id, tile_type, grant_points, game_state);
 
     // Recursively go through neighbors and set them as mined as well.
     dx, dy : float;
@@ -2256,23 +2269,22 @@ set_cave_as_mined :: (tile_id: s32, cave_type: CaveType) {
         tile_is_unrevealed_cave := table_contains(*cave_tile_ids_set, neighbor_id);
         if !tile_is_unrevealed_cave continue;
 
-        set_cave_as_mined(neighbor_id, cave_type);
+        set_cave_as_mined(neighbor_id, cave_type, grant_points, game_state);
     }
 }
 
-set_tile_as_type :: (tile_id: s32, as_type : TileType) {
+set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, game_state: *GameState) {
     chunk := find_or_create_chunk_by_tile_id(tile_id);
+
+    tile_was_iron := table_contains(*iron_tile_ids_set, tile_id);
+    tile_was_dirt := !tile_was_iron && !table_contains(*fully_mined_tile_ids_set, tile_id);
 
     // Remove the tile from all of the tile trackers. We will even remove it from lists that it should
     // stick around in. We put it into the one it should be right below this.
-    // TODO: maybe don't do it like this? For some reason, this seems like a good idea to me right now,
-    // but I could easily see this being stupid and wasteful. I guess we'll see.
     {
         // If the tile was a resource, then keep track of the gain and also remove the resource
         // from the map
-        tile_was_iron := table_find(*iron_tile_ids_set, tile_id);
         if tile_was_iron {
-            // TODO: give the player resources?
             array_unordered_remove_by_value(*chunk.iron_tile_ids, tile_id);
             table_remove(*iron_tile_ids_set, tile_id);
         }
@@ -2313,7 +2325,6 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType) {
         table_remove(*hole_tile_ids_set, tile_id);
     }
 
-    // Add the tile to whatever new list it should be a part of.
     if #complete as_type == {
         case .CAVE; {
             array_add(*chunk.cave_tile_ids, tile_id);
@@ -2322,6 +2333,18 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType) {
         case .MINED; {
             array_add(*chunk.fully_mined_tile_ids, tile_id);
             table_set(*fully_mined_tile_ids_set, tile_id, 1738);
+
+            if grant_points {
+                if tile_was_iron {
+                    game_state.gold   += GOLD_FROM_MINE_IRON;
+                    game_state.points += POINTS_FROM_MINE_IRON;
+                }
+
+                if tile_was_dirt {
+                    game_state.gold   += GOLD_FROM_MINE_DIRT;
+                    game_state.points += POINTS_FROM_MINE_DIRT;
+                }
+            }
         }
         case .ENCASED; {
             array_add(*chunk.encased_tile_ids, tile_id);
@@ -2362,6 +2385,7 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType) {
         }
     }
 
+    // Update pathing
     if #complete as_type == {
         // Add edges for pathing to any neighbors who are also open
         case .CAVE; #through;
@@ -2391,7 +2415,7 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType) {
         // Remove edges for pathing to all neighbors
         case .ENCASED;  #through;
         case .OBSIDIAN; #through;
-        case .HOLE; #through;
+        case .HOLE;     #through;
         case .DIRT;     #through;
         case .IRON;
             dx, dy : float;
@@ -2757,7 +2781,7 @@ derive_entities_in_viewport :: (camera: Camera2D) {
     }
 }
 
-reveal_cave_if_necessary :: (tile_id: s32) {
+reveal_cave_if_necessary :: (tile_id: s32, grant_points: bool, game_state: *GameState) {
     check_is_neighbor_unreavealed_cave :: (tile_id: s32) -> found_cave_neighbor: bool, cave_neighbor_id: s32 {
         for i: 0..3 {
             dx := TILE_DIRECTION_DELTAS[i][0];
@@ -2780,7 +2804,7 @@ reveal_cave_if_necessary :: (tile_id: s32) {
         cave_type : CaveType = cast(CaveType) cast(int) random_get_within_range(0, xx enum_count(CaveType));
 
         // Second, recursively reveal the tiles of the cave.
-        set_cave_as_mined(cave_tile_id, cave_type);
+        set_cave_as_mined(cave_tile_id, cave_type, grant_points, game_state);
     }
 }
 

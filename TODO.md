@@ -1,10 +1,6 @@
 # In progress
 
-- paths can be drawn with one segment
-    - condition: reproducible on f232b3f
-    - cause:
-    - correction:
-    - confirmation:
+- gold and points trackers
 
 # Bugs
 
@@ -21,7 +17,6 @@
 
 # Core
 
-- gold and points trackers
 - treasure caves
 - goblins
 - losing
