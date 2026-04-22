@@ -1,5 +1,20 @@
 # Done
 
+- dwarves seem to spawn on cursor when dragging near or on another dwarf
+    - condition:
+        - reproducible on 8e9702b, a9f528e
+        - it seems to be easier to reproduce the more dwarves there are
+        - after a while it seems to almost happen every time you select a dwarf, but not 100%
+        - it seems to actually teleport an existing dwarf, not create a new one
+        - it looks like the ids are being incorrectly selected into the game state
+        - changing the game state from an index to an id seems to have worked, need to confirm though
+    - cause:
+        - the logic for selecting dwarves was using dwarf index, and it was off by one.
+    - correction:
+        - changed the logic to use id instead of index, and fixed the off by one error.
+    - confirmation:
+        - fixed in 10bc2bb
+
 - dwarves bounce between the end of a path and the middle arrow
     - condition:
         - reproducible on 714a893

@@ -102,18 +102,33 @@ select_is_pressed_once  : bool;
 select_is_held_down     : bool;
 add_base                : bool;
 add_iron                : bool;
-add_as_dynamite         : bool;
-add_as_obsidian         : bool;
-started_to_create_path  : bool;
-dragging_to_create_path : bool;
+select_as_place_dynamite         : bool;
+select_as_place_obsidian         : bool;
+started_to_draw_path  : bool;
+drawing_path : bool;
 drag_cam_pressed        : bool;
 drag_cam_down           : bool;
 move_camera_up          : bool;
 move_camera_down        : bool;
 move_camera_left        : bool;
 move_camera_right       : bool;
+select_as_remove_path             : bool;
 
-dragging_to_create_path_prev : bool;
+select_is_pressed_once_prev  : bool;
+select_is_held_down_prev     : bool;
+add_base_prev                : bool;
+add_iron_prev                : bool;
+select_as_place_dynamite_prev         : bool;
+select_as_place_obsidian_prev         : bool;
+started_to_draw_path_prev  : bool;
+drawing_path_prev : bool;
+drag_cam_pressed_prev        : bool;
+drag_cam_down_prev           : bool;
+move_camera_up_prev          : bool;
+move_camera_down_prev        : bool;
+move_camera_left_prev        : bool;
+move_camera_right_prev       : bool;
+select_as_remove_path_prev             : bool;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Other
@@ -316,7 +331,7 @@ hole_tile_ids_in_viewport : [..] s32;
 
 path_being_traced : Path;
 paths             : [..] Path;
-// paths_in_viewport : [..] Path;
+paths_in_viewport : [..] Path;
 
 active_chunks: Table(u64, *Chunk);
 
@@ -351,10 +366,10 @@ main :: () {
         controls.select[0]              = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_LEFT   };
         controls.add_base[0]            = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_B               };
         controls.add_iron[0]            = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_I               };
-        controls.add_as_dynamite[0]     = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_E               };
-        controls.add_as_obsidian[0]     = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_Q               };
-        controls.add_as_obsidian[1]     = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT_SHIFT      };
-        controls.add_as_obsidian[2]     = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT_SHIFT     };
+        controls.select_as_place_dynamite[0]     = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_E               };
+        controls.select_as_place_obsidian[0]     = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_Q               };
+        controls.select_as_place_obsidian[1]     = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT_SHIFT      };
+        controls.select_as_place_obsidian[2]     = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT_SHIFT     };
         controls.drag_as_create_path[0] = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_LEFT   };
         controls.drag_cam[0]            = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_RIGHT  };
         controls.drag_cam[1]            = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_MIDDLE };
@@ -366,12 +381,13 @@ main :: () {
         controls.move_camera_left[1]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_A               };
         controls.move_camera_right[0]   = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT           };
         controls.move_camera_right[1]   = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_D               };
+        controls.select_as_remove_path[0]         = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_F               };
     }
 
     // Initialize game
     game_state := GameState.{
         hovered_dwarf_index    = 0,
-        selected_dwarf_id   = 0,
+        selected_dwarf_id      = 0,
         water_flow_cooldown_ms = WATER_FLOW_COOLDOWN_MS,
         lava_flow_cooldown_ms  = LAVA_FLOW_COOLDOWN_MS,
     };
@@ -490,24 +506,51 @@ main :: () {
             if IsKeyPressed(.KEY_SPACE) paused = !paused;
             if IsKeyPressed(.KEY_G) debug_mode = !debug_mode;
 
-            // Previous controls
-            dragging_to_create_path_prev = dragging_to_create_path;
+            // Controls from last frame
+            {
+                select_is_pressed_once_prev   = select_is_pressed_once;
+                select_is_held_down_prev      = select_is_held_down;
+                add_base_prev                 = add_base;
+                add_iron_prev                 = add_iron;
+                select_as_place_dynamite_prev = select_as_place_dynamite;
+                select_as_place_obsidian_prev = select_as_place_obsidian;
+                select_as_remove_path_prev    = select_as_remove_path;
+                drag_cam_pressed_prev         = drag_cam_pressed;
+                drag_cam_down_prev            = drag_cam_down;
+                move_camera_up_prev           = move_camera_up;
+                move_camera_down_prev         = move_camera_down;
+                move_camera_left_prev         = move_camera_left;
+                move_camera_right_prev        = move_camera_right;
 
-            // Game controls
-            select_is_pressed_once  = control_is_pressed(controls.select);
-            select_is_held_down     = control_is_down(controls.select);
-            add_base                = control_is_pressed(controls.add_base);
-            add_iron                = control_is_pressed(controls.add_iron);
-            add_as_dynamite         = control_is_down(controls.add_as_dynamite);
-            add_as_obsidian         = control_is_down(controls.add_as_obsidian);
-            started_to_create_path  = control_is_pressed(controls.drag_as_create_path);
-            dragging_to_create_path = control_is_down(controls.drag_as_create_path) && !IsKeyDown(KeyboardKey.KEY_LEFT_CONTROL); // TODO: just a little debug hack
-            drag_cam_pressed        = control_is_pressed(controls.drag_cam);
-            drag_cam_down           = control_is_down(controls.drag_cam);
-            move_camera_up          = control_is_down(controls.move_camera_up);
-            move_camera_down        = control_is_down(controls.move_camera_down);
-            move_camera_left        = control_is_down(controls.move_camera_left);
-            move_camera_right       = control_is_down(controls.move_camera_right);
+                started_to_draw_path_prev   = started_to_draw_path;
+                drawing_path_prev  = drawing_path;
+            }
+
+            // Controls this frame
+            {
+                select_is_pressed_once   = control_is_pressed(controls.select);
+                select_is_held_down      = control_is_down(controls.select);
+                add_base                 = control_is_pressed(controls.add_base);
+                add_iron                 = control_is_pressed(controls.add_iron);
+                select_as_place_dynamite = control_is_down(controls.select_as_place_dynamite);
+                select_as_place_obsidian = control_is_down(controls.select_as_place_obsidian);
+                select_as_remove_path    = control_is_down(controls.select_as_remove_path);
+                drag_cam_pressed         = control_is_pressed(controls.drag_cam);
+                drag_cam_down            = control_is_down(controls.drag_cam);
+                move_camera_up           = control_is_down(controls.move_camera_up);
+                move_camera_down         = control_is_down(controls.move_camera_down);
+                move_camera_left         = control_is_down(controls.move_camera_left);
+                move_camera_right        = control_is_down(controls.move_camera_right);
+
+                started_to_draw_path = (
+                    select_is_pressed_once &&
+                    !select_as_place_dynamite &&
+                    !select_as_place_obsidian &&
+                    !select_as_remove_path_prev &&
+                    !IsKeyDown(KeyboardKey.KEY_LEFT_CONTROL) // debug control to mine blocks
+                );
+                drawing_path = select_is_held_down && (drawing_path_prev || started_to_draw_path_prev);
+            }
         }
 
         //
@@ -575,7 +618,7 @@ main :: () {
             if !paused {
                 // Update user action
                 {        
-                    if add_as_obsidian {
+                    if select_as_place_obsidian {
                         if select_is_held_down {
                             // Try to turn the selected tile into obsidian
                             tile_id := get_tile_id_by_pos(mouse_pos_in_world);
@@ -602,7 +645,7 @@ main :: () {
                             }
                         }
                     }
-                    else if add_as_dynamite {
+                    else if select_as_place_dynamite {
                         if select_is_pressed_once {
                             // Try to add dynamite to the selected tile
                             tile_id := get_tile_id_by_pos(mouse_pos_in_world);
@@ -615,38 +658,55 @@ main :: () {
                             }
                         }
                     }
+                    else if select_as_remove_path {
+                        if select_is_held_down {
+                            tile_id := get_tile_id_by_pos(mouse_pos_in_world);
+
+                            for path: paths_in_viewport {
+                                if tile_id == path.start_tile_id {
+                                    array_unordered_remove_by_index(*paths, it_index);
+                                }
+
+                                path_has_middle_arrow, tile_id_with_middle_arrow := find_tile_id_with_middle_arrow_on_path(path);
+                                if path_has_middle_arrow && tile_id == tile_id_with_middle_arrow {
+                                    array_unordered_remove_by_index(*paths, it_index);
+                                }
+                            }
+                        }
+                    }
                     else {
-                        if dragging_to_create_path {
-                            if started_to_create_path {
-                                for dwarf: dwarves_in_viewport {
-                                    if CheckCollisionPointRec(mouse_pos_in_world, get_world_rect_from_pos(dwarf.pos)) {
-                                        game_state.selected_dwarf_id = dwarf.id;
-                                        break;
-                                    }
+                        if started_to_draw_path {
+                            for dwarf: dwarves_in_viewport {
+                                if CheckCollisionPointRec(mouse_pos_in_world, get_world_rect_from_pos(dwarf.pos)) {
+                                    game_state.selected_dwarf_id = dwarf.id;
+                                    break;
                                 }
-
-                                // If a dwarf was found being clicked
-                                if game_state.selected_dwarf_id > 0 {
-                                    found, selected_dwarf_index := table_find(*dwarf_id_to_index, game_state.selected_dwarf_id);
-                                    assert(found);
-
-                                    // Teleport dwarf to tile we are hovering over and keep it there
-                                    tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
-                                    dwarves[selected_dwarf_index].pos = get_rect_pos(tile_rect);
-                                    
-                                    // Stop the dwarf from moving so you can think while dragging a path
-                                    dwarves[selected_dwarf_index].state = .IDLE;
-
-                                    // Remove its current pathing
-                                    array_reset(*(dwarves[selected_dwarf_index].tile_ids_on_path));
-                                }
-
-                                mouse_pos_when_path_creation_started = mouse_pos_in_world;
                             }
 
-                            // Draw out the path that is currently being traced
+                            // If a dwarf was found being clicked
+                            if game_state.selected_dwarf_id > 0 {
+                                found, selected_dwarf_index := table_find(*dwarf_id_to_index, game_state.selected_dwarf_id);
+                                assert(found);
+
+                                // Teleport dwarf to tile we are hovering over and keep it there
+                                tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
+                                dwarves[selected_dwarf_index].pos = get_rect_pos(tile_rect);
+                                
+                                // Stop the dwarf from moving so you can think while dragging a path
+                                dwarves[selected_dwarf_index].state = .IDLE;
+
+                                // Remove its current pathing
+                                array_reset(*(dwarves[selected_dwarf_index].tile_ids_on_path));
+                            }
+
+                            mouse_pos_when_path_creation_started = mouse_pos_in_world;
+                        }
+
+                        if drawing_path {
+                            // Draw out the path that is currently being traced.
                             path_being_traced = get_path(mouse_pos_when_path_creation_started, mouse_pos_in_world);
-                        } else if dragging_to_create_path_prev {
+                        } else if drawing_path_prev {
+                            // If we were drawing a path, but just let go, then create the path as a real thing.
                             array_add(*paths, path_being_traced);
 
                             if game_state.selected_dwarf_id > 0 {
@@ -1238,9 +1298,8 @@ main :: () {
 
                 // Draw paths
                 {
-                    if dragging_to_create_path draw_path(path_being_traced);
-                    
-                    for path: paths draw_path(path);
+                    if drawing_path  draw_path(path_being_traced);
+                    for path: paths_in_viewport draw_path(path);
                 }
 
                 // Draw hovered tile
@@ -1303,6 +1362,25 @@ main :: () {
                     DrawText(tprint("selected_dwarf_id: %\0", game_state.selected_dwarf_id).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
                     DrawText(tprint("water_flow_cooldown_ms: %\0", game_state.water_flow_cooldown_ms).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
                     DrawText(tprint("lava_flow_cooldown_ms: %\0", game_state.lava_flow_cooldown_ms).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                }
+
+                // Debug controls
+                {
+                    DrawText(tprint("select_is_pressed_once: %\0", select_is_pressed_once).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                    DrawText(tprint("select_is_held_down: %\0", select_is_held_down).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                    DrawText(tprint("add_base: %\0", add_base).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                    DrawText(tprint("add_iron: %\0", add_iron).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                    DrawText(tprint("select_as_place_dynamite: %\0", select_as_place_dynamite).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                    DrawText(tprint("select_as_place_obsidian: %\0", select_as_place_obsidian).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                    DrawText(tprint("select_as_remove_path: %\0", select_as_remove_path).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                    DrawText(tprint("started_to_draw_path: %\0", started_to_draw_path).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                    DrawText(tprint("drag_cam_pressed: %\0", drag_cam_pressed).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                    DrawText(tprint("drag_cam_down: %\0", drag_cam_down).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                    DrawText(tprint("move_camera_up: %\0", move_camera_up).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                    DrawText(tprint("move_camera_down: %\0", move_camera_down).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                    DrawText(tprint("move_camera_left: %\0", move_camera_left).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                    DrawText(tprint("move_camera_right: %\0", move_camera_right).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                    DrawText(tprint("drawing_path: %\0", drawing_path).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
                 }
 
                 debug_text_y = 0;
@@ -2410,6 +2488,7 @@ derive_entities_in_viewport :: (camera: Camera2D) {
     array_reset(*dwarves_in_viewport);
     array_reset(*tiles_with_dynamite_ids_in_viewport);
     array_reset(*hole_tile_ids_in_viewport);
+    array_reset(*paths_in_viewport);
     
     // Calculate chunk dimensions in pixels
     chunk_pixel_width  := cast(float)(CHUNK_SIZE) * TILEMAP_GENERAL_WORLD_WIDTH;
@@ -2607,21 +2686,6 @@ derive_entities_in_viewport :: (camera: Camera2D) {
         }
     }
 
-    // // Derive viewable bases
-    // {
-    //     for base: bases {
-    //         pos := base.pos;
-
-    //         if pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x continue;
-    //         if pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x continue;
-            
-    //         if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y continue;
-    //         if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
-
-    //         array_add(*bases_in_viewport, base);
-    //     }
-    // }
-
     // Derive viewable dwarves
     {
         for dwarf: dwarves {
@@ -2649,6 +2713,41 @@ derive_entities_in_viewport :: (camera: Camera2D) {
             if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
             array_add(*tiles_with_dynamite_ids_in_viewport, dynamite_tile_id);
+        }
+    }
+
+    // Derive viewable paths
+    {
+        for path: paths {
+            start_tile_pos  := get_tile_pos_by_id(path.start_tile_id);
+            middle_tile_pos := get_tile_pos_by_id(path.middle_tile_id);
+            end_tile_pos    := get_tile_pos_by_id(path.end_tile_id);
+
+            if (
+                start_tile_pos.x  + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x &&
+                middle_tile_pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x &&
+                end_tile_pos.x    + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x
+            ) continue;
+
+            if (
+                start_tile_pos.x  - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x &&
+                middle_tile_pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x &&
+                end_tile_pos.x    - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x
+            ) continue;
+
+            if (
+                start_tile_pos.y  - TILEMAP_GENERAL_WORLD_WIDTH > window_end.y &&
+                middle_tile_pos.y - TILEMAP_GENERAL_WORLD_WIDTH > window_end.y &&
+                end_tile_pos.y    - TILEMAP_GENERAL_WORLD_WIDTH > window_end.y
+            ) continue;
+                
+            if (
+                start_tile_pos.y  + TILEMAP_GENERAL_WORLD_WIDTH < window_start.y &&
+                middle_tile_pos.y + TILEMAP_GENERAL_WORLD_WIDTH < window_start.y &&
+                end_tile_pos.y    + TILEMAP_GENERAL_WORLD_WIDTH < window_start.y
+            ) continue;
+
+            array_add(*paths_in_viewport, path);
         }
     }
 }

@@ -1,16 +1,6 @@
 # In progress
 
-- dwarves seem to spawn on cursor when dragging near or on another dwarf
-    - condition:
-        - reproducible on 8e9702b, a9f528e
-        - it seems to be easier to reproduce the more dwarves there are
-        - after a while it seems to almost happen every time you select a dwarf, but not 100%
-        - it seems to actually teleport an existing dwarf, not create a new one
-        - it looks like the ids are being incorrectly selected into the game state
-        - changing the game state from an index to an id seems to have worked, need to confirm though
-    - cause:
-    - correction:
-    - confirmation:
+
 
 # Bugs
 
@@ -33,13 +23,12 @@
 # Core
 
 - gold and points trackers
-- fullscreen and resizability
-- goblins
 - treasure caves
+- goblins
 - losing
+- fullscreen and resizability
 - speed up time button
 - temporarily pause time button
-- delete path arrows
 
 # Performance
 
