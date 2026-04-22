@@ -1,6 +1,10 @@
 # In progress
 
-
+- paths can be drawn with one segment
+    - condition: reproducible on f232b3f
+    - cause:
+    - correction:
+    - confirmation:
 
 # Bugs
 
@@ -11,11 +15,6 @@
     - confirmation:
 - adding tons of bases at once makes dwarves go diagonal
     - condition: reproducible on 329b3b5
-    - cause:
-    - correction:
-    - confirmation:
-- paths can be drawn with one segment
-    - condition: reproducible on f232b3f
     - cause:
     - correction:
     - confirmation:

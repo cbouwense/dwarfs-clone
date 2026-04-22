@@ -703,9 +703,14 @@ main :: () {
                         }
 
                         if drawing_path {
-                            // Draw out the path that is currently being traced.
-                            path_being_traced = get_path(mouse_pos_when_path_creation_started, mouse_pos_in_world);
-                        } else if drawing_path_prev {
+                            // Draw out the path that is currently being traced, if it is more than 1 tile long.
+                            potential_path_being_traced := get_path(mouse_pos_when_path_creation_started, mouse_pos_in_world);
+                            if potential_path_being_traced.start_tile_id != potential_path_being_traced.end_tile_id {
+                                path_being_traced = potential_path_being_traced;
+                            } else {
+                                path_being_traced.start_tile_id = 0;
+                            }
+                        } else if drawing_path_prev && path_being_traced.start_tile_id > 0 {
                             // If we were drawing a path, but just let go, then create the path as a real thing.
                             array_add(*paths, path_being_traced);
 
@@ -1298,7 +1303,7 @@ main :: () {
 
                 // Draw paths
                 {
-                    if drawing_path  draw_path(path_being_traced);
+                    if drawing_path && path_being_traced.start_tile_id > 0 draw_path(path_being_traced);
                     for path: paths_in_viewport draw_path(path);
                 }
 
