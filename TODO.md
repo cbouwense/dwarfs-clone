@@ -1,6 +1,6 @@
 # In progress
 
-- gold and points trackers
+- gold cost for obsidian, dynamite, and arrows
 
 # Bugs
 
@@ -17,6 +17,7 @@
 
 # Core
 
+- stone walls
 - treasure caves
 - goblins
 - losing

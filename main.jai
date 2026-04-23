@@ -61,11 +61,17 @@ CHUNK_SIZE :: 32; // 32 x 32 tiles
 WATER_FLOW_COOLDOWN_MS :: 1000;
 LAVA_FLOW_COOLDOWN_MS  :: 2500;
 
+// TODO: gold and points probably depend on difficulty level
+
 GOLD_FROM_MINE_DIRT :: 1;
 GOLD_FROM_MINE_IRON :: 75;
 
 POINTS_FROM_MINE_DIRT :: 1;
 POINTS_FROM_MINE_IRON :: 50;
+
+GOLD_COST_DYNAMITE  :: 50;
+GOLD_COST_OBSIDIAN  :: 75;
+GOLD_COST_PATH_STEP :: 5;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Metagame state
@@ -104,37 +110,37 @@ init_sprites :: () {
 // Controls
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-select_is_pressed_once  : bool;
-select_is_held_down     : bool;
-add_base                : bool;
-add_iron                : bool;
-select_as_place_dynamite         : bool;
-select_as_place_obsidian         : bool;
-started_to_draw_path  : bool;
-drawing_path : bool;
-drag_cam_pressed        : bool;
-drag_cam_down           : bool;
-move_camera_up          : bool;
-move_camera_down        : bool;
-move_camera_left        : bool;
-move_camera_right       : bool;
-select_as_remove_path             : bool;
+select_is_pressed_once   : bool;
+select_is_held_down      : bool;
+add_base                 : bool;
+add_iron                 : bool;
+select_as_place_dynamite : bool;
+select_as_place_obsidian : bool;
+started_to_draw_path     : bool;
+drawing_path             : bool;
+drag_cam_pressed         : bool;
+drag_cam_down            : bool;
+move_camera_up           : bool;
+move_camera_down         : bool;
+move_camera_left         : bool;
+move_camera_right        : bool;
+select_as_remove_path    : bool;
 
-select_is_pressed_once_prev  : bool;
-select_is_held_down_prev     : bool;
-add_base_prev                : bool;
-add_iron_prev                : bool;
-select_as_place_dynamite_prev         : bool;
-select_as_place_obsidian_prev         : bool;
-started_to_draw_path_prev  : bool;
-drawing_path_prev : bool;
-drag_cam_pressed_prev        : bool;
-drag_cam_down_prev           : bool;
-move_camera_up_prev          : bool;
-move_camera_down_prev        : bool;
-move_camera_left_prev        : bool;
-move_camera_right_prev       : bool;
-select_as_remove_path_prev             : bool;
+select_is_pressed_once_prev   : bool;
+select_is_held_down_prev      : bool;
+add_base_prev                 : bool;
+add_iron_prev                 : bool;
+select_as_place_dynamite_prev : bool;
+select_as_place_obsidian_prev : bool;
+started_to_draw_path_prev     : bool;
+drawing_path_prev             : bool;
+drag_cam_pressed_prev         : bool;
+drag_cam_down_prev            : bool;
+move_camera_up_prev           : bool;
+move_camera_down_prev         : bool;
+move_camera_left_prev         : bool;
+move_camera_right_prev        : bool;
+select_as_remove_path_prev    : bool;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Other
@@ -371,25 +377,25 @@ main :: () {
     // Initialize controls
     controls: Controls;
     {
-        controls.select[0]              = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_LEFT   };
-        controls.add_base[0]            = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_B               };
-        controls.add_iron[0]            = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_I               };
-        controls.select_as_place_dynamite[0]     = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_E               };
-        controls.select_as_place_obsidian[0]     = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_Q               };
-        controls.select_as_place_obsidian[1]     = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT_SHIFT      };
-        controls.select_as_place_obsidian[2]     = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT_SHIFT     };
-        controls.drag_as_create_path[0] = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_LEFT   };
-        controls.drag_cam[0]            = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_RIGHT  };
-        controls.drag_cam[1]            = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_MIDDLE };
-        controls.move_camera_up[0]      = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_UP              };
-        controls.move_camera_up[1]      = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_W               };
-        controls.move_camera_down[0]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_DOWN            };
-        controls.move_camera_down[1]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_S               };
-        controls.move_camera_left[0]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT            };
-        controls.move_camera_left[1]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_A               };
-        controls.move_camera_right[0]   = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT           };
-        controls.move_camera_right[1]   = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_D               };
-        controls.select_as_remove_path[0]         = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_F               };
+        controls.select[0]                   = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_LEFT   };
+        controls.add_base[0]                 = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_B               };
+        controls.add_iron[0]                 = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_I               };
+        controls.select_as_place_dynamite[0] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_E               };
+        controls.select_as_place_obsidian[0] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_Q               };
+        controls.select_as_place_obsidian[1] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT_SHIFT      };
+        controls.select_as_place_obsidian[2] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT_SHIFT     };
+        controls.drag_as_create_path[0]      = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_LEFT   };
+        controls.drag_cam[0]                 = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_RIGHT  };
+        controls.drag_cam[1]                 = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_MIDDLE };
+        controls.move_camera_up[0]           = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_UP              };
+        controls.move_camera_up[1]           = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_W               };
+        controls.move_camera_down[0]         = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_DOWN            };
+        controls.move_camera_down[1]         = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_S               };
+        controls.move_camera_left[0]         = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT            };
+        controls.move_camera_left[1]         = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_A               };
+        controls.move_camera_right[0]        = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT           };
+        controls.move_camera_right[1]        = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_D               };
+        controls.select_as_remove_path[0]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_F               };
     }
 
     // Initialize game
@@ -631,41 +637,55 @@ main :: () {
                 {        
                     if select_as_place_obsidian {
                         if select_is_held_down {
-                            // Try to turn the selected tile into obsidian
-                            tile_id := get_tile_id_by_pos(mouse_pos_in_world);
+                            if debug_mode || game_state.gold >= GOLD_COST_OBSIDIAN {
+                                // Try to turn the selected tile into obsidian
+                                tile_id := get_tile_id_by_pos(mouse_pos_in_world);
 
-                            tile_is_iron            := table_contains(*iron_tile_ids_set, tile_id);
-                            tile_is_being_mined     := table_contains(*actively_mined_tile_ids_to_health_table, tile_id);
-                            tile_is_mined           := table_contains(*fully_mined_tile_ids_set, tile_id);
-                            tile_is_mineable        := tile_is_iron || tile_is_being_mined || !tile_is_mined;
+                                tile_is_iron            := table_contains(*iron_tile_ids_set, tile_id);
+                                tile_is_being_mined     := table_contains(*actively_mined_tile_ids_to_health_table, tile_id);
+                                tile_is_mined           := table_contains(*fully_mined_tile_ids_set, tile_id);
+                                tile_is_mineable        := tile_is_iron || tile_is_being_mined || !tile_is_mined;
 
-                            tile_is_unrevealed_cave := table_contains(*cave_tile_ids_set, tile_id);
-                            tile_is_water_still     := table_contains(*water_still_tile_ids_set, tile_id);
-                            tile_is_water_flowing   := table_contains(*water_flowing_tile_ids_set, tile_id);
-                            tile_is_lava_still      := table_contains(*lava_still_tile_ids_set, tile_id);
-                            tile_is_lava_flowing    := table_contains(*lava_flowing_tile_ids_set, tile_id);
-                            tile_is_empty           := tile_is_unrevealed_cave || tile_is_water_still || tile_is_water_flowing || tile_is_lava_still || tile_is_lava_flowing;
+                                tile_is_unrevealed_cave := table_contains(*cave_tile_ids_set, tile_id);
+                                tile_is_water_still     := table_contains(*water_still_tile_ids_set, tile_id);
+                                tile_is_water_flowing   := table_contains(*water_flowing_tile_ids_set, tile_id);
+                                tile_is_lava_still      := table_contains(*lava_still_tile_ids_set, tile_id);
+                                tile_is_lava_flowing    := table_contains(*lava_flowing_tile_ids_set, tile_id);
+                                tile_is_empty           := tile_is_unrevealed_cave || tile_is_water_still || tile_is_water_flowing || tile_is_lava_still || tile_is_lava_flowing;
 
-                            tile_is_obsidian        := table_contains(*obsidian_tile_ids_set, tile_id);
+                                tile_is_obsidian        := table_contains(*obsidian_tile_ids_set, tile_id);
 
-                            tile_is_encased         := table_contains(*encased_tile_ids_set, tile_id);
+                                tile_is_encased         := table_contains(*encased_tile_ids_set, tile_id);
 
-                            if tile_is_mineable && !tile_is_empty && !tile_is_obsidian && !tile_is_encased {
-                                set_tile_as_type(tile_id, .OBSIDIAN, false, *game_state);
-                                handle_encasement(tile_id, *persistent_encasing_obsidian_tile_ids_set, *game_state);
+                                if tile_is_mineable && !tile_is_empty && !tile_is_obsidian && !tile_is_encased {
+                                    // Place down the obsidian.
+                                    set_tile_as_type(tile_id, .OBSIDIAN, false, *game_state);
+
+                                    // Encase any lava or water if we've made a full loop.
+                                    handle_encasement(tile_id, *persistent_encasing_obsidian_tile_ids_set, *game_state);
+
+                                    // Debit the gold cost.
+                                    if !debug_mode game_state.gold -= GOLD_COST_OBSIDIAN;
+                                }
                             }
                         }
                     }
                     else if select_as_place_dynamite {
                         if select_is_pressed_once {
-                            // Try to add dynamite to the selected tile
-                            tile_id := get_tile_id_by_pos(mouse_pos_in_world);
+                            if debug_mode || game_state.gold >= GOLD_COST_DYNAMITE {
+                                // Try to add dynamite to the selected tile
+                                tile_id := get_tile_id_by_pos(mouse_pos_in_world);
 
-                            tile_is_mined   := table_contains(*fully_mined_tile_ids_set, tile_id);
-                            tile_is_encased := table_contains(*encased_tile_ids_set, tile_id);
+                                tile_is_mined   := table_contains(*fully_mined_tile_ids_set, tile_id);
+                                tile_is_encased := table_contains(*encased_tile_ids_set, tile_id);
 
-                            if tile_is_mined && !tile_is_encased {
-                                array_add(*tiles_with_dynamite_ids, tile_id);
+                                if tile_is_mined && !tile_is_encased {
+                                    // Place down the dynamite.
+                                    array_add(*tiles_with_dynamite_ids, tile_id);
+
+                                    // Debit the gold cost.
+                                    if !debug_mode game_state.gold -= GOLD_COST_DYNAMITE;
+                                }
                             }
                         }
                     }
@@ -716,6 +736,34 @@ main :: () {
                         if drawing_path {
                             // Draw out the path that is currently being traced, if it is more than 1 tile long.
                             potential_path_being_traced := get_path(mouse_pos_when_path_creation_started, mouse_pos_in_world);
+
+                            if !debug_mode {
+                                start_pos  := get_tile_pos_by_id(potential_path_being_traced.start_tile_id);
+                                middle_pos := get_tile_pos_by_id(potential_path_being_traced.middle_tile_id);
+                                end_pos    := get_tile_pos_by_id(potential_path_being_traced.end_tile_id);
+
+                                tile_ids_on_first_leg := get_tile_ids_along_path(start_pos, middle_pos);
+                                tile_ids_on_last_leg  := get_tile_ids_along_path(middle_pos, end_pos);
+                                tile_id_count_on_path := tile_ids_on_first_leg.count + tile_ids_on_last_leg.count;
+                                
+                                potential_path_cost     := tile_id_count_on_path * GOLD_COST_PATH_STEP;
+                                unaffordable_tile_count := cast(int) ceil((cast(float) (potential_path_cost - game_state.gold)) / cast(float)GOLD_COST_PATH_STEP);
+
+                                for 0..unaffordable_tile_count - 1 {
+                                    if tile_ids_on_last_leg.count > 0 {
+                                        array_unordered_remove_by_index(*tile_ids_on_last_leg, tile_ids_on_last_leg.count - 1);
+                                    } else if tile_ids_on_first_leg.count > 0 {
+                                        array_unordered_remove_by_index(*tile_ids_on_first_leg, tile_ids_on_first_leg.count - 1);
+                                    } else {
+                                        break;
+                                    }
+                                }
+
+                                potential_path_being_traced.start_tile_id  = ifx tile_ids_on_first_leg.count > 0 then tile_ids_on_first_leg[0] else 0;
+                                potential_path_being_traced.middle_tile_id = ifx tile_ids_on_first_leg.count > 0 then tile_ids_on_first_leg[tile_ids_on_first_leg.count - 1] else 0;
+                                potential_path_being_traced.end_tile_id    = ifx tile_ids_on_last_leg.count  > 0 then tile_ids_on_last_leg[tile_ids_on_last_leg.count - 1] else 0;
+                            }
+
                             if potential_path_being_traced.start_tile_id != potential_path_being_traced.end_tile_id {
                                 path_being_traced = potential_path_being_traced;
                             } else {
@@ -725,16 +773,31 @@ main :: () {
                             // If we were drawing a path, but just let go, then create the path as a real thing.
                             array_add(*paths, path_being_traced);
 
+                            // PERF: Could probably just do this with id math or something
+                            //
+                            // Debit the gold cost.
+                            start_pos  := get_tile_pos_by_id(path_being_traced.start_tile_id);
+                            middle_pos := get_tile_pos_by_id(path_being_traced.middle_tile_id);
+                            end_pos    := get_tile_pos_by_id(path_being_traced.end_tile_id);
+
+                            tile_ids_on_first_leg := get_tile_ids_along_path(start_pos, middle_pos);
+                            tile_ids_on_last_leg  := get_tile_ids_along_path(middle_pos, end_pos);
+                            tile_id_count_on_path := tile_ids_on_first_leg.count + tile_ids_on_last_leg.count;
+
+                            if !debug_mode game_state.gold -= tile_id_count_on_path * GOLD_COST_PATH_STEP;
+
+                            // TODO: do we even need to do this? I feel like we could just set it to moving and it would handle itself.
                             if game_state.selected_dwarf_id > 0 {
                                 found, selected_dwarf_index := table_find(*dwarf_id_to_index, game_state.selected_dwarf_id);
                                 assert(found);
 
-                                start_pos := get_tile_pos_by_id(path_being_traced.start_tile_id);
-                                end_pos   := get_tile_pos_by_id(path_being_traced.end_tile_id);
-                                tile_ids_on_path := get_tile_ids_along_path(start_pos, end_pos);
-
+                                // NOTE: This would appear to be missing the tile ids on the last leg. However, anything we set this
+                                // dwarf's tile ids to be will be immediately overwritten by the fact that he is currently standing
+                                // on an arrow, and will inherit its tile path. Then why even set this dwarf's tile ids? I think
+                                // without having a target, the dwarf will choose a random direction. This feels like a bug, but the
+                                // behavior is acceptable and causes no real performance issues as I can see right now.
                                 array_reset(*(dwarves[selected_dwarf_index].tile_ids_on_path));
-                                array_copy(*(dwarves[selected_dwarf_index].tile_ids_on_path), tile_ids_on_path);
+                                array_copy(*(dwarves[selected_dwarf_index].tile_ids_on_path), tile_ids_on_first_leg);
 
                                 dwarves[selected_dwarf_index].state = .MOVING;
                                 game_state.selected_dwarf_id = 0;
