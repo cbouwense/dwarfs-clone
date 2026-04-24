@@ -68,9 +68,11 @@ LAVA_FLOW_COOLDOWN_MS  :: 2500;
 
 GOLD_FROM_MINE_DIRT :: 1;
 GOLD_FROM_MINE_IRON :: 75;
+GOLD_FROM_TREASURE  :: 75;
 
 POINTS_FROM_MINE_DIRT :: 1;
 POINTS_FROM_MINE_IRON :: 50;
+POINTS_FROM_TREASURE  :: 75;
 
 GOLD_COST_DYNAMITE  :: 50;
 GOLD_COST_OBSIDIAN  :: 75;
@@ -349,6 +351,9 @@ dwarf_id_counter    : s32 = 0;
 
 tiles_with_dynamite_ids             : [..] s32;
 tiles_with_dynamite_ids_in_viewport : [..] s32;
+
+tiles_with_treasure_ids             : [..] s32;
+tiles_with_treasure_ids_in_viewport : [..] s32;
 
 hole_tile_ids             : [..] s32;
 hole_tile_ids_set         : Table(s32, s32);
@@ -1114,7 +1119,28 @@ main :: () {
 
                                 // TODO: animation I guess
 
-                                continue;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // Update treasure
+                {
+                    // Take an array view of the actual state because we mutate the state during the loop
+                    // and can cause self referential problems when looping on the actual state.
+                    current_tiles_with_treasure_ids := array_view(tiles_with_treasure_ids, 0);
+                    for current_tiles_with_treasure_ids {
+                        for dwarf, dwarf_index: dwarves {
+                            treasure_pos := get_tile_pos_by_id(it);
+                            if Vector2Equals(dwarf.pos, treasure_pos) {
+                                // Credit the gold.
+                                game_state.gold += GOLD_FROM_TREASURE;
+
+                                // Destroy the treasure
+                                array_unordered_remove_by_index(*tiles_with_treasure_ids, it_index);
+
+                                break;
                             }
                         }
                     }
@@ -1420,6 +1446,24 @@ main :: () {
                     for tiles_with_dynamite_ids_in_viewport {
                         source := Rectangle.{
                             4 * TILEMAP_GENERAL_TILE_WIDTH,
+                            0 * TILEMAP_GENERAL_TILE_HEIGHT,
+                            TILEMAP_GENERAL_TILE_WIDTH,
+                            TILEMAP_GENERAL_TILE_HEIGHT,
+                        };
+
+                        pos  := get_tile_pos_by_id(it);
+                        dest := get_world_rect_from_pos(pos);
+
+                        DrawTexturePro(tilemap_texture_general, source, dest, Vector2.{0,0}, 0.0, WHITE);
+                    }
+                }
+
+                // Draw treasure
+                DRAW_TREASURE :: true;
+                #if DRAW_TREASURE {
+                    for tiles_with_treasure_ids_in_viewport {
+                        source := Rectangle.{
+                            5 * TILEMAP_GENERAL_TILE_WIDTH,
                             0 * TILEMAP_GENERAL_TILE_HEIGHT,
                             TILEMAP_GENERAL_TILE_WIDTH,
                             TILEMAP_GENERAL_TILE_HEIGHT,
@@ -2340,13 +2384,25 @@ get_arrow_rotation :: (start_pos: Vector2, end_pos: Vector2) -> float32 {
 set_cave_as_mined :: (tile_id: s32, cave_type: CaveType, grant_points: bool, game_state: *GameState) {
     tile_type : TileType;
     if #complete cave_type == {
-        case .EMPTY;        tile_type = .MINED;
-        case .WATER;        tile_type = .WATER_FLOWING;
-        case .LAVA;         tile_type = .LAVA_FLOWING;
-        case .TREASURE;     tile_type = .MINED;
-        case .MINION;       tile_type = .MINED;
-        case .SHAMAN;       tile_type = .MINED;
-        case .SPIDER_QUEEN; tile_type = .MINED;
+        case .EMPTY;
+            tile_type = .MINED;
+        case .WATER;
+            tile_type = .WATER_FLOWING;
+        case .LAVA;
+            tile_type = .LAVA_FLOWING;
+        case .TREASURE;
+            tile_type = .MINED;
+
+            rng := random_get_within_range(0, 1);
+            is_treasure := rng <= 0.25;
+            if is_treasure array_add(*tiles_with_treasure_ids, tile_id);
+
+        case .MINION;
+            tile_type = .MINED;
+        case .SHAMAN;
+            tile_type = .MINED;
+        case .SPIDER_QUEEN;
+            tile_type = .MINED;
     }
 
     set_tile_as_type(tile_id, tile_type, grant_points, game_state);
@@ -2622,6 +2678,7 @@ derive_entities_in_viewport :: (camera: Camera2D) {
     array_reset(*bases_in_viewport);
     array_reset(*dwarves_in_viewport);
     array_reset(*tiles_with_dynamite_ids_in_viewport);
+    array_reset(*tiles_with_treasure_ids_in_viewport);
     array_reset(*hole_tile_ids_in_viewport);
     array_reset(*paths_in_viewport);
     
@@ -2861,6 +2918,21 @@ derive_entities_in_viewport :: (camera: Camera2D) {
             if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
             array_add(*tiles_with_dynamite_ids_in_viewport, dynamite_tile_id);
+        }
+    }
+
+    // Derive viewable dynamite
+    {
+        for treasure_tile_id: tiles_with_treasure_ids {
+            pos := get_tile_pos_by_id(treasure_tile_id);
+
+            if pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x continue;
+            if pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x continue;
+            
+            if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y continue;
+            if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+
+            array_add(*tiles_with_treasure_ids_in_viewport, treasure_tile_id);
         }
     }
 
