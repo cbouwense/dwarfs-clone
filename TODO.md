@@ -1,6 +1,6 @@
 # In progress
 
-- gold cost for obsidian, dynamite, and arrows
+- stone walls
 
 # Bugs
 
@@ -17,7 +17,6 @@
 
 # Core
 
-- stone walls
 - treasure caves
 - goblins
 - losing
