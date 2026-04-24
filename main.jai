@@ -36,6 +36,8 @@ DWARF_MINE_COOLDOWN_MS :: 250;
 DWARF_MINE_DAMAGE_PER_SWING :: 50;
 DWARF_SPAWN_MS :: 5000;
 
+LAVA_DAMAGE_PER_HIT :: 20;
+
 TILEMAP_GENERAL_MAP_WIDTH    :: 320;
 TILEMAP_GENERAL_MAP_HEIGHT   :: 320;
 TILEMAP_GENERAL_TILE_WIDTH   :: 32;
@@ -689,13 +691,9 @@ main :: () {
                             if debug_mode || game_state.gold >= GOLD_COST_WALL {
                                 // Try to turn the selected tile into a wall
                                 tile_id := get_tile_id_by_pos(mouse_pos_in_world);
+                                tile_is_fully_mined := table_contains(*fully_mined_tile_ids_set, tile_id);
 
-                                tile_is_fully_mined   := table_contains(*fully_mined_tile_ids_set, tile_id);
-                                tile_is_water_flowing := table_contains(*water_flowing_tile_ids_set, tile_id);
-                                tile_is_lava_flowing  := table_contains(*lava_flowing_tile_ids_set, tile_id);
-                                tile_is_wall          := table_contains(*wall_tile_ids_set, tile_id);
-
-                                if tile_is_fully_mined || tile_is_water_flowing && tile_is_lava_flowing && !tile_is_wall {
+                                if tile_is_fully_mined {
                                     // Place down the wall.
                                     set_tile_as_type(tile_id, .WALL, false, *game_state);
 
@@ -2068,8 +2066,23 @@ try_to_set_cardinal_neighbors_as_flowing_tile_type :: (tile_id: s32, as_type: Ti
         tile_is_obsidian := table_contains(*obsidian_tile_ids_set, neighbor_id);
         if tile_is_obsidian continue;
 
+        // If the tile is a wall, damage it a bit.
         tile_is_wall := table_contains(*wall_tile_ids_set, neighbor_id);
-        if tile_is_wall continue;
+        if tile_is_wall {
+            found, current_health := table_find(*actively_mined_tile_ids_to_health_table, neighbor_id);
+            // If we don't see the wall in the actively mined tile list, then it's full health
+            if (!found) current_health = WALL_HEALTH;
+
+            new_health := current_health - LAVA_DAMAGE_PER_HIT;
+
+            if new_health <= 0 {
+                set_tile_as_type(neighbor_id, .MINED, false, game_state);
+            } else {
+                table_set(*actively_mined_tile_ids_to_health_table, neighbor_id, new_health);
+            }
+
+            continue;
+        }
 
         tile_is_being_mined := table_contains(*actively_mined_tile_ids_to_health_table, neighbor_id);
         if tile_is_being_mined continue;

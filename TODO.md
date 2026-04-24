@@ -1,6 +1,6 @@
 # In progress
 
-- stone walls
+- treasure caves
 
 # Bugs
 
@@ -17,7 +17,6 @@
 
 # Core
 
-- treasure caves
 - goblins
 - losing
 - fullscreen and resizability
