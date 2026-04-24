@@ -4,18 +4,19 @@ Control :: struct {
 }
 
 Controls :: struct {
-    select              : [3] Control;
-    add_base            : [3] Control;
-    add_iron            : [3] Control;
-    select_as_place_dynamite     : [3] Control;
-    select_as_place_obsidian     : [3] Control;
-    drag_as_create_path : [3] Control;
-    drag_cam            : [3] Control;
-    move_camera_up      : [3] Control;
-    move_camera_down    : [3] Control;
-    move_camera_left    : [3] Control;
-    move_camera_right   : [3] Control;
-    select_as_remove_path         : [3] Control;
+    select                   : [3] Control;
+    add_base                 : [3] Control;
+    add_iron                 : [3] Control;
+    select_as_place_dynamite : [3] Control;
+    select_as_place_obsidian : [3] Control;
+    select_as_place_wall     : [3] Control;
+    drag_as_create_path      : [3] Control;
+    drag_cam                 : [3] Control;
+    move_camera_up           : [3] Control;
+    move_camera_down         : [3] Control;
+    move_camera_left         : [3] Control;
+    move_camera_right        : [3] Control;
+    select_as_remove_path    : [3] Control;
 }
 
 control_is_down :: (haystack: [] Control) -> bool {
