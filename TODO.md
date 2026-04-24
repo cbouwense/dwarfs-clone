@@ -1,7 +1,5 @@
 # In progress
 
-- dwarves look for first treasure in treasure caves
-
 # Bugs
 
 - flowing liquid can cause actively mined tiles to disappear and crashes game
@@ -10,7 +8,7 @@
     - correction:
     - confirmation:
 - adding tons of bases at once makes dwarves go diagonal
-    - condition: reproducible on 329b3b5
+    - condition: reproducible on 329b3b5, f32fdea
     - cause:
     - correction:
     - confirmation:
@@ -25,6 +23,7 @@
 - base canons
 - base spawn diggers
 - base spawn warriors
+- bases cannot be placed down on caves
 
 # Performance
 

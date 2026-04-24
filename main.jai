@@ -995,7 +995,33 @@ main :: () {
                                     ) {
                                         kill_dwarf_by_index(it_index);
                                     }
-                                    else assert(false, "Dwarf % tryna mine some weird ass shit (tile id %)", dwarf.id, tile_id_next_in_dwarfs_path);
+                                    else {
+                                        is_fully_mined   := table_contains(*fully_mined_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                        is_cave          := table_contains(*cave_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                        is_encased       := table_contains(*encased_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                        is_iron          := table_contains(*iron_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                        is_water_still   := table_contains(*water_still_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                        is_water_flowing := table_contains(*water_flowing_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                        is_lava_still    := table_contains(*lava_still_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                        is_lava_flowing  := table_contains(*lava_flowing_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                        is_obsidian      := table_contains(*obsidian_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                        is_wall          := table_contains(*wall_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                        is_hole          := table_contains(*hole_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                        print_vars(
+                                            is_fully_mined,
+                                            is_cave,
+                                            is_encased,
+                                            is_iron,
+                                            is_water_still,
+                                            is_water_flowing,
+                                            is_lava_still,
+                                            is_lava_flowing,
+                                            is_obsidian,
+                                            is_wall,
+                                            is_hole
+                                        );
+                                        assert(false, "Dwarf % tryna mine some weird ass shit (tile id %)", dwarf.id, tile_id_next_in_dwarfs_path);
+                                    }
 
                                     table_set(*actively_mined_tile_ids_to_health_table, tile_id_next_in_dwarfs_path, new_health);
                                 }
@@ -1071,7 +1097,19 @@ main :: () {
 
                                             // If we just cracked into a cave, we'll need to reveal the cave and do anything
                                             // that cave type needs (e.g. spawn water, lava, monsters, etc.).
-                                            reveal_cave_if_necessary(dwarf.tile_id_mining, true, *game_state);
+                                            revealed_cave, cave_type := reveal_cave_if_necessary(dwarf.tile_id_mining, true, *game_state);
+
+                                            if revealed_cave && cave_type == .TREASURE {
+                                                found, new_treasure_tile_id := find_treasure_tile_id_within_radius(dwarf.tile_id_mining, 10);
+                                                if found {
+                                                    tile_ids_to_new_treasure := dijkstra(dwarf.tile_id_mining, new_treasure_tile_id, edges);
+                                                    tile_ids_to_new_treasure.count -= 1;
+                                                    tile_ids_to_new_treasure.data  += 1;
+                                                    
+                                                    array_reset(*dwarf.tile_ids_on_path);
+                                                    array_copy(*dwarf.tile_ids_on_path, tile_ids_to_new_treasure);
+                                                }
+                                            }
 
                                             dwarf.tile_id_mining = 0;
                                             dwarf.state = .MOVING;
@@ -3027,7 +3065,7 @@ derive_entities_in_viewport :: (camera: Camera2D) {
     }
 }
 
-reveal_cave_if_necessary :: (tile_id: s32, grant_points: bool, game_state: *GameState) {
+reveal_cave_if_necessary :: (tile_id: s32, grant_points: bool, game_state: *GameState) -> revealed_cave: bool, cave_type: CaveType {
     check_is_neighbor_unreavealed_cave :: (tile_id: s32) -> found_cave_neighbor: bool, cave_neighbor_id: s32 {
         for i: 0..3 {
             dx := TILE_DIRECTION_DELTAS[i][0];
@@ -3044,14 +3082,19 @@ reveal_cave_if_necessary :: (tile_id: s32, grant_points: bool, game_state: *Game
         return false, 1738;
     }
 
+    cave_type: CaveType;
+
     neighbor_is_unrevealed_cave, cave_tile_id := check_is_neighbor_unreavealed_cave(tile_id);
     if neighbor_is_unrevealed_cave {
         // First, decide what kind of cave this will be.
-        cave_type : CaveType = cast(CaveType) cast(int) random_get_within_range(0, xx enum_count(CaveType));
+        cave_type = cast(CaveType) cast(int) random_get_within_range(0, xx enum_count(CaveType));
 
         // Second, recursively reveal the tiles of the cave.
         set_cave_as_mined(cave_tile_id, cave_type, grant_points, game_state);
+
     }
+
+    return neighbor_is_unrevealed_cave, cave_type;
 }
 
 get_rect_center :: (rect: Rectangle) -> Vector2 {
