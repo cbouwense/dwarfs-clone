@@ -353,6 +353,7 @@ tiles_with_dynamite_ids             : [..] s32;
 tiles_with_dynamite_ids_in_viewport : [..] s32;
 
 tiles_with_treasure_ids             : [..] s32;
+tiles_with_treasure_ids_set         : Table(s32, s32);
 tiles_with_treasure_ids_in_viewport : [..] s32;
 
 hole_tile_ids             : [..] s32;
@@ -1131,7 +1132,7 @@ main :: () {
                     // and can cause self referential problems when looping on the actual state.
                     current_tiles_with_treasure_ids := array_view(tiles_with_treasure_ids, 0);
                     for current_tiles_with_treasure_ids {
-                        for dwarf, dwarf_index: dwarves {
+                        for *dwarf, dwarf_index: dwarves {
                             treasure_pos := get_tile_pos_by_id(it);
                             if Vector2Equals(dwarf.pos, treasure_pos) {
                                 // Credit the gold.
@@ -1139,6 +1140,17 @@ main :: () {
 
                                 // Destroy the treasure
                                 array_unordered_remove_by_index(*tiles_with_treasure_ids, it_index);
+                                table_remove(*tiles_with_treasure_ids_set, it);
+
+                                found, new_treasure_tile_id := find_treasure_tile_id_within_radius(it, 10);
+                                if found {
+                                    tile_ids_to_new_treasure := dijkstra(it, new_treasure_tile_id, edges);
+                                    tile_ids_to_new_treasure.count -= 1;
+                                    tile_ids_to_new_treasure.data  += 1;
+                                    
+                                    array_reset(*dwarf.tile_ids_on_path);
+                                    array_copy(*dwarf.tile_ids_on_path, tile_ids_to_new_treasure);
+                                }
 
                                 break;
                             }
@@ -2394,8 +2406,11 @@ set_cave_as_mined :: (tile_id: s32, cave_type: CaveType, grant_points: bool, gam
             tile_type = .MINED;
 
             rng := random_get_within_range(0, 1);
-            is_treasure := rng <= 0.25;
-            if is_treasure array_add(*tiles_with_treasure_ids, tile_id);
+            is_treasure := rng <= 0.333;
+            if is_treasure {
+                array_add(*tiles_with_treasure_ids, tile_id);
+                table_set(*tiles_with_treasure_ids_set, tile_id, 1738);
+            }
 
         case .MINION;
             tile_type = .MINED;
@@ -2427,6 +2442,8 @@ set_cave_as_mined :: (tile_id: s32, cave_type: CaveType, grant_points: bool, gam
         set_cave_as_mined(neighbor_id, cave_type, grant_points, game_state);
     }
 }
+
+
 
 set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, game_state: *GameState) {
     chunk := find_or_create_chunk_by_tile_id(tile_id);
@@ -2573,11 +2590,15 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, game_
             }
 
         // Remove edges for pathing to all neighbors
-        case .ENCASED;  #through;
-        case .OBSIDIAN; #through;
-        case .WALL;     #through;
-        case .HOLE;     #through;
-        case .DIRT;     #through;
+        case .ENCASED;       #through;
+        case .OBSIDIAN;      #through;
+        case .WALL;          #through;
+        case .HOLE;          #through;
+        case .DIRT;          #through;
+        case .WATER_STILL;   #through;
+        case .WATER_FLOWING; #through;
+        case .LAVA_STILL;    #through;
+        case .LAVA_FLOWING;  #through;
         case .IRON;
             dx, dy : float;
             tile_pos := get_tile_pos_by_id(tile_id);
@@ -2587,12 +2608,6 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, game_
                     array_unordered_remove_by_index(*edges, it_index);
                 }
             }
-
-        // No op
-        case .WATER_STILL;   #through;
-        case .WATER_FLOWING; #through;
-        case .LAVA_STILL;    #through;
-        case .LAVA_FLOWING;
     }
 }
 
@@ -2658,6 +2673,46 @@ spawn_iron :: (
         array_add(*ids_to_process, id + 1);
         array_add(*ids_to_process, id - 1);
     }
+}
+
+find_treasure_tile_id_within_radius :: (
+    starting_tile_id: s32,
+    radius: s32
+) -> found: bool, tile_id: s32 {
+    max_tile_id := WORLD_COLS * WORLD_ROWS;
+
+    ids_to_process : [..] s32;
+    array_add(*ids_to_process, starting_tile_id);
+    ids_processed_set : Table(s32, s32);
+
+    while ids_to_process.count > 0 {
+        // Get the next id to process
+        id := pop_front(*ids_to_process);
+
+        // Make sure the id is valid and hasn't already been processed
+        if table_contains(*ids_processed_set, id) continue;
+        if id <= 0 continue;
+        if id > max_tile_id continue;
+        if !table_contains(*fully_mined_tile_ids_set, id) continue;
+        if id == starting_tile_id - (WORLD_ROWS * (radius + 1)) continue; // north
+        if id == starting_tile_id + (WORLD_ROWS * (radius + 1)) continue; // south
+        if id == starting_tile_id + (radius + 1)                continue; // east
+        if id == starting_tile_id - (radius + 1)                continue; // west
+
+        // If treasure is found, return
+        if table_contains(*tiles_with_treasure_ids_set, id) return true, id;
+
+        // Mark it as processed
+        table_set(*ids_processed_set, id, 1738);
+
+        // Add neighbors as needing to be processed
+        array_add(*ids_to_process, id - WORLD_ROWS);
+        array_add(*ids_to_process, id + WORLD_ROWS);
+        array_add(*ids_to_process, id + 1);
+        array_add(*ids_to_process, id - 1);
+    }
+
+    return false, 0;
 }
 
 derive_entities_in_viewport :: (camera: Camera2D) {
@@ -2921,7 +2976,7 @@ derive_entities_in_viewport :: (camera: Camera2D) {
         }
     }
 
-    // Derive viewable dynamite
+    // Derive viewable treasure
     {
         for treasure_tile_id: tiles_with_treasure_ids {
             pos := get_tile_pos_by_id(treasure_tile_id);

@@ -1,6 +1,6 @@
 # In progress
 
-- treasure caves
+- dwarves look for first treasure in treasure caves
 
 # Bugs
 
@@ -22,6 +22,9 @@
 - fullscreen and resizability
 - speed up time button
 - temporarily pause time button
+- base canons
+- base spawn diggers
+- base spawn warriors
 
 # Performance
 
