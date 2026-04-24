@@ -894,10 +894,14 @@ main :: () {
                                 target_tile_id  := dwarf.tile_ids_on_path[0];
                                 target_tile_pos := get_tile_pos_by_id(target_tile_id);
 
-                                assert(
-                                    dwarf.pos.x == target_tile_pos.x || dwarf.pos.y == target_tile_pos.y,
-                                    "Dwarf % is going at an angle", it_index
-                                );
+                                // assert(
+                                //     dwarf.pos.x == target_tile_pos.x || dwarf.pos.y == target_tile_pos.y,
+                                //     "Dwarf id % is going at an angle", dwarf.id
+                                // );
+                                if !(dwarf.pos.x == target_tile_pos.x || dwarf.pos.y == target_tile_pos.y) {
+                                    paused = true;
+                                    print("Dwarf id % is going at an angle", dwarf.id);
+                                }
 
                                 tile_id_next_in_dwarfs_path := dwarf.tile_ids_on_path[0];
 
@@ -1070,7 +1074,6 @@ main :: () {
                                                         // then we want to path towards it.
                                                         tile_ids_on_path := get_tile_ids_along_path(dwarf.pos, neighbor_pos);
                                                         array_reset(*(dwarf.tile_ids_on_path));
-                                                        // PERF
                                                         // TODO: Am I leaking stuff here, or...
                                                         array_copy(*(dwarf.tile_ids_on_path), tile_ids_on_path);
                                                     }
@@ -1102,9 +1105,14 @@ main :: () {
                                             if revealed_cave && cave_type == .TREASURE {
                                                 found, new_treasure_tile_id := find_treasure_tile_id_within_radius(dwarf.tile_id_mining, 10);
                                                 if found {
+                                                    // Teleport dwarf to the center of the tile he's standing on before changing his pathing.
+                                                    // Without doing this, the dwarf can end up being misaligned.
+                                                    dwarf_center   := get_rect_center(get_world_rect_from_pos(dwarf.pos));
+                                                    dwarf_tile_id  := get_tile_id_by_pos(dwarf_center);
+                                                    dwarf_tile_pos := get_tile_pos_by_id(dwarf_tile_id);
+                                                    dwarf.pos = dwarf_tile_pos;
+
                                                     tile_ids_to_new_treasure := dijkstra(dwarf.tile_id_mining, new_treasure_tile_id, edges);
-                                                    tile_ids_to_new_treasure.count -= 1;
-                                                    tile_ids_to_new_treasure.data  += 1;
                                                     
                                                     array_reset(*dwarf.tile_ids_on_path);
                                                     array_copy(*dwarf.tile_ids_on_path, tile_ids_to_new_treasure);
@@ -1137,20 +1145,17 @@ main :: () {
 
                 // Update dynamite
                 {
-                    // Take an array view of the actual state because we mutate the state during the loop
-                    // and can cause self referential problems when looping on the actual state.
-                    current_tiles_with_dynamite_ids := array_view(tiles_with_dynamite_ids, 0);
-                    for current_tiles_with_dynamite_ids {
+                    tile_ids_to_remove_dynamite_from : [..] s32;
+
+                    for tiles_with_dynamite_ids {
                         // Kill any dwarves you are coming in contact with
                         for dwarf, dwarf_index: dwarves {
                             dynamite_pos := get_tile_pos_by_id(it);
                             if Vector2Equals(dwarf.pos, dynamite_pos) {
                                 kill_dwarf_by_index(dwarf_index);
 
-                                // Destroy the dynamite
-                                // TODO: I have a feeling this might cause weird problems. If it does, just mark these
-                                // as to-delete and have a delete pass.
-                                array_unordered_remove_by_index(*tiles_with_dynamite_ids, it_index);
+                                // Mark the dynamite as to be destroyed
+                                array_add(*tile_ids_to_remove_dynamite_from, it);
 
                                 // Create a hole
                                 set_tile_as_type(it, .HOLE, false, *game_state);
@@ -1162,30 +1167,41 @@ main :: () {
                             }
                         }
                     }
+
+                    for tile_ids_to_remove_dynamite_from {
+                        array_unordered_remove_by_index(*tiles_with_dynamite_ids, it);
+                    }
                 }
 
                 // Update treasure
                 {
-                    // Take an array view of the actual state because we mutate the state during the loop
-                    // and can cause self referential problems when looping on the actual state.
-                    current_tiles_with_treasure_ids := array_view(tiles_with_treasure_ids, 0);
-                    for current_tiles_with_treasure_ids {
+                    tile_ids_to_remove_treasure_from : [..] s32;
+
+                    for tiles_with_treasure_ids {
                         for *dwarf, dwarf_index: dwarves {
                             treasure_pos := get_tile_pos_by_id(it);
                             if Vector2Equals(dwarf.pos, treasure_pos) {
                                 // Credit the gold.
                                 game_state.gold += GOLD_FROM_TREASURE;
 
-                                // Destroy the treasure
-                                array_unordered_remove_by_index(*tiles_with_treasure_ids, it_index);
-                                table_remove(*tiles_with_treasure_ids_set, it);
+                                // PERF: is there some way to do this without another loop?
+                                //
+                                // Mark the treasure to be destoryedDestroy the treasure
+                                array_add(*tile_ids_to_remove_treasure_from, it);
 
                                 found, new_treasure_tile_id := find_treasure_tile_id_within_radius(it, 10);
                                 if found {
                                     tile_ids_to_new_treasure := dijkstra(it, new_treasure_tile_id, edges);
                                     tile_ids_to_new_treasure.count -= 1;
                                     tile_ids_to_new_treasure.data  += 1;
-                                    
+
+                                    // Teleport dwarf to the center of the tile he's standing on before changing his pathing.
+                                    // Without doing this, the dwarf can end up being misaligned.
+                                    dwarf_center   := get_rect_center(get_world_rect_from_pos(dwarf.pos));
+                                    dwarf_tile_id  := get_tile_id_by_pos(dwarf_center);
+                                    dwarf_tile_pos := get_tile_pos_by_id(dwarf_tile_id);
+                                    dwarf.pos = dwarf_tile_pos;
+
                                     array_reset(*dwarf.tile_ids_on_path);
                                     array_copy(*dwarf.tile_ids_on_path, tile_ids_to_new_treasure);
                                 }
@@ -1193,6 +1209,11 @@ main :: () {
                                 break;
                             }
                         }
+                    }
+
+                    for tile_ids_to_remove_treasure_from {
+                        array_unordered_remove_by_value(*tiles_with_treasure_ids, it);
+                        table_remove(*tiles_with_treasure_ids_set, it);
                     }
                 }
 

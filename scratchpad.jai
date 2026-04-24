@@ -8,12 +8,12 @@ Compiler :: #import "Compiler";
 #import "Sort";
 #import "System";
 
-#load "utils.jai";
+#load "main.jai";
 
 #run {
   Compiler.set_build_options_dc(.{do_output=false});
 
-  for 0..5 {
-    print("%\n", it);
-  }
+
+
+  print("%\n", get_tile_pos_by_id(2001932));
 }
