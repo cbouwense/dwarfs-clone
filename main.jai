@@ -38,6 +38,8 @@ DWARF_SPAWN_MS :: 5000;
 
 LAVA_DAMAGE_PER_HIT :: 20;
 
+SCALE :: 1;
+
 TILEMAP_GENERAL_MAP_WIDTH    :: 320;
 TILEMAP_GENERAL_MAP_HEIGHT   :: 320;
 TILEMAP_GENERAL_TILE_WIDTH   :: 32;
@@ -54,8 +56,6 @@ WORLD_ROWS_MASK :: WORLD_ROWS - 1;
 WORLD_COLS_SHIFT :: #run integer_log2(WORLD_COLS);
 TILE_WIDTH_F  :: cast(float32) TILEMAP_GENERAL_WORLD_WIDTH;
 TILE_HEIGHT_F :: cast(float32) TILEMAP_GENERAL_WORLD_HEIGHT;
-
-SCALE :: 1;
 
 TRANSPARENT_WHITE :: Color.{ 255, 255, 255, 100 };
 
@@ -307,7 +307,8 @@ data_folder: string;
 actively_mined_tile_ids_to_health_table : Table(s32, s32);
 actively_mined_tile_ids_in_viewport     : [..] s32;
 
-fully_mined_tile_ids_set         : Table(s32, Any);
+// The value in the key-value pair corresponds to the tile column, zero-indexed
+fully_mined_tile_ids_set         : Table(s32, s32);
 fully_mined_tile_ids_in_viewport : [..] s32;
 
 cave_tile_ids_set         : Table(s32, Any);
@@ -514,7 +515,7 @@ main :: () {
     }
     camera.offset   = Vector2.{ 800, 450 };
     camera.rotation = 0.0;
-    camera.zoom     = 0.2;
+    camera.zoom     = 1.0;
 
     persistent_encasing_obsidian_tile_ids_set: Table(s32, Color);
 
@@ -529,8 +530,6 @@ main :: () {
         mouse_pos_in_ui    := GetMousePosition();
         mouse_pos_in_world := GetScreenToWorld2D(mouse_pos_in_ui, camera);
         mouse_wheel_move   := GetMouseWheelMove();
-
-        derive_entities_in_viewport(camera);
 
         //
         // Input
@@ -1177,18 +1176,20 @@ main :: () {
                 {
                     tile_ids_to_remove_treasure_from : [..] s32;
 
+                    // PERF: this double loop looks sus
                     for tiles_with_treasure_ids {
                         for *dwarf, dwarf_index: dwarves {
                             treasure_pos := get_tile_pos_by_id(it);
-                            if Vector2Equals(dwarf.pos, treasure_pos) {
+                            dwarf_is_pretty_much_touching_treasure := values_are_close(dwarf.pos, treasure_pos, 1);
+                            if dwarf_is_pretty_much_touching_treasure {
                                 // Credit the gold.
                                 game_state.gold += GOLD_FROM_TREASURE;
 
-                                // PERF: is there some way to do this without another loop?
-                                //
-                                // Mark the treasure to be destoryedDestroy the treasure
-                                array_add(*tile_ids_to_remove_treasure_from, it);
+                                // Remove the treasure
+                                array_unordered_remove_by_value(*tiles_with_treasure_ids, it);
+                                table_remove(*tiles_with_treasure_ids_set, it);
 
+                                // Look for more treasure
                                 found, new_treasure_tile_id := find_treasure_tile_id_within_radius(it, 10);
                                 if found {
                                     tile_ids_to_new_treasure := dijkstra(it, new_treasure_tile_id, edges);
@@ -1319,6 +1320,8 @@ main :: () {
                     for lava_still_tile_ids kill_any_dwarves_touching_tile_id(it);
                 }
             }
+        
+            derive_entities_in_viewport(camera);
         }
 
         //
@@ -1361,11 +1364,25 @@ main :: () {
                 DRAW_TILES :: true;
                 #if DRAW_TILES {
                     for fully_mined_tile_ids_in_viewport {
-                        DrawRectangleV(
-                            get_tile_pos_by_id(it),
-                            Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
-                            BEIGE, // TODO: texture
-                        );
+                        found, tile_column := table_find(*fully_mined_tile_ids_set, it);
+                        if !found {
+                            paused = true;
+                            print("tile % had no associated tilemap column", it);
+                        }
+                        // LOD
+                        if camera.zoom < 0.3 tile_column = 3;
+
+                        source := Rectangle.{
+                            xx (tile_column * TILEMAP_GENERAL_TILE_WIDTH),
+                            1 * TILEMAP_GENERAL_TILE_HEIGHT,
+                            TILEMAP_GENERAL_TILE_WIDTH,
+                            TILEMAP_GENERAL_TILE_HEIGHT,
+                        };
+
+                        pos  := get_tile_pos_by_id(it);
+                        dest := get_world_rect_from_pos(pos);
+
+                        DrawTexturePro(tilemap_texture_general, source, dest, Vector2.{0,0}, 0.0, WHITE);
                     }
 
                     for cave_tile_ids_in_viewport {
@@ -1549,58 +1566,64 @@ main :: () {
             }
 
             // Draw UI
-            debug_text_y : s32 = 10;
-            INCREMENT_Y :: 20;
-            if debug_mode {
-                DrawFPS(10, read_then_increment(*debug_text_y, INCREMENT_Y));
-                DrawText(tprint("dwarf count: %\0", dwarves.count).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 12, WHITE);
-            
-                // Debug game state
-                {
-                    DrawText(tprint("hovered_dwarf_index: %\0", game_state.hovered_dwarf_index).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                    DrawText(tprint("selected_dwarf_id: %\0", game_state.selected_dwarf_id).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                    DrawText(tprint("water_flow_cooldown_ms: %\0", game_state.water_flow_cooldown_ms).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                    DrawText(tprint("lava_flow_cooldown_ms: %\0", game_state.lava_flow_cooldown_ms).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                    DrawText(tprint("gold: %\0", game_state.gold).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                    DrawText(tprint("points: %\0", game_state.points).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                }
+            {
+                debug_text_y : s32 = 10;
+                INCREMENT_Y :: 20;
+                if debug_mode {
+                    DrawFPS(10, read_then_increment(*debug_text_y, INCREMENT_Y));
+                    DrawText(tprint("dwarf count: %\0", dwarves.count).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 12, WHITE);
+                
+                    // Debug game state
+                    {
+                        DrawText(tprint("hovered_dwarf_index: %\0", game_state.hovered_dwarf_index).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                        DrawText(tprint("selected_dwarf_id: %\0", game_state.selected_dwarf_id).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                        DrawText(tprint("water_flow_cooldown_ms: %\0", game_state.water_flow_cooldown_ms).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                        DrawText(tprint("lava_flow_cooldown_ms: %\0", game_state.lava_flow_cooldown_ms).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                        DrawText(tprint("gold: %\0", game_state.gold).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                        DrawText(tprint("points: %\0", game_state.points).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                    }
 
-                // Debug controls
-                {
-                    DrawText(tprint("select_is_pressed_once: %\0", select_is_pressed_once).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                    DrawText(tprint("select_is_held_down: %\0", select_is_held_down).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                    DrawText(tprint("add_base: %\0", add_base).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                    DrawText(tprint("add_iron: %\0", add_iron).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                    DrawText(tprint("select_as_place_dynamite: %\0", select_as_place_dynamite).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                    DrawText(tprint("select_as_place_obsidian: %\0", select_as_place_obsidian).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                    DrawText(tprint("select_as_place_wall: %\0", select_as_place_wall).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                    DrawText(tprint("select_as_remove_path: %\0", select_as_remove_path).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                    DrawText(tprint("started_to_draw_path: %\0", started_to_draw_path).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                    DrawText(tprint("drag_cam_pressed: %\0", drag_cam_pressed).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                    DrawText(tprint("drag_cam_down: %\0", drag_cam_down).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                    DrawText(tprint("move_camera_up: %\0", move_camera_up).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                    DrawText(tprint("move_camera_down: %\0", move_camera_down).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                    DrawText(tprint("move_camera_left: %\0", move_camera_left).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                    DrawText(tprint("move_camera_right: %\0", move_camera_right).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                    DrawText(tprint("drawing_path: %\0", drawing_path).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                }
+                    // Debug controls
+                    {
+                        DrawText(tprint("select_is_pressed_once: %\0", select_is_pressed_once).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                        DrawText(tprint("select_is_held_down: %\0", select_is_held_down).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                        DrawText(tprint("add_base: %\0", add_base).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                        DrawText(tprint("add_iron: %\0", add_iron).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                        DrawText(tprint("select_as_place_dynamite: %\0", select_as_place_dynamite).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                        DrawText(tprint("select_as_place_obsidian: %\0", select_as_place_obsidian).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                        DrawText(tprint("select_as_place_wall: %\0", select_as_place_wall).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                        DrawText(tprint("select_as_remove_path: %\0", select_as_remove_path).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                        DrawText(tprint("started_to_draw_path: %\0", started_to_draw_path).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                        DrawText(tprint("drag_cam_pressed: %\0", drag_cam_pressed).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                        DrawText(tprint("drag_cam_down: %\0", drag_cam_down).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                        DrawText(tprint("move_camera_up: %\0", move_camera_up).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                        DrawText(tprint("move_camera_down: %\0", move_camera_down).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                        DrawText(tprint("move_camera_left: %\0", move_camera_left).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                        DrawText(tprint("move_camera_right: %\0", move_camera_right).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                        DrawText(tprint("drawing_path: %\0", drawing_path).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                    }
 
-                debug_text_y = 0;
-                for dwarves {
-                    if CheckCollisionPointRec(mouse_pos_in_world, Rectangle.{ it.pos.x, it.pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT }) {
-                        DrawText(tprint("id: %\0", it.id).data,                                 xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                        DrawText(tprint("pos: %\0", it.pos).data,                               xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                        DrawText(tprint("state: %\0", it.state).data,                           xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                        DrawText(tprint("tile_ids_on_path: %\0", it.tile_ids_on_path).data,     xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                        DrawText(tprint("mining_cooldown_ms: %\0", it.mining_cooldown_ms).data, xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                        DrawText(tprint("tile_id_mining: %\0", it.tile_id_mining).data,         xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                        DrawText(tprint("direction: %\0", it.direction).data,                   xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                    // Debug camera
+                    {
+                        DrawText(tprint("offset: %\0", camera.offset).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                        DrawText(tprint("target: %\0", camera.target).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                        DrawText(tprint("rotation: %\0", camera.rotation).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                        DrawText(tprint("zoom: %\0", camera.zoom).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                    }
+
+                    debug_text_y = 0;
+                    for dwarves {
+                        if CheckCollisionPointRec(mouse_pos_in_world, Rectangle.{ it.pos.x, it.pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT }) {
+                            DrawText(tprint("id: %\0", it.id).data,                                 xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                            DrawText(tprint("pos: %\0", it.pos).data,                               xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                            DrawText(tprint("state: %\0", it.state).data,                           xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                            DrawText(tprint("tile_ids_on_path: %\0", it.tile_ids_on_path).data,     xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                            DrawText(tprint("mining_cooldown_ms: %\0", it.mining_cooldown_ms).data, xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                            DrawText(tprint("tile_id_mining: %\0", it.tile_id_mining).data,         xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                            DrawText(tprint("direction: %\0", it.direction).data,                   xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                        }
                     }
                 }
-            }
-
-            if paused {
-
             }
         }
     }
@@ -2502,8 +2525,6 @@ set_cave_as_mined :: (tile_id: s32, cave_type: CaveType, grant_points: bool, gam
     }
 }
 
-
-
 set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, game_state: *GameState) {
     chunk := find_or_create_chunk_by_tile_id(tile_id);
 
@@ -2566,7 +2587,8 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, game_
         }
         case .MINED; {
             array_add(*chunk.fully_mined_tile_ids, tile_id);
-            table_set(*fully_mined_tile_ids_set, tile_id, 1738);
+            tile_column := cast(s32) random_get_within_range(0, 2);
+            table_set(*fully_mined_tile_ids_set, tile_id, tile_column);
 
             if grant_points {
                 if tile_was_iron {

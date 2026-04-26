@@ -1,5 +1,9 @@
 # In progress
 
+- mined tile sprites
+
+# Bugs
+
 - adding tons of bases at once makes dwarves go diagonal
     - condition:
         - reproducible on 329b3b5, f32fdea, 2d6a86c
@@ -9,11 +13,13 @@
     - cause:
     - correction:
     - confirmation:
-
-# Bugs
-
 - flowing liquid can cause actively mined tiles to disappear and crashes game
     - condition: reproducible on c43b3f5
+    - cause:
+    - correction:
+    - confirmation:
+- zooming out really far makes dwarves jiggle in place
+    - condition: reproducible on dee71bc
     - cause:
     - correction:
     - confirmation:
