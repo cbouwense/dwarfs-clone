@@ -36,6 +36,10 @@ DWARF_MINE_COOLDOWN_MS :: 250;
 DWARF_MINE_DAMAGE_PER_SWING :: 50;
 DWARF_SPAWN_MS :: 5000;
 
+GOBLIN_MOVE_SPEED :: 100;
+GOBLIN_ATTACK_COOLDOWN_MS :: 2000;
+GOBLIN_ATTACK_DAMAGE_PER_SWING :: 5;
+
 LAVA_DAMAGE_PER_HIT :: 20;
 
 SCALE :: 1;
@@ -121,6 +125,7 @@ select_is_held_down      : bool;
 add_base                 : bool;
 add_iron                 : bool;
 select_as_place_dynamite : bool;
+select_as_place_goblin   : bool;
 select_as_place_obsidian : bool;
 select_as_place_wall     : bool;
 started_to_draw_path     : bool;
@@ -138,6 +143,7 @@ select_is_held_down_prev      : bool;
 add_base_prev                 : bool;
 add_iron_prev                 : bool;
 select_as_place_dynamite_prev : bool;
+select_as_place_goblin_prev   : bool;
 select_as_place_obsidian_prev : bool;
 select_as_place_wall_prev     : bool;
 started_to_draw_path_prev     : bool;
@@ -153,6 +159,8 @@ select_as_remove_path_prev    : bool;
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Other
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+
+PAUSE_ON_PANIC :: true;
 
 mouse_drag_began_at_pos : Vector2;
 mouse_pos_when_path_creation_started : Vector2;
@@ -208,7 +216,7 @@ CaveType :: enum u8 {
     WATER;
     LAVA;
     TREASURE;
-    MINION;
+    GOBLIN;
     SHAMAN;
     SPIDER_QUEEN;
 }
@@ -243,6 +251,13 @@ HasPos :: struct {
     pos : Vector2;
 }
 
+Moveable :: struct {
+    id               : s32;
+    pos              : Vector2;
+    tile_ids_on_path : [..] s32;
+    direction        : Direction;
+}
+
 Base :: struct {
     pos : Vector2;
     spawn_dwarf_cooldown_ms : s32;
@@ -253,7 +268,7 @@ Tile :: struct {
 }
 
 DwarfState :: enum {
-    IDLE;
+    NOTHING;
     MOVING;
     MINING;
 }
@@ -265,6 +280,21 @@ Dwarf :: struct {
     tile_ids_on_path   : [..] s32;
     mining_cooldown_ms : s32;
     tile_id_mining     : s32;
+    direction          : Direction;
+}
+
+GoblinState :: enum {
+    NOTHING;
+    DECIDING;
+    MOVING;
+    ATTACKING;
+}
+
+Goblin :: struct {
+    id                 : s32;
+    pos                : Vector2;
+    state              : GoblinState;
+    tile_ids_on_path   : [..] s32;
     direction          : Direction;
 }
 
@@ -350,6 +380,11 @@ dwarves_in_viewport : [..] Dwarf;
 dwarf_id_to_index   : Table(s32, s64);
 dwarf_id_counter    : s32 = 0;
 
+goblins             : [..] Goblin;
+goblins_in_viewport : [..] Goblin;
+goblin_id_to_index  : Table(s32, s64);
+goblin_id_counter   : s32 = 0;
+
 tiles_with_dynamite_ids             : [..] s32;
 tiles_with_dynamite_ids_in_viewport : [..] s32;
 
@@ -399,6 +434,7 @@ main :: () {
         controls.add_base[0]                 = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_B               };
         controls.add_iron[0]                 = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_I               };
         controls.select_as_place_dynamite[0] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_E               };
+        controls.select_as_place_goblin[0]   = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_T               };
         controls.select_as_place_obsidian[0] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_Q               };
         controls.select_as_place_obsidian[1] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT_SHIFT      };
         controls.select_as_place_obsidian[2] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT_SHIFT     };
@@ -567,6 +603,7 @@ main :: () {
                 add_base                 = control_is_pressed(controls.add_base);
                 add_iron                 = control_is_pressed(controls.add_iron);
                 select_as_place_dynamite = control_is_down(controls.select_as_place_dynamite);
+                select_as_place_goblin   = control_is_down(controls.select_as_place_goblin);
                 select_as_place_obsidian = control_is_down(controls.select_as_place_obsidian);
                 select_as_place_wall     = control_is_down(controls.select_as_place_wall);
                 select_as_remove_path    = control_is_down(controls.select_as_remove_path);
@@ -580,6 +617,7 @@ main :: () {
                 started_to_draw_path = (
                     select_is_pressed_once &&
                     !select_as_place_dynamite &&
+                    !select_as_place_goblin   &&
                     !select_as_place_obsidian &&
                     !select_as_place_wall &&
                     !select_as_remove_path_prev &&
@@ -598,6 +636,7 @@ main :: () {
                 // Debug break tiles
                 hovered_tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
                 if IsMouseButtonDown(MouseButton.MOUSE_BUTTON_LEFT) && IsKeyDown(KeyboardKey.KEY_LEFT_CONTROL) {
+                    print("Breaking tiles\n");
                     tile_id := get_tile_id_by_pos(Vector2.{ hovered_tile_rect.x, hovered_tile_rect.y });
                     set_tile_as_type(tile_id, .MINED, false, *game_state);
                     reveal_cave_if_necessary(tile_id, false, *game_state);
@@ -727,6 +766,14 @@ main :: () {
                             }
                         }
                     }
+                    else if select_as_place_goblin {
+                        print("select_as_place_goblin\n");
+                        if select_is_pressed_once {
+                            print("trying to spawn goblin\n");
+                            tile_id := get_tile_id_by_pos(mouse_pos_in_world);
+                            create_goblin(get_tile_pos_by_id(tile_id));
+                        }
+                    }
                     else if select_as_remove_path {
                         if select_is_held_down {
                             tile_id := get_tile_id_by_pos(mouse_pos_in_world);
@@ -762,7 +809,7 @@ main :: () {
                                 dwarves[selected_dwarf_index].pos = get_rect_pos(tile_rect);
                                 
                                 // Stop the dwarf from moving so you can think while dragging a path
-                                dwarves[selected_dwarf_index].state = .IDLE;
+                                dwarves[selected_dwarf_index].state = .NOTHING;
 
                                 // Remove its current pathing
                                 array_reset(*(dwarves[selected_dwarf_index].tile_ids_on_path));
@@ -959,15 +1006,16 @@ main :: () {
                                             }
                                         }
                                     } else {
-                                        // If the dwarf has not reached its target yet, then simply continue on to the target
-                                        current_pos     := dwarf.pos;
-                                        target_pos      := get_tile_pos_by_id(dwarf.tile_ids_on_path[0]);
-                                        delta           := Vector2Subtract(target_pos, current_pos);
-                                        direction       := Vector2Normalize(delta);
-                                        movement_vector := Vector2Scale(direction, DWARF_MOVE_SPEED * dt_seconds);
-                                        new_pos         := Vector2Add(current_pos, movement_vector);
+                                        move_one_step_towards_its_next_target(dwarf, DWARF_MOVE_SPEED, dt_seconds);
+                                        // // If the dwarf has not reached its target yet, then simply continue on to the target
+                                        // current_pos     := dwarf.pos;
+                                        // target_pos      := get_tile_pos_by_id(dwarf.tile_ids_on_path[0]);
+                                        // delta           := Vector2Subtract(target_pos, current_pos);
+                                        // direction       := Vector2Normalize(delta);
+                                        // movement_vector := Vector2Scale(direction, DWARF_MOVE_SPEED * dt_seconds);
+                                        // new_pos         := Vector2Add(current_pos, movement_vector);
 
-                                        dwarf.pos = new_pos;
+                                        // dwarf.pos = new_pos;
                                     }
                                 }
                                 // If it's unmineable, then they'll have to do something else, because they can't go through it
@@ -1102,7 +1150,7 @@ main :: () {
                                             revealed_cave, cave_type := reveal_cave_if_necessary(dwarf.tile_id_mining, true, *game_state);
 
                                             if revealed_cave && cave_type == .TREASURE {
-                                                found, new_treasure_tile_id := find_treasure_tile_id_within_radius(dwarf.tile_id_mining, 10);
+                                                found, new_treasure_tile_id := detect_treasure_tile_id_within_radius(dwarf.tile_id_mining, 10);
                                                 if found {
                                                     // Teleport dwarf to the center of the tile he's standing on before changing his pathing.
                                                     // Without doing this, the dwarf can end up being misaligned.
@@ -1137,7 +1185,143 @@ main :: () {
                                     }
                                 }
 
-                            case .IDLE;
+                            case .NOTHING;
+                        }
+                    }
+                }
+
+                // Update goblins
+                {
+                    for *goblin: goblins {
+                        goblin_center   := get_rect_center(get_world_rect_from_pos(goblin.pos));
+                        goblin_tile_id  := get_tile_id_by_pos(goblin_center);
+                        goblin_tile_pos := get_tile_pos_by_id(goblin_tile_id);
+
+                        if #complete goblin.state == {
+                            case .DECIDING;
+                                {
+                                    #if PAUSE_ON_PANIC {
+                                        if !Vector2Equals(goblin.pos, goblin_tile_pos) {
+                                            paused = true;
+                                            print("Goblin % was not precisely on its tile while deciding what to do next.", goblin.id);
+                                        }
+                                    } else {
+                                        assert(Vector2Equals(goblin.pos, goblin_tile_pos), "Goblin % was not precisely on its tile while deciding what to do next.", goblin.id);
+                                    }
+                                }
+
+                                // Check if there are any attack targets nearby.
+                                //
+                                // First detect any dwarves.
+                                detected, dwarf_target := detect_dwarf_within_radius(goblin_tile_id, 5);
+                                if detected {
+                                    dwarf_target_center      := get_rect_center(get_world_rect_from_pos(dwarf_target.pos));
+                                    dwarf_target_tile_id     := get_tile_id_by_pos(dwarf_target_center);
+                                    tile_ids_to_dwarf_target := dijkstra(goblin_tile_id, dwarf_target_tile_id, edges);
+                                    
+                                    // If the goblin is right up against the dwarf already, then start fighting
+                                    if tile_ids_to_dwarf_target.count == 2 {
+                                        goblin.state = .ATTACKING;
+                                    } else {
+                                        // Since we started pathfinding on the goblin's current tile, we need to pop that off the front
+                                        // so we don't softlock on it.
+                                        pop_front(*tile_ids_to_dwarf_target);
+
+                                        array_reset(*goblin.tile_ids_on_path);
+                                        array_copy(*goblin.tile_ids_on_path, tile_ids_to_dwarf_target);
+
+                                        goblin.state = .MOVING;
+                                    }
+                                }
+                                // TODO: detect bases
+                                
+                                // No targets detected
+                                else {
+                                    // If the goblin still has target tiles, then move to the next one
+                                    if goblin.tile_ids_on_path.count > 0 {
+                                        goblin.state = .MOVING;
+                                    }
+                                    // If the goblin has no more target tiles, then wander around
+                                    else {
+                                        new_direction := goblin.direction;
+
+                                        // Find a new target by picking a random cardinal direction 1 tile away
+                                        change_direction_rng := random_get_within_range(0, 1);
+                                        if change_direction_rng < 0.1 {
+                                            go_left := change_direction_rng < 0.05;
+
+                                            if goblin.direction == .NORTH {
+                                                new_direction = ifx go_left then .WEST  else .EAST;
+                                            }
+                                            else if goblin.direction == .SOUTH {
+                                                new_direction = ifx go_left then .EAST  else .WEST;
+                                            }
+                                            else if goblin.direction == .EAST  {
+                                                new_direction = ifx go_left then .NORTH else .SOUTH;
+                                            }
+                                            else if goblin.direction == .WEST  {
+                                                new_direction = ifx go_left then .SOUTH else .NORTH;
+                                            }
+                                            else assert(false);
+                                        }
+
+                                        dx := TILE_DIRECTION_DELTAS[new_direction][0];
+                                        dy := TILE_DIRECTION_DELTAS[new_direction][1];
+                                        goblin.direction = new_direction;
+
+                                        assert(dx == 0 || dy == 0, "dx: %, dy: %", dx, dy);
+
+                                        new_target_tile_pos := Vector2.{
+                                            goblin.pos.x + dx,
+                                            goblin.pos.y + dy,
+                                        };
+
+                                        new_target_tile_id := get_tile_id_by_pos(new_target_tile_pos);
+                                        array_add(*goblin.tile_ids_on_path, new_target_tile_id);
+
+                                        goblin.state = .MOVING;
+                                    }
+                                }
+
+                                assert(goblin.state != .DECIDING, "Goblin got to end of DECIDING state without making a decision");
+
+                            case .MOVING;
+                                assert(goblin.tile_ids_on_path.count > 0, "Goblin was moving somewhere but has no target");
+                                target_tile_id  := goblin.tile_ids_on_path[0];
+                                target_tile_pos := get_tile_pos_by_id(target_tile_id);
+
+                                if !(goblin.pos.x == target_tile_pos.x || goblin.pos.y == target_tile_pos.y) {
+                                    paused = true;
+                                    print("Goblin id % is going at an angle", goblin.id);
+                                }
+
+                                tile_id_next_in_goblin_path := goblin.tile_ids_on_path[0];
+
+                                // If it's mined, then proceed
+                                if table_contains(*fully_mined_tile_ids_set, tile_id_next_in_goblin_path) {
+                                    goblin_pretty_much_reached_target := values_are_close(goblin.pos, target_tile_pos, 1);
+                                    if goblin_pretty_much_reached_target {
+                                        // Teleport goblin to the target tile to remove any floating point weirdness.
+                                        goblin.pos = target_tile_pos;
+
+                                        // Remove the target from the tile ids on path
+                                        array_ordered_remove_by_index(*goblin.tile_ids_on_path, 0);
+
+                                        // Figure out what to do next
+                                        goblin.state = .DECIDING;
+                                    } else {
+                                        move_one_step_towards_its_next_target(goblin, GOBLIN_MOVE_SPEED, dt_seconds);
+                                    }
+                                }
+                                // TODO: I think we'll have to include other things like goblins and dwarves, since they can't go through them either
+                                //
+                                // If it's unmined, then they'll have to do something else, because they can't go through it
+                                else {
+                                    goblin.state = .DECIDING;
+                                }
+
+                            case .ATTACKING;
+                            case .NOTHING;
                         }
                     }
                 }
@@ -1190,7 +1374,7 @@ main :: () {
                                 table_remove(*tiles_with_treasure_ids_set, it);
 
                                 // Look for more treasure
-                                found, new_treasure_tile_id := find_treasure_tile_id_within_radius(it, 10);
+                                found, new_treasure_tile_id := detect_treasure_tile_id_within_radius(it, 10);
                                 if found {
                                     tile_ids_to_new_treasure := dijkstra(it, new_treasure_tile_id, edges);
                                     tile_ids_to_new_treasure.count -= 1;
@@ -1528,6 +1712,19 @@ main :: () {
                     }
                 }
 
+                // Draw goblins
+                {
+                    for goblin: goblins_in_viewport {
+                        goblin_center   := get_rect_center(get_world_rect_from_pos(goblin.pos));
+                        goblin_tile_id  := get_tile_id_by_pos(goblin_center);
+                        DrawRectangleV(
+                            get_tile_pos_by_id(goblin_tile_id),
+                            Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
+                            LIME, // TODO: texture
+                        );
+                    }
+                }
+
                 // Draw dynamite
                 DRAW_DYNAMITE :: true;
                 #if DRAW_DYNAMITE {
@@ -1572,7 +1769,7 @@ main :: () {
                 if debug_mode {
                     DrawFPS(10, read_then_increment(*debug_text_y, INCREMENT_Y));
                     DrawText(tprint("dwarf count: %\0", dwarves.count).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 12, WHITE);
-                
+
                     // Debug game state
                     {
                         DrawText(tprint("hovered_dwarf_index: %\0", game_state.hovered_dwarf_index).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
@@ -1623,10 +1820,33 @@ main :: () {
                             DrawText(tprint("direction: %\0", it.direction).data,                   xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                         }
                     }
+                    for goblins {
+                        if CheckCollisionPointRec(mouse_pos_in_world, Rectangle.{ it.pos.x, it.pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT }) {
+                            DrawText(tprint("id: %\0", it.id).data,                                 xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                            DrawText(tprint("pos: %\0", it.pos).data,                               xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                            DrawText(tprint("state: %\0", it.state).data,                           xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                            DrawText(tprint("tile_ids_on_path: %\0", it.tile_ids_on_path).data,     xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                            DrawText(tprint("direction: %\0", it.direction).data,                   xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                        }
+                    }
                 }
             }
         }
     }
+}
+
+// Functions
+
+move_one_step_towards_its_next_target :: (thing: *$T/interface Moveable, speed: int, dt_seconds: float) {
+    // If the thing has not reached its target yet, then simply continue on to the target
+    current_pos     := thing.pos;
+    target_pos      := get_tile_pos_by_id(thing.tile_ids_on_path[0]);
+    delta           := Vector2Subtract(target_pos, current_pos);
+    direction       := Vector2Normalize(delta);
+    movement_vector := Vector2Scale(direction, speed * dt_seconds);
+    new_pos         := Vector2Add(current_pos, movement_vector);
+
+    thing.pos = new_pos;
 }
 
 set_dwarf_direction_to_face_next_target :: (dwarf: *Dwarf) {
@@ -1661,6 +1881,27 @@ create_dwarf :: (pos: Vector2) -> Dwarf {
     array_add(*dwarves, dwarf);
 
     return dwarf;
+}
+
+create_goblin :: (pos: Vector2) -> Goblin {
+    goblin_id  := increment_then_read(*goblin_id_counter);
+    direction := cast(Direction) cast(int) random_get_within_range(0, 3);
+
+    goblin := Goblin.{
+        id        = goblin_id,
+        pos       = pos,
+        state     = .DECIDING,
+        direction = direction,
+        // tile_ids_on_path intentionally not set
+    };
+
+    tile_id := get_tile_id_by_pos(pos);
+    // chunk := find_or_create_chunk_by_tile_id(dwarf_tile_id);
+    // array_add(*chunk.dwarf_ids, dwarf_id);
+    table_set(*goblin_id_to_index, goblin_id, goblins.count);
+    array_add(*goblins, goblin);
+
+    return goblin;
 }
 
 create_base :: (pos: Vector2, is_home_base: bool, game_state: *GameState) -> Base {
@@ -2494,8 +2735,13 @@ set_cave_as_mined :: (tile_id: s32, cave_type: CaveType, grant_points: bool, gam
                 table_set(*tiles_with_treasure_ids_set, tile_id, 1738);
             }
 
-        case .MINION;
+        case .GOBLIN;
             tile_type = .MINED;
+
+            rng := random_get_within_range(0, 1);
+            is_goblin := rng <= 0.25;
+            if is_goblin create_goblin(get_tile_pos_by_id(tile_id));
+
         case .SHAMAN;
             tile_type = .MINED;
         case .SPIDER_QUEEN;
@@ -2756,7 +3002,8 @@ spawn_iron :: (
     }
 }
 
-find_treasure_tile_id_within_radius :: (
+// TODO: probably want to DRY up these detector functions 
+detect_treasure_tile_id_within_radius :: (
     starting_tile_id: s32,
     radius: s32
 ) -> found: bool, tile_id: s32 {
@@ -2796,6 +3043,56 @@ find_treasure_tile_id_within_radius :: (
     return false, 0;
 }
 
+// TODO: probably want to DRY up these detector functions
+detect_dwarf_within_radius :: (
+    starting_tile_id: s32,
+    radius: s32
+) -> found: bool, dwarf: Dwarf {
+    max_tile_id := WORLD_COLS * WORLD_ROWS;
+
+    ids_to_process : [..] s32;
+    array_add(*ids_to_process, starting_tile_id);
+    ids_processed_set : Table(s32, s32);
+
+    // TODO: dawg we really need a faster way to lookup dwarf stuff
+    tile_ids_to_dwarfs : Table(s32, Dwarf);
+    for dwarf: dwarves {
+        dwarf_center   := get_rect_center(get_world_rect_from_pos(dwarf.pos));
+        dwarf_tile_id  := get_tile_id_by_pos(dwarf_center);
+        table_set(*tile_ids_to_dwarfs, dwarf_tile_id, dwarf);
+    }
+
+    while ids_to_process.count > 0 {
+        // Get the next id to process
+        id := pop_front(*ids_to_process);
+
+        // Make sure the id is valid and hasn't already been processed
+        if table_contains(*ids_processed_set, id) continue;
+        if id <= 0 continue;
+        if id > max_tile_id continue;
+        if !table_contains(*fully_mined_tile_ids_set, id) continue;
+        if id == starting_tile_id - (WORLD_ROWS * (radius + 1)) continue; // north
+        if id == starting_tile_id + (WORLD_ROWS * (radius + 1)) continue; // south
+        if id == starting_tile_id + (radius + 1)                continue; // east
+        if id == starting_tile_id - (radius + 1)                continue; // west
+
+        // If a dwarf is detected, return
+        detected, dwarf := table_find(*tile_ids_to_dwarfs, id);
+        if (detected) return true, dwarf;
+
+        // Mark it as processed
+        table_set(*ids_processed_set, id, 1738);
+
+        // Add neighbors as needing to be processed
+        array_add(*ids_to_process, id - WORLD_ROWS);
+        array_add(*ids_to_process, id + WORLD_ROWS);
+        array_add(*ids_to_process, id + 1);
+        array_add(*ids_to_process, id - 1);
+    }
+
+    return false, Dwarf.{};
+}
+
 derive_entities_in_viewport :: (camera: Camera2D) {
     window_start := GetScreenToWorld2D(Vector2.{ 0, 0 }, camera);
     window_end   := GetScreenToWorld2D(Vector2.{ cast(float) GetScreenWidth(), cast(float) GetScreenHeight()}, camera);
@@ -2813,6 +3110,7 @@ derive_entities_in_viewport :: (camera: Camera2D) {
     array_reset(*lava_flowing_tile_ids_in_viewport);
     array_reset(*bases_in_viewport);
     array_reset(*dwarves_in_viewport);
+    array_reset(*goblins_in_viewport);
     array_reset(*tiles_with_dynamite_ids_in_viewport);
     array_reset(*tiles_with_treasure_ids_in_viewport);
     array_reset(*hole_tile_ids_in_viewport);
@@ -3039,6 +3337,21 @@ derive_entities_in_viewport :: (camera: Camera2D) {
             if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
             array_add(*dwarves_in_viewport, dwarf);
+        }
+    }
+
+    // Derive viewable goblins
+    {
+        for goblin: goblins {
+            pos := goblin.pos;
+
+            if pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x continue;
+            if pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x continue;
+            
+            if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y continue;
+            if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+
+            array_add(*goblins_in_viewport, goblin);
         }
     }
 

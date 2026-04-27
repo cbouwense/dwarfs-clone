@@ -1,6 +1,6 @@
 # In progress
 
-- mined tile sprites
+- goblins
 
 # Bugs
 
@@ -10,6 +10,7 @@
         - got a case where a dwarf was on {33088.0, 31296.0}, target tile id was 2001932, which has a position of {33120, 31264}.
         - I implemented pausing instead of crashing and it looks like, at least in this one case, a dwarf found a treaure cave and started pathing straight to a treasure that was diagonal to him.
         - when the dwarves' target tiles were being set, I believe sometimes they were a bit off axis before they started moving towards that new target tile. After instituting a fix for that, this issue has not recurred, but I'm not convinced I've fixed it for sure. I also think this fix has broken other things. Going to go to a previous commit to see if I can fix there too, before treasure spawns.
+        - it did break other things, but I fixed that
     - cause:
     - correction:
     - confirmation:
@@ -26,7 +27,6 @@
 
 # Core
 
-- goblins
 - losing
 - fullscreen and resizability
 - speed up time button
@@ -35,6 +35,8 @@
 - base spawn diggers
 - base spawn warriors
 - bases cannot be placed down on caves
+
+- mined tile sprites
 
 # Performance
 
@@ -48,5 +50,6 @@
 
 # Refactor
 
+- Refactor dwarf decisions into actual state
 - Function to tell if a tile is moveable or not
 - hotreloading

@@ -8,6 +8,7 @@ Controls :: struct {
     add_base                 : [3] Control;
     add_iron                 : [3] Control;
     select_as_place_dynamite : [3] Control;
+    select_as_place_goblin   : [3] Control;
     select_as_place_obsidian : [3] Control;
     select_as_place_wall     : [3] Control;
     drag_as_create_path      : [3] Control;
