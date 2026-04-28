@@ -24,6 +24,11 @@
     - cause:
     - correction:
     - confirmation:
+- dynamite is just straight up borked
+    - condition: reproducible on 2ff8d69
+    - cause:
+    - correction:
+    - confirmation:
 
 # Core
 

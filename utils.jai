@@ -43,14 +43,16 @@ Edge :: struct {
  *     Edge.{1, 2, 17.38},
  *   ];
  * 
- *   shortest_path := dijkstra(0, 2, edges);
+ *   path_found, shortest_path := dijkstra(0, 2, edges);
+ *   // path_found == true
  *   // shortest_path == [0, 1, 2]
  */
-dijkstra :: (start_id: s32, target_id: s32, edges: [] Edge) -> [] s32 {
+dijkstra :: (start_id: s32, target_id: s32, edges: [] Edge) -> path_found: bool, path: []s32 {
     ids_to_distances  : Table(Key_Type = s32, Value_Type = float32); // id to distance from start value
     priority_queue    : Table(Key_Type = s32, Value_Type = Any);     // setting Value_Type as Any because we're using this as a Set
     visited_nodes_set : Table(Key_Type = s32, Value_Type = Any);     // setting Value_Type as Any because we're using this as a Set
     predecessors      : Table(Key_Type = s32, Value_Type = s32);
+    path_found := false;
 
     for edge: edges {
         table_set(*ids_to_distances, edge.from, FLOAT32_INFINITY);
@@ -84,7 +86,10 @@ dijkstra :: (start_id: s32, target_id: s32, edges: [] Edge) -> [] s32 {
         found_closest_node, current_node_id := find_closest_node_id(priority_queue, ids_to_distances);
         assert(found_closest_node);
 
-        if current_node_id == target_id break;
+        if current_node_id == target_id {
+            path_found = true;
+            break;
+        }
 
         // Consider all of its neighbors and update their distances through the current node
         for edge: edges {
@@ -93,7 +98,7 @@ dijkstra :: (start_id: s32, target_id: s32, edges: [] Edge) -> [] s32 {
 
             if node_id != current_node_id continue;
 
-            neighbor_already_visited, _ := table_find(*visited_nodes_set, neighbor_id);
+            neighbor_already_visited := table_contains(*visited_nodes_set, neighbor_id);
             if neighbor_already_visited continue;
 
             current_node_distance_exists, current_node_distance         := table_find(*ids_to_distances, node_id);
@@ -131,7 +136,7 @@ dijkstra :: (start_id: s32, target_id: s32, edges: [] Edge) -> [] s32 {
 
     for 0..reverse_path.count-1 array_add(*final_path, reverse_path[reverse_path.count-1 - it]);
 
-    return final_path;
+    return path_found, final_path;
 }
 
 table_print :: (table: Table, table_name: string = "") {
