@@ -1715,10 +1715,9 @@ main :: () {
                 // Draw goblins
                 {
                     for goblin: goblins_in_viewport {
-                        goblin_center   := get_rect_center(get_world_rect_from_pos(goblin.pos));
-                        goblin_tile_id  := get_tile_id_by_pos(goblin_center);
+                        dest := get_world_rect_from_pos(goblin.pos);
                         DrawRectangleV(
-                            get_tile_pos_by_id(goblin_tile_id),
+                            Vector2.{ dest.x, dest.y },
                             Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
                             LIME, // TODO: texture
                         );
