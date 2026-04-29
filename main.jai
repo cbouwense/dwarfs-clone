@@ -161,6 +161,7 @@ select_as_remove_path_prev    : bool;
 // Other
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+// TODO: add this as param in build or something
 PAUSE_ON_PANIC :: true;
 
 mouse_drag_began_at_pos : Vector2;
@@ -1195,17 +1196,7 @@ main :: () {
 
                         if #complete goblin.state == {
                             case .DECIDING;
-                                {
-                                    // TODO: macro or something for this
-                                    #if PAUSE_ON_PANIC {
-                                        if !Vector2Equals(goblin.pos, goblin_tile_pos) {
-                                            paused = true;
-                                            print("Goblin % was not precisely on its tile while deciding what to do next.", goblin.id);
-                                        }
-                                    } else {
-                                        assert(Vector2Equals(goblin.pos, goblin_tile_pos), "Goblin % was not precisely on its tile while deciding what to do next.", goblin.id);
-                                    }
-                                }
+                                soft_assert(xx Vector2Equals(goblin.pos, goblin_tile_pos), "Goblin % was not precisely on its tile while deciding what to do next.", goblin.id);
 
                                 // Check if there are any attack targets nearby.
                                 //
@@ -1216,7 +1207,21 @@ main :: () {
 
                                     dwarf_center          := get_rect_center(get_world_rect_from_pos(dwarf.pos));
                                     dwarf_current_tile_id := get_tile_id_by_pos(dwarf_center);
-                                    tile_id_dwarf_will_defend_from := ifx dwarf.tile_ids_on_path.count > 0 then dwarf.tile_ids_on_path[0] else dwarf_current_tile_id;
+                                    tile_id_dwarf_will_defend_from : s32;
+
+                                    if #complete dwarf.state == {
+                                        // If the dwarf is moving towards a tile, aim to where the puck is going.
+                                        case .MOVING;
+                                            soft_assert(dwarf.tile_ids_on_path.count > 0, "Expected dwarf % to have at least one tile on its path, but found none", dwarf.id);
+                                            tile_id_dwarf_will_defend_from = dwarf.tile_ids_on_path[0];
+
+                                        // If the dwarf is standing still, then we'll want to attack it on the tile it's on.
+                                        case .NOTHING;   #through;
+                                        case .ATTACKING; #through;
+                                        case .MINING;
+                                            tile_id_dwarf_will_defend_from = dwarf_current_tile_id;
+                                    }
+
                                     path_found, tile_ids_to_dwarf_target := dijkstra(goblin_tile_id, tile_id_dwarf_will_defend_from, edges);
                                     
                                     if path_found {
@@ -1290,16 +1295,8 @@ main :: () {
                                 assert(goblin.state != .DECIDING, "Goblin got to end of DECIDING state without making a decision");
 
                             case .MOVING;
-                                // TODO: macro or something for this
-                                #if PAUSE_ON_PANIC {
-                                    if goblin.tile_ids_on_path.count <= 0 {
-                                        paused = true;
-                                        print("Goblin % was moving somewhere but has no target\n", goblin.id);
-                                        break;
-                                    }
-                                } else {
-                                    assert(goblin.tile_ids_on_path.count > 0, "Goblin was moving somewhere but has no target");
-                                }
+                                soft_assert(goblin.tile_ids_on_path.count > 0, "Goblin was moving somewhere but has no target");
+
                                 target_tile_id  := goblin.tile_ids_on_path[0];
                                 target_tile_pos := get_tile_pos_by_id(target_tile_id);
 

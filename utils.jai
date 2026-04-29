@@ -180,3 +180,14 @@ enum_count :: ($T: Type) -> int {
     info := type_info(T);
     return info.values.count;
 }
+
+soft_assert :: (condition: bool, format_string: string, args: .. Any) #expand {
+    #if PAUSE_ON_PANIC {
+        if !condition {
+            `paused = true;
+            print(format_string, ..args);
+        }
+    } else {
+        assert(condition, format_string, ..args);
+    }
+}

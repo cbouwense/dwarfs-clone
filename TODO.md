@@ -1,6 +1,7 @@
 # In progress
 
-- goblins
+- Refactor dwarf decisions into actual state
+- Dwarves should move into the tiles they just mined before pathing to other resource tiles
 
 # Bugs
 
@@ -37,8 +38,8 @@
 - speed up time button
 - temporarily pause time button
 - base canons
-- base spawn diggers
-- base spawn warriors
+- base spawn diggers control
+- base spawn warriors control
 - bases cannot be placed down on caves
 
 - mined tile sprites
@@ -51,10 +52,9 @@
 
 # Nitpicks
 
-- Dwarves should move into the tiles they just mined before pathing to other resource tiles
+
 
 # Refactor
 
-- Refactor dwarf decisions into actual state
 - Function to tell if a tile is moveable or not
 - hotreloading
