@@ -162,7 +162,7 @@ select_as_remove_path_prev    : bool;
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // TODO: add this as param in build or something
-PAUSE_ON_PANIC :: false;
+PAUSE_ON_PANIC :: true;
 
 mouse_drag_began_at_pos : Vector2;
 mouse_pos_when_path_creation_started : Vector2;
@@ -1114,13 +1114,9 @@ main :: () {
                                             if just_mined_iron {
                                                 found_next_iron_in_deposit, next_iron_tile_id := detect_iron_tile_id_within_radius(dwarf_tile_id, 3);
                                                 if found_next_iron_in_deposit {
-                                                    found_path_to_next_iron_deposit, path_to_next_iron_deposit := dijkstra(dwarf_tile_id, next_iron_tile_id, edges);
-                                                    if found_path_to_next_iron_deposit {
-                                                        array_reset(*dwarf.tile_ids_on_path);
-                                                        array_copy(*dwarf.tile_ids_on_path, path_to_next_iron_deposit);
-                                                    } else {
-                                                        print("WARN: Dwarf % detected another iron tile in the deposit he is currently mining, but couldn't path to it. I feel like this shouldn't happen, but maybe it can.\n", dwarf.id);
-                                                    }
+                                                    tile_ids_to_next_iron_tile := get_tile_ids_along_path(get_tile_pos_by_id(dwarf_tile_id), get_tile_pos_by_id(next_iron_tile_id));
+                                                    array_reset(*dwarf.tile_ids_on_path);
+                                                    array_copy(*dwarf.tile_ids_on_path, tile_ids_to_next_iron_tile);
                                                 }
                                             }
 
@@ -1138,11 +1134,9 @@ main :: () {
                                                     dwarf_tile_pos := get_tile_pos_by_id(dwarf_tile_id);
                                                     dwarf.pos = dwarf_tile_pos;
 
-                                                    path_found, tile_ids_to_new_treasure := dijkstra(dwarf.tile_id_mining, new_treasure_tile_id, edges);
-                                                    if path_found {
-                                                        array_reset(*dwarf.tile_ids_on_path);
-                                                        array_copy(*dwarf.tile_ids_on_path, tile_ids_to_new_treasure);
-                                                    }
+                                                    tile_ids_to_new_treasure := get_tile_ids_along_path(get_tile_pos_by_id(dwarf.tile_id_mining), get_tile_pos_by_id(new_treasure_tile_id));
+                                                    array_reset(*dwarf.tile_ids_on_path);
+                                                    array_copy(*dwarf.tile_ids_on_path, tile_ids_to_new_treasure);
                                                 }
                                             }
 
@@ -1387,22 +1381,19 @@ main :: () {
                                 // Look for more treasure
                                 found, new_treasure_tile_id := detect_treasure_tile_id_within_radius(it, 10);
                                 if found {
-                                    path_found, tile_ids_to_new_treasure := dijkstra(it, new_treasure_tile_id, edges);
-                                    // TODO: should this be asserted to always be found?
-                                    if path_found {
-                                        tile_ids_to_new_treasure.count -= 1;
-                                        tile_ids_to_new_treasure.data  += 1;
+                                    tile_ids_to_new_treasure := get_tile_ids_along_path(get_tile_pos_by_id(it), get_tile_pos_by_id(new_treasure_tile_id));
+                                    tile_ids_to_new_treasure.count -= 1;
+                                    tile_ids_to_new_treasure.data  += 1;
 
-                                        // Teleport dwarf to the center of the tile he's standing on before changing his pathing.
-                                        // Without doing this, the dwarf can end up being misaligned.
-                                        dwarf_center   := get_rect_center(get_world_rect_from_pos(dwarf.pos));
-                                        dwarf_tile_id  := get_tile_id_by_pos(dwarf_center);
-                                        dwarf_tile_pos := get_tile_pos_by_id(dwarf_tile_id);
-                                        dwarf.pos = dwarf_tile_pos;
+                                    // Teleport dwarf to the center of the tile he's standing on before changing his pathing.
+                                    // Without doing this, the dwarf can end up being misaligned.
+                                    dwarf_center   := get_rect_center(get_world_rect_from_pos(dwarf.pos));
+                                    dwarf_tile_id  := get_tile_id_by_pos(dwarf_center);
+                                    dwarf_tile_pos := get_tile_pos_by_id(dwarf_tile_id);
+                                    dwarf.pos = dwarf_tile_pos;
 
-                                        array_reset(*dwarf.tile_ids_on_path);
-                                        array_copy(*dwarf.tile_ids_on_path, tile_ids_to_new_treasure);
-                                    }
+                                    array_reset(*dwarf.tile_ids_on_path);
+                                    array_copy(*dwarf.tile_ids_on_path, tile_ids_to_new_treasure);
                                 }
 
                                 break;
@@ -3016,12 +3007,12 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, game_
                     continue;
                 }
 
-                // neighbor_is_mined := table_contains(*fully_mined_tile_ids_set, neighbor_id);
-
-                // if neighbor_is_mined {
+                neighbor_is_mined := table_contains(*fully_mined_tile_ids_set, neighbor_id);
+                if neighbor_is_mined {
+                    // TODO: don't add 2
                     array_add(*edges, Edge.{ from = tile_id,     to = neighbor_id, distance = 1 });
                     array_add(*edges, Edge.{ from = neighbor_id, to = tile_id, distance = 1 });
-                // }
+                }
             }
 
         // Remove edges for pathing to all neighbors
