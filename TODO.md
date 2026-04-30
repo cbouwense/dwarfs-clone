@@ -1,6 +1,5 @@
 # In progress
 
-- Refactor dwarf decisions into actual state
 - Dwarves should move into the tiles they just mined before pathing to other resource tiles
 
 # Bugs
@@ -41,7 +40,7 @@
 - base spawn diggers control
 - base spawn warriors control
 - bases cannot be placed down on caves
-
+- dwarves and goblins should not pass through each other
 - mined tile sprites
 
 # Performance
@@ -52,9 +51,7 @@
 
 # Nitpicks
 
-
-
-# Refactor
+# Miscellaneous
 
 - Function to tell if a tile is moveable or not
 - hotreloading

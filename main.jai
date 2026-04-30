@@ -162,7 +162,7 @@ select_as_remove_path_prev    : bool;
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // TODO: add this as param in build or something
-PAUSE_ON_PANIC :: true;
+PAUSE_ON_PANIC :: false;
 
 mouse_drag_began_at_pos : Vector2;
 mouse_pos_when_path_creation_started : Vector2;
@@ -284,6 +284,7 @@ Dwarf :: struct {
     tile_ids_on_path    : [..] s32;
     mining_cooldown_ms  : s32;
     tile_id_mining      : s32;
+    was_mining_resource : bool; // PERF: don't
     goblin_id_attacking : s32; // TODO: is this right? feels overly specific
     direction           : Direction;
 }
@@ -1082,7 +1083,7 @@ main :: () {
                                 }
 
                             case .MINING;
-                                assert(dwarf.tile_id_mining >= 0, "Dwarf tryna mine but he got no gotdamn tile to mine!!!!!!!");
+                                assert(dwarf.tile_id_mining > 0, "Dwarf tryna mine but he got no gotdamn tile to mine!!!!!!!");
 
                                 // If you try to mine liquid, you're fucking banned
                                 if (
@@ -1106,45 +1107,19 @@ main :: () {
                                         new_health := current_health - DWARF_MINE_DAMAGE_PER_SWING;
 
                                         if new_health <= 0 {
-                                            // TODO: probably will want a function to determine if a tile has a resource
-                                            // instead of checking each table manually as we have more. idk.
-                                            is_mining_resource := table_find(*iron_tile_ids_set, dwarf.tile_id_mining);
+                                            just_mined_iron := table_contains(*iron_tile_ids_set, dwarf.tile_id_mining);
                                             
                                             set_tile_as_type(dwarf.tile_id_mining, .MINED, true, *game_state);
 
-                                            // If the dwarf is mining a resource, check if there are any others nearby
-                                            if is_mining_resource {
-                                                check_for_resource_and_mine_if_present :: (dwarf: *Dwarf, dx: float32, dy: float32, iron_tile_ids_set: *Table) -> bool {
-                                                    mined_tile_pos := get_tile_pos_by_id(dwarf.tile_id_mining);
-                                                    neighbor_pos   := Vector2.{ mined_tile_pos.x + dx, mined_tile_pos.y + dy };
-                                                    neighbor_id    := get_tile_id_by_pos(neighbor_pos);
-
-                                                    is_neighbor_a_resource_tile := table_find(iron_tile_ids_set, neighbor_id);
-                                                    if is_neighbor_a_resource_tile {
-                                                        // If the tile we mined was a resource like iron (as opposed to dirt),
-                                                        // then we want to path towards it.
-                                                        tile_ids_on_path := get_tile_ids_along_path(dwarf.pos, neighbor_pos);
-                                                        array_reset(*(dwarf.tile_ids_on_path));
-                                                        // TODO: Am I leaking stuff here, or...
-                                                        array_copy(*(dwarf.tile_ids_on_path), tile_ids_on_path);
-                                                    }
-
-                                                    return is_neighbor_a_resource_tile;
-                                                }
-
-                                                // TODO: clean this up if you're bored
-                                                for TILE_DIRECTION_DELTAS {
-                                                    found := check_for_resource_and_mine_if_present(dwarf, it[0] * 1, it[1] * 1, *iron_tile_ids_set);
-                                                    if found break;
-
-                                                    for TILE_DIRECTION_DELTAS {
-                                                        found = check_for_resource_and_mine_if_present(dwarf, it[0] * 2, it[1] * 2, *iron_tile_ids_set);
-                                                        if found break;
-
-                                                        for TILE_DIRECTION_DELTAS {
-                                                            found = check_for_resource_and_mine_if_present(dwarf, it[0] * 3, it[1] * 3, *iron_tile_ids_set);
-                                                            if found break;
-                                                        }
+                                            if just_mined_iron {
+                                                found_next_iron_in_deposit, next_iron_tile_id := detect_iron_tile_id_within_radius(dwarf_tile_id, 3);
+                                                if found_next_iron_in_deposit {
+                                                    found_path_to_next_iron_deposit, path_to_next_iron_deposit := dijkstra(dwarf_tile_id, next_iron_tile_id, edges);
+                                                    if found_path_to_next_iron_deposit {
+                                                        array_reset(*dwarf.tile_ids_on_path);
+                                                        array_copy(*dwarf.tile_ids_on_path, path_to_next_iron_deposit);
+                                                    } else {
+                                                        print("WARN: Dwarf % detected another iron tile in the deposit he is currently mining, but couldn't path to it. I feel like this shouldn't happen, but maybe it can.\n", dwarf.id);
                                                     }
                                                 }
                                             }
@@ -1172,7 +1147,7 @@ main :: () {
                                             }
 
                                             dwarf.tile_id_mining = 0;
-                                            dwarf.state = .MOVING;
+                                            dwarf.state = .DECIDING;
                                         } else {
                                             // If the tile just needs to take some damage, well, then damage it ya fuckin jallopy
                                             table_set(*actively_mined_tile_ids_to_health_table, dwarf.tile_id_mining, new_health);
@@ -1186,7 +1161,7 @@ main :: () {
                                         // In this case, the dwarf should abandon the idea of mining its current tile.
                                         array_reset(*(dwarf.tile_ids_on_path));
                                         dwarf.tile_id_mining = 0;
-                                        dwarf.state = .MOVING;
+                                        dwarf.state = .DECIDING;
                                     }
                                 }
 
@@ -1308,36 +1283,37 @@ main :: () {
 
                             case .MOVING;
                                 soft_assert(goblin.tile_ids_on_path.count > 0, "Goblin % was moving somewhere but has no target", goblin.id);
+                                if !paused {
+                                    target_tile_id  := goblin.tile_ids_on_path[0];
+                                    target_tile_pos := get_tile_pos_by_id(target_tile_id);
 
-                                target_tile_id  := goblin.tile_ids_on_path[0];
-                                target_tile_pos := get_tile_pos_by_id(target_tile_id);
+                                    soft_assert(goblin.pos.x == target_tile_pos.x || goblin.pos.y == target_tile_pos.y, "Goblin id % is going at an angle", goblin.id);
 
-                                soft_assert(goblin.pos.x == target_tile_pos.x || goblin.pos.y == target_tile_pos.y, "Goblin id % is going at an angle", goblin.id);
+                                    tile_id_next_in_goblin_path := goblin.tile_ids_on_path[0];
 
-                                tile_id_next_in_goblin_path := goblin.tile_ids_on_path[0];
+                                    // If it's mined, then proceed
+                                    if table_contains(*fully_mined_tile_ids_set, tile_id_next_in_goblin_path) {
+                                        goblin_pretty_much_reached_target := values_are_close(goblin.pos, target_tile_pos, 1);
+                                        if goblin_pretty_much_reached_target {
+                                            // Teleport goblin to the target tile to remove any floating point weirdness.
+                                            goblin.pos = target_tile_pos;
 
-                                // If it's mined, then proceed
-                                if table_contains(*fully_mined_tile_ids_set, tile_id_next_in_goblin_path) {
-                                    goblin_pretty_much_reached_target := values_are_close(goblin.pos, target_tile_pos, 1);
-                                    if goblin_pretty_much_reached_target {
-                                        // Teleport goblin to the target tile to remove any floating point weirdness.
-                                        goblin.pos = target_tile_pos;
+                                            // Remove the target from the tile ids on path
+                                            array_ordered_remove_by_index(*goblin.tile_ids_on_path, 0);
 
-                                        // Remove the target from the tile ids on path
-                                        array_ordered_remove_by_index(*goblin.tile_ids_on_path, 0);
-
-                                        // Figure out what to do next
-                                        goblin.state = .DECIDING;
-                                    } else {
-                                        move_one_step_towards_its_next_target(goblin, GOBLIN_MOVE_SPEED, dt_seconds);
+                                            // Figure out what to do next
+                                            goblin.state = .DECIDING;
+                                        } else {
+                                            move_one_step_towards_its_next_target(goblin, GOBLIN_MOVE_SPEED, dt_seconds);
+                                        }
                                     }
-                                }
-                                // TODO: I think we'll have to include other things like goblins and dwarves, since they can't go through them either
-                                // TODO: doesn't this softlock actually?
-                                //
-                                // If it's unmined, then they'll have to do something else, because they can't go through it
-                                else {
-                                    goblin.state = .DECIDING;
+                                    // TODO: I think we'll have to include other things like goblins and dwarves, since they can't go through them either
+                                    // TODO: doesn't this softlock actually?
+                                    //
+                                    // If it's unmined, then they'll have to do something else, because they can't go through it
+                                    else {
+                                        goblin.state = .DECIDING;
+                                    }
                                 }
 
                             case .ATTACKING;
@@ -1353,73 +1329,7 @@ main :: () {
                                     print_vars(swing_connected);
 
                                     if swing_connected {
-                                        // // Decrease the tile health by the dwarf mining damage
-                                        // found_tile_dwarf_is_mining, current_health := table_find(*actively_mined_tile_ids_to_health_table, dwarf.tile_id_mining);
-                                        
-                                        // if found_tile_dwarf_is_mining {
-                                        //     new_health := current_health - DWARF_MINE_DAMAGE_PER_SWING;
-
-                                        //     if new_health <= 0 {
-                                        //         // TODO: probably will want a function to determine if a tile has a resource
-                                        //         // instead of checking each table manually as we have more. idk.
-                                        //         is_mining_resource := table_find(*iron_tile_ids_set, dwarf.tile_id_mining);
-                                                
-                                        //         set_tile_as_type(dwarf.tile_id_mining, .MINED, true, *game_state);
-
-                                        //         // If the dwarf is mining a resource, check if there are any others nearby
-                                        //         if is_mining_resource {
-                                        //             check_for_resource_and_mine_if_present :: (dwarf: *Dwarf, dx: float32, dy: float32, iron_tile_ids_set: *Table) -> bool {
-                                        //                 mined_tile_pos := get_tile_pos_by_id(dwarf.tile_id_mining);
-                                        //                 neighbor_pos   := Vector2.{ mined_tile_pos.x + dx, mined_tile_pos.y + dy };
-                                        //                 neighbor_id    := get_tile_id_by_pos(neighbor_pos);
-
-                                        //                 is_neighbor_a_resource_tile := table_find(iron_tile_ids_set, neighbor_id);
-                                        //                 if is_neighbor_a_resource_tile {
-                                        //                     // If the tile we mined was a resource like iron (as opposed to dirt),
-                                        //                     // then we want to path towards it.
-                                        //                     tile_ids_on_path := get_tile_ids_along_path(dwarf.pos, neighbor_pos);
-                                        //                     array_reset(*(dwarf.tile_ids_on_path));
-                                        //                     // TODO: Am I leaking stuff here, or...
-                                        //                     array_copy(*(dwarf.tile_ids_on_path), tile_ids_on_path);
-                                        //                 }
-
-                                        //                 return is_neighbor_a_resource_tile;
-                                        //             }
-
-                                        //             // TODO: clean this up if you're bored
-                                        //             for TILE_DIRECTION_DELTAS {
-                                        //                 found := check_for_resource_and_mine_if_present(dwarf, it[0] * 1, it[1] * 1, *iron_tile_ids_set);
-                                        //                 if found break;
-
-                                        //                 for TILE_DIRECTION_DELTAS {
-                                        //                     found = check_for_resource_and_mine_if_present(dwarf, it[0] * 2, it[1] * 2, *iron_tile_ids_set);
-                                        //                     if found break;
-
-                                        //                     for TILE_DIRECTION_DELTAS {
-                                        //                         found = check_for_resource_and_mine_if_present(dwarf, it[0] * 3, it[1] * 3, *iron_tile_ids_set);
-                                        //                         if found break;
-                                        //                     }
-                                        //                 }
-                                        //             }
-                                        //         }
-
-                                        //         dwarf.tile_id_mining = 0;
-                                        //         dwarf.state = .MOVING;
-                                        //     } else {
-                                        //         // If the tile just needs to take some damage, well, then damage it ya fuckin jallopy
-                                        //         table_set(*actively_mined_tile_ids_to_health_table, dwarf.tile_id_mining, new_health);
-                                        //     }
-
-                                        //     // Reset cooldown
-                                        //     dwarf.mining_cooldown_ms = DWARF_MINE_COOLDOWN_MS;
-                                        // } else {
-                                        //     if debug_mode print("INFO: Dwarf was mining tile % but suddenly it was removed from the table of actively mined tiles.\n", dwarf.tile_id_mining);
-                                        //     // It's possible for the tile the dwarf is mining to suddenly be changed, like into obsidian.
-                                        //     // In this case, the dwarf should abandon the idea of mining its current tile.
-                                        //     array_reset(*(dwarf.tile_ids_on_path));
-                                        //     dwarf.tile_id_mining = 0;
-                                        //     dwarf.state = .MOVING;
-                                        // }
+                                        // TODO
                                     }
                                 }
                             case .NOTHING;
@@ -1920,6 +1830,7 @@ main :: () {
                             DrawText(tprint("tile_ids_on_path: %\0", it.tile_ids_on_path).data,     xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                             DrawText(tprint("mining_cooldown_ms: %\0", it.mining_cooldown_ms).data, xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                             DrawText(tprint("tile_id_mining: %\0", it.tile_id_mining).data,         xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                            DrawText(tprint("was_mining_resource: %\0", it.was_mining_resource).data,         xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                             DrawText(tprint("direction: %\0", it.direction).data,                   xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                         }
                     }
@@ -3105,12 +3016,12 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, game_
                     continue;
                 }
 
-                neighbor_is_mined := table_contains(*fully_mined_tile_ids_set, neighbor_id);
+                // neighbor_is_mined := table_contains(*fully_mined_tile_ids_set, neighbor_id);
 
-                if neighbor_is_mined {
+                // if neighbor_is_mined {
                     array_add(*edges, Edge.{ from = tile_id,     to = neighbor_id, distance = 1 });
                     array_add(*edges, Edge.{ from = neighbor_id, to = tile_id, distance = 1 });
-                }
+                // }
             }
 
         // Remove edges for pathing to all neighbors
@@ -3288,6 +3199,48 @@ detect_dwarf_within_radius :: (
     }
 
     return false, Dwarf.{};
+}
+
+// TODO: probably want to DRY up these detector functions 
+detect_iron_tile_id_within_radius :: (
+    starting_tile_id: s32,
+    radius: s32
+) -> found: bool, tile_id: s32 {
+    max_tile_id := WORLD_COLS * WORLD_ROWS;
+
+    ids_to_process : [..] s32;
+    array_add(*ids_to_process, starting_tile_id);
+    ids_processed_set : Table(s32, s32);
+
+    while ids_to_process.count > 0 {
+        // Get the next id to process
+        id := pop_front(*ids_to_process);
+
+        // Make sure the id is valid and hasn't already been processed
+        if table_contains(*ids_processed_set, id) continue;
+        if id <= 0 continue;
+        if id > max_tile_id continue;
+        // if table_contains(*fully_mined_tile_ids_set, id) continue;
+        // if table_contains(*actively_mined_tile_ids_to_health_table, id) continue;
+        if id == starting_tile_id - (WORLD_ROWS * (radius + 1)) continue; // north
+        if id == starting_tile_id + (WORLD_ROWS * (radius + 1)) continue; // south
+        if id == starting_tile_id + (radius + 1)                continue; // east
+        if id == starting_tile_id - (radius + 1)                continue; // west
+
+        // If iron is found, return
+        if table_contains(*iron_tile_ids_set, id) return true, id;
+
+        // Mark it as processed
+        table_set(*ids_processed_set, id, 1738);
+
+        // Add neighbors as needing to be processed
+        array_add(*ids_to_process, id - WORLD_ROWS);
+        array_add(*ids_to_process, id + WORLD_ROWS);
+        array_add(*ids_to_process, id + 1);
+        array_add(*ids_to_process, id - 1);
+    }
+
+    return false, 0;
 }
 
 derive_entities_in_viewport :: (camera: Camera2D) {
