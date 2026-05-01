@@ -10,7 +10,7 @@
     - correction:
         - allow dwarves to move into liquid
     - confirmation:
-        - fixed in 25b2286
+        - fixed in f8adb82
 
 - adding tons of bases at once makes dwarves go diagonal
     - condition:
