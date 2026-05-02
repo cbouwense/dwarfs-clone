@@ -1,6 +1,6 @@
 # In progress
 
-
+- Just use math to get neighboring tile ids
 
 # Bugs
 
@@ -42,7 +42,6 @@
 
 # Performance
 
-- Just use math to get neighboring tile ids
 - underclock cpu
 - Use ids for stuff, not positions
 

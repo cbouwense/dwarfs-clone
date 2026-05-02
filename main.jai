@@ -190,9 +190,14 @@ Direction :: enum u8 #specified {
     NORTH_WEST :: 5;
     SOUTH_EAST :: 6;
     SOUTH_WEST :: 7;
-    CENTER     :: 8;  // essentially no direction
-    COUNT      :: 9; // helper value that explicitly stores the enum length
+    CENTER     :: 8; // essentially no direction
 }
+
+DIRECTIONS_CARDINAL :: #run array_view(enum_values_as_enum(Direction), 0, 4);
+DIRECTIONS_COMPASS  :: #run array_view(enum_values_as_enum(Direction), 0, 8);
+DIRECTIONS_ALL      :: #run array_view(enum_values_as_enum(Direction), 0, enum_highest_value(Direction) + 1);
+
+#run print_vars(DIRECTIONS_CARDINAL, DIRECTIONS_COMPASS, DIRECTIONS_ALL);
 
 TILE_DIRECTION_DELTAS :: [2]float32.[
     .[0.0, -TILEMAP_GENERAL_WORLD_HEIGHT],  // north
@@ -1346,6 +1351,7 @@ main :: () {
                                             else assert(false);
                                         }
 
+                                        // TODO: Just use math to get neighboring tile ids
                                         dx := TILE_DIRECTION_DELTAS[new_direction][0];
                                         dy := TILE_DIRECTION_DELTAS[new_direction][1];
                                         goblin.direction = new_direction;
@@ -1967,6 +1973,7 @@ give_dwarf_random_new_target :: (dwarf: *Dwarf) {
         else assert(false);
     }
 
+    // TODO: Just use math to get neighboring tile ids
     dx := TILE_DIRECTION_DELTAS[new_direction][0];
     dy := TILE_DIRECTION_DELTAS[new_direction][1];
     dwarf.direction = new_direction;
@@ -2139,6 +2146,7 @@ create_base :: (pos: Vector2, is_home_base: bool, game_state: *GameState) -> Bas
         }
     }
 
+    // TODO: Just use math to get neighboring tile ids
     // Carve out some tiles around the base
     for TILE_DIRECTION_DELTAS {
         dx := it[0];
@@ -2197,15 +2205,22 @@ kill_dwarf_by_id :: (dwarf_id: s32) {
     kill_dwarf_by_index(dwarf_index);
 }
 
+get_neighbor_tile_id_by_index :: (tile_id: s32, direction_index: s64) -> s32 {
+    dx := TILE_DIRECTION_ID_DELTAS[direction_index][0];
+    dy := TILE_DIRECTION_ID_DELTAS[direction_index][1];
+    return tile_id + dx + dy;
+}
+
+get_neighbor_tile_id_by_direction :: (tile_id: s32, direction: Direction) -> s32 {
+    direction_index : s64 = cast(s64) direction; 
+    return get_neighbor_tile_id_by_index(tile_id, direction_index);
+}
+
 get_neighbor_tile_ids :: (tile_id: s32) -> [..] s32 {
     neighbor_tile_ids : [..] s32;
-    dx, dy : s32;
 
-    for i: 0..7 {
-        dx = TILE_DIRECTION_ID_DELTAS[i][0];
-        dy = TILE_DIRECTION_ID_DELTAS[i][1];
-
-        array_add(*neighbor_tile_ids, tile_id + dx + dy);
+    for DIRECTIONS_CARDINAL {
+        array_add(*neighbor_tile_ids, get_neighbor_tile_id_by_direction(tile_id, it));
     }
 
     return neighbor_tile_ids;
@@ -2316,6 +2331,7 @@ handle_encasement :: (tile_id: s32, persistent_encasing_obsidian_tile_ids_set: *
         tile_pos := get_tile_pos_by_id(tile_id);
         dx, dy: float32;
         for i: 0..3 {
+            // TODO: Just use math to get neighboring tile ids
             dx = TILE_DIRECTION_DELTAS[i][0];
             dy = TILE_DIRECTION_DELTAS[i][1];
 
@@ -2619,6 +2635,7 @@ try_to_set_cardinal_neighbors_as_flowing_tile_type :: (tile_id: s32, as_type: Ti
     dx, dy : float;
 
     for i: 0..3 {
+        // TODO: Just use math to get neighboring tile ids
         dx = TILE_DIRECTION_DELTAS[i][0];
         dy = TILE_DIRECTION_DELTAS[i][1];
         neighbor_pos := Vector2.{ tile_pos.x + dx, tile_pos.y + dy };
@@ -2960,6 +2977,7 @@ set_cave_as_mined :: (tile_id: s32, cave_type: CaveType, grant_points: bool, gam
     tile_pos := get_tile_pos_by_id(tile_id);
 
     for i: 0..3 {
+        // TODO: Just use math to get neighboring tile ids
         dx = TILE_DIRECTION_DELTAS[i][0];
         dy = TILE_DIRECTION_DELTAS[i][1];
         neighbor_pos := Vector2.{ tile_pos.x + dx, tile_pos.y + dy };
@@ -3105,6 +3123,7 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, game_
             tile_pos := get_tile_pos_by_id(tile_id);
 
             for i: 0..3 {
+                // TODO: Just use math to get neighboring tile ids
                 dx = TILE_DIRECTION_DELTAS[i][0];
                 dy = TILE_DIRECTION_DELTAS[i][1];
                 neighbor_pos := Vector2.{ tile_pos.x + dx, tile_pos.y + dy };
@@ -3671,6 +3690,7 @@ derive_entities_in_viewport :: (camera: Camera2D) {
 
 reveal_cave_if_necessary :: (tile_id: s32, grant_points: bool, game_state: *GameState) -> revealed_cave: bool, cave_type: CaveType {
     check_is_neighbor_unreavealed_cave :: (tile_id: s32) -> found_cave_neighbor: bool, cave_neighbor_id: s32 {
+        // TODO: Just use math to get neighboring tile ids
         for i: 0..3 {
             dx := TILE_DIRECTION_DELTAS[i][0];
             dy := TILE_DIRECTION_DELTAS[i][1];
