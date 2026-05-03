@@ -658,6 +658,7 @@ main :: () {
                 if IsMouseButtonDown(MouseButton.MOUSE_BUTTON_LEFT) && IsKeyDown(KeyboardKey.KEY_LEFT_CONTROL) {
                     tile_id := get_tile_id_by_pos(Vector2.{ hovered_tile_rect.x, hovered_tile_rect.y });
                     set_tile_as_type(tile_id, .MINED, false, *game_state);
+                    reveal_cave_if_necessary(tile_id, false, *game_state);
                 }
 
                 // Update camera
@@ -2127,7 +2128,9 @@ create_base :: (pos: Vector2, is_home_base: bool, game_state: *GameState) -> Bas
 
     // Carve out some tiles around the base (including the base tile itself)
     for DIRECTIONS_ALL {
-        set_tile_as_type(get_neighbor_tile_id_by_direction(base_tile_id, it), .MINED, false, game_state);
+        tile_id := get_neighbor_tile_id_by_direction(base_tile_id, it);
+        set_tile_as_type(tile_id, .MINED, false, game_state);
+        reveal_cave_if_necessary(tile_id, false, game_state);
     }
 
     return base;
@@ -3007,8 +3010,6 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, game_
             array_add(*chunk.fully_mined_tile_ids, tile_id);
             tile_column := cast(s32) random_get_within_range(0, 2);
             table_set(*fully_mined_tile_ids_set, tile_id, tile_column);
-
-            reveal_cave_if_necessary(tile_id, false, game_state);
 
             if grant_points {
                 if tile_was_iron {
