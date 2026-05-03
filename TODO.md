@@ -1,6 +1,6 @@
 # In progress
 
-- Just use math to get neighboring tile ids
+
 
 # Bugs
 

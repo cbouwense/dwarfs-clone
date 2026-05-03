@@ -194,16 +194,14 @@ Direction :: enum u8 #specified {
 }
 
 DIRECTIONS_CARDINAL :: #run array_view(enum_values_as_enum(Direction), 0, 4);
-DIRECTIONS_COMPASS  :: #run array_view(enum_values_as_enum(Direction), 0, 8);
+DIRECTIONS_COMPASS  :: #run array_view(enum_values_as_enum(Direction), 0, enum_highest_value(Direction));
 DIRECTIONS_ALL      :: #run array_view(enum_values_as_enum(Direction), 0, enum_highest_value(Direction) + 1);
 
-#run print_vars(DIRECTIONS_CARDINAL, DIRECTIONS_COMPASS, DIRECTIONS_ALL);
-
 TILE_DIRECTION_DELTAS :: [2]float32.[
-    .[0.0, -TILEMAP_GENERAL_WORLD_HEIGHT],  // north
-    .[0.0, +TILEMAP_GENERAL_WORLD_HEIGHT],  // south
-    .[+TILEMAP_GENERAL_WORLD_WIDTH, 0.0],   // east
-    .[-TILEMAP_GENERAL_WORLD_WIDTH, 0.0],   // west
+    .[0.0, -TILEMAP_GENERAL_WORLD_HEIGHT], // north
+    .[0.0, +TILEMAP_GENERAL_WORLD_HEIGHT], // south
+    .[+TILEMAP_GENERAL_WORLD_WIDTH, 0.0],  // east
+    .[-TILEMAP_GENERAL_WORLD_WIDTH, 0.0],  // west
     .[+TILEMAP_GENERAL_WORLD_WIDTH, -TILEMAP_GENERAL_WORLD_HEIGHT], // north east
     .[-TILEMAP_GENERAL_WORLD_WIDTH, -TILEMAP_GENERAL_WORLD_HEIGHT], // north west
     .[+TILEMAP_GENERAL_WORLD_WIDTH, +TILEMAP_GENERAL_WORLD_HEIGHT], // south east
@@ -1351,19 +1349,9 @@ main :: () {
                                             else assert(false);
                                         }
 
-                                        // TODO: Just use math to get neighboring tile ids
-                                        dx := TILE_DIRECTION_DELTAS[new_direction][0];
-                                        dy := TILE_DIRECTION_DELTAS[new_direction][1];
                                         goblin.direction = new_direction;
 
-                                        assert(dx == 0 || dy == 0, "dx: %, dy: %", dx, dy);
-
-                                        new_target_tile_pos := Vector2.{
-                                            goblin.pos.x + dx,
-                                            goblin.pos.y + dy,
-                                        };
-
-                                        new_target_tile_id := get_tile_id_by_pos(new_target_tile_pos);
+                                        new_target_tile_id := get_neighbor_tile_id_by_direction(goblin_tile_id, new_direction);
                                         array_add(*goblin.tile_ids_on_path, new_target_tile_id);
 
                                         goblin.state = .MOVING;
@@ -1973,19 +1961,10 @@ give_dwarf_random_new_target :: (dwarf: *Dwarf) {
         else assert(false);
     }
 
-    // TODO: Just use math to get neighboring tile ids
-    dx := TILE_DIRECTION_DELTAS[new_direction][0];
-    dy := TILE_DIRECTION_DELTAS[new_direction][1];
     dwarf.direction = new_direction;
 
-    assert(dx == 0 || dy == 0, "dx: %, dy: %", dx, dy);
-
-    new_target_tile_pos := Vector2.{
-        dwarf.pos.x + dx,
-        dwarf.pos.y + dy,
-    };
-
-    new_target_tile_id := get_tile_id_by_pos(new_target_tile_pos);
+    dwarf_tile_id := get_tile_id_by_pos(dwarf.pos);
+    new_target_tile_id := get_neighbor_tile_id_by_direction(dwarf_tile_id, new_direction);
     array_reset(*dwarf.tile_ids_on_path);
     array_add(*dwarf.tile_ids_on_path, new_target_tile_id);
 }
@@ -2146,16 +2125,9 @@ create_base :: (pos: Vector2, is_home_base: bool, game_state: *GameState) -> Bas
         }
     }
 
-    // TODO: Just use math to get neighboring tile ids
-    // Carve out some tiles around the base
-    for TILE_DIRECTION_DELTAS {
-        dx := it[0];
-        dy := it[1];
-
-        neighbor_pos := Vector2.{ base.pos.x + dx, base.pos.y + dy };
-        neighbor_id  := get_tile_id_by_pos(neighbor_pos);
-
-        set_tile_as_type(neighbor_id, .MINED, false, game_state);
+    // Carve out some tiles around the base (including the base tile itself)
+    for DIRECTIONS_ALL {
+        set_tile_as_type(get_neighbor_tile_id_by_direction(base_tile_id, it), .MINED, false, game_state);
     }
 
     return base;
@@ -2331,7 +2303,6 @@ handle_encasement :: (tile_id: s32, persistent_encasing_obsidian_tile_ids_set: *
         tile_pos := get_tile_pos_by_id(tile_id);
         dx, dy: float32;
         for i: 0..3 {
-            // TODO: Just use math to get neighboring tile ids
             dx = TILE_DIRECTION_DELTAS[i][0];
             dy = TILE_DIRECTION_DELTAS[i][1];
 
@@ -2631,19 +2602,8 @@ are_all_neighbors_liquid :: (tile_id: s32) -> bool {
 }
 
 try_to_set_cardinal_neighbors_as_flowing_tile_type :: (tile_id: s32, as_type: TileType, game_state: *GameState) {
-    tile_pos := get_tile_pos_by_id(tile_id);
-    dx, dy : float;
-
-    for i: 0..3 {
-        // TODO: Just use math to get neighboring tile ids
-        dx = TILE_DIRECTION_DELTAS[i][0];
-        dy = TILE_DIRECTION_DELTAS[i][1];
-        neighbor_pos := Vector2.{ tile_pos.x + dx, tile_pos.y + dy };
-        found_neighbor, neighbor_id := find_tile_id_by_pos(neighbor_pos);
-        if !found_neighbor {
-            print("WARN: Couldn't find neighbor for tile at pos (%,%). This either means it's on the edge of the world, or that something might be wrong.\n", neighbor_pos.x, neighbor_pos.y);
-            continue;
-        }
+    for DIRECTIONS_CARDINAL {
+        neighbor_id := get_neighbor_tile_id_by_direction(tile_id, it);
 
         // TODO: this is kind of terrible because if/when I add new things, I'm going to have to remember
         // to add them here. Would be good to have this automated somehow.
@@ -2973,19 +2933,8 @@ set_cave_as_mined :: (tile_id: s32, cave_type: CaveType, grant_points: bool, gam
     set_tile_as_type(tile_id, tile_type, grant_points, game_state);
 
     // Recursively go through neighbors and set them as mined as well.
-    dx, dy : float;
-    tile_pos := get_tile_pos_by_id(tile_id);
-
-    for i: 0..3 {
-        // TODO: Just use math to get neighboring tile ids
-        dx = TILE_DIRECTION_DELTAS[i][0];
-        dy = TILE_DIRECTION_DELTAS[i][1];
-        neighbor_pos := Vector2.{ tile_pos.x + dx, tile_pos.y + dy };
-        found_neighbor, neighbor_id := find_tile_id_by_pos(neighbor_pos);
-        if !found_neighbor {
-            print("WARN: Couldn't find neighbor for tile at pos (%,%). This either means it's on the edge of the world, or that something might be wrong.\n", neighbor_pos.x, neighbor_pos.y);
-            continue;
-        }
+    for DIRECTIONS_CARDINAL {
+        neighbor_id := get_neighbor_tile_id_by_direction(tile_id, it);
 
         tile_is_unrevealed_cave := table_contains(*cave_tile_ids_set, neighbor_id);
         if !tile_is_unrevealed_cave continue;
@@ -3119,23 +3068,11 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, game_
         // Add edges for pathing to any neighbors who are also open
         case .CAVE; #through;
         case .MINED;
-            dx, dy : float;
-            tile_pos := get_tile_pos_by_id(tile_id);
-
-            for i: 0..3 {
-                // TODO: Just use math to get neighboring tile ids
-                dx = TILE_DIRECTION_DELTAS[i][0];
-                dy = TILE_DIRECTION_DELTAS[i][1];
-                neighbor_pos := Vector2.{ tile_pos.x + dx, tile_pos.y + dy };
-                found_neighbor, neighbor_id := find_tile_id_by_pos(neighbor_pos);
-                if !found_neighbor {
-                    print("WARN: Couldn't find neighbor for tile at pos (%,%). This either means it's on the edge of the world, or that something might be wrong.\n", neighbor_pos.x, neighbor_pos.y);
-                    continue;
-                }
-
+            for DIRECTIONS_CARDINAL {
+                neighbor_id := get_neighbor_tile_id_by_direction(tile_id, it);
                 neighbor_is_mined := table_contains(*fully_mined_tile_ids_set, neighbor_id);
                 if neighbor_is_mined {
-                    // TODO: don't add 2
+                    // PERF: don't add 2?
                     array_add(*edges, Edge.{ from = tile_id,     to = neighbor_id, distance = 1 });
                     array_add(*edges, Edge.{ from = neighbor_id, to = tile_id, distance = 1 });
                 }
@@ -3690,16 +3627,10 @@ derive_entities_in_viewport :: (camera: Camera2D) {
 
 reveal_cave_if_necessary :: (tile_id: s32, grant_points: bool, game_state: *GameState) -> revealed_cave: bool, cave_type: CaveType {
     check_is_neighbor_unreavealed_cave :: (tile_id: s32) -> found_cave_neighbor: bool, cave_neighbor_id: s32 {
-        // TODO: Just use math to get neighboring tile ids
-        for i: 0..3 {
-            dx := TILE_DIRECTION_DELTAS[i][0];
-            dy := TILE_DIRECTION_DELTAS[i][1];
-            
-            tile_pos     := get_tile_pos_by_id(tile_id);
-            neighbor_pos := Vector2.{ tile_pos.x + dx, tile_pos.y + dy };
-            neighbor_id  := get_tile_id_by_pos(neighbor_pos);
-
+        for DIRECTIONS_CARDINAL {
+            neighbor_id := get_neighbor_tile_id_by_direction(tile_id, it);
             neighbor_is_unrevealed_cave := table_contains(*cave_tile_ids_set, neighbor_id);
+
             if neighbor_is_unrevealed_cave return true, neighbor_id;
         }
 
