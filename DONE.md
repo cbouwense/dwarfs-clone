@@ -1,5 +1,11 @@
 # Done
 
+- zooming out really far makes dwarves jiggle in place
+    - condition: reproducible on dee71bc
+    - cause: checking if dwarves were close to their target with float comparisons or something.
+    - correction: check if the dwarf's step distance this frame would be farther than the distance to the target.
+    - confirmation: fixed in 535e183
+
 - Dwarves apparently keep trying to move into tiles that are unmined
     - condition:
         - reproducible on 279d68e

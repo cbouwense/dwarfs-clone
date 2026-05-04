@@ -1,11 +1,5 @@
 # In progress
 
-- zooming out really far makes dwarves jiggle in place
-    - condition: reproducible on dee71bc
-    - cause:
-    - correction:
-    - confirmation:
-
 # Bugs
 
 - cannot move dwarfs out of combat manually
