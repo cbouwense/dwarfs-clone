@@ -1,6 +1,6 @@
 # In progress
 
-- Function to tell if a tile is moveable or not
+
 
 # Bugs
 
