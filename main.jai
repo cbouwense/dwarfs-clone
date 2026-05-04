@@ -1443,7 +1443,7 @@ main :: () {
                     }
 
                     for tile_ids_to_remove_dynamite_from {
-                        array_unordered_remove_by_index(*tiles_with_dynamite_ids, it);
+                        array_unordered_remove_by_value(*tiles_with_dynamite_ids, it);
                     }
                 }
 

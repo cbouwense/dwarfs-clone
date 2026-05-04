@@ -1,18 +1,11 @@
 # In progress
 
-
+- Function to tell if a tile is moveable or not
 
 # Bugs
 
 - zooming out really far makes dwarves jiggle in place
     - condition: reproducible on dee71bc
-    - cause:
-    - correction:
-    - confirmation:
-- dynamite is just straight up borked
-    - condition:
-        - reproducible on 2ff8d69, 279d68e
-        - it's not even zooming out too far, I think it's maybe at a certain dwarf count?
     - cause:
     - correction:
     - confirmation:
@@ -50,5 +43,4 @@
 # Miscellaneous
 
 - Search feature for tiles, dwarves, etc.
-- Function to tell if a tile is moveable or not
 - hotreloading
