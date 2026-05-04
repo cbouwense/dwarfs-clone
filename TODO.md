@@ -1,14 +1,13 @@
 # In progress
 
-
-
-# Bugs
-
 - zooming out really far makes dwarves jiggle in place
     - condition: reproducible on dee71bc
     - cause:
     - correction:
     - confirmation:
+
+# Bugs
+
 - cannot move dwarfs out of combat manually
     - condition: reproducible on 279d68e
     - cause:
@@ -36,11 +35,10 @@
 # Performance
 
 - underclock cpu
-- Use ids for stuff, not positions
 
 # Nitpicks
 
 # Miscellaneous
 
-- Search feature for tiles, dwarves, etc.
+- search feature for tiles, dwarves, etc.
 - hotreloading

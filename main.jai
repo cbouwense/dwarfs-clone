@@ -1127,12 +1127,15 @@ main :: () {
                                     assert_soft(dwarf.pos.x == target_tile_pos.x || dwarf.pos.y == target_tile_pos.y, "Dwarf % is going at an angle", dwarf.id);
 
                                     if !is_tile_id_walkable(target_tile_id) {
+                                        is_fully_mined    := table_contains(*fully_mined_tile_ids_set, target_tile_id);
                                         is_actively_mined := table_contains(*actively_mined_tile_ids_to_health_table, target_tile_id);
                                         is_cave           := table_contains(*cave_tile_ids_set, target_tile_id);
                                         is_encased        := table_contains(*encased_tile_ids_set, target_tile_id);
                                         is_iron           := table_contains(*iron_tile_ids_set, target_tile_id);
                                         is_water_still    := table_contains(*water_still_tile_ids_set, target_tile_id);
+                                        is_water_flowing  := table_contains(*water_flowing_tile_ids_set, target_tile_id);
                                         is_lava_still     := table_contains(*lava_still_tile_ids_set, target_tile_id);
+                                        is_lava_flowing   := table_contains(*lava_flowing_tile_ids_set, target_tile_id);
                                         is_obsidian       := table_contains(*obsidian_tile_ids_set, target_tile_id);
                                         is_wall           := table_contains(*wall_tile_ids_set, target_tile_id);
                                         is_hole           := table_contains(*hole_tile_ids_set, target_tile_id);
@@ -1153,7 +1156,18 @@ main :: () {
                                         assert_soft(false, "Dwarf % is trying to move into the unmined tile %\n", dwarf.id, target_tile_id);
                                     }
 
-                                    dwarf_pretty_much_reached_target := values_are_close(dwarf.pos, target_tile_pos, 1);
+                                    // Calculate the squared distance
+                                    dx := target_tile_pos.x - dwarf.pos.x;
+                                    dy := target_tile_pos.y - dwarf.pos.y;
+                                    distance_squared := (dx * dx) + (dy * dy);
+
+                                    // Calculate the squared step size
+                                    step_size := DWARF_MOVE_SPEED * dt_seconds;
+                                    step_size_squared := step_size * step_size;
+
+                                    // Use squared distances so we can avoid a sqrtf
+                                    dwarf_pretty_much_reached_target := distance_squared <= step_size_squared;
+
                                     if dwarf_pretty_much_reached_target {
                                         // Teleport dwarf to the target tile to remove any floating point weirdness.
                                         dwarf.pos = target_tile_pos;
@@ -1164,7 +1178,7 @@ main :: () {
                                         // Figure out what to do next
                                         dwarf.state = .DECIDING;
                                     } else {
-                                        move_one_step_towards_its_next_target(dwarf, DWARF_MOVE_SPEED, dt_seconds);
+                                        move_one_step_towards_its_next_target_cardinal(dwarf, DWARF_MOVE_SPEED, dt_seconds);
 
                                         // Remain in the .MOVING state, since we didn't reach the target yet
                                     }
@@ -1379,7 +1393,7 @@ main :: () {
                                             // Figure out what to do next
                                             goblin.state = .DECIDING;
                                         } else {
-                                            move_one_step_towards_its_next_target(goblin, GOBLIN_MOVE_SPEED, dt_seconds);
+                                            move_one_step_towards_its_next_target_cardinal(goblin, GOBLIN_MOVE_SPEED, dt_seconds);
                                         }
                                     }
                                     // TODO: I think we'll have to include other things like goblins and dwarves, since they can't go through them either
@@ -2106,16 +2120,23 @@ taunt_dwarf :: (dwarf_id: s32, taunter_tile_id: s32) {
     dwarves[dwarf_index].direction = direction_to_face_taunter;
 }
 
-move_one_step_towards_its_next_target :: (thing: *$T/interface Moveable, speed: int, dt_seconds: float) {
-    // If the thing has not reached its target yet, then simply continue on to the target
-    current_pos     := thing.pos;
-    target_pos      := get_tile_pos_by_id(thing.tile_ids_on_path[0]);
-    delta           := Vector2Subtract(target_pos, current_pos);
-    direction       := Vector2Normalize(delta);
-    movement_vector := Vector2Scale(direction, speed * dt_seconds);
-    new_pos         := Vector2Add(current_pos, movement_vector);
+move_one_step_towards_its_next_target_cardinal :: (thing: *$T/interface Moveable, speed: int, dt_seconds: float) {
+    target_pos := get_tile_pos_by_id(thing.tile_ids_on_path[0]);
+    step_size  := cast(float) speed * dt_seconds;
 
-    thing.pos = new_pos;
+    // Since movement is strictly cardinal, we only need to change X *or* Y.
+    // (i.e. no vectors, no normalization, no square roots).
+    if thing.pos.x < target_pos.x {
+        thing.pos.x += step_size;
+    } else if thing.pos.x > target_pos.x {
+        thing.pos.x -= step_size;
+    } else if thing.pos.y < target_pos.y {
+        thing.pos.y += step_size;
+    } else if thing.pos.y > target_pos.y {
+        thing.pos.y -= step_size;
+    } else {
+        assert_soft(false, "Thing % had nowhere to go, even though it should have", thing.id);
+    }
 }
 
 set_dwarf_direction_to_face_next_target :: (dwarf: *Dwarf) {
