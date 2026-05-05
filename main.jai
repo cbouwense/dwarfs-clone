@@ -572,7 +572,9 @@ main :: () {
 
     persistent_encasing_obsidian_tile_ids_set: Table(s32, Color);
 
-    while !WindowShouldClose() {
+    while !should_quit_game {
+        defer should_quit_game = should_quit_game || WindowShouldClose();
+
         reset_temporary_storage();
 
         time := GetTime();
@@ -1939,6 +1941,85 @@ main :: () {
                     PAUSED_TEXT :: "PAUSED";
                     PAUSED_FONT_SIZE :: 56;
                     DrawText(PAUSED_TEXT, xx (GetScreenWidth() * 0.5 - MeasureText(PAUSED_TEXT, PAUSED_FONT_SIZE) * 0.5), xx (GetScreenHeight() * 0.5), PAUSED_FONT_SIZE, WHITE);
+
+                    // Button shared sizing stuff
+                    screen_width  := GetScreenWidth();
+                    screen_height := GetScreenHeight();
+
+                    pause_menu_button_width  := screen_width  * 0.15;
+                    pause_menu_button_height := screen_height * 0.10;
+
+                    pause_menu_button_margin :: 20;
+                    pause_menu_button_gap    :: 10;
+
+                    // TODO: would be cool to generate this constant at compile time somehow
+                    PAUSE_MENU_BUTTON_COUNT :: 4;
+
+                    get_pause_button_rectangle :: (button_gap: int, pause_button_y: float, button_width: float, button_height: float) -> Rectangle {
+                        // TODO: use existing stuff here
+                        screen_width  := GetScreenWidth();
+
+                        return Rectangle.{
+                            screen_width * 0.5 - button_width * 0.5,
+                            pause_button_y,
+                            button_width,
+                            button_height
+                        };
+                    }
+
+                    pause_menu_button_y := screen_height * 0.5 - (PAUSE_MENU_BUTTON_COUNT * 0.5 * pause_menu_button_height) - (PAUSE_MENU_BUTTON_COUNT * 0.5 - 0.5) * pause_menu_button_gap;
+
+                    // Resume button
+                    {
+                        defer pause_menu_button_y += pause_menu_button_height + pause_menu_button_gap;
+
+                        resume_button := get_pause_button_rectangle(pause_menu_button_gap, pause_menu_button_y, pause_menu_button_width, pause_menu_button_height);
+
+                        clicked := GuiButton(resume_button, "RESUME");
+
+                        if clicked {
+                            paused = false;
+                        }
+                    }
+
+                    // Resume button
+                    {
+                        defer pause_menu_button_y += pause_menu_button_height + pause_menu_button_gap;
+
+                        options_button := get_pause_button_rectangle(pause_menu_button_gap, pause_menu_button_y, pause_menu_button_width, pause_menu_button_height);
+
+                        clicked := GuiButton(options_button, "OPTIONS");
+
+                        if clicked {
+                            // TODO
+                        }
+                    }
+
+                    // Main menu button
+                    {
+                        defer pause_menu_button_y += pause_menu_button_height + pause_menu_button_gap;
+
+                        main_menu_button := get_pause_button_rectangle(pause_menu_button_gap, pause_menu_button_y, pause_menu_button_width, pause_menu_button_height);
+
+                        clicked := GuiButton(main_menu_button, "MAIN MENU");
+
+                        if clicked {
+                            // TODO
+                        }
+                    }
+
+                    // Quit to desktop button
+                    {
+                        defer pause_menu_button_y += pause_menu_button_height + pause_menu_button_gap;
+
+                        quit_button := get_pause_button_rectangle(pause_menu_button_gap, pause_menu_button_y, pause_menu_button_width, pause_menu_button_height);
+
+                        clicked := GuiButton(quit_button, "QUIT");
+
+                        if clicked {
+                            should_quit_game = true;
+                        }
+                    }
                 }
             }
         }

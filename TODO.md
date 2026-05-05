@@ -1,5 +1,7 @@
 # In progress
 
+- pause menu
+
 # Bugs
 
 - cannot move dwarfs out of combat manually
@@ -15,6 +17,8 @@
 
 # Core
 
+- main menu
+- HUD
 - losing
 - fullscreen and resizability
 - speed up time button
