@@ -1889,6 +1889,9 @@ main :: () {
 
             // Draw UI
             {
+                screen_width  := GetScreenWidth();
+                screen_height := GetScreenHeight();
+
                 debug_text_y : s32 = 10;
                 INCREMENT_Y :: 20;
                 if metagame_state.debug_mode {
@@ -1960,7 +1963,6 @@ main :: () {
                 }
 
                 if metagame_state.paused {
-                    // TODO: do we even want this "PAUSED" text?
                     PAUSED_TEXT :: "PAUSED";
                     PAUSED_FONT_SIZE :: 56;
                     DrawText(PAUSED_TEXT, xx (GetScreenWidth() * 0.5 - MeasureText(PAUSED_TEXT, PAUSED_FONT_SIZE) * 0.5), 20, PAUSED_FONT_SIZE, WHITE);
@@ -1968,9 +1970,6 @@ main :: () {
                     if #complete metagame_state.menu_active == {
                         case .PAUSE;
                             // Button shared sizing stuff
-                            screen_width  := GetScreenWidth();
-                            screen_height := GetScreenHeight();
-
                             pause_menu_button_width  := screen_width  * 0.15;
                             pause_menu_button_height := screen_height * 0.10;
 
@@ -2004,12 +2003,10 @@ main :: () {
 
                                 clicked := GuiButton(resume_button, "RESUME");
 
-                                if clicked {
-                                    metagame_state.paused = false;
-                                }
+                                if clicked unpause_game();
                             }
 
-                            // Resume button
+                            // Options button
                             {
                                 defer pause_menu_button_y += pause_menu_button_height + pause_menu_button_gap;
 
@@ -2017,9 +2014,7 @@ main :: () {
 
                                 clicked := GuiButton(options_button, "OPTIONS");
 
-                                if clicked {
-                                    // TODO
-                                }
+                                if clicked metagame_state.menu_active = .OPTIONS;
                             }
 
                             // Main menu button
@@ -2043,13 +2038,95 @@ main :: () {
 
                                 clicked := GuiButton(quit_button, "QUIT");
 
-                                if clicked {
-                                    metagame_state.should_quit_game = true;
-                                }
+                                if clicked metagame_state.should_quit_game = true;
                             }
                         
                         case .OPTIONS;
+                            OPTIONS_HEADER_FONT_SIZE :: 48;
+                            
+                            ACTION_COLUMN_X     : s32 = xx (screen_width * 0);
+                            BIND_ONE_COLUMN_X   : s32 = xx (screen_width * 0.25);
+                            BIND_TWO_COLUMN_X   : s32 = xx (screen_width * 0.50);
+                            BIND_THREE_COLUMN_X : s32 = xx (screen_width * 0.75);
 
+                            OPTIONS_HEADER_Y :: 75;
+
+                            // Options menu headers
+                            {
+                                DrawText("ACTION", ACTION_COLUMN_X, OPTIONS_HEADER_Y, OPTIONS_HEADER_FONT_SIZE, WHITE);
+                                DrawText("BIND ONE", xx BIND_ONE_COLUMN_X, OPTIONS_HEADER_Y, OPTIONS_HEADER_FONT_SIZE, WHITE);
+                                DrawText("BIND TWO", xx BIND_TWO_COLUMN_X, OPTIONS_HEADER_Y, OPTIONS_HEADER_FONT_SIZE, WHITE);
+                                DrawText("BIND THREE", xx BIND_THREE_COLUMN_X, OPTIONS_HEADER_Y, OPTIONS_HEADER_FONT_SIZE, WHITE);
+                            }
+
+                            // Option menu rows
+                            {
+                                OPTIONS_Y_INCREMENT   :: 65;
+                                OPTIONS_ROW_FONT_SIZE : s32 : xx (OPTIONS_HEADER_FONT_SIZE * 0.75);
+
+                                options_row_y : s32 = xx (OPTIONS_HEADER_Y + OPTIONS_Y_INCREMENT);
+
+                                DrawText("Build base",        ACTION_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                DrawText("<None>",        BIND_ONE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                DrawText("<None>",        BIND_TWO_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                DrawText("<None>",        BIND_THREE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                options_row_y += OPTIONS_Y_INCREMENT;
+
+                                DrawText("Build dynamite",    ACTION_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                DrawText("<None>",    BIND_ONE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                DrawText("<None>",    BIND_TWO_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                DrawText("<None>",    BIND_THREE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                options_row_y += OPTIONS_Y_INCREMENT;
+
+                                DrawText("Build wall", ACTION_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                DrawText("<None>",     BIND_ONE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                DrawText("<None>",     BIND_TWO_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                DrawText("<None>",     BIND_THREE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                options_row_y += OPTIONS_Y_INCREMENT;
+
+                                DrawText("Obsidian mode",     ACTION_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                DrawText("<None>",     BIND_ONE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                DrawText("<None>",     BIND_TWO_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                DrawText("<None>",     BIND_THREE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                options_row_y += OPTIONS_Y_INCREMENT;
+
+                                DrawText("Drag camera",       ACTION_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                DrawText("<None>",       BIND_ONE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                DrawText("<None>",       BIND_TWO_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                DrawText("<None>",       BIND_THREE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                options_row_y += OPTIONS_Y_INCREMENT;
+
+                                DrawText("Move camera up",    ACTION_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                DrawText("<None>",    BIND_ONE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                DrawText("<None>",    BIND_TWO_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                DrawText("<None>",    BIND_THREE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                options_row_y += OPTIONS_Y_INCREMENT;
+
+                                DrawText("Move camera down",  ACTION_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                DrawText("<None>",  BIND_ONE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                DrawText("<None>",  BIND_TWO_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                DrawText("<None>",  BIND_THREE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                options_row_y += OPTIONS_Y_INCREMENT;
+
+                                DrawText("Move camera left",  ACTION_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                DrawText("<None>",  BIND_ONE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                DrawText("<None>",  BIND_TWO_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                DrawText("<None>",  BIND_THREE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                options_row_y += OPTIONS_Y_INCREMENT;
+
+                                DrawText("Move camera right", ACTION_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                DrawText("<None>", BIND_ONE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                DrawText("<None>", BIND_TWO_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                DrawText("<None>", BIND_THREE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                options_row_y += OPTIONS_Y_INCREMENT;
+
+                                DrawText("Toggle remove",     ACTION_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                DrawText("<None>",     BIND_ONE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                DrawText("<None>",     BIND_TWO_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                DrawText("<None>",     BIND_THREE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                options_row_y += OPTIONS_Y_INCREMENT;
+
+                            }
 
                         case .NONE; // no-op
                     }

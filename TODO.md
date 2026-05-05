@@ -29,6 +29,7 @@
 - bases cannot be placed down on caves
 - dwarves and goblins should not pass through each other
 - mined tile sprites
+- disable camera controls while paused
 
 # Performance
 
