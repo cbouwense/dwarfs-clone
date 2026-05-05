@@ -90,9 +90,26 @@ GOLD_COST_WALL      :: 50;
 // Metagame state
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-should_quit_game := false;
-paused           := false;
-debug_mode       := false;
+Menu :: enum {
+    NONE;
+    PAUSE;
+    OPTIONS;
+    // TODO: MAIN?
+}
+
+MetagameState :: struct {
+    should_quit_game : bool;
+    paused           : bool;
+    debug_mode       : bool;
+    menu_active      : Menu;
+}
+
+metagame_state := MetagameState.{
+    should_quit_game = false,
+    paused           = false,
+    debug_mode       = false,
+    menu_active      = .NONE,
+};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Textures
@@ -572,8 +589,8 @@ main :: () {
 
     persistent_encasing_obsidian_tile_ids_set: Table(s32, Color);
 
-    while !should_quit_game {
-        defer should_quit_game = should_quit_game || WindowShouldClose();
+    while !metagame_state.should_quit_game {
+        defer metagame_state.should_quit_game = metagame_state.should_quit_game || WindowShouldClose();
 
         reset_temporary_storage();
 
@@ -591,8 +608,13 @@ main :: () {
         //
         {
             // Metagame controls
-            if IsKeyPressed(.KEY_SPACE) paused = !paused;
-            if IsKeyPressed(.KEY_G) debug_mode = !debug_mode;
+            if IsKeyPressed(.KEY_SPACE) {
+                if metagame_state.paused
+                    unpause_game();
+                else
+                    pause_game();
+            }
+            if IsKeyPressed(.KEY_G) metagame_state.debug_mode = !metagame_state.debug_mode;
 
             // Controls from last frame
             {
@@ -711,12 +733,12 @@ main :: () {
             }
 
             // Update pausable things
-            if !paused {
+            if !metagame_state.paused {
                 // Update user action
                 {        
                     if select_as_place_obsidian {
                         if select_is_held_down {
-                            if debug_mode || game_state.gold >= GOLD_COST_OBSIDIAN {
+                            if metagame_state.debug_mode || game_state.gold >= GOLD_COST_OBSIDIAN {
                                 // Try to turn the selected tile into obsidian
                                 tile_id := get_tile_id_by_pos(mouse_pos_in_world);
 
@@ -746,14 +768,14 @@ main :: () {
                                     handle_encasement(tile_id, *persistent_encasing_obsidian_tile_ids_set, *game_state);
 
                                     // Debit the gold cost.
-                                    if !debug_mode game_state.gold -= GOLD_COST_OBSIDIAN;
+                                    if !metagame_state.debug_mode game_state.gold -= GOLD_COST_OBSIDIAN;
                                 }
                             }
                         }
                     }
                     else if select_as_place_wall {
                         if select_is_held_down {
-                            if debug_mode || game_state.gold >= GOLD_COST_WALL {
+                            if metagame_state.debug_mode || game_state.gold >= GOLD_COST_WALL {
                                 // Try to turn the selected tile into a wall
                                 tile_id := get_tile_id_by_pos(mouse_pos_in_world);
                                 tile_is_fully_mined := table_contains(*fully_mined_tile_ids_set, tile_id);
@@ -763,14 +785,14 @@ main :: () {
                                     set_tile_as_type(tile_id, .WALL, false, *game_state);
 
                                     // Debit the gold cost.
-                                    if !debug_mode game_state.gold -= GOLD_COST_WALL;
+                                    if !metagame_state.debug_mode game_state.gold -= GOLD_COST_WALL;
                                 }
                             }
                         }
                     }
                     else if select_as_place_dwarf {
                         if select_is_pressed_once {
-                            if debug_mode {
+                            if metagame_state.debug_mode {
                                 tile_id := get_tile_id_by_pos(mouse_pos_in_world);
                                 create_dwarf(get_tile_pos_by_id(tile_id));
                             }
@@ -778,7 +800,7 @@ main :: () {
                     }
                     else if select_as_place_dynamite {
                         if select_is_pressed_once {
-                            if debug_mode || game_state.gold >= GOLD_COST_DYNAMITE {
+                            if metagame_state.debug_mode || game_state.gold >= GOLD_COST_DYNAMITE {
                                 // Try to add dynamite to the selected tile
                                 tile_id := get_tile_id_by_pos(mouse_pos_in_world);
 
@@ -790,7 +812,7 @@ main :: () {
                                     array_add(*tiles_with_dynamite_ids, tile_id);
 
                                     // Debit the gold cost.
-                                    if !debug_mode game_state.gold -= GOLD_COST_DYNAMITE;
+                                    if !metagame_state.debug_mode game_state.gold -= GOLD_COST_DYNAMITE;
                                 }
                             }
                         }
@@ -849,7 +871,7 @@ main :: () {
                             // Draw out the path that is currently being traced, if it is more than 1 tile long.
                             potential_path_being_traced := get_path(mouse_pos_when_path_creation_started, mouse_pos_in_world);
 
-                            if !debug_mode {
+                            if !metagame_state.debug_mode {
                                 start_pos  := get_tile_pos_by_id(potential_path_being_traced.start_tile_id);
                                 middle_pos := get_tile_pos_by_id(potential_path_being_traced.middle_tile_id);
                                 end_pos    := get_tile_pos_by_id(potential_path_being_traced.end_tile_id);
@@ -896,7 +918,7 @@ main :: () {
                             tile_ids_on_last_leg  := get_tile_ids_along_path(middle_pos, end_pos);
                             tile_id_count_on_path := tile_ids_on_first_leg.count + tile_ids_on_last_leg.count;
 
-                            if !debug_mode game_state.gold -= tile_id_count_on_path * GOLD_COST_PATH_STEP;
+                            if !metagame_state.debug_mode game_state.gold -= tile_id_count_on_path * GOLD_COST_PATH_STEP;
 
                             // TODO: do we even need to do this? I feel like we could just set it to moving and it would handle itself.
                             if game_state.selected_dwarf_id > 0 {
@@ -1253,7 +1275,7 @@ main :: () {
                                             // Reset cooldown
                                             dwarf.mining_cooldown_ms = DWARF_MINE_COOLDOWN_MS;
                                         } else {
-                                            if debug_mode print("INFO: Dwarf was mining tile % but suddenly it was removed from the table of actively mined tiles.\n", dwarf.tile_id_mining);
+                                            if metagame_state.debug_mode print("INFO: Dwarf was mining tile % but suddenly it was removed from the table of actively mined tiles.\n", dwarf.tile_id_mining);
                                             // It's possible for the tile the dwarf is mining to suddenly be changed, like into obsidian.
                                             // In this case, the dwarf should abandon the idea of mining its current tile.
                                             array_reset(*(dwarf.tile_ids_on_path));
@@ -1374,7 +1396,7 @@ main :: () {
 
                             case .MOVING;
                                 assert_soft(goblin.tile_ids_on_path.count > 0, "Goblin % was moving somewhere but has no target", goblin.id);
-                                if !paused {
+                                if !metagame_state.paused {
                                     target_tile_id  := goblin.tile_ids_on_path[0];
                                     target_tile_pos := get_tile_pos_by_id(target_tile_id);
 
@@ -1654,7 +1676,7 @@ main :: () {
                     for fully_mined_tile_ids_in_viewport {
                         found, tile_column := table_find(*fully_mined_tile_ids_set, it);
                         if !found {
-                            paused = true;
+                            metagame_state.paused = true;
                             print("tile % had no associated tilemap column", it);
                         }
                         // LOD
@@ -1745,7 +1767,7 @@ main :: () {
                         );
                     }
 
-                    if !debug_mode {
+                    if !metagame_state.debug_mode {
                         for encased_tile_ids_in_viewport {
                             DrawRectangleV(
                                 get_tile_pos_by_id(it),
@@ -1755,7 +1777,7 @@ main :: () {
                         }
                     }
 
-                    if debug_mode {
+                    if metagame_state.debug_mode {
                         for persistent_encasing_obsidian_tile_ids_set {
                             DrawRectangleV(
                                 get_tile_pos_by_id(it_index),
@@ -1792,7 +1814,7 @@ main :: () {
                 {
                     hovered_tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
                     DrawRectangleRec(hovered_tile_rect, TRANSPARENT_WHITE);
-                    if debug_mode {
+                    if metagame_state.debug_mode {
                         found_tile, tile_id := find_tile_id_by_pos(get_rect_pos(hovered_tile_rect));
                         if found_tile {
                             DrawText(tprint("%\0", tile_id).data, xx hovered_tile_rect.x, xx hovered_tile_rect.y, 12, WHITE);
@@ -1869,7 +1891,7 @@ main :: () {
             {
                 debug_text_y : s32 = 10;
                 INCREMENT_Y :: 20;
-                if debug_mode {
+                if metagame_state.debug_mode {
                     DrawFPS(10, read_then_increment(*debug_text_y, INCREMENT_Y));
                     DrawText(tprint("dwarf count: %\0", dwarves.count).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 12, WHITE);
 
@@ -1937,88 +1959,99 @@ main :: () {
                     }
                 }
 
-                if paused {
+                if metagame_state.paused {
+                    // TODO: do we even want this "PAUSED" text?
                     PAUSED_TEXT :: "PAUSED";
                     PAUSED_FONT_SIZE :: 56;
-                    DrawText(PAUSED_TEXT, xx (GetScreenWidth() * 0.5 - MeasureText(PAUSED_TEXT, PAUSED_FONT_SIZE) * 0.5), xx (GetScreenHeight() * 0.5), PAUSED_FONT_SIZE, WHITE);
+                    DrawText(PAUSED_TEXT, xx (GetScreenWidth() * 0.5 - MeasureText(PAUSED_TEXT, PAUSED_FONT_SIZE) * 0.5), 20, PAUSED_FONT_SIZE, WHITE);
 
-                    // Button shared sizing stuff
-                    screen_width  := GetScreenWidth();
-                    screen_height := GetScreenHeight();
+                    if #complete metagame_state.menu_active == {
+                        case .PAUSE;
+                            // Button shared sizing stuff
+                            screen_width  := GetScreenWidth();
+                            screen_height := GetScreenHeight();
 
-                    pause_menu_button_width  := screen_width  * 0.15;
-                    pause_menu_button_height := screen_height * 0.10;
+                            pause_menu_button_width  := screen_width  * 0.15;
+                            pause_menu_button_height := screen_height * 0.10;
 
-                    pause_menu_button_margin :: 20;
-                    pause_menu_button_gap    :: 10;
+                            pause_menu_button_margin :: 20;
+                            pause_menu_button_gap    :: 10;
 
-                    // TODO: would be cool to generate this constant at compile time somehow
-                    PAUSE_MENU_BUTTON_COUNT :: 4;
+                            // TODO: would be cool to generate this constant at compile time somehow
+                            PAUSE_MENU_BUTTON_COUNT :: 4;
 
-                    get_pause_button_rectangle :: (button_gap: int, pause_button_y: float, button_width: float, button_height: float) -> Rectangle {
-                        // TODO: use existing stuff here
-                        screen_width  := GetScreenWidth();
+                            get_pause_button_rectangle :: (button_gap: int, pause_button_y: float, button_width: float, button_height: float) -> Rectangle {
+                                // TODO: use existing stuff here
+                                screen_width  := GetScreenWidth();
 
-                        return Rectangle.{
-                            screen_width * 0.5 - button_width * 0.5,
-                            pause_button_y,
-                            button_width,
-                            button_height
-                        };
-                    }
+                                return Rectangle.{
+                                    screen_width * 0.5 - button_width * 0.5,
+                                    pause_button_y,
+                                    button_width,
+                                    button_height
+                                };
+                            }
 
-                    pause_menu_button_y := screen_height * 0.5 - (PAUSE_MENU_BUTTON_COUNT * 0.5 * pause_menu_button_height) - (PAUSE_MENU_BUTTON_COUNT * 0.5 - 0.5) * pause_menu_button_gap;
+                            pause_menu_button_y := screen_height * 0.5 - (PAUSE_MENU_BUTTON_COUNT * 0.5 * pause_menu_button_height) - (PAUSE_MENU_BUTTON_COUNT * 0.5 - 0.5) * pause_menu_button_gap;
 
-                    // Resume button
-                    {
-                        defer pause_menu_button_y += pause_menu_button_height + pause_menu_button_gap;
+                            // TODO: DRY these up
 
-                        resume_button := get_pause_button_rectangle(pause_menu_button_gap, pause_menu_button_y, pause_menu_button_width, pause_menu_button_height);
+                            // Resume button
+                            {
+                                defer pause_menu_button_y += pause_menu_button_height + pause_menu_button_gap;
 
-                        clicked := GuiButton(resume_button, "RESUME");
+                                resume_button := get_pause_button_rectangle(pause_menu_button_gap, pause_menu_button_y, pause_menu_button_width, pause_menu_button_height);
 
-                        if clicked {
-                            paused = false;
-                        }
-                    }
+                                clicked := GuiButton(resume_button, "RESUME");
 
-                    // Resume button
-                    {
-                        defer pause_menu_button_y += pause_menu_button_height + pause_menu_button_gap;
+                                if clicked {
+                                    metagame_state.paused = false;
+                                }
+                            }
 
-                        options_button := get_pause_button_rectangle(pause_menu_button_gap, pause_menu_button_y, pause_menu_button_width, pause_menu_button_height);
+                            // Resume button
+                            {
+                                defer pause_menu_button_y += pause_menu_button_height + pause_menu_button_gap;
 
-                        clicked := GuiButton(options_button, "OPTIONS");
+                                options_button := get_pause_button_rectangle(pause_menu_button_gap, pause_menu_button_y, pause_menu_button_width, pause_menu_button_height);
 
-                        if clicked {
-                            // TODO
-                        }
-                    }
+                                clicked := GuiButton(options_button, "OPTIONS");
 
-                    // Main menu button
-                    {
-                        defer pause_menu_button_y += pause_menu_button_height + pause_menu_button_gap;
+                                if clicked {
+                                    // TODO
+                                }
+                            }
 
-                        main_menu_button := get_pause_button_rectangle(pause_menu_button_gap, pause_menu_button_y, pause_menu_button_width, pause_menu_button_height);
+                            // Main menu button
+                            {
+                                defer pause_menu_button_y += pause_menu_button_height + pause_menu_button_gap;
 
-                        clicked := GuiButton(main_menu_button, "MAIN MENU");
+                                main_menu_button := get_pause_button_rectangle(pause_menu_button_gap, pause_menu_button_y, pause_menu_button_width, pause_menu_button_height);
 
-                        if clicked {
-                            // TODO
-                        }
-                    }
+                                clicked := GuiButton(main_menu_button, "MAIN MENU");
 
-                    // Quit to desktop button
-                    {
-                        defer pause_menu_button_y += pause_menu_button_height + pause_menu_button_gap;
+                                if clicked {
+                                    // TODO
+                                }
+                            }
 
-                        quit_button := get_pause_button_rectangle(pause_menu_button_gap, pause_menu_button_y, pause_menu_button_width, pause_menu_button_height);
+                            // Quit to desktop button
+                            {
+                                defer pause_menu_button_y += pause_menu_button_height + pause_menu_button_gap;
 
-                        clicked := GuiButton(quit_button, "QUIT");
+                                quit_button := get_pause_button_rectangle(pause_menu_button_gap, pause_menu_button_y, pause_menu_button_width, pause_menu_button_height);
 
-                        if clicked {
-                            should_quit_game = true;
-                        }
+                                clicked := GuiButton(quit_button, "QUIT");
+
+                                if clicked {
+                                    metagame_state.should_quit_game = true;
+                                }
+                            }
+                        
+                        case .OPTIONS;
+
+
+                        case .NONE; // no-op
                     }
                 }
             }
@@ -2027,6 +2060,16 @@ main :: () {
 }
 
 // Functions
+
+pause_game :: () {
+    metagame_state.paused = true;
+    metagame_state.menu_active = .PAUSE;
+}
+
+unpause_game :: () {
+    metagame_state.paused = false;
+    metagame_state.menu_active = .NONE;
+}
 
 SetDwarfRandomNewTargetReturnStatus :: enum {
     DIRECTION_FOUND;

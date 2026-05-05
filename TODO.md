@@ -1,6 +1,6 @@
 # In progress
 
-- pause menu
+- options menu
 
 # Bugs
 
