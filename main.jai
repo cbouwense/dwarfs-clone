@@ -2045,9 +2045,9 @@ main :: () {
                             OPTIONS_HEADER_FONT_SIZE :: 48;
                             
                             ACTION_COLUMN_X     : s32 = xx (screen_width * 0);
-                            BIND_ONE_COLUMN_X   : s32 = xx (screen_width * 0.25);
-                            BIND_TWO_COLUMN_X   : s32 = xx (screen_width * 0.50);
-                            BIND_THREE_COLUMN_X : s32 = xx (screen_width * 0.75);
+                            BIND_ONE_COLUMN_X   := screen_width * 0.25;
+                            BIND_TWO_COLUMN_X   := screen_width * 0.50;
+                            BIND_THREE_COLUMN_X := screen_width * 0.75;
 
                             OPTIONS_HEADER_Y :: 75;
 
@@ -2064,67 +2064,70 @@ main :: () {
                                 OPTIONS_Y_INCREMENT   :: 65;
                                 OPTIONS_ROW_FONT_SIZE : s32 : xx (OPTIONS_HEADER_FONT_SIZE * 0.75);
 
-                                options_row_y : s32 = xx (OPTIONS_HEADER_Y + OPTIONS_Y_INCREMENT);
+                                BIND_BUTTON_WIDTH  := screen_width * 0.10;
+                                BIND_BUTTON_HEIGHT := BIND_BUTTON_WIDTH * 0.334;
 
-                                DrawText("Build base",        ACTION_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                DrawText("<None>",        BIND_ONE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                DrawText("<None>",        BIND_TWO_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                DrawText("<None>",        BIND_THREE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                options_row_y : float32 = OPTIONS_HEADER_Y + OPTIONS_Y_INCREMENT;
+
+                                DrawText("Build base", ACTION_COLUMN_X, xx options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                GuiButton(Rectangle.{ BIND_ONE_COLUMN_X,   options_row_y, BIND_BUTTON_WIDTH, BIND_BUTTON_HEIGHT }, "<None>");
+                                GuiButton(Rectangle.{ BIND_TWO_COLUMN_X,   options_row_y, BIND_BUTTON_WIDTH, BIND_BUTTON_HEIGHT }, "<None>");
+                                GuiButton(Rectangle.{ BIND_THREE_COLUMN_X, options_row_y, BIND_BUTTON_WIDTH, BIND_BUTTON_HEIGHT }, "<None>");
                                 options_row_y += OPTIONS_Y_INCREMENT;
 
-                                DrawText("Build dynamite",    ACTION_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                DrawText("<None>",    BIND_ONE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                DrawText("<None>",    BIND_TWO_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                DrawText("<None>",    BIND_THREE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                DrawText("Build dynamite", ACTION_COLUMN_X, xx options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                GuiButton(Rectangle.{ BIND_ONE_COLUMN_X,   options_row_y, BIND_BUTTON_WIDTH, BIND_BUTTON_HEIGHT }, "<None>");
+                                GuiButton(Rectangle.{ BIND_TWO_COLUMN_X,   options_row_y, BIND_BUTTON_WIDTH, BIND_BUTTON_HEIGHT }, "<None>");
+                                GuiButton(Rectangle.{ BIND_THREE_COLUMN_X, options_row_y, BIND_BUTTON_WIDTH, BIND_BUTTON_HEIGHT }, "<None>");
                                 options_row_y += OPTIONS_Y_INCREMENT;
 
-                                DrawText("Build wall", ACTION_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                DrawText("<None>",     BIND_ONE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                DrawText("<None>",     BIND_TWO_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                DrawText("<None>",     BIND_THREE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                DrawText("Build wall", ACTION_COLUMN_X, xx options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                GuiButton(Rectangle.{ BIND_ONE_COLUMN_X,   options_row_y, BIND_BUTTON_WIDTH, BIND_BUTTON_HEIGHT }, "<None>");
+                                GuiButton(Rectangle.{ BIND_TWO_COLUMN_X,   options_row_y, BIND_BUTTON_WIDTH, BIND_BUTTON_HEIGHT }, "<None>");
+                                GuiButton(Rectangle.{ BIND_THREE_COLUMN_X, options_row_y, BIND_BUTTON_WIDTH, BIND_BUTTON_HEIGHT }, "<None>");
                                 options_row_y += OPTIONS_Y_INCREMENT;
 
-                                DrawText("Obsidian mode",     ACTION_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                DrawText("<None>",     BIND_ONE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                DrawText("<None>",     BIND_TWO_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                DrawText("<None>",     BIND_THREE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                DrawText("Obsidian mode", ACTION_COLUMN_X, xx options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                GuiButton(Rectangle.{ BIND_ONE_COLUMN_X,   options_row_y, BIND_BUTTON_WIDTH, BIND_BUTTON_HEIGHT }, "<None>");
+                                GuiButton(Rectangle.{ BIND_TWO_COLUMN_X,   options_row_y, BIND_BUTTON_WIDTH, BIND_BUTTON_HEIGHT }, "<None>");
+                                GuiButton(Rectangle.{ BIND_THREE_COLUMN_X, options_row_y, BIND_BUTTON_WIDTH, BIND_BUTTON_HEIGHT }, "<None>");
                                 options_row_y += OPTIONS_Y_INCREMENT;
 
-                                DrawText("Drag camera",       ACTION_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                DrawText("<None>",       BIND_ONE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                DrawText("<None>",       BIND_TWO_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                DrawText("<None>",       BIND_THREE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                options_row_y += OPTIONS_Y_INCREMENT;
+                                // DrawText("Drag camera",       ACTION_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                // DrawText("<None>",       BIND_ONE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                // DrawText("<None>",       BIND_TWO_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                // DrawText("<None>",       BIND_THREE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                // options_row_y += OPTIONS_Y_INCREMENT;
 
-                                DrawText("Move camera up",    ACTION_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                DrawText("<None>",    BIND_ONE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                DrawText("<None>",    BIND_TWO_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                DrawText("<None>",    BIND_THREE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                options_row_y += OPTIONS_Y_INCREMENT;
+                                // DrawText("Move camera up",    ACTION_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                // DrawText("<None>",    BIND_ONE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                // DrawText("<None>",    BIND_TWO_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                // DrawText("<None>",    BIND_THREE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                // options_row_y += OPTIONS_Y_INCREMENT;
 
-                                DrawText("Move camera down",  ACTION_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                DrawText("<None>",  BIND_ONE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                DrawText("<None>",  BIND_TWO_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                DrawText("<None>",  BIND_THREE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                options_row_y += OPTIONS_Y_INCREMENT;
+                                // DrawText("Move camera down",  ACTION_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                // DrawText("<None>",  BIND_ONE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                // DrawText("<None>",  BIND_TWO_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                // DrawText("<None>",  BIND_THREE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                // options_row_y += OPTIONS_Y_INCREMENT;
 
-                                DrawText("Move camera left",  ACTION_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                DrawText("<None>",  BIND_ONE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                DrawText("<None>",  BIND_TWO_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                DrawText("<None>",  BIND_THREE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                options_row_y += OPTIONS_Y_INCREMENT;
+                                // DrawText("Move camera left",  ACTION_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                // DrawText("<None>",  BIND_ONE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                // DrawText("<None>",  BIND_TWO_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                // DrawText("<None>",  BIND_THREE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                // options_row_y += OPTIONS_Y_INCREMENT;
 
-                                DrawText("Move camera right", ACTION_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                DrawText("<None>", BIND_ONE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                DrawText("<None>", BIND_TWO_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                DrawText("<None>", BIND_THREE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                options_row_y += OPTIONS_Y_INCREMENT;
+                                // DrawText("Move camera right", ACTION_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                // DrawText("<None>", BIND_ONE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                // DrawText("<None>", BIND_TWO_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                // DrawText("<None>", BIND_THREE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                // options_row_y += OPTIONS_Y_INCREMENT;
 
-                                DrawText("Toggle remove",     ACTION_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                DrawText("<None>",     BIND_ONE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                DrawText("<None>",     BIND_TWO_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                DrawText("<None>",     BIND_THREE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                options_row_y += OPTIONS_Y_INCREMENT;
+                                // DrawText("Toggle remove",     ACTION_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                // DrawText("<None>",     BIND_ONE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                // DrawText("<None>",     BIND_TWO_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                // DrawText("<None>",     BIND_THREE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                // options_row_y += OPTIONS_Y_INCREMENT;
 
                             }
 
