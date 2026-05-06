@@ -5,7 +5,7 @@ Control :: struct {
 
 Controls :: struct {
     select                   : [3] Control;
-    add_base                 : [3] Control;
+    add_base_mode            : [3] Control;
     add_iron                 : [3] Control;
     select_as_place_dwarf    : [3] Control;
     select_as_place_dynamite : [3] Control;

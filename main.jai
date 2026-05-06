@@ -142,7 +142,7 @@ init_sprites :: () {
 
 select_is_pressed_once   : bool;
 select_is_held_down      : bool;
-add_base                 : bool;
+add_base_mode            : bool;
 add_iron                 : bool;
 select_as_place_dwarf    : bool;
 select_as_place_dynamite : bool;
@@ -162,7 +162,7 @@ select_as_remove_path    : bool;
 // TODO: macro?
 select_is_pressed_once_prev   : bool;
 select_is_held_down_prev      : bool;
-add_base_prev                 : bool;
+add_base_mode_prev            : bool;
 add_iron_prev                 : bool;
 select_as_place_dwarf_prev    : bool;
 select_as_place_dynamite_prev : bool;
@@ -446,6 +446,7 @@ main :: () {
     // TODO
     // HideCursor(); // We render a custom one from a texture.
     SetTargetFPS(144);
+    SetExitKey(.KEY_NULL);
 
     base_path := path_strip_filename(get_path_of_running_executable());
     data_folder = join(base_path, "data");
@@ -464,7 +465,7 @@ main :: () {
     controls: Controls;
     {
         controls.select[0]                   = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_LEFT   };
-        controls.add_base[0]                 = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_B               };
+        controls.add_base_mode[0]            = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_B               };
         controls.add_iron[0]                 = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_I               };
         controls.select_as_place_dwarf[0]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_D               };
         controls.select_as_place_dynamite[0] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_E               };
@@ -476,13 +477,9 @@ main :: () {
         controls.drag_cam[0]                 = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_RIGHT  };
         controls.drag_cam[1]                 = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_MIDDLE };
         controls.move_camera_up[0]           = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_UP              };
-        // controls.move_camera_up[1]           = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_W               };
         controls.move_camera_down[0]         = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_DOWN            };
-        // controls.move_camera_down[1]         = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_S               };
         controls.move_camera_left[0]         = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT            };
-        // controls.move_camera_left[1]         = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_A               };
         controls.move_camera_right[0]        = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT           };
-        // controls.move_camera_right[1]        = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_D               };
         controls.select_as_remove_path[0]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_R               };
     }
 
@@ -608,7 +605,7 @@ main :: () {
         //
         {
             // Metagame controls
-            if IsKeyPressed(.KEY_SPACE) {
+            if IsKeyPressed(.KEY_ESCAPE) {
                 if metagame_state.paused
                     unpause_game();
                 else
@@ -620,7 +617,7 @@ main :: () {
             {
                 select_is_pressed_once_prev   = select_is_pressed_once;
                 select_is_held_down_prev      = select_is_held_down;
-                add_base_prev                 = add_base;
+                add_base_mode_prev            = add_base_mode;
                 add_iron_prev                 = add_iron;
                 select_as_place_dwarf_prev    = select_as_place_dwarf;
                 select_as_place_dynamite_prev = select_as_place_dynamite;
@@ -642,7 +639,7 @@ main :: () {
             {
                 select_is_pressed_once   = control_is_pressed(controls.select);
                 select_is_held_down      = control_is_down(controls.select);
-                add_base                 = control_is_down(controls.add_base);
+                add_base_mode            = control_is_down(controls.add_base_mode);
                 add_iron                 = control_is_pressed(controls.add_iron);
                 select_as_place_dwarf    = control_is_down(controls.select_as_place_dwarf);
                 select_as_place_dynamite = control_is_down(controls.select_as_place_dynamite);
@@ -1528,7 +1525,8 @@ main :: () {
 
                 // Update bases
                 {
-                    if add_base {
+                    // TODO: actually, we want this to wait for a click so the player can see an onion outline before placing
+                    if add_base_mode {
                         base_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
                         create_base(Vector2.{ base_rect.x, base_rect.y }, false, *game_state);
                     }
@@ -1912,7 +1910,7 @@ main :: () {
                     {
                         DrawText(tprint("select_is_pressed_once: %\0", select_is_pressed_once).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
                         DrawText(tprint("select_is_held_down: %\0", select_is_held_down).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                        DrawText(tprint("add_base: %\0", add_base).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                        DrawText(tprint("add_base_mode: %\0", add_base_mode).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
                         DrawText(tprint("add_iron: %\0", add_iron).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
                         DrawText(tprint("select_as_place_dwarf: %\0", select_as_place_dwarf).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
                         DrawText(tprint("select_as_place_dynamite: %\0", select_as_place_dynamite).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
@@ -2042,7 +2040,7 @@ main :: () {
                             }
                         
                         case .OPTIONS;
-                            OPTIONS_HEADER_FONT_SIZE :: 48;
+                            OPTIONS_HEADER_FONT_SIZE :: 40;
                             
                             ACTION_COLUMN_X     : s32 = xx (screen_width * 0);
                             BIND_ONE_COLUMN_X   := screen_width * 0.25;
@@ -2069,11 +2067,33 @@ main :: () {
 
                                 options_row_y : float32 = OPTIONS_HEADER_Y + OPTIONS_Y_INCREMENT;
 
-                                DrawText("Build base", ACTION_COLUMN_X, xx options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                GuiButton(Rectangle.{ BIND_ONE_COLUMN_X,   options_row_y, BIND_BUTTON_WIDTH, BIND_BUTTON_HEIGHT }, "<None>");
-                                GuiButton(Rectangle.{ BIND_TWO_COLUMN_X,   options_row_y, BIND_BUTTON_WIDTH, BIND_BUTTON_HEIGHT }, "<None>");
-                                GuiButton(Rectangle.{ BIND_THREE_COLUMN_X, options_row_y, BIND_BUTTON_WIDTH, BIND_BUTTON_HEIGHT }, "<None>");
-                                options_row_y += OPTIONS_Y_INCREMENT;
+                                // PERF: cache these / tables
+                                control_to_readable_name_cstr :: (control: Control) -> *u8 {
+                                    if control.value == -1 return to_c_string("<None>");
+
+                                    mouse_info    := type_info(MouseButton);
+                                    keyboard_info := type_info(KeyboardKey);
+
+                                    // print_vars(mouse_info.*, keyboard_info.*);
+
+                                    info := ifx control.type == MouseButton then mouse_info else keyboard_info;
+                                    found, index := array_find(info.values, control.value);
+                                    assert(found);
+
+                                    return to_c_string(info.names[index]);
+                                }
+
+                                {
+                                    current_bind_one   := control_to_readable_name_cstr(controls.add_base_mode[0]);
+                                    current_bind_two   := control_to_readable_name_cstr(controls.add_base_mode[1]);
+                                    current_bind_three := control_to_readable_name_cstr(controls.add_base_mode[2]);
+
+                                    DrawText("Add base mode", ACTION_COLUMN_X, xx options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+                                    GuiButton(Rectangle.{ BIND_ONE_COLUMN_X,   options_row_y, BIND_BUTTON_WIDTH, BIND_BUTTON_HEIGHT }, current_bind_one);
+                                    GuiButton(Rectangle.{ BIND_TWO_COLUMN_X,   options_row_y, BIND_BUTTON_WIDTH, BIND_BUTTON_HEIGHT }, current_bind_two);
+                                    GuiButton(Rectangle.{ BIND_THREE_COLUMN_X, options_row_y, BIND_BUTTON_WIDTH, BIND_BUTTON_HEIGHT }, current_bind_three);
+                                    options_row_y += OPTIONS_Y_INCREMENT;
+                                }
 
                                 DrawText("Build dynamite", ACTION_COLUMN_X, xx options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
                                 GuiButton(Rectangle.{ BIND_ONE_COLUMN_X,   options_row_y, BIND_BUTTON_WIDTH, BIND_BUTTON_HEIGHT }, "<None>");
