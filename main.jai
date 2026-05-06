@@ -102,6 +102,7 @@ MetagameState :: struct {
     paused           : bool;
     debug_mode       : bool;
     menu_active      : Menu;
+    // control_slot_being_rebound : 
 }
 
 metagame_state := MetagameState.{
@@ -109,6 +110,7 @@ metagame_state := MetagameState.{
     paused           = false,
     debug_mode       = false,
     menu_active      = .NONE,
+    // control_slot_being_rebound = 
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -461,26 +463,33 @@ main :: () {
         GuiSetFont(font);
     }
 
+    // TODO: Defaults to fall back on
+
     // Initialize controls
     controls: Controls;
     {
-        controls.select[0]                   = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_LEFT   };
-        controls.add_base_mode[0]            = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_B               };
-        controls.add_iron[0]                 = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_I               };
-        controls.select_as_place_dwarf[0]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_D               };
-        controls.select_as_place_dynamite[0] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_E               };
-        controls.select_as_place_goblin[0]   = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_T               };
-        controls.select_as_place_obsidian[0] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_Q               };
-        controls.select_as_place_obsidian[1] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT_SHIFT      };
-        controls.select_as_place_obsidian[2] = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT_SHIFT     };
-        controls.select_as_place_wall[0]     = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_F               };
-        controls.drag_cam[0]                 = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_RIGHT  };
-        controls.drag_cam[1]                 = Control.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_MIDDLE };
-        controls.move_camera_up[0]           = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_UP              };
-        controls.move_camera_down[0]         = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_DOWN            };
-        controls.move_camera_left[0]         = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT            };
-        controls.move_camera_right[0]        = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT           };
-        controls.select_as_remove_path[0]    = Control.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_R               };
+        controls.select.binds[0] = Bind.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_LEFT   };
+
+        controls.add_base_mode.name     = "Add base mode";
+        controls.add_base_mode.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_B };
+
+        controls.add_iron.binds[0]                 = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_I               };
+        controls.select_as_place_dwarf.binds[0]    = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_D               };
+        controls.select_as_place_dynamite.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_E               };
+        controls.select_as_place_goblin.binds[0]   = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_T               };
+        controls.select_as_place_obsidian.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_Q               };
+        controls.select_as_place_obsidian.binds[1] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT_SHIFT      };
+        controls.select_as_place_obsidian.binds[2] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT_SHIFT     };
+        controls.select_as_place_wall.binds[0]     = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_F               };
+        controls.drag_cam.binds[0]                 = Bind.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_RIGHT  };
+        controls.drag_cam.binds[1]                 = Bind.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_MIDDLE };
+        controls.move_camera_up.binds[0]           = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_UP              };
+        controls.move_camera_down.binds[0]         = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_DOWN            };
+        controls.move_camera_left.binds[0]         = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT            };
+        controls.move_camera_right.binds[0]        = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT           };
+        controls.select_as_remove_path.binds[0]    = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_R               };
+
+        // control_being_rebound = 
     }
 
     // Initialize game
@@ -606,10 +615,15 @@ main :: () {
         {
             // Metagame controls
             if IsKeyPressed(.KEY_ESCAPE) {
-                if metagame_state.paused
-                    unpause_game();
-                else
+                if metagame_state.paused {
+                    if #complete metagame_state.menu_active == {
+                        case .PAUSE;   unpause_game();
+                        case .OPTIONS; metagame_state.menu_active = .PAUSE;
+                        case .NONE;    unpause_game();
+                    }
+                } else {
                     pause_game();
+                }
             }
             if IsKeyPressed(.KEY_G) metagame_state.debug_mode = !metagame_state.debug_mode;
 
@@ -2068,30 +2082,51 @@ main :: () {
                                 options_row_y : float32 = OPTIONS_HEADER_Y + OPTIONS_Y_INCREMENT;
 
                                 // PERF: cache these / tables
-                                control_to_readable_name_cstr :: (control: Control) -> *u8 {
-                                    if control.value == -1 return to_c_string("<None>");
+                                bind_to_readable_name_cstr :: (bind: Bind) -> *u8 {
+                                    if bind.is_being_rebound return to_c_string("...");
+                                    if bind.value == 0 return to_c_string("<None>");
 
                                     mouse_info    := type_info(MouseButton);
                                     keyboard_info := type_info(KeyboardKey);
 
-                                    // print_vars(mouse_info.*, keyboard_info.*);
-
-                                    info := ifx control.type == MouseButton then mouse_info else keyboard_info;
-                                    found, index := array_find(info.values, control.value);
+                                    info := ifx bind.type == MouseButton then mouse_info else keyboard_info;
+                                    found, index := array_find(info.values, bind.value);
                                     assert(found);
 
                                     return to_c_string(info.names[index]);
                                 }
 
                                 {
-                                    current_bind_one   := control_to_readable_name_cstr(controls.add_base_mode[0]);
-                                    current_bind_two   := control_to_readable_name_cstr(controls.add_base_mode[1]);
-                                    current_bind_three := control_to_readable_name_cstr(controls.add_base_mode[2]);
+                                    control := *controls.add_base_mode;
 
-                                    DrawText("Add base mode", ACTION_COLUMN_X, xx options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                    GuiButton(Rectangle.{ BIND_ONE_COLUMN_X,   options_row_y, BIND_BUTTON_WIDTH, BIND_BUTTON_HEIGHT }, current_bind_one);
-                                    GuiButton(Rectangle.{ BIND_TWO_COLUMN_X,   options_row_y, BIND_BUTTON_WIDTH, BIND_BUTTON_HEIGHT }, current_bind_two);
-                                    GuiButton(Rectangle.{ BIND_THREE_COLUMN_X, options_row_y, BIND_BUTTON_WIDTH, BIND_BUTTON_HEIGHT }, current_bind_three);
+                                    bind_one_current   := bind_to_readable_name_cstr(control.binds[0]);
+                                    bind_two_current   := bind_to_readable_name_cstr(control.binds[1]);
+                                    bind_three_current := bind_to_readable_name_cstr(control.binds[2]);
+
+                                    DrawText(to_c_string(control.name), ACTION_COLUMN_X, xx options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
+
+                                    bind_one_clicked   := GuiButton(Rectangle.{ BIND_ONE_COLUMN_X,   options_row_y, BIND_BUTTON_WIDTH, BIND_BUTTON_HEIGHT }, bind_one_current);
+                                    bind_two_clicked   := GuiButton(Rectangle.{ BIND_TWO_COLUMN_X,   options_row_y, BIND_BUTTON_WIDTH, BIND_BUTTON_HEIGHT }, bind_two_current);
+                                    bind_three_clicked := GuiButton(Rectangle.{ BIND_THREE_COLUMN_X, options_row_y, BIND_BUTTON_WIDTH, BIND_BUTTON_HEIGHT }, bind_three_current);
+
+                                    if bind_one_clicked   control.binds[0].is_being_rebound = !control.binds[0].is_being_rebound;
+                                    if bind_two_clicked   control.binds[1].is_being_rebound = !control.binds[1].is_being_rebound;
+                                    if bind_three_clicked control.binds[2].is_being_rebound = !control.binds[2].is_being_rebound;  
+
+                                    bind_index_currently_being_rebound := -1;
+                                    if control.binds[0].is_being_rebound bind_index_currently_being_rebound = 0;
+                                    if control.binds[1].is_being_rebound bind_index_currently_being_rebound = 1;
+                                    if control.binds[2].is_being_rebound bind_index_currently_being_rebound = 2;
+
+                                    if bind_index_currently_being_rebound > -1 {
+                                        key_pressed := GetKeyPressed();
+                                        if key_pressed {
+                                            print_vars(key_pressed);
+                                            control.binds[bind_index_currently_being_rebound].value = key_pressed;
+                                            control.binds[bind_index_currently_being_rebound].is_being_rebound = false;
+                                        }
+                                    }
+
                                     options_row_y += OPTIONS_Y_INCREMENT;
                                 }
 

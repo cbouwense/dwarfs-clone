@@ -14,6 +14,11 @@
     - cause:
     - correction:
     - confirmation:
+- water does not destroy dynamite
+    - condition: reproducible on 18dc4f3
+    - cause:
+    - correction:
+    - confirmation:
 
 # Core
 
