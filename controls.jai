@@ -1,6 +1,6 @@
 Bind :: struct {
-    type : Type;   // KeyboardKey | MouseButton;
-    value: s32;
+    type  : Type;   // KeyboardKey | MouseButton;
+    value : s32;
     is_being_rebound : bool;
 }
 
@@ -9,7 +9,6 @@ Control :: struct {
     binds : [3] Bind;
 }
 
-// TODO: struct or just array?
 Controls :: struct {
     select                   : Control;
     add_base_mode            : Control;

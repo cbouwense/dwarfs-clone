@@ -468,26 +468,49 @@ main :: () {
     // Initialize controls
     controls: Controls;
     {
-        controls.select.binds[0] = Bind.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_LEFT   };
+        controls.select.binds[0] = Bind.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_LEFT };
 
-        controls.add_base_mode.name     = "Add base mode";
+        controls.add_base_mode.name = "Add base mode";
         controls.add_base_mode.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_B };
 
-        controls.add_iron.binds[0]                 = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_I               };
-        controls.select_as_place_dwarf.binds[0]    = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_D               };
-        controls.select_as_place_dynamite.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_E               };
-        controls.select_as_place_goblin.binds[0]   = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_T               };
-        controls.select_as_place_obsidian.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_Q               };
-        controls.select_as_place_obsidian.binds[1] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT_SHIFT      };
-        controls.select_as_place_obsidian.binds[2] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT_SHIFT     };
-        controls.select_as_place_wall.binds[0]     = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_F               };
-        controls.drag_cam.binds[0]                 = Bind.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_RIGHT  };
-        controls.drag_cam.binds[1]                 = Bind.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_MIDDLE };
-        controls.move_camera_up.binds[0]           = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_UP              };
-        controls.move_camera_down.binds[0]         = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_DOWN            };
-        controls.move_camera_left.binds[0]         = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT            };
-        controls.move_camera_right.binds[0]        = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT           };
-        controls.select_as_remove_path.binds[0]    = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_R               };
+        controls.add_iron.name = "DEBUG: Add iron deposit";
+        controls.add_iron.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_I };
+
+        controls.select_as_place_dwarf.name = "DEBUG: Add dwarf";
+        controls.select_as_place_dwarf.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_D };
+
+        controls.select_as_place_dynamite.name = "Add dynamite mode";
+        controls.select_as_place_dynamite.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_E };
+
+        controls.select_as_place_goblin.name = "DEBUG: Place goblin";
+        controls.select_as_place_goblin.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_T };
+        
+        controls.select_as_place_obsidian.name = "Add obsidian mode";
+        controls.select_as_place_obsidian.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_Q           };
+        controls.select_as_place_obsidian.binds[1] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT_SHIFT  };
+        controls.select_as_place_obsidian.binds[2] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT_SHIFT };
+        
+        controls.select_as_place_wall.name = "Add wall mode";
+        controls.select_as_place_wall.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_F };
+        
+        controls.drag_cam.name = "Drag camera";
+        controls.drag_cam.binds[0] = Bind.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_RIGHT  };
+        controls.drag_cam.binds[1] = Bind.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_MIDDLE };
+        
+        controls.move_camera_up.name = "Move camera up";
+        controls.move_camera_up.binds[0]           = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_UP };
+        
+        controls.move_camera_down.name = "Move camera down";
+        controls.move_camera_down.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_DOWN };
+        
+        controls.move_camera_left.name = "Move camera left";
+        controls.move_camera_left.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT };
+        
+        controls.move_camera_right.name = "Move camera right";
+        controls.move_camera_right.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT };
+        
+        controls.select_as_remove_path.name = "Remove path mode";
+        controls.select_as_remove_path.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_R };
 
         // control_being_rebound = 
     }
@@ -613,13 +636,35 @@ main :: () {
         // Input
         //
         {
+            print_vars(controls.add_base_mode);
+
             // Metagame controls
             if IsKeyPressed(.KEY_ESCAPE) {
                 if metagame_state.paused {
                     if #complete metagame_state.menu_active == {
-                        case .PAUSE;   unpause_game();
-                        case .OPTIONS; metagame_state.menu_active = .PAUSE;
-                        case .NONE;    unpause_game();
+                        case .PAUSE; unpause_game();
+                        case .OPTIONS;
+                            // TODO: do this somewhat intelligently
+                            //
+                            // Set any binds currently being set to not being set
+                            for *controls.select.binds it.is_being_rebound = false;
+                            for *controls.add_base_mode.binds it.is_being_rebound = false;
+                            for *controls.add_iron.binds it.is_being_rebound = false;
+                            for *controls.select_as_place_dwarf.binds it.is_being_rebound = false;
+                            for *controls.select_as_place_dynamite.binds it.is_being_rebound = false;
+                            for *controls.select_as_place_goblin.binds it.is_being_rebound = false;
+                            for *controls.select_as_place_obsidian.binds it.is_being_rebound = false;
+                            for *controls.select_as_place_wall.binds it.is_being_rebound = false;
+                            for *controls.drag_as_create_path.binds it.is_being_rebound = false;
+                            for *controls.drag_cam.binds it.is_being_rebound = false;
+                            for *controls.move_camera_up.binds it.is_being_rebound = false;
+                            for *controls.move_camera_down.binds it.is_being_rebound = false;
+                            for *controls.move_camera_left.binds it.is_being_rebound = false;
+                            for *controls.move_camera_right.binds it.is_being_rebound = false;
+                            for *controls.select_as_remove_path.binds it.is_being_rebound = false;
+
+                            metagame_state.menu_active = .PAUSE;
+                        case .NONE; unpause_game();
                     }
                 } else {
                     pause_game();
@@ -2073,13 +2118,13 @@ main :: () {
 
                             // Option menu rows
                             {
-                                OPTIONS_Y_INCREMENT   :: 65;
-                                OPTIONS_ROW_FONT_SIZE : s32 : xx (OPTIONS_HEADER_FONT_SIZE * 0.75);
-
-                                BIND_BUTTON_WIDTH  := screen_width * 0.10;
-                                BIND_BUTTON_HEIGHT := BIND_BUTTON_WIDTH * 0.334;
-
+                                OPTIONS_Y_INCREMENT :: 65;
                                 options_row_y : float32 = OPTIONS_HEADER_Y + OPTIONS_Y_INCREMENT;
+
+                                OPTIONS_ROW_FONT_SIZE : s32 : xx (OPTIONS_HEADER_FONT_SIZE * 0.75);
+                                
+                                BIND_BUTTON_WIDTH  := screen_width * 0.25;
+                                BIND_BUTTON_HEIGHT := BIND_BUTTON_WIDTH * 0.15;
 
                                 // PERF: cache these / tables
                                 bind_to_readable_name_cstr :: (bind: Bind) -> *u8 {
@@ -2096,18 +2141,16 @@ main :: () {
                                     return to_c_string(info.names[index]);
                                 }
 
-                                {
-                                    control := *controls.add_base_mode;
+                                keybind_row :: (control: *Control) #expand {
+                                    DrawText(to_c_string(control.name), `ACTION_COLUMN_X, xx `options_row_y, `OPTIONS_ROW_FONT_SIZE, WHITE);
 
                                     bind_one_current   := bind_to_readable_name_cstr(control.binds[0]);
                                     bind_two_current   := bind_to_readable_name_cstr(control.binds[1]);
                                     bind_three_current := bind_to_readable_name_cstr(control.binds[2]);
 
-                                    DrawText(to_c_string(control.name), ACTION_COLUMN_X, xx options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-
-                                    bind_one_clicked   := GuiButton(Rectangle.{ BIND_ONE_COLUMN_X,   options_row_y, BIND_BUTTON_WIDTH, BIND_BUTTON_HEIGHT }, bind_one_current);
-                                    bind_two_clicked   := GuiButton(Rectangle.{ BIND_TWO_COLUMN_X,   options_row_y, BIND_BUTTON_WIDTH, BIND_BUTTON_HEIGHT }, bind_two_current);
-                                    bind_three_clicked := GuiButton(Rectangle.{ BIND_THREE_COLUMN_X, options_row_y, BIND_BUTTON_WIDTH, BIND_BUTTON_HEIGHT }, bind_three_current);
+                                    bind_one_clicked   := GuiButton(Rectangle.{ `BIND_ONE_COLUMN_X,   `options_row_y, `BIND_BUTTON_WIDTH, `BIND_BUTTON_HEIGHT }, bind_one_current);
+                                    bind_two_clicked   := GuiButton(Rectangle.{ `BIND_TWO_COLUMN_X,   `options_row_y, `BIND_BUTTON_WIDTH, `BIND_BUTTON_HEIGHT }, bind_two_current);
+                                    bind_three_clicked := GuiButton(Rectangle.{ `BIND_THREE_COLUMN_X, `options_row_y, `BIND_BUTTON_WIDTH, `BIND_BUTTON_HEIGHT }, bind_three_current);
 
                                     if bind_one_clicked   control.binds[0].is_being_rebound = !control.binds[0].is_being_rebound;
                                     if bind_two_clicked   control.binds[1].is_being_rebound = !control.binds[1].is_being_rebound;
@@ -2119,71 +2162,45 @@ main :: () {
                                     if control.binds[2].is_being_rebound bind_index_currently_being_rebound = 2;
 
                                     if bind_index_currently_being_rebound > -1 {
+                                        // NOTE: usually you have GetKeyPressed in a queue because there can be multiple keys
+                                        // pressed per frame. Here, we just take the first one and call it a day.
                                         key_pressed := GetKeyPressed();
+                                        
                                         if key_pressed {
-                                            print_vars(key_pressed);
+                                            control.binds[bind_index_currently_being_rebound].type  = KeyboardKey;
                                             control.binds[bind_index_currently_being_rebound].value = key_pressed;
                                             control.binds[bind_index_currently_being_rebound].is_being_rebound = false;
+                                        } else {
+                                            mouse_value : s32 = -1;
+                                            // Intentionally leaving out MOUSE_BUTTON_LEFT, I don't think we ever want to rebind that.
+                                            if IsMouseButtonPressed(.MOUSE_BUTTON_RIGHT)   mouse_value = 1;
+                                            if IsMouseButtonPressed(.MOUSE_BUTTON_MIDDLE)  mouse_value = 2;
+                                            if IsMouseButtonPressed(.MOUSE_BUTTON_SIDE)    mouse_value = 3;
+                                            if IsMouseButtonPressed(.MOUSE_BUTTON_EXTRA)   mouse_value = 4;
+                                            if IsMouseButtonPressed(.MOUSE_BUTTON_FORWARD) mouse_value = 5;
+                                            if IsMouseButtonPressed(.MOUSE_BUTTON_BACK)    mouse_value = 6;
+
+                                            if mouse_value > -1 {
+                                                control.binds[bind_index_currently_being_rebound].type  = MouseButton;
+                                                control.binds[bind_index_currently_being_rebound].value = mouse_value;
+                                                control.binds[bind_index_currently_being_rebound].is_being_rebound = false;
+                                            }
                                         }
                                     }
 
-                                    options_row_y += OPTIONS_Y_INCREMENT;
+                                    `options_row_y += `OPTIONS_Y_INCREMENT;
                                 }
 
-                                DrawText("Build dynamite", ACTION_COLUMN_X, xx options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                GuiButton(Rectangle.{ BIND_ONE_COLUMN_X,   options_row_y, BIND_BUTTON_WIDTH, BIND_BUTTON_HEIGHT }, "<None>");
-                                GuiButton(Rectangle.{ BIND_TWO_COLUMN_X,   options_row_y, BIND_BUTTON_WIDTH, BIND_BUTTON_HEIGHT }, "<None>");
-                                GuiButton(Rectangle.{ BIND_THREE_COLUMN_X, options_row_y, BIND_BUTTON_WIDTH, BIND_BUTTON_HEIGHT }, "<None>");
-                                options_row_y += OPTIONS_Y_INCREMENT;
-
-                                DrawText("Build wall", ACTION_COLUMN_X, xx options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                GuiButton(Rectangle.{ BIND_ONE_COLUMN_X,   options_row_y, BIND_BUTTON_WIDTH, BIND_BUTTON_HEIGHT }, "<None>");
-                                GuiButton(Rectangle.{ BIND_TWO_COLUMN_X,   options_row_y, BIND_BUTTON_WIDTH, BIND_BUTTON_HEIGHT }, "<None>");
-                                GuiButton(Rectangle.{ BIND_THREE_COLUMN_X, options_row_y, BIND_BUTTON_WIDTH, BIND_BUTTON_HEIGHT }, "<None>");
-                                options_row_y += OPTIONS_Y_INCREMENT;
-
-                                DrawText("Obsidian mode", ACTION_COLUMN_X, xx options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                GuiButton(Rectangle.{ BIND_ONE_COLUMN_X,   options_row_y, BIND_BUTTON_WIDTH, BIND_BUTTON_HEIGHT }, "<None>");
-                                GuiButton(Rectangle.{ BIND_TWO_COLUMN_X,   options_row_y, BIND_BUTTON_WIDTH, BIND_BUTTON_HEIGHT }, "<None>");
-                                GuiButton(Rectangle.{ BIND_THREE_COLUMN_X, options_row_y, BIND_BUTTON_WIDTH, BIND_BUTTON_HEIGHT }, "<None>");
-                                options_row_y += OPTIONS_Y_INCREMENT;
-
-                                // DrawText("Drag camera",       ACTION_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                // DrawText("<None>",       BIND_ONE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                // DrawText("<None>",       BIND_TWO_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                // DrawText("<None>",       BIND_THREE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                // options_row_y += OPTIONS_Y_INCREMENT;
-
-                                // DrawText("Move camera up",    ACTION_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                // DrawText("<None>",    BIND_ONE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                // DrawText("<None>",    BIND_TWO_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                // DrawText("<None>",    BIND_THREE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                // options_row_y += OPTIONS_Y_INCREMENT;
-
-                                // DrawText("Move camera down",  ACTION_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                // DrawText("<None>",  BIND_ONE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                // DrawText("<None>",  BIND_TWO_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                // DrawText("<None>",  BIND_THREE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                // options_row_y += OPTIONS_Y_INCREMENT;
-
-                                // DrawText("Move camera left",  ACTION_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                // DrawText("<None>",  BIND_ONE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                // DrawText("<None>",  BIND_TWO_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                // DrawText("<None>",  BIND_THREE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                // options_row_y += OPTIONS_Y_INCREMENT;
-
-                                // DrawText("Move camera right", ACTION_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                // DrawText("<None>", BIND_ONE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                // DrawText("<None>", BIND_TWO_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                // DrawText("<None>", BIND_THREE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                // options_row_y += OPTIONS_Y_INCREMENT;
-
-                                // DrawText("Toggle remove",     ACTION_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                // DrawText("<None>",     BIND_ONE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                // DrawText("<None>",     BIND_TWO_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                // DrawText("<None>",     BIND_THREE_COLUMN_X, options_row_y, OPTIONS_ROW_FONT_SIZE, WHITE);
-                                // options_row_y += OPTIONS_Y_INCREMENT;
-
+                                keybind_row(*controls.add_base_mode);
+                                keybind_row(*controls.select_as_place_dynamite);
+                                keybind_row(*controls.select_as_place_obsidian);
+                                keybind_row(*controls.select_as_place_wall);
+                                keybind_row(*controls.drag_cam);
+                                keybind_row(*controls.move_camera_up);
+                                keybind_row(*controls.move_camera_down);
+                                keybind_row(*controls.move_camera_left);
+                                keybind_row(*controls.move_camera_right);
+                                keybind_row(*controls.select_as_remove_path);
                             }
 
                         case .NONE; // no-op
