@@ -1,35 +1,37 @@
 #import "Basic";
-Compiler :: #import "Compiler";
 #import "Hash_Table";
 #import "Input";
-#import "Math";
+Math :: #import "Math";
 #import "Print_Vars";
 #import "Random";
+#import "Sloppy_Math";
 #import "Sort";
+#import "String";
 #import "System";
 
-#load "main.jai";
+main :: () {
+    while true {
+        derive_entities_in_viewport();
+    }
+}
 
-#run {
-  Compiler.set_build_options_dc(.{do_output=false});
+derive_entities_in_viewport :: () {    
+    for cy: 1..90001 {
+        for cx: 1..90001 {
+            
+            find_chunk_key_tmp :: (chunk_x: s32, chunk_y: s32) -> (found: bool, key: u64) {
+                if chunk_x < 0 return false, 0;
+                if chunk_y < 0 return false, 0;
 
-  print("******************************************************\n");
-  print("******************************************************\n");
+                x_u64 : u64 = 0xFFFFFFFF00000000;
+                y_u64 : u64 = 0x00000000FFFFFFFF;
 
-  my_array : [..] int;
-  
+                return false, 0xFFFFFFFFFFFFFFFF;
+            }
 
-  for 1..10 array_add(*my_array, it);
-
-  view := array_view(my_array, 0);
-
-  for view {
-    print("=======================\n");
-    print("before removal:\n");
-    print_vars(it, it_index, my_array, view);
-    array_ordered_remove_by_index(*my_array, it_index);
-    print("after removal:\n");
-    print_vars(it, it_index, my_array, view);
-    print("=======================\n\n\n");
-  }
+            key_was_valid, key := find_chunk_key_tmp(xx cx, xx cy);
+            // This happens if the camera is looking out of bounds.
+            if !key_was_valid continue;
+        }
+    }
 }

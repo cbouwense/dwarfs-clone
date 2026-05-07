@@ -308,7 +308,7 @@ Dwarf :: struct {
     id                  : s32;
     pos                 : Vector2;
     state               : DwarfState;
-    tile_ids_on_path    : [..] s32;
+    tile_ids_on_path    : [..] s32; // TODO: might just want a static size
     mining_cooldown_ms  : s32;
     tile_id_mining      : s32;
     was_mining_resource : bool; // PERF: don't
@@ -327,7 +327,7 @@ Goblin :: struct {
     id                 : s32;
     pos                : Vector2;
     state              : GoblinState;
-    tile_ids_on_path   : [..] s32;
+    tile_ids_on_path   : [..] s32; // TODO: might just want a static size
     attack_cooldown_ms : s32;
     dwarf_id_attacking : s32;
     direction          : Direction;
@@ -407,18 +407,18 @@ obsidian_tile_ids_in_viewport : [..] s32;
 wall_tile_ids_set         : Table(s32, s32);
 wall_tile_ids_in_viewport : [..] s32;
 
-bases               : [..] Base;
-bases_in_viewport   : [..] Base;
+bases             : [..] Base;
+bases_in_viewport : [..] Base;
 
 dwarves             : [..] Dwarf;
-dwarves_in_viewport : [..] Dwarf;
 dwarf_id_to_index   : Table(s32, s64);
 dwarf_id_counter    : s32 = 0;
+dwarves_in_viewport : [..] Dwarf;
 
 goblins             : [..] Goblin;
-goblins_in_viewport : [..] Goblin;
 goblin_id_to_index  : Table(s32, s64);
 goblin_id_counter   : s32 = 0;
+goblins_in_viewport : [..] Goblin;
 
 tiles_with_dynamite_ids             : [..] s32;
 tiles_with_dynamite_ids_in_viewport : [..] s32;
@@ -440,6 +440,27 @@ active_chunks: Table(u64, *Chunk);
 edges : [..] Edge; // List of edges between tiles for pathfinding
 
 main :: () {
+    {
+        fully_mined_tile_ids_in_viewport.allocator    = temp;
+        actively_mined_tile_ids_in_viewport.allocator = temp;
+        cave_tile_ids_in_viewport.allocator           = temp;
+        encased_tile_ids_in_viewport.allocator        = temp;
+        iron_tile_ids_in_viewport.allocator           = temp;
+        water_still_tile_ids_in_viewport.allocator    = temp;
+        water_flowing_tile_ids_in_viewport.allocator  = temp;
+        lava_still_tile_ids_in_viewport.allocator     = temp;
+        lava_flowing_tile_ids_in_viewport.allocator   = temp;
+        obsidian_tile_ids_in_viewport.allocator       = temp;
+        wall_tile_ids_in_viewport.allocator           = temp;
+        dwarves_in_viewport.allocator                 = temp;
+        goblins_in_viewport.allocator                 = temp;
+        tiles_with_dynamite_ids_in_viewport.allocator = temp;
+        tiles_with_treasure_ids_in_viewport.allocator = temp;
+        hole_tile_ids_in_viewport.allocator           = temp;
+        paths_in_viewport.allocator                   = temp;
+        bases_in_viewport.allocator                   = temp;
+    }
+
     random_seed(123456789);
 
     InitWindow(1600, 900, "Dwarfs?! Clone");
@@ -618,12 +639,21 @@ main :: () {
 
     persistent_encasing_obsidian_tile_ids_set: Table(s32, Color);
 
+    tile_ids_to_dwarfs: Table(s32, Dwarf);
+    tile_ids_to_dwarfs.allocator = temp;
+    init(*tile_ids_to_dwarfs);
+    
+    tile_ids_to_goblins: Table(s32, Goblin);
+    tile_ids_to_goblins.allocator = temp;
+    init(*tile_ids_to_dwarfs);
+
     while !metagame_state.should_quit_game {
         defer metagame_state.should_quit_game = metagame_state.should_quit_game || WindowShouldClose();
 
+        table_reset(*tile_ids_to_dwarfs);
+        table_reset(*tile_ids_to_goblins);
         reset_temporary_storage();
 
-        time := GetTime();
         dt_seconds_raw := GetFrameTime();
         // Cap delta time to prevent teleporting or weird bullshit
         dt_seconds := ifx dt_seconds_raw > 0.033 then 0.033 else dt_seconds_raw;
@@ -632,11 +662,23 @@ main :: () {
         mouse_pos_in_world := GetScreenToWorld2D(mouse_pos_in_ui, camera);
         mouse_wheel_move   := GetMouseWheelMove();
 
+        for dwarf: dwarves {
+            dwarf_center   := get_rect_center(get_world_rect_from_pos(dwarf.pos));
+            dwarf_tile_id  := get_tile_id_by_pos(dwarf_center);
+            table_set(*tile_ids_to_dwarfs, dwarf_tile_id, dwarf);
+        }
+
+        for goblin: goblins {
+            goblin_center   := get_rect_center(get_world_rect_from_pos(goblin.pos));
+            goblin_tile_id  := get_tile_id_by_pos(goblin_center);
+            table_set(*tile_ids_to_goblins, goblin_tile_id, goblin);
+        }
+
         //
         // Input
         //
         {
-            print_vars(controls.add_base_mode);
+            // print_vars(controls.add_base_mode);
 
             // Metagame controls
             if IsKeyPressed(.KEY_ESCAPE) {
@@ -1036,11 +1078,10 @@ main :: () {
                                 }
                             }
                         }
-
                         // Second of all, unless you're moving, if there's a goblin up your ass deal with it.
                         if !done_updating_this_dwarf {
                             if dwarf.state != .MOVING {
-                                detected, goblin, direction_of_goblin := detect_goblin_neighbor(dwarf_tile_id);
+                                detected, goblin, direction_of_goblin := detect_goblin_neighbor(dwarf_tile_id, *tile_ids_to_goblins);
                                 if detected {
                                     dwarf.goblin_id_attacking = goblin.id;
                                     dwarf.direction = direction_of_goblin;
@@ -1363,7 +1404,7 @@ main :: () {
                                 // Check if there are any attack targets nearby.
                                 //
                                 // First detect any dwarves.
-                                detected, dwarf := detect_dwarf_within_radius(goblin_tile_id, 5);
+                                detected, dwarf := detect_dwarf_within_radius(goblin_tile_id, 5, *tile_ids_to_dwarfs);
                                 if detected {
                                     goblin.dwarf_id_attacking = dwarf.id;
 
@@ -1495,7 +1536,7 @@ main :: () {
                                     // Hit check
                                     rng := random_get_within_range(0, 1);
                                     swing_connected := rng <= GOBLIN_HIT_CHANCE;
-                                    print_vars(swing_connected);
+                                    // print_vars(swing_connected);
 
                                     if swing_connected {
                                         // TODO
@@ -1508,7 +1549,8 @@ main :: () {
 
                 // Update dynamite
                 {
-                    tile_ids_to_remove_dynamite_from : [..] s32;
+                    tile_ids_to_remove_dynamite_from: [..] s32;
+                    tile_ids_to_remove_dynamite_from.allocator = temp;
 
                     for tiles_with_dynamite_ids {
                         // Kill any dwarves you are coming in contact with
@@ -1539,6 +1581,7 @@ main :: () {
                 // Update treasure
                 {
                     tile_ids_to_remove_treasure_from : [..] s32;
+                    tile_ids_to_remove_treasure_from.allocator = temp;
 
                     // PERF: this double loop looks sus
                     for tiles_with_treasure_ids {
@@ -2342,28 +2385,20 @@ try_to_set_dwarf_random_new_target :: (dwarf: *Dwarf) -> SetDwarfRandomNewTarget
     return .DIRECTION_FOUND;
 }
 
-detect_goblin_neighbor :: (tile_id: s32) -> goblin_neighbor_detected: bool, goblin: Goblin, direction: Direction {
-    // TODO: dawg we really need a faster way to lookup dwarf stuff
-    tile_ids_to_goblins : Table(s32, Goblin);
-    for goblin: goblins {
-        goblin_center   := get_rect_center(get_world_rect_from_pos(goblin.pos));
-        goblin_tile_id  := get_tile_id_by_pos(goblin_center);
-        table_set(*tile_ids_to_goblins, goblin_tile_id, goblin);
-    }
-
+detect_goblin_neighbor :: (tile_id: s32, tile_ids_to_goblins: *Table) -> goblin_neighbor_detected: bool, goblin: Goblin, direction: Direction {
     found: bool;
     goblin: Goblin;
 
-    found, goblin = table_find(*tile_ids_to_goblins, tile_id - WORLD_COLS);
+    found, goblin = table_find(tile_ids_to_goblins, tile_id - WORLD_COLS);
     if (found) return true, goblin, .NORTH;
 
-    found, goblin = table_find(*tile_ids_to_goblins, tile_id + WORLD_COLS);
+    found, goblin = table_find(tile_ids_to_goblins, tile_id + WORLD_COLS);
     if (found) return true, goblin, .SOUTH;
 
-    found, goblin = table_find(*tile_ids_to_goblins, tile_id + 1);
+    found, goblin = table_find(tile_ids_to_goblins, tile_id + 1);
     if (found) return true, goblin, .EAST;
 
-    found, goblin = table_find(*tile_ids_to_goblins, tile_id - 1);
+    found, goblin = table_find(tile_ids_to_goblins, tile_id - 1);
     if (found) return true, goblin, .WEST;
 
     return false, Goblin.{}, .CENTER;
@@ -2572,6 +2607,7 @@ get_neighbor_tile_id_by_direction :: (tile_id: s32, direction: Direction) -> s32
 
 get_neighbor_tile_ids :: (tile_id: s32) -> [..] s32 {
     neighbor_tile_ids : [..] s32;
+    neighbor_tile_ids.allocator = temp;
 
     for DIRECTIONS_CARDINAL {
         array_add(*neighbor_tile_ids, get_neighbor_tile_id_by_direction(tile_id, it));
@@ -2671,6 +2707,8 @@ is_tile_id_walkable_or_mineable :: (tile_id: s32) -> bool {
 
 get_neighbor_tile_ids_of_type :: (tile_id: s32, tile_type: TileType) -> [..] s32 {
     neighbor_tile_ids : [..] s32;
+    neighbor_tile_ids.allocator = temp;
+    
     dx, dy : s32;
 
     for i: 0..7 {
@@ -2715,7 +2753,8 @@ handle_encasement :: (tile_id: s32, persistent_encasing_obsidian_tile_ids_set: *
         // We may have multiple directions of encasement. Consider a block being placed in
         // the middle of two, three, or even four diamonds that were only missing the spot
         // that was just placed.
-        directions_of_encasement : [..]Direction;
+        directions_of_encasement: [..] Direction;
+        directions_of_encasement.allocator = temp;
 
         tile_pos := get_tile_pos_by_id(tile_id);
         dx, dy: float32;
@@ -2791,6 +2830,7 @@ check_encasement :: (tile_id: s32, encasing_obsidian_tile_ids_set: *Table, persi
             path_has_hole := found_at_least_one_hole || table_contains(*hole_tile_ids_set, tile_id);
             if path.count > 0 && path_has_hole {
                 cycle_points: [..] Vector2;
+                cycle_points.allocator = temp;
                 
                 // Only build the cycle points first
                 for tile: path {
@@ -2821,19 +2861,24 @@ check_encasement :: (tile_id: s32, encasing_obsidian_tile_ids_set: *Table, persi
 // BFS of the two obsidian blocks neighboring 
 find_shortest_obsidian_path :: (start_id: s32, end_id: s32, ignore_id: s32) -> found_at_least_one_hole: bool, path: [..] s32 {
     path: [..] s32;
+    path.allocator = temp;
+
     found_at_least_one_hole := false;
 
     // Track which tiles we've seen so we don't loop infinitely
     visited: Table(s32, bool);
-    defer deinit(*visited);
+    visited.allocator = temp;
+    // defer deinit(*visited);
 
     // Track the "parent" of each tile to reconstruct the path later
     came_from: Table(s32, s32);
-    defer deinit(*came_from);
+    came_from.allocator = temp;
+    // defer deinit(*came_from);
 
     // The BFS queue
     queue: [..] s32;
-    defer array_free(queue);
+    queue.allocator = temp;
+    // defer array_free(queue);
 
     // Initialize BFS with our starting neighbor
     array_add(*queue, start_id);
@@ -2905,10 +2950,17 @@ check_interior_volume :: (cycle: [] Vector2) -> float {
 }
 
 try_to_encase_tiles :: (starting_tile_id: s32, game_state: *GameState) {
-    found_liquid   : bool = false;
-    ids_processed  : Table(s32, s32);
-    ids_to_process : [..] s32;
-    encased_ids    : [..] s32;
+    found_liquid: bool = false;
+
+    ids_processed: Table(s32, s32);
+    ids_processed.allocator = temp;
+
+    ids_to_process: [..] s32;
+    ids_to_process.allocator = temp;
+
+    encased_ids: [..] s32;
+    encased_ids.allocator = temp;
+
     array_add(*ids_to_process, starting_tile_id);
 
     while ids_to_process.count > 0 {
@@ -3253,6 +3305,7 @@ get_path :: (from_pos: Vector2, to_pos: Vector2) -> Path {
 
 get_tile_ids_along_path :: (from_pos: Vector2, to_pos: Vector2) -> [..] s32 {
     path_ids: [..] s32;
+    path_ids.allocator = temp;
 
     target_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, to_pos);
     from_rect   := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, from_pos);
@@ -3546,16 +3599,20 @@ spawn_iron :: (
     size := cast(int) random_get_within_range(xx vein_size_min, xx vein_size_max);
     max_tile_id := world_columns * world_rows;
 
-    ids_to_process : [..] s32;
+    ids_to_process: [..] s32;
+    ids_to_process.allocator = temp;
+
+    ids_processed_set: Table(s32, s32);
+    ids_processed_set.allocator = temp;
+
     array_add(*ids_to_process, starting_tile_id);
-    ids_processed  : [..] s32;
 
     while ids_to_process.count > 0 && size > 0 {
         // Get the next id to process
         id := pop_front(*ids_to_process);
 
         // Make sure the id is valid and hasn't already been processed
-        id_already_processed := array_find(ids_processed, id);
+        id_already_processed := table_contains(*ids_processed_set, id);
         if id_already_processed continue;
         if id <= 0 continue;
         if id > max_tile_id continue;
@@ -3568,7 +3625,7 @@ spawn_iron :: (
         table_set(iron_tile_ids_set, id, 0);
 
         // Mark it as processed
-        array_add(*ids_processed, id);
+        table_add(*ids_processed_set, id, 1738);
         size -= 1;
 
         // Add neighbors as needing to be processed
@@ -3579,16 +3636,20 @@ spawn_iron :: (
     }
 }
 
-// TODO: probably want to DRY up these detector functions 
+// TODO: probably want to DRY up these detector functions
 detect_treasure_tile_id_within_radius :: (
     starting_tile_id: s32,
     radius: s32
 ) -> found: bool, tile_id: s32 {
     max_tile_id := WORLD_COLS * WORLD_ROWS;
 
-    ids_to_process : [..] s32;
+    ids_to_process: [..] s32;
+    ids_to_process.allocator = temp;
+
+    ids_processed_set: Table(s32, s32);
+    ids_processed_set.allocator = temp;
+
     array_add(*ids_to_process, starting_tile_id);
-    ids_processed_set : Table(s32, s32);
 
     while ids_to_process.count > 0 {
         // Get the next id to process
@@ -3623,21 +3684,18 @@ detect_treasure_tile_id_within_radius :: (
 // TODO: probably want to DRY up these detector functions
 detect_dwarf_within_radius :: (
     starting_tile_id: s32,
-    radius: s32
+    radius: s32,
+    tile_ids_to_dwarfs: *Table
 ) -> found: bool, dwarf: Dwarf {
     max_tile_id := WORLD_COLS * WORLD_ROWS;
 
     ids_to_process : [..] s32;
-    array_add(*ids_to_process, starting_tile_id);
-    ids_processed_set : Table(s32, s32);
+    ids_to_process.allocator = temp;
 
-    // TODO: dawg we really need a faster way to lookup dwarf stuff
-    tile_ids_to_dwarfs : Table(s32, Dwarf);
-    for dwarf: dwarves {
-        dwarf_center   := get_rect_center(get_world_rect_from_pos(dwarf.pos));
-        dwarf_tile_id  := get_tile_id_by_pos(dwarf_center);
-        table_set(*tile_ids_to_dwarfs, dwarf_tile_id, dwarf);
-    }
+    ids_processed_set : Table(s32, s32);
+    ids_processed_set.allocator = temp;
+
+    array_add(*ids_to_process, starting_tile_id);
 
     while ids_to_process.count > 0 {
         // Get the next id to process
@@ -3654,7 +3712,7 @@ detect_dwarf_within_radius :: (
         if id == starting_tile_id - (radius + 1)                continue; // west
 
         // If a dwarf is detected, return
-        detected, dwarf := table_find(*tile_ids_to_dwarfs, id);
+        detected, dwarf := table_find(tile_ids_to_dwarfs, id);
         if (detected) return true, dwarf;
 
         // Mark it as processed
@@ -3677,9 +3735,13 @@ detect_iron_tile_id_within_radius :: (
 ) -> found: bool, tile_id: s32 {
     max_tile_id := WORLD_COLS * WORLD_ROWS;
 
-    ids_to_process : [..] s32;
+    ids_to_process: [..] s32;
+    ids_to_process.allocator = temp;
+
+    ids_processed_set: Table(s32, s32);
+    ids_processed_set.allocator = temp;
+
     array_add(*ids_to_process, starting_tile_id);
-    ids_processed_set : Table(s32, s32);
 
     while ids_to_process.count > 0 {
         // Get the next id to process
@@ -3750,7 +3812,22 @@ derive_entities_in_viewport :: (camera: Camera2D) {
     for cy: start_chunk_y..end_chunk_y {
         for cx: start_chunk_x..end_chunk_x {
             
-            key_was_valid, key := find_chunk_key(cx, cy);
+            find_chunk_key_tmp :: (chunk_x: s32, chunk_y: s32) -> (found: bool, key: u64) {
+                if chunk_x < 0 return false, 0;
+                if chunk_y < 0 return false, 0;
+
+                // x_u64 := cast(u64) cast(u32) chunk_x;
+                // y_u64 := cast(u64) cast(u32) chunk_y;
+                // x_u64 : u64 = 0xFFFFFFFF00000000;
+                // y_u64 : u64 = 0x00000000FFFFFFFF;
+                
+                // TODO: does endian-ness matter? Probably not?...
+                // x occupies the top 32 bits, y occupies the bottom 32 bits.
+                // return true, (x_u64 << 32) | y_u64;
+                return true, 0xFFFFFFFFFFFFFFFF;
+            }
+
+            key_was_valid, key := find_chunk_key_tmp(cx, cy);
             // This happens if the camera is looking out of bounds.
             if !key_was_valid continue;
 
@@ -3758,162 +3835,162 @@ derive_entities_in_viewport :: (camera: Camera2D) {
             // If the chunk doesn't exist, nobody has mined or walked here, so just move on.
             if !found continue; 
 
-            // Fully mined tiles
-            for tile_id: chunk.fully_mined_tile_ids {
-                pos := get_tile_pos_by_id(tile_id);
+            // // Fully mined tiles
+            // for tile_id: chunk.fully_mined_tile_ids {
+            //     pos := get_tile_pos_by_id(tile_id);
 
-                if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
-                if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
-                if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
-                if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+            //     if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+            //     if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+            //     if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+            //     if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-                array_add(*fully_mined_tile_ids_in_viewport, tile_id);
-            }
+            //     array_add(*fully_mined_tile_ids_in_viewport, tile_id);
+            // }
 
-            // Cave tiles
-            for tile_id: chunk.cave_tile_ids {
-                pos := get_tile_pos_by_id(tile_id);
+            // // Cave tiles
+            // for tile_id: chunk.cave_tile_ids {
+            //     pos := get_tile_pos_by_id(tile_id);
 
-                if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
-                if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
-                if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
-                if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+            //     if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+            //     if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+            //     if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+            //     if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-                array_add(*cave_tile_ids_in_viewport, tile_id);
-            }
+            //     array_add(*cave_tile_ids_in_viewport, tile_id);
+            // }
 
-            // Encased tiles
-            for tile_id: chunk.encased_tile_ids {
-                pos := get_tile_pos_by_id(tile_id);
+            // // Encased tiles
+            // for tile_id: chunk.encased_tile_ids {
+            //     pos := get_tile_pos_by_id(tile_id);
 
-                if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
-                if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
-                if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
-                if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+            //     if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+            //     if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+            //     if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+            //     if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-                array_add(*encased_tile_ids_in_viewport, tile_id);
-            }
+            //     array_add(*encased_tile_ids_in_viewport, tile_id);
+            // }
 
-            // Actively mined tiles
-            // TODO: do we need to do this?
-            for tile_id: chunk.actively_mined_tile_ids {
-                pos := get_tile_pos_by_id(tile_id);
+            // // Actively mined tiles
+            // // TODO: do we need to do this?
+            // for tile_id: chunk.actively_mined_tile_ids {
+            //     pos := get_tile_pos_by_id(tile_id);
 
-                if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
-                if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
-                if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
-                if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+            //     if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+            //     if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+            //     if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+            //     if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-                array_add(*actively_mined_tile_ids_in_viewport, tile_id);
-            }
+            //     array_add(*actively_mined_tile_ids_in_viewport, tile_id);
+            // }
 
-            // Iron tiles
-            for tile_id: chunk.iron_tile_ids {
-                pos := get_tile_pos_by_id(tile_id);
+            // // Iron tiles
+            // for tile_id: chunk.iron_tile_ids {
+            //     pos := get_tile_pos_by_id(tile_id);
 
-                if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
-                if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
-                if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
-                if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+            //     if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+            //     if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+            //     if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+            //     if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-                array_add(*iron_tile_ids_in_viewport, tile_id);
-            }
+            //     array_add(*iron_tile_ids_in_viewport, tile_id);
+            // }
 
-            // Obsidian tiles
-            for tile_id: chunk.obsidian_tile_ids {
-                pos := get_tile_pos_by_id(tile_id);
+            // // Obsidian tiles
+            // for tile_id: chunk.obsidian_tile_ids {
+            //     pos := get_tile_pos_by_id(tile_id);
 
-                if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
-                if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
-                if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
-                if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+            //     if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+            //     if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+            //     if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+            //     if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-                array_add(*obsidian_tile_ids_in_viewport, tile_id);
-            }
+            //     array_add(*obsidian_tile_ids_in_viewport, tile_id);
+            // }
 
             // Wall tiles
-            for tile_id: chunk.wall_tile_ids {
-                pos := get_tile_pos_by_id(tile_id);
+            // for tile_id: chunk.wall_tile_ids {
+            //     pos := get_tile_pos_by_id(tile_id);
 
-                if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
-                if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
-                if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
-                if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+            //     if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+            //     if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+            //     if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+            //     if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-                array_add(*wall_tile_ids_in_viewport, tile_id);
-            }
+            //     array_add(*wall_tile_ids_in_viewport, tile_id);
+            // }
 
-            // Water still tiles
-            for tile_id: chunk.water_still_tile_ids {
-                pos := get_tile_pos_by_id(tile_id);
+            // // Water still tiles
+            // for tile_id: chunk.water_still_tile_ids {
+            //     pos := get_tile_pos_by_id(tile_id);
 
-                if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
-                if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
-                if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
-                if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+            //     if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+            //     if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+            //     if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+            //     if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-                array_add(*water_still_tile_ids_in_viewport, tile_id);
-            }
+            //     array_add(*water_still_tile_ids_in_viewport, tile_id);
+            // }
 
-            // Water flowing tiles
-            for tile_id: chunk.water_flowing_tile_ids {
-                pos := get_tile_pos_by_id(tile_id);
+            // // Water flowing tiles
+            // for tile_id: chunk.water_flowing_tile_ids {
+            //     pos := get_tile_pos_by_id(tile_id);
 
-                if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
-                if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
-                if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
-                if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+            //     if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+            //     if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+            //     if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+            //     if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-                array_add(*water_flowing_tile_ids_in_viewport, tile_id);
-            }
+            //     array_add(*water_flowing_tile_ids_in_viewport, tile_id);
+            // }
 
-            // Lava still tiles
-            for tile_id: chunk.lava_still_tile_ids {
-                pos := get_tile_pos_by_id(tile_id);
+            // // Lava still tiles
+            // for tile_id: chunk.lava_still_tile_ids {
+            //     pos := get_tile_pos_by_id(tile_id);
 
-                if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
-                if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
-                if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
-                if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+            //     if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+            //     if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+            //     if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+            //     if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-                array_add(*lava_still_tile_ids_in_viewport, tile_id);
-            }
+            //     array_add(*lava_still_tile_ids_in_viewport, tile_id);
+            // }
 
-            // Lava flowing tiles
-            for tile_id: chunk.lava_flowing_tile_ids {
-                pos := get_tile_pos_by_id(tile_id);
+            // // Lava flowing tiles
+            // for tile_id: chunk.lava_flowing_tile_ids {
+            //     pos := get_tile_pos_by_id(tile_id);
 
-                if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
-                if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
-                if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
-                if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+            //     if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+            //     if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+            //     if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+            //     if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-                array_add(*lava_flowing_tile_ids_in_viewport, tile_id);
-            }
+            //     array_add(*lava_flowing_tile_ids_in_viewport, tile_id);
+            // }
 
-            // Hole tiles
-            for tile_id: chunk.hole_tile_ids {
-                pos := get_tile_pos_by_id(tile_id);
+            // // Hole tiles
+            // for tile_id: chunk.hole_tile_ids {
+            //     pos := get_tile_pos_by_id(tile_id);
 
-                if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
-                if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
-                if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
-                if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+            //     if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+            //     if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+            //     if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+            //     if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-                array_add(*hole_tile_ids_in_viewport, tile_id);
-            }
+            //     array_add(*hole_tile_ids_in_viewport, tile_id);
+            // }
 
-            // Bases
-            for base_id: chunk.base_ids {
-                base := bases[base_id];
+            // // Bases
+            // for base_id: chunk.base_ids {
+            //     base := bases[base_id];
 
-                if base.pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
-                if base.pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
-                if base.pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
-                if base.pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+            //     if base.pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+            //     if base.pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+            //     if base.pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+            //     if base.pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-                array_add(*bases_in_viewport, base);
-            }
+            //     array_add(*bases_in_viewport, base);
+            // }
 
             // // Dwarves
             // for dwarf_id: chunk.dwarf_ids {
@@ -3945,99 +4022,99 @@ derive_entities_in_viewport :: (camera: Camera2D) {
     }
 
     // Derive viewable dwarves
-    {
-        for dwarf: dwarves {
-            pos := dwarf.pos;
+    // {
+    //     for dwarf: dwarves {
+    //         pos := dwarf.pos;
 
-            if pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x continue;
-            if pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x continue;
+    //         if pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x continue;
+    //         if pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x continue;
             
-            if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y continue;
-            if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+    //         if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y continue;
+    //         if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-            array_add(*dwarves_in_viewport, dwarf);
-        }
-    }
+    //         array_add(*dwarves_in_viewport, dwarf);
+    //     }
+    // }
 
-    // Derive viewable goblins
-    {
-        for goblin: goblins {
-            pos := goblin.pos;
+    // // Derive viewable goblins
+    // {
+    //     for goblin: goblins {
+    //         pos := goblin.pos;
 
-            if pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x continue;
-            if pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x continue;
+    //         if pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x continue;
+    //         if pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x continue;
             
-            if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y continue;
-            if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+    //         if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y continue;
+    //         if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-            array_add(*goblins_in_viewport, goblin);
-        }
-    }
+    //         array_add(*goblins_in_viewport, goblin);
+    //     }
+    // }
 
-    // Derive viewable dynamite
-    {
-        for dynamite_tile_id: tiles_with_dynamite_ids {
-            pos := get_tile_pos_by_id(dynamite_tile_id);
+    // // Derive viewable dynamite
+    // {
+    //     for dynamite_tile_id: tiles_with_dynamite_ids {
+    //         pos := get_tile_pos_by_id(dynamite_tile_id);
 
-            if pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x continue;
-            if pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x continue;
+    //         if pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x continue;
+    //         if pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x continue;
             
-            if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y continue;
-            if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+    //         if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y continue;
+    //         if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-            array_add(*tiles_with_dynamite_ids_in_viewport, dynamite_tile_id);
-        }
-    }
+    //         array_add(*tiles_with_dynamite_ids_in_viewport, dynamite_tile_id);
+    //     }
+    // }
 
-    // Derive viewable treasure
-    {
-        for treasure_tile_id: tiles_with_treasure_ids {
-            pos := get_tile_pos_by_id(treasure_tile_id);
+    // // Derive viewable treasure
+    // {
+    //     for treasure_tile_id: tiles_with_treasure_ids {
+    //         pos := get_tile_pos_by_id(treasure_tile_id);
 
-            if pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x continue;
-            if pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x continue;
+    //         if pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x continue;
+    //         if pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x continue;
             
-            if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y continue;
-            if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+    //         if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y continue;
+    //         if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-            array_add(*tiles_with_treasure_ids_in_viewport, treasure_tile_id);
-        }
-    }
+    //         array_add(*tiles_with_treasure_ids_in_viewport, treasure_tile_id);
+    //     }
+    // }
 
-    // Derive viewable paths
-    {
-        for path: paths {
-            start_tile_pos  := get_tile_pos_by_id(path.start_tile_id);
-            middle_tile_pos := get_tile_pos_by_id(path.middle_tile_id);
-            end_tile_pos    := get_tile_pos_by_id(path.end_tile_id);
+    // // Derive viewable paths
+    // {
+    //     for path: paths {
+    //         start_tile_pos  := get_tile_pos_by_id(path.start_tile_id);
+    //         middle_tile_pos := get_tile_pos_by_id(path.middle_tile_id);
+    //         end_tile_pos    := get_tile_pos_by_id(path.end_tile_id);
 
-            if (
-                start_tile_pos.x  + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x &&
-                middle_tile_pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x &&
-                end_tile_pos.x    + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x
-            ) continue;
+    //         if (
+    //             start_tile_pos.x  + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x &&
+    //             middle_tile_pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x &&
+    //             end_tile_pos.x    + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x
+    //         ) continue;
 
-            if (
-                start_tile_pos.x  - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x &&
-                middle_tile_pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x &&
-                end_tile_pos.x    - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x
-            ) continue;
+    //         if (
+    //             start_tile_pos.x  - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x &&
+    //             middle_tile_pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x &&
+    //             end_tile_pos.x    - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x
+    //         ) continue;
 
-            if (
-                start_tile_pos.y  - TILEMAP_GENERAL_WORLD_WIDTH > window_end.y &&
-                middle_tile_pos.y - TILEMAP_GENERAL_WORLD_WIDTH > window_end.y &&
-                end_tile_pos.y    - TILEMAP_GENERAL_WORLD_WIDTH > window_end.y
-            ) continue;
+    //         if (
+    //             start_tile_pos.y  - TILEMAP_GENERAL_WORLD_WIDTH > window_end.y &&
+    //             middle_tile_pos.y - TILEMAP_GENERAL_WORLD_WIDTH > window_end.y &&
+    //             end_tile_pos.y    - TILEMAP_GENERAL_WORLD_WIDTH > window_end.y
+    //         ) continue;
                 
-            if (
-                start_tile_pos.y  + TILEMAP_GENERAL_WORLD_WIDTH < window_start.y &&
-                middle_tile_pos.y + TILEMAP_GENERAL_WORLD_WIDTH < window_start.y &&
-                end_tile_pos.y    + TILEMAP_GENERAL_WORLD_WIDTH < window_start.y
-            ) continue;
+    //         if (
+    //             start_tile_pos.y  + TILEMAP_GENERAL_WORLD_WIDTH < window_start.y &&
+    //             middle_tile_pos.y + TILEMAP_GENERAL_WORLD_WIDTH < window_start.y &&
+    //             end_tile_pos.y    + TILEMAP_GENERAL_WORLD_WIDTH < window_start.y
+    //         ) continue;
 
-            array_add(*paths_in_viewport, path);
-        }
-    }
+    //         array_add(*paths_in_viewport, path);
+    //     }
+    // }
 }
 
 reveal_cave_if_necessary :: (tile_id: s32, grant_points: bool, game_state: *GameState) -> revealed_cave: bool, cave_type: CaveType {
@@ -4154,8 +4231,12 @@ perlin_noise_2d :: ($DESIRED_VALUES: s32, starting_frequency: s32 = 1, starting_
     assert(octaves > 0,            "You probably want a positive octaves. If not, delete this assertion.");
     assert(DESIRED_VALUES % starting_frequency == 0, "The perlin noise frequency must be a divisor of the number of desired values.");
 
+    // TODO: temp allocator?
     results : [..] float;
+
     random_grid_gradients: [..] Vector2;
+    random_grid_gradients.allocator = temp;
+
     for i: 0..(DESIRED_VALUES * DESIRED_VALUES - 1) {
         array_add(*results, 0.0);
     }

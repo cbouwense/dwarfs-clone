@@ -1,6 +1,6 @@
 # In progress
 
-- options menu
+- investigate insane memory usage
 
 # Bugs
 
@@ -19,9 +19,17 @@
     - cause:
     - correction:
     - confirmation:
+- water eats through walls
+    - condition: reproducible on edea4e6
+    - cause:
+    - correction:
+    - confirmation:
 
 # Core
 
+- options menu
+    - apply changes
+    - restore defaults
 - main menu
 - HUD
 - losing
@@ -35,6 +43,7 @@
 - dwarves and goblins should not pass through each other
 - mined tile sprites
 - disable camera controls while paused
+- mouse icon for what mode you're in (wall, dynamite, etc)
 
 # Performance
 
