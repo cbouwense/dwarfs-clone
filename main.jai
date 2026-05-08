@@ -353,9 +353,9 @@ Chunk :: struct {
     lava_flowing_tile_ids   : [..] s32;
     hole_tile_ids           : [..] s32;
     base_ids                : [..] s32;
-    // dwarf_ids               : [..] s32;
 
     // TODO: Will probably want these
+    // dwarf_ids               : [..] s32;
     // dynamite : [..] Dynamite;
 }
 
@@ -641,11 +641,9 @@ main :: () {
 
     tile_ids_to_dwarfs: Table(s32, Dwarf);
     tile_ids_to_dwarfs.allocator = temp;
-    init(*tile_ids_to_dwarfs);
     
     tile_ids_to_goblins: Table(s32, Goblin);
     tile_ids_to_goblins.allocator = temp;
-    init(*tile_ids_to_dwarfs);
 
     while !metagame_state.should_quit_game {
         defer metagame_state.should_quit_game = metagame_state.should_quit_game || WindowShouldClose();
@@ -3094,9 +3092,11 @@ try_to_set_cardinal_neighbors_as_flowing_tile_type :: (tile_id: s32, as_type: Ti
         tile_is_obsidian := table_contains(*obsidian_tile_ids_set, neighbor_id);
         if tile_is_obsidian continue;
 
-        // If the tile is a wall, damage it a bit.
+        // If the tile is a wall and you are lava, damage it a bit.
         tile_is_wall := table_contains(*wall_tile_ids_set, neighbor_id);
-        if tile_is_wall {
+        as_lava := as_type == .LAVA_STILL || as_type == .LAVA_FLOWING;
+        
+        if tile_is_wall && as_lava {
             found, current_health := table_find(*actively_mined_tile_ids_to_health_table, neighbor_id);
             // If we don't see the wall in the actively mined tile list, then it's full health
             if (!found) current_health = WALL_HEALTH;
@@ -3811,23 +3811,8 @@ derive_entities_in_viewport :: (camera: Camera2D) {
 
     for cy: start_chunk_y..end_chunk_y {
         for cx: start_chunk_x..end_chunk_x {
-            
-            find_chunk_key_tmp :: (chunk_x: s32, chunk_y: s32) -> (found: bool, key: u64) {
-                if chunk_x < 0 return false, 0;
-                if chunk_y < 0 return false, 0;
 
-                // x_u64 := cast(u64) cast(u32) chunk_x;
-                // y_u64 := cast(u64) cast(u32) chunk_y;
-                // x_u64 : u64 = 0xFFFFFFFF00000000;
-                // y_u64 : u64 = 0x00000000FFFFFFFF;
-                
-                // TODO: does endian-ness matter? Probably not?...
-                // x occupies the top 32 bits, y occupies the bottom 32 bits.
-                // return true, (x_u64 << 32) | y_u64;
-                return true, 0xFFFFFFFFFFFFFFFF;
-            }
-
-            key_was_valid, key := find_chunk_key_tmp(cx, cy);
+            key_was_valid, key := find_chunk_key(cx, cy);
             // This happens if the camera is looking out of bounds.
             if !key_was_valid continue;
 
@@ -3835,164 +3820,165 @@ derive_entities_in_viewport :: (camera: Camera2D) {
             // If the chunk doesn't exist, nobody has mined or walked here, so just move on.
             if !found continue; 
 
-            // // Fully mined tiles
-            // for tile_id: chunk.fully_mined_tile_ids {
-            //     pos := get_tile_pos_by_id(tile_id);
+            // Fully mined tiles
+            for tile_id: chunk.fully_mined_tile_ids {
+                pos := get_tile_pos_by_id(tile_id);
 
-            //     if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
-            //     if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
-            //     if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
-            //     if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+                if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+                if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+                if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+                if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-            //     array_add(*fully_mined_tile_ids_in_viewport, tile_id);
-            // }
+                array_add(*fully_mined_tile_ids_in_viewport, tile_id);
+            }
 
-            // // Cave tiles
-            // for tile_id: chunk.cave_tile_ids {
-            //     pos := get_tile_pos_by_id(tile_id);
+            // Cave tiles
+            for tile_id: chunk.cave_tile_ids {
+                pos := get_tile_pos_by_id(tile_id);
 
-            //     if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
-            //     if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
-            //     if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
-            //     if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+                if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+                if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+                if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+                if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-            //     array_add(*cave_tile_ids_in_viewport, tile_id);
-            // }
+                array_add(*cave_tile_ids_in_viewport, tile_id);
+            }
 
-            // // Encased tiles
-            // for tile_id: chunk.encased_tile_ids {
-            //     pos := get_tile_pos_by_id(tile_id);
+            // Encased tiles
+            for tile_id: chunk.encased_tile_ids {
+                pos := get_tile_pos_by_id(tile_id);
 
-            //     if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
-            //     if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
-            //     if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
-            //     if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+                if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+                if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+                if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+                if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-            //     array_add(*encased_tile_ids_in_viewport, tile_id);
-            // }
+                array_add(*encased_tile_ids_in_viewport, tile_id);
+            }
 
-            // // Actively mined tiles
-            // // TODO: do we need to do this?
-            // for tile_id: chunk.actively_mined_tile_ids {
-            //     pos := get_tile_pos_by_id(tile_id);
+            // Actively mined tiles
+            // TODO: do we need to do this?
+            for tile_id: chunk.actively_mined_tile_ids {
+                pos := get_tile_pos_by_id(tile_id);
 
-            //     if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
-            //     if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
-            //     if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
-            //     if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+                if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+                if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+                if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+                if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-            //     array_add(*actively_mined_tile_ids_in_viewport, tile_id);
-            // }
+                array_add(*actively_mined_tile_ids_in_viewport, tile_id);
+            }
 
-            // // Iron tiles
-            // for tile_id: chunk.iron_tile_ids {
-            //     pos := get_tile_pos_by_id(tile_id);
+            // Iron tiles
+            for tile_id: chunk.iron_tile_ids {
+                pos := get_tile_pos_by_id(tile_id);
 
-            //     if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
-            //     if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
-            //     if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
-            //     if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+                if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+                if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+                if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+                if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-            //     array_add(*iron_tile_ids_in_viewport, tile_id);
-            // }
+                array_add(*iron_tile_ids_in_viewport, tile_id);
+            }
 
-            // // Obsidian tiles
-            // for tile_id: chunk.obsidian_tile_ids {
-            //     pos := get_tile_pos_by_id(tile_id);
+            // Obsidian tiles
+            for tile_id: chunk.obsidian_tile_ids {
+                pos := get_tile_pos_by_id(tile_id);
 
-            //     if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
-            //     if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
-            //     if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
-            //     if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+                if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+                if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+                if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+                if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-            //     array_add(*obsidian_tile_ids_in_viewport, tile_id);
-            // }
+                array_add(*obsidian_tile_ids_in_viewport, tile_id);
+            }
 
             // Wall tiles
-            // for tile_id: chunk.wall_tile_ids {
-            //     pos := get_tile_pos_by_id(tile_id);
+            for tile_id: chunk.wall_tile_ids {
+                pos := get_tile_pos_by_id(tile_id);
 
-            //     if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
-            //     if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
-            //     if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
-            //     if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+                if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+                if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+                if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+                if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-            //     array_add(*wall_tile_ids_in_viewport, tile_id);
-            // }
+                array_add(*wall_tile_ids_in_viewport, tile_id);
+            }
 
-            // // Water still tiles
-            // for tile_id: chunk.water_still_tile_ids {
-            //     pos := get_tile_pos_by_id(tile_id);
+            // Water still tiles
+            for tile_id: chunk.water_still_tile_ids {
+                pos := get_tile_pos_by_id(tile_id);
 
-            //     if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
-            //     if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
-            //     if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
-            //     if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+                if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+                if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+                if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+                if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-            //     array_add(*water_still_tile_ids_in_viewport, tile_id);
-            // }
+                array_add(*water_still_tile_ids_in_viewport, tile_id);
+            }
 
-            // // Water flowing tiles
-            // for tile_id: chunk.water_flowing_tile_ids {
-            //     pos := get_tile_pos_by_id(tile_id);
+            // Water flowing tiles
+            for tile_id: chunk.water_flowing_tile_ids {
+                pos := get_tile_pos_by_id(tile_id);
 
-            //     if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
-            //     if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
-            //     if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
-            //     if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+                if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+                if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+                if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+                if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-            //     array_add(*water_flowing_tile_ids_in_viewport, tile_id);
-            // }
+                array_add(*water_flowing_tile_ids_in_viewport, tile_id);
+            }
 
-            // // Lava still tiles
-            // for tile_id: chunk.lava_still_tile_ids {
-            //     pos := get_tile_pos_by_id(tile_id);
+            // Lava still tiles
+            for tile_id: chunk.lava_still_tile_ids {
+                pos := get_tile_pos_by_id(tile_id);
 
-            //     if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
-            //     if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
-            //     if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
-            //     if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+                if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+                if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+                if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+                if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-            //     array_add(*lava_still_tile_ids_in_viewport, tile_id);
-            // }
+                array_add(*lava_still_tile_ids_in_viewport, tile_id);
+            }
 
-            // // Lava flowing tiles
-            // for tile_id: chunk.lava_flowing_tile_ids {
-            //     pos := get_tile_pos_by_id(tile_id);
+            // Lava flowing tiles
+            for tile_id: chunk.lava_flowing_tile_ids {
+                pos := get_tile_pos_by_id(tile_id);
 
-            //     if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
-            //     if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
-            //     if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
-            //     if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+                if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+                if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+                if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+                if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-            //     array_add(*lava_flowing_tile_ids_in_viewport, tile_id);
-            // }
+                array_add(*lava_flowing_tile_ids_in_viewport, tile_id);
+            }
 
-            // // Hole tiles
-            // for tile_id: chunk.hole_tile_ids {
-            //     pos := get_tile_pos_by_id(tile_id);
+            // Hole tiles
+            for tile_id: chunk.hole_tile_ids {
+                pos := get_tile_pos_by_id(tile_id);
 
-            //     if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
-            //     if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
-            //     if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
-            //     if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+                if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+                if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+                if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+                if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-            //     array_add(*hole_tile_ids_in_viewport, tile_id);
-            // }
+                array_add(*hole_tile_ids_in_viewport, tile_id);
+            }
 
-            // // Bases
-            // for base_id: chunk.base_ids {
-            //     base := bases[base_id];
+            // Bases
+            for base_id: chunk.base_ids {
+                base := bases[base_id];
 
-            //     if base.pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
-            //     if base.pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
-            //     if base.pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
-            //     if base.pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+                if base.pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+                if base.pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+                if base.pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+                if base.pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-            //     array_add(*bases_in_viewport, base);
-            // }
+                array_add(*bases_in_viewport, base);
+            }
 
-            // // Dwarves
+            // TODO
+            // Dwarves
             // for dwarf_id: chunk.dwarf_ids {
             //     found, dwarf_index := table_find(*dwarf_id_to_index, dwarf_id);
             //     assert(found);
@@ -4022,99 +4008,99 @@ derive_entities_in_viewport :: (camera: Camera2D) {
     }
 
     // Derive viewable dwarves
-    // {
-    //     for dwarf: dwarves {
-    //         pos := dwarf.pos;
+    {
+        for dwarf: dwarves {
+            pos := dwarf.pos;
 
-    //         if pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x continue;
-    //         if pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x continue;
+            if pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x continue;
+            if pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x continue;
             
-    //         if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y continue;
-    //         if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+            if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y continue;
+            if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-    //         array_add(*dwarves_in_viewport, dwarf);
-    //     }
-    // }
+            array_add(*dwarves_in_viewport, dwarf);
+        }
+    }
 
-    // // Derive viewable goblins
-    // {
-    //     for goblin: goblins {
-    //         pos := goblin.pos;
+    // Derive viewable goblins
+    {
+        for goblin: goblins {
+            pos := goblin.pos;
 
-    //         if pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x continue;
-    //         if pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x continue;
+            if pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x continue;
+            if pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x continue;
             
-    //         if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y continue;
-    //         if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+            if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y continue;
+            if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-    //         array_add(*goblins_in_viewport, goblin);
-    //     }
-    // }
+            array_add(*goblins_in_viewport, goblin);
+        }
+    }
 
-    // // Derive viewable dynamite
-    // {
-    //     for dynamite_tile_id: tiles_with_dynamite_ids {
-    //         pos := get_tile_pos_by_id(dynamite_tile_id);
+    // Derive viewable dynamite
+    {
+        for dynamite_tile_id: tiles_with_dynamite_ids {
+            pos := get_tile_pos_by_id(dynamite_tile_id);
 
-    //         if pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x continue;
-    //         if pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x continue;
+            if pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x continue;
+            if pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x continue;
             
-    //         if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y continue;
-    //         if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+            if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y continue;
+            if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-    //         array_add(*tiles_with_dynamite_ids_in_viewport, dynamite_tile_id);
-    //     }
-    // }
+            array_add(*tiles_with_dynamite_ids_in_viewport, dynamite_tile_id);
+        }
+    }
 
-    // // Derive viewable treasure
-    // {
-    //     for treasure_tile_id: tiles_with_treasure_ids {
-    //         pos := get_tile_pos_by_id(treasure_tile_id);
+    // Derive viewable treasure
+    {
+        for treasure_tile_id: tiles_with_treasure_ids {
+            pos := get_tile_pos_by_id(treasure_tile_id);
 
-    //         if pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x continue;
-    //         if pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x continue;
+            if pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x continue;
+            if pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x continue;
             
-    //         if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y continue;
-    //         if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+            if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y continue;
+            if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-    //         array_add(*tiles_with_treasure_ids_in_viewport, treasure_tile_id);
-    //     }
-    // }
+            array_add(*tiles_with_treasure_ids_in_viewport, treasure_tile_id);
+        }
+    }
 
-    // // Derive viewable paths
-    // {
-    //     for path: paths {
-    //         start_tile_pos  := get_tile_pos_by_id(path.start_tile_id);
-    //         middle_tile_pos := get_tile_pos_by_id(path.middle_tile_id);
-    //         end_tile_pos    := get_tile_pos_by_id(path.end_tile_id);
+    // Derive viewable paths
+    {
+        for path: paths {
+            start_tile_pos  := get_tile_pos_by_id(path.start_tile_id);
+            middle_tile_pos := get_tile_pos_by_id(path.middle_tile_id);
+            end_tile_pos    := get_tile_pos_by_id(path.end_tile_id);
 
-    //         if (
-    //             start_tile_pos.x  + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x &&
-    //             middle_tile_pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x &&
-    //             end_tile_pos.x    + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x
-    //         ) continue;
+            if (
+                start_tile_pos.x  + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x &&
+                middle_tile_pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x &&
+                end_tile_pos.x    + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x
+            ) continue;
 
-    //         if (
-    //             start_tile_pos.x  - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x &&
-    //             middle_tile_pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x &&
-    //             end_tile_pos.x    - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x
-    //         ) continue;
+            if (
+                start_tile_pos.x  - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x &&
+                middle_tile_pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x &&
+                end_tile_pos.x    - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x
+            ) continue;
 
-    //         if (
-    //             start_tile_pos.y  - TILEMAP_GENERAL_WORLD_WIDTH > window_end.y &&
-    //             middle_tile_pos.y - TILEMAP_GENERAL_WORLD_WIDTH > window_end.y &&
-    //             end_tile_pos.y    - TILEMAP_GENERAL_WORLD_WIDTH > window_end.y
-    //         ) continue;
+            if (
+                start_tile_pos.y  - TILEMAP_GENERAL_WORLD_WIDTH > window_end.y &&
+                middle_tile_pos.y - TILEMAP_GENERAL_WORLD_WIDTH > window_end.y &&
+                end_tile_pos.y    - TILEMAP_GENERAL_WORLD_WIDTH > window_end.y
+            ) continue;
                 
-    //         if (
-    //             start_tile_pos.y  + TILEMAP_GENERAL_WORLD_WIDTH < window_start.y &&
-    //             middle_tile_pos.y + TILEMAP_GENERAL_WORLD_WIDTH < window_start.y &&
-    //             end_tile_pos.y    + TILEMAP_GENERAL_WORLD_WIDTH < window_start.y
-    //         ) continue;
+            if (
+                start_tile_pos.y  + TILEMAP_GENERAL_WORLD_WIDTH < window_start.y &&
+                middle_tile_pos.y + TILEMAP_GENERAL_WORLD_WIDTH < window_start.y &&
+                end_tile_pos.y    + TILEMAP_GENERAL_WORLD_WIDTH < window_start.y
+            ) continue;
 
-    //         array_add(*paths_in_viewport, path);
-    //     }
-    // }
+            array_add(*paths_in_viewport, path);
+        }
+    }
 }
 
 reveal_cave_if_necessary :: (tile_id: s32, grant_points: bool, game_state: *GameState) -> revealed_cave: bool, cave_type: CaveType {

@@ -1,6 +1,10 @@
 # In progress
 
-- investigate insane memory usage
+- water does not destroy dynamite
+    - condition: reproducible on 18dc4f3
+    - cause:
+    - correction:
+    - confirmation:
 
 # Bugs
 
@@ -14,22 +18,13 @@
     - cause:
     - correction:
     - confirmation:
-- water does not destroy dynamite
-    - condition: reproducible on 18dc4f3
-    - cause:
-    - correction:
-    - confirmation:
-- water eats through walls
-    - condition: reproducible on edea4e6
-    - cause:
-    - correction:
-    - confirmation:
 
 # Core
 
 - options menu
     - apply changes
     - restore defaults
+    - persist preferences
 - main menu
 - HUD
 - losing
