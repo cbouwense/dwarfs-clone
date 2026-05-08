@@ -1,10 +1,6 @@
 # In progress
 
-- water does not destroy dynamite
-    - condition: reproducible on 18dc4f3
-    - cause:
-    - correction:
-    - confirmation:
+- disable camera controls while paused
 
 # Bugs
 
@@ -37,12 +33,11 @@
 - bases cannot be placed down on caves
 - dwarves and goblins should not pass through each other
 - mined tile sprites
-- disable camera controls while paused
 - mouse icon for what mode you're in (wall, dynamite, etc)
 
 # Performance
 
-- underclock cpu
+
 
 # Nitpicks
 

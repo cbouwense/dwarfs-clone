@@ -1674,6 +1674,7 @@ main :: () {
                     current_water_flowing_tile_ids := array_view(water_flowing_tile_ids, 0);
                     for current_water_flowing_tile_ids {
                         kill_any_dwarves_touching_tile_id(it);
+                        kill_any_dynamite_touching_tile_id(it);
 
                         if should_spread_this_frame {
                             try_to_set_cardinal_neighbors_as_flowing_tile_type(it, .WATER_FLOWING, *game_state);
@@ -1690,7 +1691,10 @@ main :: () {
                 // Update water still
                 UPDATE_WATER_STILL :: true;
                 #if UPDATE_WATER_STILL {
-                    for water_still_tile_ids kill_any_dwarves_touching_tile_id(it);
+                    for water_still_tile_ids {
+                        kill_any_dwarves_touching_tile_id(it);
+                        kill_any_dynamite_touching_tile_id(it);
+                    }
                 }
 
                 // Update lava flowing
@@ -1709,6 +1713,7 @@ main :: () {
                     current_lava_flowing_tile_ids := array_view(lava_flowing_tile_ids, 0);
                     for current_lava_flowing_tile_ids {
                         kill_any_dwarves_touching_tile_id(it);
+                        kill_any_dynamite_touching_tile_id(it);
 
                         if should_spread_water_this_frame {
                             try_to_set_cardinal_neighbors_as_flowing_tile_type(it, .LAVA_FLOWING, *game_state);
@@ -1725,7 +1730,10 @@ main :: () {
                 // Update lava still
                 UPDATE_LAVA_STILL :: true;
                 #if UPDATE_LAVA_STILL {
-                    for lava_still_tile_ids kill_any_dwarves_touching_tile_id(it);
+                    for lava_still_tile_ids {
+                        kill_any_dwarves_touching_tile_id(it);
+                        kill_any_dynamite_touching_tile_id(it);
+                    }
                 }
             }
         
@@ -2559,6 +2567,18 @@ kill_any_dwarves_touching_tile_id :: (tile_id: s32) {
     }
 }
 
+kill_any_dynamite_touching_tile_id :: (tile_id: s32) {
+    kill_pos  := get_tile_pos_by_id(tile_id);
+    kill_rect := Rectangle.{ kill_pos.x, kill_pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
+    for dynamite_tile_id, dynamite_index: tiles_with_dynamite_ids {
+        dynamite_pos := get_tile_pos_by_id(dynamite_tile_id);
+        dynamite_rect := Rectangle.{ dynamite_pos.x, dynamite_pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
+        if CheckCollisionRecs(dynamite_rect, kill_rect) {
+            array_unordered_remove_by_value(*tiles_with_dynamite_ids, tile_id);
+        }
+    }
+}
+
 kill_dwarf_by_index :: (dwarf_index: s64) {
     dwarf_id_being_swapped := dwarves[dwarves.count - 1].id;
     dwarf_id_being_killed  := dwarves[dwarf_index].id;
@@ -2567,21 +2587,6 @@ kill_dwarf_by_index :: (dwarf_index: s64) {
         table_set(*dwarf_id_to_index, dwarf_id_being_swapped, dwarf_index);
     }
     table_remove(*dwarf_id_to_index, dwarf_id_being_killed);
-
-    // TODO: I kinda think we need something similar to derive_entities_in_viewport, but for chunk membership
-    // dwarf         := dwarves[dwarf_index];
-    // dwarf_center  := get_rect_center(get_world_rect_from_pos(dwarf.pos));
-    // dwarf_tile_id := get_tile_id_by_pos(dwarf_center);
-    // chunk         := find_or_create_chunk_by_tile_id(dwarf_tile_id);
-
-    // found := false;
-    // for chunk.dwarf_ids {
-    //     if it == dwarf.id {
-    //         found = true;
-    //         array_unordered_remove_by_index(*chunk.dwarf_ids, it_index);
-    //     }
-    // }
-    // assert(found);
 
     array_unordered_remove_by_index(*dwarves, dwarf_index);
 }
@@ -3095,7 +3100,7 @@ try_to_set_cardinal_neighbors_as_flowing_tile_type :: (tile_id: s32, as_type: Ti
         // If the tile is a wall and you are lava, damage it a bit.
         tile_is_wall := table_contains(*wall_tile_ids_set, neighbor_id);
         as_lava := as_type == .LAVA_STILL || as_type == .LAVA_FLOWING;
-        
+
         if tile_is_wall && as_lava {
             found, current_health := table_find(*actively_mined_tile_ids_to_health_table, neighbor_id);
             // If we don't see the wall in the actively mined tile list, then it's full health
