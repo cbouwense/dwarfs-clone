@@ -90,27 +90,36 @@ GOLD_COST_WALL      :: 50;
 // Metagame state
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-Menu :: enum {
-    NONE;
-    PAUSE;
+MetagameState :: enum {
+    RUNNING;
+    PAUSED;
+    GAME_OVER;
+}
+
+PauseState :: enum {
+    MENU;
     OPTIONS;
-    // TODO: MAIN?
 }
 
-MetagameState :: struct {
+GameOverState :: enum {
+    MENU;
+    LOOK_AROUND;
+}
+
+Metagame :: struct {
+    state            : MetagameState;
     should_quit_game : bool;
-    paused           : bool;
     debug_mode       : bool;
-    menu_active      : Menu;
-    // control_slot_being_rebound : 
+    pause_state      : PauseState;
+    game_over_state  : GameOverState;
 }
 
-metagame_state := MetagameState.{
+metagame := Metagame.{
+    state            = .RUNNING,
     should_quit_game = false,
-    paused           = false,
     debug_mode       = false,
-    menu_active      = .NONE,
-    // control_slot_being_rebound = 
+    pause_state      = .MENU,
+    game_over_state  = .MENU,
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -290,6 +299,7 @@ Moveable :: struct {
 Base :: struct {
     pos : Vector2;
     spawn_dwarf_cooldown_ms : s32;
+    is_home_base : bool;
 }
 
 Tile :: struct {
@@ -519,7 +529,7 @@ main :: () {
         controls.drag_cam.binds[1] = Bind.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_MIDDLE };
         
         controls.move_camera_up.name = "Move camera up";
-        controls.move_camera_up.binds[0]           = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_UP };
+        controls.move_camera_up.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_UP };
         
         controls.move_camera_down.name = "Move camera down";
         controls.move_camera_down.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_DOWN };
@@ -532,8 +542,6 @@ main :: () {
         
         controls.select_as_remove_path.name = "Remove path mode";
         controls.select_as_remove_path.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_R };
-
-        // control_being_rebound = 
     }
 
     // Initialize game
@@ -645,8 +653,8 @@ main :: () {
     tile_ids_to_goblins: Table(s32, Goblin);
     tile_ids_to_goblins.allocator = temp;
 
-    while !metagame_state.should_quit_game {
-        defer metagame_state.should_quit_game = metagame_state.should_quit_game || WindowShouldClose();
+    while !metagame.should_quit_game {
+        defer metagame.should_quit_game = metagame.should_quit_game || WindowShouldClose();
 
         table_reset(*tile_ids_to_dwarfs);
         table_reset(*tile_ids_to_goblins);
@@ -676,41 +684,48 @@ main :: () {
         // Input
         //
         {
-            // print_vars(controls.add_base_mode);
-
+            // TODO: codify metagame controls/
+            //
             // Metagame controls
             if IsKeyPressed(.KEY_ESCAPE) {
-                if metagame_state.paused {
-                    if #complete metagame_state.menu_active == {
-                        case .PAUSE; unpause_game();
-                        case .OPTIONS;
-                            // TODO: do this somewhat intelligently
-                            //
-                            // Set any binds currently being set to not being set
-                            for *controls.select.binds it.is_being_rebound = false;
-                            for *controls.add_base_mode.binds it.is_being_rebound = false;
-                            for *controls.add_iron.binds it.is_being_rebound = false;
-                            for *controls.select_as_place_dwarf.binds it.is_being_rebound = false;
-                            for *controls.select_as_place_dynamite.binds it.is_being_rebound = false;
-                            for *controls.select_as_place_goblin.binds it.is_being_rebound = false;
-                            for *controls.select_as_place_obsidian.binds it.is_being_rebound = false;
-                            for *controls.select_as_place_wall.binds it.is_being_rebound = false;
-                            for *controls.drag_as_create_path.binds it.is_being_rebound = false;
-                            for *controls.drag_cam.binds it.is_being_rebound = false;
-                            for *controls.move_camera_up.binds it.is_being_rebound = false;
-                            for *controls.move_camera_down.binds it.is_being_rebound = false;
-                            for *controls.move_camera_left.binds it.is_being_rebound = false;
-                            for *controls.move_camera_right.binds it.is_being_rebound = false;
-                            for *controls.select_as_remove_path.binds it.is_being_rebound = false;
+                if #complete metagame.state == {
+                    case .RUNNING;
+                        metagame.state = .PAUSED;
+                    case .PAUSED;
+                        if #complete metagame.pause_state == {
+                            case .MENU;
+                                metagame.state = .RUNNING;
+                            case .OPTIONS;
+                                // TODO: do this somewhat intelligently
+                                //
+                                // Set any binds currently being set to not being set
+                                for *controls.select.binds                   it.is_being_rebound = false;
+                                for *controls.add_base_mode.binds            it.is_being_rebound = false;
+                                for *controls.add_iron.binds                 it.is_being_rebound = false;
+                                for *controls.select_as_place_dwarf.binds    it.is_being_rebound = false;
+                                for *controls.select_as_place_dynamite.binds it.is_being_rebound = false;
+                                for *controls.select_as_place_goblin.binds   it.is_being_rebound = false;
+                                for *controls.select_as_place_obsidian.binds it.is_being_rebound = false;
+                                for *controls.select_as_place_wall.binds     it.is_being_rebound = false;
+                                for *controls.drag_as_create_path.binds      it.is_being_rebound = false;
+                                for *controls.drag_cam.binds                 it.is_being_rebound = false;
+                                for *controls.move_camera_up.binds           it.is_being_rebound = false;
+                                for *controls.move_camera_down.binds         it.is_being_rebound = false;
+                                for *controls.move_camera_left.binds         it.is_being_rebound = false;
+                                for *controls.move_camera_right.binds        it.is_being_rebound = false;
+                                for *controls.select_as_remove_path.binds    it.is_being_rebound = false;
 
-                            metagame_state.menu_active = .PAUSE;
-                        case .NONE; unpause_game();
-                    }
-                } else {
-                    pause_game();
+                                metagame.pause_state = .MENU;
+                        }
+                    case .GAME_OVER;
+                        if #complete metagame.game_over_state == {
+                            case .MENU; // Pressing escape does nothing in the game over menu
+                            case .LOOK_AROUND; metagame.game_over_state = .MENU;
+                        }
                 }
             }
-            if IsKeyPressed(.KEY_G) metagame_state.debug_mode = !metagame_state.debug_mode;
+
+            if IsKeyPressed(.KEY_G) metagame.debug_mode = !metagame.debug_mode;
 
             // Controls from last frame
             {
@@ -799,7 +814,8 @@ main :: () {
                         mouse_drag_began_at_pos = mouse_pos_in_world;
                     }
 
-                    if drag_cam_down {
+                    can_move_camera := metagame.debug_mode || metagame.state == .RUNNING || (metagame.state == .GAME_OVER && metagame.game_over_state == .LOOK_AROUND);
+                    if drag_cam_down && can_move_camera {
                         world_delta := Vector2Subtract(mouse_drag_began_at_pos, mouse_pos_in_world);
                         
                         // Apply that difference to the camera target.
@@ -829,12 +845,12 @@ main :: () {
             }
 
             // Update pausable things
-            if !metagame_state.paused {
+            if metagame.state == .RUNNING {
                 // Update user action
-                {        
+                {
                     if select_as_place_obsidian {
                         if select_is_held_down {
-                            if metagame_state.debug_mode || game_state.gold >= GOLD_COST_OBSIDIAN {
+                            if metagame.debug_mode || game_state.gold >= GOLD_COST_OBSIDIAN {
                                 // Try to turn the selected tile into obsidian
                                 tile_id := get_tile_id_by_pos(mouse_pos_in_world);
 
@@ -864,14 +880,14 @@ main :: () {
                                     handle_encasement(tile_id, *persistent_encasing_obsidian_tile_ids_set, *game_state);
 
                                     // Debit the gold cost.
-                                    if !metagame_state.debug_mode game_state.gold -= GOLD_COST_OBSIDIAN;
+                                    if !metagame.debug_mode game_state.gold -= GOLD_COST_OBSIDIAN;
                                 }
                             }
                         }
                     }
                     else if select_as_place_wall {
                         if select_is_held_down {
-                            if metagame_state.debug_mode || game_state.gold >= GOLD_COST_WALL {
+                            if metagame.debug_mode || game_state.gold >= GOLD_COST_WALL {
                                 // Try to turn the selected tile into a wall
                                 tile_id := get_tile_id_by_pos(mouse_pos_in_world);
                                 tile_is_fully_mined := table_contains(*fully_mined_tile_ids_set, tile_id);
@@ -881,14 +897,14 @@ main :: () {
                                     set_tile_as_type(tile_id, .WALL, false, *game_state);
 
                                     // Debit the gold cost.
-                                    if !metagame_state.debug_mode game_state.gold -= GOLD_COST_WALL;
+                                    if !metagame.debug_mode game_state.gold -= GOLD_COST_WALL;
                                 }
                             }
                         }
                     }
                     else if select_as_place_dwarf {
                         if select_is_pressed_once {
-                            if metagame_state.debug_mode {
+                            if metagame.debug_mode {
                                 tile_id := get_tile_id_by_pos(mouse_pos_in_world);
                                 create_dwarf(get_tile_pos_by_id(tile_id));
                             }
@@ -896,7 +912,7 @@ main :: () {
                     }
                     else if select_as_place_dynamite {
                         if select_is_pressed_once {
-                            if metagame_state.debug_mode || game_state.gold >= GOLD_COST_DYNAMITE {
+                            if metagame.debug_mode || game_state.gold >= GOLD_COST_DYNAMITE {
                                 // Try to add dynamite to the selected tile
                                 tile_id := get_tile_id_by_pos(mouse_pos_in_world);
 
@@ -908,7 +924,7 @@ main :: () {
                                     array_add(*tiles_with_dynamite_ids, tile_id);
 
                                     // Debit the gold cost.
-                                    if !metagame_state.debug_mode game_state.gold -= GOLD_COST_DYNAMITE;
+                                    if !metagame.debug_mode game_state.gold -= GOLD_COST_DYNAMITE;
                                 }
                             }
                         }
@@ -967,7 +983,7 @@ main :: () {
                             // Draw out the path that is currently being traced, if it is more than 1 tile long.
                             potential_path_being_traced := get_path(mouse_pos_when_path_creation_started, mouse_pos_in_world);
 
-                            if !metagame_state.debug_mode {
+                            if !metagame.debug_mode {
                                 start_pos  := get_tile_pos_by_id(potential_path_being_traced.start_tile_id);
                                 middle_pos := get_tile_pos_by_id(potential_path_being_traced.middle_tile_id);
                                 end_pos    := get_tile_pos_by_id(potential_path_being_traced.end_tile_id);
@@ -1014,7 +1030,7 @@ main :: () {
                             tile_ids_on_last_leg  := get_tile_ids_along_path(middle_pos, end_pos);
                             tile_id_count_on_path := tile_ids_on_first_leg.count + tile_ids_on_last_leg.count;
 
-                            if !metagame_state.debug_mode game_state.gold -= tile_id_count_on_path * GOLD_COST_PATH_STEP;
+                            if !metagame.debug_mode game_state.gold -= tile_id_count_on_path * GOLD_COST_PATH_STEP;
 
                             // TODO: do we even need to do this? I feel like we could just set it to moving and it would handle itself.
                             if game_state.selected_dwarf_id > 0 {
@@ -1370,7 +1386,7 @@ main :: () {
                                             // Reset cooldown
                                             dwarf.mining_cooldown_ms = DWARF_MINE_COOLDOWN_MS;
                                         } else {
-                                            if metagame_state.debug_mode print("INFO: Dwarf was mining tile % but suddenly it was removed from the table of actively mined tiles.\n", dwarf.tile_id_mining);
+                                            if metagame.debug_mode print("INFO: Dwarf was mining tile % but suddenly it was removed from the table of actively mined tiles.\n", dwarf.tile_id_mining);
                                             // It's possible for the tile the dwarf is mining to suddenly be changed, like into obsidian.
                                             // In this case, the dwarf should abandon the idea of mining its current tile.
                                             array_reset(*(dwarf.tile_ids_on_path));
@@ -1491,7 +1507,7 @@ main :: () {
 
                             case .MOVING;
                                 assert_soft(goblin.tile_ids_on_path.count > 0, "Goblin % was moving somewhere but has no target", goblin.id);
-                                if !metagame_state.paused {
+                                if metagame.state == .RUNNING {
                                     target_tile_id  := goblin.tile_ids_on_path[0];
                                     target_tile_pos := get_tile_pos_by_id(target_tile_id);
 
@@ -1673,6 +1689,7 @@ main :: () {
                     // and can cause self referential problems when looping on the actual state.
                     current_water_flowing_tile_ids := array_view(water_flowing_tile_ids, 0);
                     for current_water_flowing_tile_ids {
+                        game_over_if_touching_home_base(it);
                         kill_any_dwarves_touching_tile_id(it);
                         kill_any_dynamite_touching_tile_id(it);
 
@@ -1692,6 +1709,7 @@ main :: () {
                 UPDATE_WATER_STILL :: true;
                 #if UPDATE_WATER_STILL {
                     for water_still_tile_ids {
+                        game_over_if_touching_home_base(it);
                         kill_any_dwarves_touching_tile_id(it);
                         kill_any_dynamite_touching_tile_id(it);
                     }
@@ -1712,6 +1730,7 @@ main :: () {
                     // and can cause self referential problems when looping on the actual state.
                     current_lava_flowing_tile_ids := array_view(lava_flowing_tile_ids, 0);
                     for current_lava_flowing_tile_ids {
+                        game_over_if_touching_home_base(it);
                         kill_any_dwarves_touching_tile_id(it);
                         kill_any_dynamite_touching_tile_id(it);
 
@@ -1731,6 +1750,7 @@ main :: () {
                 UPDATE_LAVA_STILL :: true;
                 #if UPDATE_LAVA_STILL {
                     for lava_still_tile_ids {
+                        game_over_if_touching_home_base(it);
                         kill_any_dwarves_touching_tile_id(it);
                         kill_any_dynamite_touching_tile_id(it);
                     }
@@ -1782,7 +1802,7 @@ main :: () {
                     for fully_mined_tile_ids_in_viewport {
                         found, tile_column := table_find(*fully_mined_tile_ids_set, it);
                         if !found {
-                            metagame_state.paused = true;
+                            metagame.state == .PAUSED;
                             print("tile % had no associated tilemap column", it);
                         }
                         // LOD
@@ -1873,7 +1893,7 @@ main :: () {
                         );
                     }
 
-                    if !metagame_state.debug_mode {
+                    if !metagame.debug_mode {
                         for encased_tile_ids_in_viewport {
                             DrawRectangleV(
                                 get_tile_pos_by_id(it),
@@ -1883,7 +1903,7 @@ main :: () {
                         }
                     }
 
-                    if metagame_state.debug_mode {
+                    if metagame.debug_mode {
                         for persistent_encasing_obsidian_tile_ids_set {
                             DrawRectangleV(
                                 get_tile_pos_by_id(it_index),
@@ -1920,7 +1940,7 @@ main :: () {
                 {
                     hovered_tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
                     DrawRectangleRec(hovered_tile_rect, TRANSPARENT_WHITE);
-                    if metagame_state.debug_mode {
+                    if metagame.debug_mode {
                         found_tile, tile_id := find_tile_id_by_pos(get_rect_pos(hovered_tile_rect));
                         if found_tile {
                             DrawText(tprint("%\0", tile_id).data, xx hovered_tile_rect.x, xx hovered_tile_rect.y, 12, WHITE);
@@ -1995,12 +2015,14 @@ main :: () {
 
             // Draw UI
             {
+                print_vars(metagame);
+
                 screen_width  := GetScreenWidth();
                 screen_height := GetScreenHeight();
 
                 debug_text_y : s32 = 10;
                 INCREMENT_Y :: 20;
-                if metagame_state.debug_mode {
+                if metagame.debug_mode {
                     DrawFPS(10, read_then_increment(*debug_text_y, INCREMENT_Y));
                     DrawText(tprint("dwarf count: %\0", dwarves.count).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 12, WHITE);
 
@@ -2068,192 +2090,274 @@ main :: () {
                     }
                 }
 
-                if metagame_state.paused {
-                    PAUSED_TEXT :: "PAUSED";
-                    PAUSED_FONT_SIZE :: 56;
-                    DrawText(PAUSED_TEXT, xx (GetScreenWidth() * 0.5 - MeasureText(PAUSED_TEXT, PAUSED_FONT_SIZE) * 0.5), 20, PAUSED_FONT_SIZE, WHITE);
+                if #complete metagame.state == {
+                    case .RUNNING; // no op
 
-                    if #complete metagame_state.menu_active == {
-                        case .PAUSE;
-                            // Button shared sizing stuff
-                            pause_menu_button_width  := screen_width  * 0.15;
-                            pause_menu_button_height := screen_height * 0.10;
+                    case .PAUSED;
+                        PAUSED_TEXT :: "PAUSED";
+                        PAUSED_FONT_SIZE :: 56;
+                        DrawText(PAUSED_TEXT, xx (GetScreenWidth() * 0.5 - MeasureText(PAUSED_TEXT, PAUSED_FONT_SIZE) * 0.5), 20, PAUSED_FONT_SIZE, WHITE);
 
-                            pause_menu_button_margin :: 20;
-                            pause_menu_button_gap    :: 10;
+                        if #complete metagame.pause_state == {
+                            case .MENU;
+                                // Button shared sizing stuff
+                                pause_menu_button_width  := screen_width  * 0.15;
+                                pause_menu_button_height := screen_height * 0.10;
 
-                            // TODO: would be cool to generate this constant at compile time somehow
-                            PAUSE_MENU_BUTTON_COUNT :: 4;
+                                pause_menu_button_margin :: 20;
+                                pause_menu_button_gap    :: 10;
 
-                            get_pause_button_rectangle :: (button_gap: int, pause_button_y: float, button_width: float, button_height: float) -> Rectangle {
-                                // TODO: use existing stuff here
-                                screen_width  := GetScreenWidth();
+                                // TODO: would be cool to generate this constant at compile time somehow
+                                PAUSE_MENU_BUTTON_COUNT :: 4;
 
-                                return Rectangle.{
-                                    screen_width * 0.5 - button_width * 0.5,
-                                    pause_button_y,
-                                    button_width,
-                                    button_height
-                                };
-                            }
+                                get_pause_button_rectangle :: (button_gap: int, pause_button_y: float, button_width: float, button_height: float) -> Rectangle {
+                                    // TODO: use existing stuff here
+                                    screen_width  := GetScreenWidth();
 
-                            pause_menu_button_y := screen_height * 0.5 - (PAUSE_MENU_BUTTON_COUNT * 0.5 * pause_menu_button_height) - (PAUSE_MENU_BUTTON_COUNT * 0.5 - 0.5) * pause_menu_button_gap;
-
-                            // TODO: DRY these up
-
-                            // Resume button
-                            {
-                                defer pause_menu_button_y += pause_menu_button_height + pause_menu_button_gap;
-
-                                resume_button := get_pause_button_rectangle(pause_menu_button_gap, pause_menu_button_y, pause_menu_button_width, pause_menu_button_height);
-
-                                clicked := GuiButton(resume_button, "RESUME");
-
-                                if clicked unpause_game();
-                            }
-
-                            // Options button
-                            {
-                                defer pause_menu_button_y += pause_menu_button_height + pause_menu_button_gap;
-
-                                options_button := get_pause_button_rectangle(pause_menu_button_gap, pause_menu_button_y, pause_menu_button_width, pause_menu_button_height);
-
-                                clicked := GuiButton(options_button, "OPTIONS");
-
-                                if clicked metagame_state.menu_active = .OPTIONS;
-                            }
-
-                            // Main menu button
-                            {
-                                defer pause_menu_button_y += pause_menu_button_height + pause_menu_button_gap;
-
-                                main_menu_button := get_pause_button_rectangle(pause_menu_button_gap, pause_menu_button_y, pause_menu_button_width, pause_menu_button_height);
-
-                                clicked := GuiButton(main_menu_button, "MAIN MENU");
-
-                                if clicked {
-                                    // TODO
+                                    return Rectangle.{
+                                        screen_width * 0.5 - button_width * 0.5,
+                                        pause_button_y,
+                                        button_width,
+                                        button_height
+                                    };
                                 }
-                            }
 
-                            // Quit to desktop button
-                            {
-                                defer pause_menu_button_y += pause_menu_button_height + pause_menu_button_gap;
+                                pause_menu_button_y := screen_height * 0.5 - (PAUSE_MENU_BUTTON_COUNT * 0.5 * pause_menu_button_height) - (PAUSE_MENU_BUTTON_COUNT * 0.5 - 0.5) * pause_menu_button_gap;
 
-                                quit_button := get_pause_button_rectangle(pause_menu_button_gap, pause_menu_button_y, pause_menu_button_width, pause_menu_button_height);
+                                // TODO: DRY these up
 
-                                clicked := GuiButton(quit_button, "QUIT");
+                                // Resume button
+                                {
+                                    defer pause_menu_button_y += pause_menu_button_height + pause_menu_button_gap;
 
-                                if clicked metagame_state.should_quit_game = true;
-                            }
+                                    resume_button := get_pause_button_rectangle(pause_menu_button_gap, pause_menu_button_y, pause_menu_button_width, pause_menu_button_height);
+
+                                    clicked := GuiButton(resume_button, "RESUME");
+
+                                    if clicked metagame.state = .RUNNING;
+                                }
+
+                                // Options button
+                                {
+                                    defer pause_menu_button_y += pause_menu_button_height + pause_menu_button_gap;
+
+                                    options_button := get_pause_button_rectangle(pause_menu_button_gap, pause_menu_button_y, pause_menu_button_width, pause_menu_button_height);
+
+                                    clicked := GuiButton(options_button, "OPTIONS");
+
+                                    if clicked metagame.pause_state = .OPTIONS;
+                                }
+
+                                // Main menu button
+                                {
+                                    defer pause_menu_button_y += pause_menu_button_height + pause_menu_button_gap;
+
+                                    main_menu_button := get_pause_button_rectangle(pause_menu_button_gap, pause_menu_button_y, pause_menu_button_width, pause_menu_button_height);
+
+                                    clicked := GuiButton(main_menu_button, "MAIN MENU");
+
+                                    if clicked {
+                                        // TODO
+                                    }
+                                }
+
+                                // Quit to desktop button
+                                {
+                                    defer pause_menu_button_y += pause_menu_button_height + pause_menu_button_gap;
+
+                                    quit_button := get_pause_button_rectangle(pause_menu_button_gap, pause_menu_button_y, pause_menu_button_width, pause_menu_button_height);
+
+                                    clicked := GuiButton(quit_button, "QUIT");
+
+                                    if clicked metagame.should_quit_game = true;
+                                }
+
+                            case .OPTIONS;
+                                OPTIONS_HEADER_FONT_SIZE :: 40;
                         
-                        case .OPTIONS;
-                            OPTIONS_HEADER_FONT_SIZE :: 40;
-                            
-                            ACTION_COLUMN_X     : s32 = xx (screen_width * 0);
-                            BIND_ONE_COLUMN_X   := screen_width * 0.25;
-                            BIND_TWO_COLUMN_X   := screen_width * 0.50;
-                            BIND_THREE_COLUMN_X := screen_width * 0.75;
+                                ACTION_COLUMN_X     : s32 = xx (screen_width * 0);
+                                BIND_ONE_COLUMN_X   := screen_width * 0.25;
+                                BIND_TWO_COLUMN_X   := screen_width * 0.50;
+                                BIND_THREE_COLUMN_X := screen_width * 0.75;
 
-                            OPTIONS_HEADER_Y :: 75;
+                                OPTIONS_HEADER_Y :: 75;
 
-                            // Options menu headers
-                            {
-                                DrawText("ACTION", ACTION_COLUMN_X, OPTIONS_HEADER_Y, OPTIONS_HEADER_FONT_SIZE, WHITE);
-                                DrawText("BIND ONE", xx BIND_ONE_COLUMN_X, OPTIONS_HEADER_Y, OPTIONS_HEADER_FONT_SIZE, WHITE);
-                                DrawText("BIND TWO", xx BIND_TWO_COLUMN_X, OPTIONS_HEADER_Y, OPTIONS_HEADER_FONT_SIZE, WHITE);
-                                DrawText("BIND THREE", xx BIND_THREE_COLUMN_X, OPTIONS_HEADER_Y, OPTIONS_HEADER_FONT_SIZE, WHITE);
-                            }
-
-                            // Option menu rows
-                            {
-                                OPTIONS_Y_INCREMENT :: 65;
-                                options_row_y : float32 = OPTIONS_HEADER_Y + OPTIONS_Y_INCREMENT;
-
-                                OPTIONS_ROW_FONT_SIZE : s32 : xx (OPTIONS_HEADER_FONT_SIZE * 0.75);
-                                
-                                BIND_BUTTON_WIDTH  := screen_width * 0.25;
-                                BIND_BUTTON_HEIGHT := BIND_BUTTON_WIDTH * 0.15;
-
-                                // PERF: cache these / tables
-                                bind_to_readable_name_cstr :: (bind: Bind) -> *u8 {
-                                    if bind.is_being_rebound return to_c_string("...");
-                                    if bind.value == 0 return to_c_string("<None>");
-
-                                    mouse_info    := type_info(MouseButton);
-                                    keyboard_info := type_info(KeyboardKey);
-
-                                    info := ifx bind.type == MouseButton then mouse_info else keyboard_info;
-                                    found, index := array_find(info.values, bind.value);
-                                    assert(found);
-
-                                    return to_c_string(info.names[index]);
+                                // Options menu headers
+                                {
+                                    DrawText("ACTION", ACTION_COLUMN_X, OPTIONS_HEADER_Y, OPTIONS_HEADER_FONT_SIZE, WHITE);
+                                    DrawText("BIND ONE", xx BIND_ONE_COLUMN_X, OPTIONS_HEADER_Y, OPTIONS_HEADER_FONT_SIZE, WHITE);
+                                    DrawText("BIND TWO", xx BIND_TWO_COLUMN_X, OPTIONS_HEADER_Y, OPTIONS_HEADER_FONT_SIZE, WHITE);
+                                    DrawText("BIND THREE", xx BIND_THREE_COLUMN_X, OPTIONS_HEADER_Y, OPTIONS_HEADER_FONT_SIZE, WHITE);
                                 }
 
-                                keybind_row :: (control: *Control) #expand {
-                                    DrawText(to_c_string(control.name), `ACTION_COLUMN_X, xx `options_row_y, `OPTIONS_ROW_FONT_SIZE, WHITE);
+                                // Option menu rows
+                                {
+                                    OPTIONS_Y_INCREMENT :: 65;
+                                    options_row_y : float32 = OPTIONS_HEADER_Y + OPTIONS_Y_INCREMENT;
 
-                                    bind_one_current   := bind_to_readable_name_cstr(control.binds[0]);
-                                    bind_two_current   := bind_to_readable_name_cstr(control.binds[1]);
-                                    bind_three_current := bind_to_readable_name_cstr(control.binds[2]);
+                                    OPTIONS_ROW_FONT_SIZE : s32 : xx (OPTIONS_HEADER_FONT_SIZE * 0.75);
+                                    
+                                    BIND_BUTTON_WIDTH  := screen_width * 0.25;
+                                    BIND_BUTTON_HEIGHT := BIND_BUTTON_WIDTH * 0.15;
 
-                                    bind_one_clicked   := GuiButton(Rectangle.{ `BIND_ONE_COLUMN_X,   `options_row_y, `BIND_BUTTON_WIDTH, `BIND_BUTTON_HEIGHT }, bind_one_current);
-                                    bind_two_clicked   := GuiButton(Rectangle.{ `BIND_TWO_COLUMN_X,   `options_row_y, `BIND_BUTTON_WIDTH, `BIND_BUTTON_HEIGHT }, bind_two_current);
-                                    bind_three_clicked := GuiButton(Rectangle.{ `BIND_THREE_COLUMN_X, `options_row_y, `BIND_BUTTON_WIDTH, `BIND_BUTTON_HEIGHT }, bind_three_current);
+                                    // PERF: cache these / tables
+                                    bind_to_readable_name_cstr :: (bind: Bind) -> *u8 {
+                                        if bind.is_being_rebound return to_c_string("...");
+                                        if bind.value == 0 return to_c_string("<None>");
 
-                                    if bind_one_clicked   control.binds[0].is_being_rebound = !control.binds[0].is_being_rebound;
-                                    if bind_two_clicked   control.binds[1].is_being_rebound = !control.binds[1].is_being_rebound;
-                                    if bind_three_clicked control.binds[2].is_being_rebound = !control.binds[2].is_being_rebound;  
+                                        mouse_info    := type_info(MouseButton);
+                                        keyboard_info := type_info(KeyboardKey);
 
-                                    bind_index_currently_being_rebound := -1;
-                                    if control.binds[0].is_being_rebound bind_index_currently_being_rebound = 0;
-                                    if control.binds[1].is_being_rebound bind_index_currently_being_rebound = 1;
-                                    if control.binds[2].is_being_rebound bind_index_currently_being_rebound = 2;
+                                        info := ifx bind.type == MouseButton then mouse_info else keyboard_info;
+                                        found, index := array_find(info.values, bind.value);
+                                        assert(found);
 
-                                    if bind_index_currently_being_rebound > -1 {
-                                        // NOTE: usually you have GetKeyPressed in a queue because there can be multiple keys
-                                        // pressed per frame. Here, we just take the first one and call it a day.
-                                        key_pressed := GetKeyPressed();
-                                        
-                                        if key_pressed {
-                                            control.binds[bind_index_currently_being_rebound].type  = KeyboardKey;
-                                            control.binds[bind_index_currently_being_rebound].value = key_pressed;
-                                            control.binds[bind_index_currently_being_rebound].is_being_rebound = false;
-                                        } else {
-                                            mouse_value : s32 = -1;
-                                            // Intentionally leaving out MOUSE_BUTTON_LEFT, I don't think we ever want to rebind that.
-                                            if IsMouseButtonPressed(.MOUSE_BUTTON_RIGHT)   mouse_value = 1;
-                                            if IsMouseButtonPressed(.MOUSE_BUTTON_MIDDLE)  mouse_value = 2;
-                                            if IsMouseButtonPressed(.MOUSE_BUTTON_SIDE)    mouse_value = 3;
-                                            if IsMouseButtonPressed(.MOUSE_BUTTON_EXTRA)   mouse_value = 4;
-                                            if IsMouseButtonPressed(.MOUSE_BUTTON_FORWARD) mouse_value = 5;
-                                            if IsMouseButtonPressed(.MOUSE_BUTTON_BACK)    mouse_value = 6;
-
-                                            if mouse_value > -1 {
-                                                control.binds[bind_index_currently_being_rebound].type  = MouseButton;
-                                                control.binds[bind_index_currently_being_rebound].value = mouse_value;
-                                                control.binds[bind_index_currently_being_rebound].is_being_rebound = false;
-                                            }
-                                        }
+                                        return to_c_string(info.names[index]);
                                     }
 
-                                    `options_row_y += `OPTIONS_Y_INCREMENT;
+                                    keybind_row :: (control: *Control) #expand {
+                                        DrawText(to_c_string(control.name), `ACTION_COLUMN_X, xx `options_row_y, `OPTIONS_ROW_FONT_SIZE, WHITE);
+
+                                        bind_one_current   := bind_to_readable_name_cstr(control.binds[0]);
+                                        bind_two_current   := bind_to_readable_name_cstr(control.binds[1]);
+                                        bind_three_current := bind_to_readable_name_cstr(control.binds[2]);
+
+                                        bind_one_clicked   := GuiButton(Rectangle.{ `BIND_ONE_COLUMN_X,   `options_row_y, `BIND_BUTTON_WIDTH, `BIND_BUTTON_HEIGHT }, bind_one_current);
+                                        bind_two_clicked   := GuiButton(Rectangle.{ `BIND_TWO_COLUMN_X,   `options_row_y, `BIND_BUTTON_WIDTH, `BIND_BUTTON_HEIGHT }, bind_two_current);
+                                        bind_three_clicked := GuiButton(Rectangle.{ `BIND_THREE_COLUMN_X, `options_row_y, `BIND_BUTTON_WIDTH, `BIND_BUTTON_HEIGHT }, bind_three_current);
+
+                                        if bind_one_clicked   control.binds[0].is_being_rebound = !control.binds[0].is_being_rebound;
+                                        if bind_two_clicked   control.binds[1].is_being_rebound = !control.binds[1].is_being_rebound;
+                                        if bind_three_clicked control.binds[2].is_being_rebound = !control.binds[2].is_being_rebound;  
+
+                                        bind_index_currently_being_rebound := -1;
+                                        if control.binds[0].is_being_rebound bind_index_currently_being_rebound = 0;
+                                        if control.binds[1].is_being_rebound bind_index_currently_being_rebound = 1;
+                                        if control.binds[2].is_being_rebound bind_index_currently_being_rebound = 2;
+
+                                        if bind_index_currently_being_rebound > -1 {
+                                            // NOTE: usually you have GetKeyPressed in a queue because there can be multiple keys
+                                            // pressed per frame. Here, we just take the first one and call it a day.
+                                            key_pressed := GetKeyPressed();
+                                            
+                                            if key_pressed {
+                                                control.binds[bind_index_currently_being_rebound].type  = KeyboardKey;
+                                                control.binds[bind_index_currently_being_rebound].value = key_pressed;
+                                                control.binds[bind_index_currently_being_rebound].is_being_rebound = false;
+                                            } else {
+                                                mouse_value : s32 = -1;
+                                                // Intentionally leaving out MOUSE_BUTTON_LEFT, I don't think we ever want to rebind that.
+                                                if IsMouseButtonPressed(.MOUSE_BUTTON_RIGHT)   mouse_value = 1;
+                                                if IsMouseButtonPressed(.MOUSE_BUTTON_MIDDLE)  mouse_value = 2;
+                                                if IsMouseButtonPressed(.MOUSE_BUTTON_SIDE)    mouse_value = 3;
+                                                if IsMouseButtonPressed(.MOUSE_BUTTON_EXTRA)   mouse_value = 4;
+                                                if IsMouseButtonPressed(.MOUSE_BUTTON_FORWARD) mouse_value = 5;
+                                                if IsMouseButtonPressed(.MOUSE_BUTTON_BACK)    mouse_value = 6;
+
+                                                if mouse_value > -1 {
+                                                    control.binds[bind_index_currently_being_rebound].type  = MouseButton;
+                                                    control.binds[bind_index_currently_being_rebound].value = mouse_value;
+                                                    control.binds[bind_index_currently_being_rebound].is_being_rebound = false;
+                                                }
+                                            }
+                                        }
+
+                                        `options_row_y += `OPTIONS_Y_INCREMENT;
+                                    }
+
+                                    keybind_row(*controls.add_base_mode);
+                                    keybind_row(*controls.select_as_place_dynamite);
+                                    keybind_row(*controls.select_as_place_obsidian);
+                                    keybind_row(*controls.select_as_place_wall);
+                                    keybind_row(*controls.drag_cam);
+                                    keybind_row(*controls.move_camera_up);
+                                    keybind_row(*controls.move_camera_down);
+                                    keybind_row(*controls.move_camera_left);
+                                    keybind_row(*controls.move_camera_right);
+                                    keybind_row(*controls.select_as_remove_path);
+                                }
+                        }
+
+                    case .GAME_OVER;
+                        TEXT :: "GAME OVER";
+                        FONT_SIZE :: 56;
+                        DrawText(TEXT, xx (GetScreenWidth() * 0.5 - MeasureText(TEXT, FONT_SIZE) * 0.5), 20, FONT_SIZE, WHITE);
+                        if #complete metagame.game_over_state == {
+                            case .MENU;
+                                // Button shared sizing stuff
+                                game_over_menu_button_width  := screen_width  * 0.15;
+                                game_over_menu_button_height := screen_height * 0.10;
+
+                                game_over_menu_button_margin :: 20;
+                                game_over_menu_button_gap    :: 10;
+
+                                GAME_OVER_MENU_BUTTON_COUNT :: 4;
+
+                                get_game_over_button_rectangle :: (button_gap: int, button_y: float, button_width: float, button_height: float) -> Rectangle {
+                                    // TODO: use existing stuff here
+                                    screen_width := GetScreenWidth();
+
+                                    return Rectangle.{
+                                        screen_width * 0.5 - button_width * 0.5,
+                                        button_y,
+                                        button_width,
+                                        button_height
+                                    };
                                 }
 
-                                keybind_row(*controls.add_base_mode);
-                                keybind_row(*controls.select_as_place_dynamite);
-                                keybind_row(*controls.select_as_place_obsidian);
-                                keybind_row(*controls.select_as_place_wall);
-                                keybind_row(*controls.drag_cam);
-                                keybind_row(*controls.move_camera_up);
-                                keybind_row(*controls.move_camera_down);
-                                keybind_row(*controls.move_camera_left);
-                                keybind_row(*controls.move_camera_right);
-                                keybind_row(*controls.select_as_remove_path);
-                            }
+                                game_over_menu_button_y := screen_height * 0.5 - (GAME_OVER_MENU_BUTTON_COUNT * 0.5 * game_over_menu_button_height) - (GAME_OVER_MENU_BUTTON_COUNT * 0.5 - 0.5) * game_over_menu_button_gap;
 
-                        case .NONE; // no-op
-                    }
+                                // TODO: DRY these up
+
+                                // Look around button
+                                {
+                                    defer game_over_menu_button_y += game_over_menu_button_height + game_over_menu_button_gap;
+
+                                    look_around_button := get_game_over_button_rectangle(game_over_menu_button_gap, game_over_menu_button_y, game_over_menu_button_width, game_over_menu_button_height);
+
+                                    clicked := GuiButton(look_around_button, "LOOK AROUND");
+
+                                    if clicked metagame.game_over_state = .LOOK_AROUND;
+                                }
+
+                                // Restart button
+                                {
+                                    defer game_over_menu_button_y += game_over_menu_button_height + game_over_menu_button_gap;
+
+                                    restart_button := get_game_over_button_rectangle(game_over_menu_button_gap, game_over_menu_button_y, game_over_menu_button_width, game_over_menu_button_height);
+
+                                    clicked := GuiButton(restart_button, "RESTART");
+
+                                    // TODO
+                                    //if clicked metagame_state.menu_active = .OPTIONS;
+                                }
+
+                                // Main menu button
+                                {
+                                    defer game_over_menu_button_y += game_over_menu_button_height + game_over_menu_button_gap;
+
+                                    main_menu_button := get_game_over_button_rectangle(game_over_menu_button_gap, game_over_menu_button_y, game_over_menu_button_width, game_over_menu_button_height);
+
+                                    clicked := GuiButton(main_menu_button, "MAIN MENU");
+
+                                    if clicked {
+                                        // TODO
+                                    }
+                                }
+
+                                // Quit to desktop button
+                                {
+                                    defer game_over_menu_button_y += game_over_menu_button_height + game_over_menu_button_gap;
+
+                                    quit_button := get_game_over_button_rectangle(game_over_menu_button_gap, game_over_menu_button_y, game_over_menu_button_width, game_over_menu_button_height);
+
+                                    clicked := GuiButton(quit_button, "QUIT");
+
+                                    if clicked metagame.should_quit_game = true;
+                                }
+                            
+                            case .LOOK_AROUND; // Don't render anything
+                        }       
                 }
             }
         }
@@ -2262,15 +2366,15 @@ main :: () {
 
 // Functions
 
-pause_game :: () {
-    metagame_state.paused = true;
-    metagame_state.menu_active = .PAUSE;
-}
+// pause_game :: () {
+//     metagame_state.paused = true;
+//     metagame_state.menu_active = .PAUSE;
+// }
 
-unpause_game :: () {
-    metagame_state.paused = false;
-    metagame_state.menu_active = .NONE;
-}
+// unpause_game :: () {
+//     metagame_state.paused = false;
+//     metagame_state.menu_active = .NONE;
+// }
 
 SetDwarfRandomNewTargetReturnStatus :: enum {
     DIRECTION_FOUND;
@@ -2516,6 +2620,7 @@ create_base :: (pos: Vector2, is_home_base: bool, game_state: *GameState) -> Bas
     base := Base.{
         pos = pos,
         spawn_dwarf_cooldown_ms = DWARF_SPAWN_MS,
+        is_home_base = is_home_base,
     };
 
     base_tile_id := get_tile_id_by_pos(base.pos);
@@ -2554,6 +2659,20 @@ create_base :: (pos: Vector2, is_home_base: bool, game_state: *GameState) -> Bas
     }
 
     return base;
+}
+
+game_over_if_touching_home_base :: (tile_id: s32) {
+    kill_pos  := get_tile_pos_by_id(tile_id);
+    kill_rect := Rectangle.{ kill_pos.x, kill_pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
+    // PERF: can just save home base id at start up
+    for base: bases {
+        if !base.is_home_base continue;
+
+        home_base_rect := Rectangle.{ base.pos.x, base.pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
+        if CheckCollisionRecs(home_base_rect, kill_rect) {
+            metagame.state = .GAME_OVER;
+        }
+    }
 }
 
 kill_any_dwarves_touching_tile_id :: (tile_id: s32) {

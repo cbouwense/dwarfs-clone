@@ -1,6 +1,6 @@
 # In progress
 
-- disable camera controls while paused
+- restarting
 
 # Bugs
 
@@ -17,13 +17,13 @@
 
 # Core
 
+- warriors
 - options menu
     - apply changes
     - restore defaults
     - persist preferences
 - main menu
 - HUD
-- losing
 - fullscreen and resizability
 - speed up time button
 - temporarily pause time button
@@ -37,9 +37,9 @@
 
 # Performance
 
-
-
 # Nitpicks
+
+- Dwarves should move slower by default
 
 # Miscellaneous
 
