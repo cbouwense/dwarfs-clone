@@ -544,118 +544,18 @@ main :: () {
         controls.select_as_remove_path.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_R };
     }
 
-    // Initialize game
-    game_state := GameState.{
-        hovered_dwarf_index    = 0,
-        selected_dwarf_id      = 0,
-        water_flow_cooldown_ms = WATER_FLOW_COOLDOWN_MS,
-        lava_flow_cooldown_ms  = LAVA_FLOW_COOLDOWN_MS,
-        points = 0,
-        gold   = 0,
-    };
-
-    // Initialize caves
-    GENERATE_CAVES_ENABLED :: true;
-    #if GENERATE_CAVES_ENABLED {
-        CAVE_PERLIN_NOISE_FREQUENCY :: 256; // How many rows / columns
-        CAVE_PERLIN_NOISE_AMPLITUDE :: 2;
-        CAVE_PERLIN_NOISE_OCTAVES   :: 1;
-        CAVE_PERLIN_NOISE_MAX_THRESHOLD :: 0.95;
-
-        cave_noise := perlin_noise_2d(WORLD_COLS, CAVE_PERLIN_NOISE_FREQUENCY, CAVE_PERLIN_NOISE_AMPLITUDE, CAVE_PERLIN_NOISE_OCTAVES);
-
-        for i: 0..(WORLD_COLS * WORLD_COLS)-1 {
-            normalized := (cave_noise[i] + 1.0) / 2.0;
-            // Clamp just in case floating point math slightly overshoots
-            cave_noise[i] = clamp(normalized, 0.0, 1.0);
-        }
-
-        for col: 0..WORLD_COLS-1 {
-            for row: 0..WORLD_ROWS-1 {
-                tile_id := (row * WORLD_COLS) + col + 1;
-                noise_index := row * WORLD_COLS + col;
-                tile_should_be_part_of_cave := cave_noise[noise_index] >= CAVE_PERLIN_NOISE_MAX_THRESHOLD;
-
-                if tile_should_be_part_of_cave {
-                    set_tile_as_type(xx tile_id, .CAVE, false, *game_state);
-                }
-            }
-        }
-    }
-
-    // Initialize iron
-    GENERATE_IRON_ENABLED :: true;
-    #if GENERATE_IRON_ENABLED {
-        IRON_SPAWN_CHANCE_NUMERATOR   :: 5;
-        IRON_SPAWN_CHANCE_DENOMINATOR :: 1000;
-        IRON_VEIN_SIZE_MIN :: 8;
-        IRON_VEIN_SIZE_MAX :: 15;
-
-        for col: 0..WORLD_COLS-1 {
-            for row: 0..WORLD_ROWS-1 {
-                tile_id := (row * WORLD_COLS) + col + 1;
-
-                iron_spawn_dice_roll := cast(int) random_get_within_range(IRON_SPAWN_CHANCE_NUMERATOR, IRON_SPAWN_CHANCE_DENOMINATOR);
-                if iron_spawn_dice_roll <= IRON_SPAWN_CHANCE_NUMERATOR {
-                    spawn_iron(xx tile_id, IRON_VEIN_SIZE_MIN, IRON_VEIN_SIZE_MAX, WORLD_COLS, WORLD_ROWS, *active_chunks, *iron_tile_ids_set);
-                }
-            }
-        }
-    }
-
-    // Initialize base
-    GENERATE_BASE_ENABLED :: true;
-    #if GENERATE_BASE_ENABLED {
-        home_base := create_base(
-            Vector2.{
-                WORLD_COLS * TILEMAP_GENERAL_WORLD_WIDTH  / 2,
-                WORLD_ROWS * TILEMAP_GENERAL_WORLD_HEIGHT / 2,
-            },
-            true,
-            *game_state
-        );
-    }
-
-    // Initialize dwarves
-    GENERATE_DWARVES_ENABLED :: true;
-    #if GENERATE_DWARVES_ENABLED {
-        for 1..DWARF_START_COUNT {
-            // Figure out where to spawn it based off of the home base
-            dx := TILE_DIRECTION_DELTAS[0][0];
-            dy := TILE_DIRECTION_DELTAS[0][1];
-            assert(bases.count > 0);
-            home_base    := bases[0];
-            neighbor_pos := Vector2.{ home_base.pos.x + dx, home_base.pos.y + dy };
-
-            create_dwarf(neighbor_pos);
-        }
-    }
-
-    // Initialize camera
-    camera: Camera2D;
-    #if GENERATE_BASE_ENABLED {
-        camera.target   = bases[0].pos;
-    } else {
-        camera.target   = Vector2.{
-            WORLD_COLS * TILEMAP_GENERAL_WORLD_WIDTH  / 2,
-            WORLD_ROWS * TILEMAP_GENERAL_WORLD_HEIGHT / 2,
-        };
-    }
-    camera.offset   = Vector2.{ 800, 450 };
-    camera.rotation = 0.0;
-    camera.zoom     = 1.0;
-
-    persistent_encasing_obsidian_tile_ids_set: Table(s32, Color);
-
     tile_ids_to_dwarfs: Table(s32, Dwarf);
     tile_ids_to_dwarfs.allocator = temp;
     
     tile_ids_to_goblins: Table(s32, Goblin);
     tile_ids_to_goblins.allocator = temp;
 
+    game_state, camera := initialize_game();
+
     while !metagame.should_quit_game {
         defer metagame.should_quit_game = metagame.should_quit_game || WindowShouldClose();
 
+        // TODO: can this be keep_memory?
         table_reset(*tile_ids_to_dwarfs);
         table_reset(*tile_ids_to_goblins);
         reset_temporary_storage();
@@ -877,7 +777,7 @@ main :: () {
                                     set_tile_as_type(tile_id, .OBSIDIAN, false, *game_state);
 
                                     // Encase any lava or water if we've made a full loop.
-                                    handle_encasement(tile_id, *persistent_encasing_obsidian_tile_ids_set, *game_state);
+                                    handle_encasement(tile_id, *game_state);
 
                                     // Debit the gold cost.
                                     if !metagame.debug_mode game_state.gold -= GOLD_COST_OBSIDIAN;
@@ -1578,7 +1478,7 @@ main :: () {
 
                                 // Create a hole
                                 set_tile_as_type(it, .HOLE, false, *game_state);
-                                handle_encasement(it, *persistent_encasing_obsidian_tile_ids_set, *game_state);
+                                handle_encasement(it, *game_state);
 
                                 // TODO: animation I guess
 
@@ -1902,16 +1802,6 @@ main :: () {
                             );
                         }
                     }
-
-                    if metagame.debug_mode {
-                        for persistent_encasing_obsidian_tile_ids_set {
-                            DrawRectangleV(
-                                get_tile_pos_by_id(it_index),
-                                Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
-                                it
-                            );
-                        }
-                    }
                 }
 
                 // Draw bases
@@ -2015,8 +1905,6 @@ main :: () {
 
             // Draw UI
             {
-                print_vars(metagame);
-
                 screen_width  := GetScreenWidth();
                 screen_height := GetScreenHeight();
 
@@ -2328,8 +2216,10 @@ main :: () {
 
                                     clicked := GuiButton(restart_button, "RESTART");
 
-                                    // TODO
-                                    //if clicked metagame_state.menu_active = .OPTIONS;
+                                    if clicked {
+                                        initialize_game();
+                                        metagame.state = .RUNNING;
+                                    }
                                 }
 
                                 // Main menu button
@@ -2366,15 +2256,161 @@ main :: () {
 
 // Functions
 
-// pause_game :: () {
-//     metagame_state.paused = true;
-//     metagame_state.menu_active = .PAUSE;
-// }
+reset_memory :: () {
+    table_reset(*actively_mined_tile_ids_to_health_table);
+    table_reset(*fully_mined_tile_ids_set);
+    table_reset(*cave_tile_ids_set);
+    table_reset(*encased_tile_ids_set);
+    table_reset(*iron_tile_ids_set);
 
-// unpause_game :: () {
-//     metagame_state.paused = false;
-//     metagame_state.menu_active = .NONE;
-// }
+    array_reset(*water_still_tile_ids);
+    table_reset(*water_still_tile_ids_set);
+
+    array_reset(*water_flowing_tile_ids);
+    table_reset(*water_flowing_tile_ids_set);
+
+    array_reset(*lava_still_tile_ids);
+    table_reset(*lava_still_tile_ids_set);
+
+    array_reset(*lava_flowing_tile_ids);
+    table_reset(*lava_flowing_tile_ids_set);
+
+    table_reset(*obsidian_tile_ids_set);
+
+    table_reset(*wall_tile_ids_set);
+
+    array_reset(*bases);
+
+    array_reset(*dwarves);
+    table_reset(*dwarf_id_to_index);
+    dwarf_id_counter = 0;
+
+    array_reset(*goblins);
+    table_reset(*goblin_id_to_index);
+    goblin_id_counter = 0;
+
+    array_reset(*tiles_with_dynamite_ids);
+
+    array_reset(*tiles_with_treasure_ids);
+    table_reset(*tiles_with_treasure_ids_set);
+
+    array_reset(*hole_tile_ids);
+    table_reset(*hole_tile_ids_set);
+
+    // path_being_traced : Path;
+    array_reset(*paths);
+
+    table_reset(*active_chunks);
+
+    array_reset(*edges);
+}
+
+initialize_game :: () -> game_state: GameState, camera: Camera2D {
+    reset_memory();
+
+    // Initialize game
+    game_state := GameState.{
+        hovered_dwarf_index    = 0,
+        selected_dwarf_id      = 0,
+        water_flow_cooldown_ms = WATER_FLOW_COOLDOWN_MS,
+        lava_flow_cooldown_ms  = LAVA_FLOW_COOLDOWN_MS,
+        points = 0,
+        gold   = 0,
+    };
+
+    // Initialize caves
+    GENERATE_CAVES_ENABLED :: true;
+    #if GENERATE_CAVES_ENABLED {
+        CAVE_PERLIN_NOISE_FREQUENCY :: 256; // How many rows / columns
+        CAVE_PERLIN_NOISE_AMPLITUDE :: 2;
+        CAVE_PERLIN_NOISE_OCTAVES   :: 1;
+        CAVE_PERLIN_NOISE_MAX_THRESHOLD :: 0.95;
+
+        cave_noise := perlin_noise_2d(WORLD_COLS, CAVE_PERLIN_NOISE_FREQUENCY, CAVE_PERLIN_NOISE_AMPLITUDE, CAVE_PERLIN_NOISE_OCTAVES);
+
+        for i: 0..(WORLD_COLS * WORLD_COLS)-1 {
+            normalized := (cave_noise[i] + 1.0) / 2.0;
+            // Clamp just in case floating point math slightly overshoots
+            cave_noise[i] = clamp(normalized, 0.0, 1.0);
+        }
+
+        for col: 0..WORLD_COLS-1 {
+            for row: 0..WORLD_ROWS-1 {
+                tile_id := (row * WORLD_COLS) + col + 1;
+                noise_index := row * WORLD_COLS + col;
+                tile_should_be_part_of_cave := cave_noise[noise_index] >= CAVE_PERLIN_NOISE_MAX_THRESHOLD;
+
+                if tile_should_be_part_of_cave {
+                    set_tile_as_type(xx tile_id, .CAVE, false, *game_state);
+                }
+            }
+        }
+    }
+
+    // Initialize iron
+    GENERATE_IRON_ENABLED :: true;
+    #if GENERATE_IRON_ENABLED {
+        IRON_SPAWN_CHANCE_NUMERATOR   :: 5;
+        IRON_SPAWN_CHANCE_DENOMINATOR :: 1000;
+        IRON_VEIN_SIZE_MIN :: 8;
+        IRON_VEIN_SIZE_MAX :: 15;
+
+        for col: 0..WORLD_COLS-1 {
+            for row: 0..WORLD_ROWS-1 {
+                tile_id := (row * WORLD_COLS) + col + 1;
+
+                iron_spawn_dice_roll := cast(int) random_get_within_range(IRON_SPAWN_CHANCE_NUMERATOR, IRON_SPAWN_CHANCE_DENOMINATOR);
+                if iron_spawn_dice_roll <= IRON_SPAWN_CHANCE_NUMERATOR {
+                    spawn_iron(xx tile_id, IRON_VEIN_SIZE_MIN, IRON_VEIN_SIZE_MAX, WORLD_COLS, WORLD_ROWS, *active_chunks, *iron_tile_ids_set);
+                }
+            }
+        }
+    }
+
+    // Initialize bases
+    GENERATE_BASE_ENABLED :: true;
+    #if GENERATE_BASE_ENABLED {
+        home_base := create_base(
+            Vector2.{
+                WORLD_COLS * TILEMAP_GENERAL_WORLD_WIDTH  / 2,
+                WORLD_ROWS * TILEMAP_GENERAL_WORLD_HEIGHT / 2,
+            },
+            true,
+            *game_state
+        );
+    }
+
+    // Initialize dwarves
+    GENERATE_DWARVES_ENABLED :: true;
+    #if GENERATE_DWARVES_ENABLED {
+        for 1..DWARF_START_COUNT {
+            // Figure out where to spawn it based off of the home base
+            dx := TILE_DIRECTION_DELTAS[0][0];
+            dy := TILE_DIRECTION_DELTAS[0][1];
+            assert(bases.count > 0);
+            home_base    := bases[0];
+            neighbor_pos := Vector2.{ home_base.pos.x + dx, home_base.pos.y + dy };
+
+            create_dwarf(neighbor_pos);
+        }
+    }
+
+    // Initialize camera
+    camera: Camera2D;
+    #if GENERATE_BASE_ENABLED {
+        camera.target   = bases[0].pos;
+    } else {
+        camera.target   = Vector2.{
+            WORLD_COLS * TILEMAP_GENERAL_WORLD_WIDTH  / 2,
+            WORLD_ROWS * TILEMAP_GENERAL_WORLD_HEIGHT / 2,
+        };
+    }
+    camera.offset   = Vector2.{ 800, 450 };
+    camera.rotation = 0.0;
+    camera.zoom     = 1.0;
+
+    return game_state, camera;
+}
 
 SetDwarfRandomNewTargetReturnStatus :: enum {
     DIRECTION_FOUND;
@@ -2861,9 +2897,9 @@ get_neighbor_tile_ids_of_type :: (tile_id: s32, tile_type: TileType) -> [..] s32
     return neighbor_tile_ids;
 }
 
-handle_encasement :: (tile_id: s32, persistent_encasing_obsidian_tile_ids_set: *Table, game_state: *GameState) {
+handle_encasement :: (tile_id: s32, game_state: *GameState) {
     encasing_obsidian_tile_ids_set: Table(s32, s32);
-    did_encase := check_encasement(tile_id, *encasing_obsidian_tile_ids_set, persistent_encasing_obsidian_tile_ids_set);
+    did_encase := check_encasement(tile_id, *encasing_obsidian_tile_ids_set);
 
     // If we did encase a section, find the inside portion that is encased.
     // Start by casting a ray north, the first tile *needs* to be non-obsidian. If we don't,
@@ -2924,7 +2960,7 @@ handle_encasement :: (tile_id: s32, persistent_encasing_obsidian_tile_ids_set: *
     }
 }
 
-check_encasement :: (tile_id: s32, encasing_obsidian_tile_ids_set: *Table, persistent_encasing_obsidian_tile_ids_set: *Table) -> (did_encase: bool) {
+check_encasement :: (tile_id: s32, encasing_obsidian_tile_ids_set: *Table) -> (did_encase: bool) {
     encaseable_neighbor_ids := get_neighbor_tile_ids_of_type(tile_id, TileType.OBSIDIAN);
     hole_neighbor_ids       := get_neighbor_tile_ids_of_type(tile_id, TileType.HOLE);
     for hole_neighbor_ids array_add(*encaseable_neighbor_ids, it);
@@ -2961,15 +2997,8 @@ check_encasement :: (tile_id: s32, encasing_obsidian_tile_ids_set: *Table, persi
 
                 // If it actually has volume, THEN add it to the encasement table
                 if check_interior_volume(cycle_points) > 0 {
-                    color := Color.{
-                        cast(u8) random_get_within_range(0, 255),
-                        cast(u8) random_get_within_range(0, 255),
-                        cast(u8) random_get_within_range(0, 255),
-                        255
-                    };
                     for tile: path {
                         table_set(encasing_obsidian_tile_ids_set, tile, 1738);
-                        table_add(persistent_encasing_obsidian_tile_ids_set, tile, color);
                     }
                     found_any_loop = true;
                 }

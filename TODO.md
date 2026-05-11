@@ -1,6 +1,6 @@
 # In progress
 
-- restarting
+
 
 # Bugs
 
@@ -11,6 +11,11 @@
     - confirmation:
 - goblins do not wander around convincingly
     - condition: reproducible on 279d68e
+    - cause:
+    - correction:
+    - confirmation:
+- dwarves can move into unmined tiles when gathering treasure
+    - condition: reproducible on c4b4832
     - cause:
     - correction:
     - confirmation:
