@@ -34,7 +34,7 @@ DWARF_START_COUNT :: 1;
 DWARF_MOVE_SPEED :: 100;
 DWARF_MINE_COOLDOWN_MS :: 250;
 DWARF_MINE_DAMAGE_PER_SWING :: 50;
-DWARF_SPAWN_MS :: 5000;
+DWARF_SPAWN_MS :: 500;
 DWARF_SPAWN_ENABLED :: true;
 
 GOBLIN_MOVE_SPEED :: 100;
@@ -853,7 +853,8 @@ main :: () {
                     }
                     else {
                         if started_to_draw_path {
-                            for dwarf: dwarves_in_viewport {
+                            // PERF: would massively benefit from chunking
+                            for dwarf: dwarves {
                                 if CheckCollisionPointRec(mouse_pos_in_world, get_world_rect_from_pos(dwarf.pos)) {
                                     game_state.selected_dwarf_id = dwarf.id;
                                     break;
@@ -992,6 +993,7 @@ main :: () {
                                 }
                             }
                         }
+
                         // Second of all, unless you're moving, if there's a goblin up your ass deal with it.
                         if !done_updating_this_dwarf {
                             if dwarf.state != .MOVING {
@@ -1012,141 +1014,139 @@ main :: () {
                                     // (i.e. moves out of the deciding state). However, there are some cases where a dwarf
                                     // can remain in the deciding state - like if he is somehow completely unable to move.
                                     dwarf_can_remain_undecided := false;
-                                    
-                                    {
-                                        // If there isn't a goblin to defend against, then next you should check if you just landed on a path arrow.
 
-                                        // TODO: faster walk and mine speed when on a path, I think
-                                        //
-                                        // Check if the dwarf is on a path arrow. If he is, then his new mission is to follow it.
-                                        for path: paths {
-                                            tile_id_with_start_arrow := get_tile_id_with_start_arrow_on_path(path);
-                                            if dwarf_tile_id == tile_id_with_start_arrow {
-                                                // If the dwarf just stepped on a start arrow, then we want him to go to the path's middle pos.
-                                                start_pos := get_tile_pos_by_id(path.start_tile_id);
-                                                end_pos   := get_tile_pos_by_id(path.middle_tile_id);
-                                                tile_ids_on_path := get_tile_ids_along_path(start_pos, end_pos);
-                                                // Don't include the tile with the arrow on it, because then we softlock.
-                                                tile_ids_on_path.data  += 1;
-                                                tile_ids_on_path.count -= 1;
+                                    // If there isn't a goblin to defend against, then next you should check if you just landed on a path arrow.
 
-                                                // TODO: extract this
-                                                array_reset(*(dwarf.tile_ids_on_path));
-                                                array_copy(*(dwarf.tile_ids_on_path), tile_ids_on_path);
-                                                set_dwarf_direction_to_face_next_target(dwarf);
+                                    // TODO: faster walk and mine speed when on a path, I think
+                                    //
+                                    // Check if the dwarf is on a path arrow. If he is, then his new mission is to follow it.
+                                    for path: paths {
+                                        tile_id_with_start_arrow := get_tile_id_with_start_arrow_on_path(path);
+                                        if dwarf_tile_id == tile_id_with_start_arrow {
+                                            // If the dwarf just stepped on a start arrow, then we want him to go to the path's middle pos.
+                                            start_pos := get_tile_pos_by_id(path.start_tile_id);
+                                            end_pos   := get_tile_pos_by_id(path.middle_tile_id);
+                                            tile_ids_on_path := get_tile_ids_along_path(start_pos, end_pos);
+                                            // Don't include the tile with the arrow on it, because then we softlock.
+                                            tile_ids_on_path.data  += 1;
+                                            tile_ids_on_path.count -= 1;
 
-                                                break;
-                                            }
+                                            // TODO: extract this
+                                            array_reset(*(dwarf.tile_ids_on_path));
+                                            array_copy(*(dwarf.tile_ids_on_path), tile_ids_on_path);
+                                            set_dwarf_direction_to_face_next_target(dwarf);
 
-                                            path_has_middle_arrow, tile_id_with_middle_arrow := find_tile_id_with_middle_arrow_on_path(path);
-                                            if path_has_middle_arrow && dwarf_tile_id == tile_id_with_middle_arrow {
-                                                // If the dwarf just stepped on a middle arrow, then we want him to go to the path's end pos.
-                                                // Note that if there is a middle arrow, then that means there is a bend in the path and the
-                                                // end pos is necessarily different than the middle pos.
-                                                start_pos := get_tile_pos_by_id(path.middle_tile_id);
-                                                end_pos   := get_tile_pos_by_id(path.end_tile_id);
-                                                tile_ids_on_path := get_tile_ids_along_path(start_pos, end_pos);
-                                                // Don't include the tile with the arrow on it, because then we softlock.
-                                                tile_ids_on_path.data  += 1;
-                                                tile_ids_on_path.count -= 1;
-
-                                                // TODO: extract this
-                                                array_reset(*(dwarf.tile_ids_on_path));
-                                                array_copy(*(dwarf.tile_ids_on_path), tile_ids_on_path);
-                                                set_dwarf_direction_to_face_next_target(dwarf);
-
-                                                break;
-                                            }
+                                            break;
                                         }
 
-                                        // If the dwarf has no targets, give him a new one
-                                        if dwarf.tile_ids_on_path.count == 0 {
-                                            result := try_to_set_dwarf_random_new_target(dwarf);
+                                        path_has_middle_arrow, tile_id_with_middle_arrow := find_tile_id_with_middle_arrow_on_path(path);
+                                        if path_has_middle_arrow && dwarf_tile_id == tile_id_with_middle_arrow {
+                                            // If the dwarf just stepped on a middle arrow, then we want him to go to the path's end pos.
+                                            // Note that if there is a middle arrow, then that means there is a bend in the path and the
+                                            // end pos is necessarily different than the middle pos.
+                                            start_pos := get_tile_pos_by_id(path.middle_tile_id);
+                                            end_pos   := get_tile_pos_by_id(path.end_tile_id);
+                                            tile_ids_on_path := get_tile_ids_along_path(start_pos, end_pos);
+                                            // Don't include the tile with the arrow on it, because then we softlock.
+                                            tile_ids_on_path.data  += 1;
+                                            tile_ids_on_path.count -= 1;
 
-                                            // If there are no directions for this dwarf to go this frame,
-                                            // just do nothing and then check again the next frame.
-                                            if result == .NO_DIRECTION_FOUND {
-                                                dwarf_can_remain_undecided = true;
-                                                done_updating_this_dwarf   = true;
-                                            }
+                                            // TODO: extract this
+                                            array_reset(*(dwarf.tile_ids_on_path));
+                                            array_copy(*(dwarf.tile_ids_on_path), tile_ids_on_path);
+                                            set_dwarf_direction_to_face_next_target(dwarf);
+
+                                            break;
                                         }
+                                    }
 
-                                        if !done_updating_this_dwarf {
-                                            tile_id_next_in_dwarfs_path := dwarf.tile_ids_on_path[0];
+                                    // If the dwarf has no targets, give him a new one
+                                    if dwarf.tile_ids_on_path.count == 0 {
+                                        result := try_to_set_dwarf_random_new_target(dwarf);
 
-                                            // If it's walkable, proceed
-                                            if is_tile_id_walkable(tile_id_next_in_dwarfs_path) {
-                                                dwarf.state = .MOVING;
-                                            }
-                                            // If it's unmined, then they'll have to mine it
-                                            else {
-                                                if is_tile_id_mineable(tile_id_next_in_dwarfs_path) {
-                                                    dwarf.state = .MINING;
-                                                    dwarf.tile_id_mining = tile_id_next_in_dwarfs_path;
+                                        // If there are no directions for this dwarf to go this frame,
+                                        // just do nothing and then check again the next frame.
+                                        if result == .NO_DIRECTION_FOUND {
+                                            dwarf_can_remain_undecided = true;
+                                            done_updating_this_dwarf   = true;
+                                        }
+                                    }
 
-                                                    // Set up the world state to accomodate the fact that the dwarf is about to mine this tile.
-                                                    // Plus, do some sanity checks to make sure that everything looks good.
-                                                    {
-                                                        // Add the tile the dwarf is about to mine to the chunk's list of actively mined tiles.
-                                                        _result, chunk := find_or_create_chunk_by_tile_id(tile_id_next_in_dwarfs_path);
-                                                        array_add(*chunk.actively_mined_tile_ids, tile_id_next_in_dwarfs_path);
+                                    if !done_updating_this_dwarf {
+                                        tile_id_next_in_dwarfs_path := dwarf.tile_ids_on_path[0];
 
-                                                        // Add the tile the dwarf is about to mine to the global table of actively mined tiles and,
-                                                        // in doing so, set its health.
-                                                        new_health: s32;
-                                                        if      is_tile_id_dirt(tile_id_next_in_dwarfs_path) new_health = xx DIRT_HEALTH;
-                                                        else if is_tile_id_iron(tile_id_next_in_dwarfs_path) new_health = xx IRON_HEALTH;
-                                                        else if is_tile_id_wall(tile_id_next_in_dwarfs_path) new_health = xx WALL_HEALTH;
-                                                        else if (
-                                                            table_contains(*water_still_tile_ids_set,   dwarf.tile_id_mining) ||
-                                                            table_contains(*water_flowing_tile_ids_set, dwarf.tile_id_mining) ||
-                                                            table_contains(*lava_still_tile_ids_set,    dwarf.tile_id_mining) ||
-                                                            table_contains(*lava_flowing_tile_ids_set,  dwarf.tile_id_mining)
-                                                        ) {
-                                                            // If you try to mine liquid, you're fucking banned
-                                                            // kill_dwarf_by_index(dwarf_index);
-                                                            array_add(*dwarf_ids_to_kill_this_frame, dwarf.id);
-                                                            done_updating_this_dwarf = true;
-                                                        }
-                                                        else {
-                                                            is_fully_mined    := table_contains(*fully_mined_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                                            is_actively_mined := table_contains(*fully_mined_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                                            is_cave           := table_contains(*cave_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                                            is_encased        := table_contains(*encased_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                                            is_iron           := table_contains(*iron_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                                            is_water_still    := table_contains(*water_still_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                                            is_water_flowing  := table_contains(*water_flowing_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                                            is_lava_still     := table_contains(*lava_still_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                                            is_lava_flowing   := table_contains(*lava_flowing_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                                            is_obsidian       := table_contains(*obsidian_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                                            is_wall           := table_contains(*wall_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                                            is_hole           := table_contains(*hole_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                                            print_vars(
-                                                                is_fully_mined,
-                                                                is_cave,
-                                                                is_encased,
-                                                                is_iron,
-                                                                is_water_still,
-                                                                is_water_flowing,
-                                                                is_lava_still,
-                                                                is_lava_flowing,
-                                                                is_obsidian,
-                                                                is_wall,
-                                                                is_hole
-                                                            );
-                                                            assert_soft(false, "Dwarf % tryna mine some weird ass shit (tile id %)", dwarf.id, tile_id_next_in_dwarfs_path);
-                                                        }
+                                        // If it's walkable, proceed
+                                        if is_tile_id_walkable(tile_id_next_in_dwarfs_path) {
+                                            dwarf.state = .MOVING;
+                                        }
+                                        // If it's unmined, then they'll have to mine it
+                                        else {
+                                            if is_tile_id_mineable(tile_id_next_in_dwarfs_path) {
+                                                dwarf.state = .MINING;
+                                                dwarf.tile_id_mining = tile_id_next_in_dwarfs_path;
 
-                                                        table_set(*actively_mined_tile_ids_to_health_table, tile_id_next_in_dwarfs_path, new_health);
+                                                // Set up the world state to accomodate the fact that the dwarf is about to mine this tile.
+                                                // Plus, do some sanity checks to make sure that everything looks good.
+                                                {
+                                                    // Add the tile the dwarf is about to mine to the chunk's list of actively mined tiles.
+                                                    _result, chunk := find_or_create_chunk_by_tile_id(tile_id_next_in_dwarfs_path);
+                                                    array_add(*chunk.actively_mined_tile_ids, tile_id_next_in_dwarfs_path);
+
+                                                    // Add the tile the dwarf is about to mine to the global table of actively mined tiles and,
+                                                    // in doing so, set its health.
+                                                    new_health: s32;
+                                                    if      is_tile_id_dirt(tile_id_next_in_dwarfs_path) new_health = xx DIRT_HEALTH;
+                                                    else if is_tile_id_iron(tile_id_next_in_dwarfs_path) new_health = xx IRON_HEALTH;
+                                                    else if is_tile_id_wall(tile_id_next_in_dwarfs_path) new_health = xx WALL_HEALTH;
+                                                    else if (
+                                                        table_contains(*water_still_tile_ids_set,   dwarf.tile_id_mining) ||
+                                                        table_contains(*water_flowing_tile_ids_set, dwarf.tile_id_mining) ||
+                                                        table_contains(*lava_still_tile_ids_set,    dwarf.tile_id_mining) ||
+                                                        table_contains(*lava_flowing_tile_ids_set,  dwarf.tile_id_mining)
+                                                    ) {
+                                                        // If you try to mine liquid, you're fucking banned
+                                                        // kill_dwarf_by_index(dwarf_index);
+                                                        array_add(*dwarf_ids_to_kill_this_frame, dwarf.id);
+                                                        done_updating_this_dwarf = true;
                                                     }
+                                                    else {
+                                                        is_fully_mined    := table_contains(*fully_mined_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                                        is_actively_mined := table_contains(*fully_mined_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                                        is_cave           := table_contains(*cave_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                                        is_encased        := table_contains(*encased_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                                        is_iron           := table_contains(*iron_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                                        is_water_still    := table_contains(*water_still_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                                        is_water_flowing  := table_contains(*water_flowing_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                                        is_lava_still     := table_contains(*lava_still_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                                        is_lava_flowing   := table_contains(*lava_flowing_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                                        is_obsidian       := table_contains(*obsidian_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                                        is_wall           := table_contains(*wall_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                                        is_hole           := table_contains(*hole_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                                        print_vars(
+                                                            is_fully_mined,
+                                                            is_cave,
+                                                            is_encased,
+                                                            is_iron,
+                                                            is_water_still,
+                                                            is_water_flowing,
+                                                            is_lava_still,
+                                                            is_lava_flowing,
+                                                            is_obsidian,
+                                                            is_wall,
+                                                            is_hole
+                                                        );
+                                                        assert_soft(false, "Dwarf % tryna mine some weird ass shit (tile id %)", dwarf.id, tile_id_next_in_dwarfs_path);
+                                                    }
+
+                                                    table_set(*actively_mined_tile_ids_to_health_table, tile_id_next_in_dwarfs_path, new_health);
                                                 }
-                                                // If it's unmineable, first of all I'm pretty sure this shouldn't have been on their path,
-                                                // but second of all, they're going to have to figure something else out then because this
-                                                // is a dead end.
-                                                else {
-                                                    try_to_set_dwarf_random_new_target(dwarf);
-                                                    dwarf_can_remain_undecided = true;
-                                                }
+                                            }
+                                            // If it's unmineable, first of all I'm pretty sure this shouldn't have been on their path,
+                                            // but second of all, they're going to have to figure something else out then because this
+                                            // is a dead end.
+                                            else {
+                                                try_to_set_dwarf_random_new_target(dwarf);
+                                                dwarf_can_remain_undecided = true;
                                             }
                                         }
                                     }
@@ -1526,6 +1526,8 @@ main :: () {
 
                                     array_reset(*dwarf.tile_ids_on_path);
                                     array_copy(*dwarf.tile_ids_on_path, tile_ids_to_new_treasure);
+                                    set_dwarf_direction_to_face_next_target(dwarf);
+                                    dwarf.state = .DECIDING;
                                 }
 
                                 break;
@@ -1656,9 +1658,9 @@ main :: () {
                     }
                 }
             }
-        
-            derive_entities_in_viewport(camera);
         }
+
+        derive_entities_in_viewport(camera);
 
         //
         // Draw
@@ -3335,7 +3337,6 @@ world_to_chunk_pos :: (world_pos: float, tile_pixel_size: float) -> s32 {
     return cast(s32) floor(world_pos / chunk_size_in_pixels);
 }
 
-// Helper function that just uses the default width and height from globals
 get_world_rect_from_pos :: (pos: Vector2) -> Rectangle {
     return Rectangle.{
         pos.x, pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT,
@@ -4273,7 +4274,8 @@ reveal_cave_if_necessary :: (tile_id: s32, grant_points: bool, game_state: *Game
     neighbor_is_unrevealed_cave, cave_tile_id := check_is_neighbor_unreavealed_cave(tile_id);
     if neighbor_is_unrevealed_cave {
         // First, decide what kind of cave this will be.
-        cave_type = cast(CaveType) cast(int) random_get_within_range(0, xx enum_count(CaveType));
+        // cave_type = cast(CaveType) cast(int) random_get_within_range(0, xx enum_count(CaveType));
+        cave_type = .TREASURE;
 
         // Second, recursively reveal the tiles of the cave.
         set_cave_as_mined(cave_tile_id, cave_type, grant_points, game_state);
@@ -4310,18 +4312,6 @@ get_tile_rect_that_pos_is_within :: (world_width: int, world_height: int, tile_w
     tile_y := grid_row * tile_height;
 
     return Rectangle.{ xx tile_x, xx tile_y, xx tile_width, xx tile_height };
-}
-
-get_tile_pos_by_id_slow :: (id: s32) -> Vector2 {
-    index := id - 1; 
-
-    grid_x := index % WORLD_COLS; // Remainder = Column
-    grid_y := index / WORLD_COLS; // Integer Div = Row
-
-    pixel_x := cast(float32) grid_x * TILEMAP_GENERAL_WORLD_WIDTH;
-    pixel_y := cast(float32) grid_y * TILEMAP_GENERAL_WORLD_HEIGHT;
-
-    return Vector2.{ pixel_x, pixel_y };
 }
 
 get_tile_pos_by_id :: inline (id: s32) -> Vector2 {
