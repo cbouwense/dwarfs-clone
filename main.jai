@@ -31,13 +31,13 @@ IRON_HEALTH :: 200;
 WALL_HEALTH :: 200;
 
 DWARF_START_COUNT :: 1;
-DWARF_MOVE_SPEED :: 100;
-DWARF_MINE_COOLDOWN_MS :: 250;
+DWARF_MOVE_SPEED :: 33;
+DWARF_MINE_COOLDOWN_MS :: 1000;
 DWARF_MINE_DAMAGE_PER_SWING :: 50;
-DWARF_SPAWN_MS :: 5000;
+DWARF_SPAWN_MS :: 10000;
 DWARF_SPAWN_ENABLED :: true;
 
-GOBLIN_MOVE_SPEED :: 100;
+GOBLIN_MOVE_SPEED :: 50;
 GOBLIN_ATTACK_COOLDOWN_MS :: 1000;
 GOBLIN_ATTACK_DAMAGE_PER_SWING :: 5;
 GOBLIN_HIT_CHANCE :: 0.80; // TODO: will have to be based on level
@@ -569,7 +569,7 @@ main :: () {
     panic_pause_is_active := false;
     panic_pause_is_cooling_down := false;
 
-    DT_MULTIPLIER_FAST_FORWARD :: 3;
+    DT_MULTIPLIER_FAST_FORWARD :: 5;
 
     game_state, camera := initialize_game();
 

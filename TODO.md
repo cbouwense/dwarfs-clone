@@ -46,8 +46,6 @@
 
 ## Demo
 
-- Dwarves should move slower by default
-
 ## Not demo
 
 - Paths should just be two single paths, not bends
