@@ -25,6 +25,7 @@ Controls :: struct {
     move_camera_left         : Control;
     move_camera_right        : Control;
     select_as_remove_path    : Control;
+    panic_pause              : Control;
 }
 
 control_is_down :: (control: Control) -> bool {
