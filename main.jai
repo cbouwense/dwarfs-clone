@@ -173,6 +173,7 @@ move_camera_left         : bool;
 move_camera_right        : bool;
 select_as_remove_path    : bool;
 panic_pause              : bool;
+fast_forward             : bool;
 
 // TODO: macro?
 select_is_pressed_once_prev   : bool;
@@ -194,6 +195,7 @@ move_camera_left_prev         : bool;
 move_camera_right_prev        : bool;
 select_as_remove_path_prev    : bool;
 panic_pause_prev              : bool;
+fast_forward_prev             : bool;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Other
@@ -551,6 +553,9 @@ main :: () {
 
         controls.panic_pause.name = "Panic pause";
         controls.panic_pause.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_SPACE };
+
+        controls.fast_forward.name = "Fast forward";
+        controls.fast_forward.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_S };
     }
 
     tile_ids_to_dwarfs: Table(s32, Dwarf);
@@ -564,6 +569,8 @@ main :: () {
     panic_pause_is_active := false;
     panic_pause_is_cooling_down := false;
 
+    DT_MULTIPLIER_FAST_FORWARD :: 3;
+
     game_state, camera := initialize_game();
 
     while !metagame.should_quit_game {
@@ -576,7 +583,15 @@ main :: () {
 
         dt_seconds_raw := GetFrameTime();
         // Cap delta time to prevent teleporting or weird bullshit
-        dt_seconds := ifx dt_seconds_raw > 0.033 then 0.033 else dt_seconds_raw;
+        dt_seconds : float;
+        if dt_seconds_raw > 0.033 {
+            dt_seconds = 0.033;
+         } else {
+            dt_seconds = dt_seconds_raw;
+            if fast_forward {
+                dt_seconds *= DT_MULTIPLIER_FAST_FORWARD;
+            }
+         }
 
         panic_pause_is_active = game_state.panic_pause_timer_ms > 0 && game_state.panic_pause_timer_ms >= PANIC_PAUSE_COOLDOWN_MS - PANIC_PAUSE_DURATION_MS;
         panic_pause_is_cooling_down = game_state.panic_pause_timer_ms > 0;
@@ -632,6 +647,7 @@ main :: () {
                                 for *controls.move_camera_right.binds        it.is_being_rebound = false;
                                 for *controls.select_as_remove_path.binds    it.is_being_rebound = false;
                                 for *controls.panic_pause.binds              it.is_being_rebound = false;
+                                for *controls.fast_forward.binds             it.is_being_rebound = false;
 
                                 metagame.pause_state = .MENU;
                         }
@@ -647,6 +663,7 @@ main :: () {
 
             // Controls from last frame
             {
+                // TODO: macro or something
                 select_is_pressed_once_prev   = select_is_pressed_once;
                 select_is_held_down_prev      = select_is_held_down;
                 add_base_mode_prev            = add_base_mode;
@@ -663,6 +680,7 @@ main :: () {
                 move_camera_down_prev         = move_camera_down;
                 move_camera_left_prev         = move_camera_left;
                 move_camera_right_prev        = move_camera_right;
+                fast_forward_prev             = fast_forward;
 
                 started_to_draw_path_prev   = started_to_draw_path;
                 drawing_path_prev  = drawing_path;
@@ -687,6 +705,7 @@ main :: () {
                 move_camera_left         = control_is_down(controls.move_camera_left);
                 move_camera_right        = control_is_down(controls.move_camera_right);
                 panic_pause              = control_is_pressed(controls.panic_pause);
+                fast_forward             = control_is_down(controls.fast_forward);
 
                 started_to_draw_path = (
                     select_is_pressed_once      &&
@@ -2202,6 +2221,7 @@ main :: () {
                                     keybind_row(*controls.move_camera_right);
                                     keybind_row(*controls.select_as_remove_path);
                                     keybind_row(*controls.panic_pause);
+                                    keybind_row(*controls.fast_forward);
                                 }
                         }
 

@@ -23,7 +23,6 @@
 
 - HUD
 - warriors
-- speed up time button
 - mouse icon for what mode you're in (wall, dynamite, etc)
 
 ## Not demo
