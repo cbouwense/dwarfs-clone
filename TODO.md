@@ -1,13 +1,6 @@
 # In progress
 
-- dwarves can move into unmined tiles when gathering treasure
-    - condition:
-        - reproducible on c4b4832
-        - it seems to happen after collecting a treasure that is next to a wall. dwarves end up with a lot of tile ids on their path, face the wrong direction, and move into unmined dirt.
-        - the above might be something else entirely. this specific problem seems to be when a dwarf gets a treasure, paths to a next treasure, and the very next tile needs to be mined. at that point, it doesn't decide that it needs to mine the next tile.
-    - cause: after picking up treasure, if the very next tile in their path was unmined, the dwarf would not go into the deciding state. Therefore, the dwarf would remain in the moving state and simply move into the unmined tile.
-    - correction: after picking up treasure, the dwarf must go into deciding state
-    - confirmation:
+
 
 # Bugs
 

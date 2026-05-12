@@ -34,7 +34,7 @@ DWARF_START_COUNT :: 1;
 DWARF_MOVE_SPEED :: 100;
 DWARF_MINE_COOLDOWN_MS :: 250;
 DWARF_MINE_DAMAGE_PER_SWING :: 50;
-DWARF_SPAWN_MS :: 500;
+DWARF_SPAWN_MS :: 5000;
 DWARF_SPAWN_ENABLED :: true;
 
 GOBLIN_MOVE_SPEED :: 100;
@@ -4274,8 +4274,7 @@ reveal_cave_if_necessary :: (tile_id: s32, grant_points: bool, game_state: *Game
     neighbor_is_unrevealed_cave, cave_tile_id := check_is_neighbor_unreavealed_cave(tile_id);
     if neighbor_is_unrevealed_cave {
         // First, decide what kind of cave this will be.
-        // cave_type = cast(CaveType) cast(int) random_get_within_range(0, xx enum_count(CaveType));
-        cave_type = .TREASURE;
+        cave_type = cast(CaveType) cast(int) random_get_within_range(0, xx enum_count(CaveType));
 
         // Second, recursively reveal the tiles of the cave.
         set_cave_as_mined(cave_tile_id, cave_type, grant_points, game_state);
