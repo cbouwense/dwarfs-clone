@@ -41,7 +41,7 @@ GOBLIN_MOVE_SPEED :: 50;
 GOBLIN_ATTACK_COOLDOWN_MS :: 1000;
 GOBLIN_ATTACK_DAMAGE_PER_SWING :: 5;
 GOBLIN_HIT_CHANCE :: 0.80; // TODO: will have to be based on level
-GOBLIN_SPAWN_ENABLED :: false;
+GOBLIN_SPAWN_ENABLED :: true;
 
 LAVA_DAMAGE_PER_HIT :: 20;
 
@@ -322,6 +322,11 @@ DwarfState :: enum {
     MINING;
 }
 
+DwarfType :: enum {
+    DIGGER;
+    WARRIOR;
+}
+
 Dwarf :: struct {
     id                  : s32;
     pos                 : Vector2;
@@ -329,9 +334,9 @@ Dwarf :: struct {
     tile_ids_on_path    : [..] s32; // TODO: might just want a static size
     mining_cooldown_ms  : s32;
     tile_id_mining      : s32;
-    was_mining_resource : bool; // PERF: don't
     goblin_id_attacking : s32; // TODO: is this right? feels overly specific
     direction           : Direction;
+    type                : DwarfType;
 }
 
 GoblinState :: enum {
@@ -564,6 +569,9 @@ main :: () {
     tile_ids_to_goblins: Table(s32, Goblin);
     tile_ids_to_goblins.allocator = temp;
 
+    tile_ids_to_bases: Table(s32, Base);
+    tile_ids_to_bases.allocator = temp;
+
     // Keeps track of how many milliseconds remain until the player can panic pause again.
     // Less than or equal to 0 means "can panic pause right now".
     panic_pause_is_active := false;
@@ -579,6 +587,7 @@ main :: () {
         // PERF: can this be keep_memory?
         table_reset(*tile_ids_to_dwarfs);
         table_reset(*tile_ids_to_goblins);
+        table_reset(*tile_ids_to_bases);
         reset_temporary_storage();
 
         dt_seconds_raw := GetFrameTime();
@@ -607,9 +616,15 @@ main :: () {
         }
 
         for goblin: goblins {
-            goblin_center   := get_rect_center(get_world_rect_from_pos(goblin.pos));
-            goblin_tile_id  := get_tile_id_by_pos(goblin_center);
+            goblin_center  := get_rect_center(get_world_rect_from_pos(goblin.pos));
+            goblin_tile_id := get_tile_id_by_pos(goblin_center);
             table_set(*tile_ids_to_goblins, goblin_tile_id, goblin);
+        }
+
+        for base: bases {
+            base_center  := get_rect_center(get_world_rect_from_pos(base.pos));
+            base_tile_id := get_tile_id_by_pos(base_center);
+            table_set(*tile_ids_to_bases, base_tile_id, base);
         }
 
         //
@@ -858,7 +873,7 @@ main :: () {
                         if select_is_pressed_once {
                             if metagame.debug_mode {
                                 tile_id := get_tile_id_by_pos(mouse_pos_in_world);
-                                create_dwarf(get_tile_pos_by_id(tile_id));
+                                create_dwarf(get_tile_pos_by_id(tile_id), .DIGGER);
                             }
                         }
                     }
@@ -1050,7 +1065,7 @@ main :: () {
                             // Second of all, unless you're moving, if there's a goblin up your ass deal with it.
                             if !done_updating_this_dwarf {
                                 if dwarf.state != .MOVING {
-                                    detected, goblin, direction_of_goblin := detect_goblin_neighbor(dwarf_tile_id, *tile_ids_to_goblins);
+                                    detected, goblin, direction_of_goblin := detect_goblin_neighbor_cardinal(dwarf_tile_id, *tile_ids_to_goblins);
                                     if detected {
                                         dwarf.goblin_id_attacking = goblin.id;
                                         dwarf.direction = direction_of_goblin;
@@ -1110,6 +1125,91 @@ main :: () {
                                                 set_dwarf_direction_to_face_next_target(dwarf);
 
                                                 break;
+                                            }
+                                        }
+
+                                        // PERF: is this too expensive to do every frame?
+                                        //
+                                        // If the dwarf is a warrior, actively seek out goblins
+                                        if dwarf.type == .WARRIOR {
+                                            detected, goblin := detect_goblin_within_radius(dwarf_tile_id, 5, *tile_ids_to_goblins);
+                                            // TODO: extract this
+                                            if detected {
+                                                dwarf.goblin_id_attacking = goblin.id;
+
+                                                goblin_center          := get_rect_center(get_world_rect_from_pos(goblin.pos));
+                                                goblin_current_tile_id := get_tile_id_by_pos(goblin_center);
+                                                tile_id_goblin_will_defend_from : s32;
+
+                                                if #complete goblin.state == {
+                                                    // If the goblin is moving towards a tile, aim to where the puck is going.
+                                                    case .MOVING;
+                                                        assert_soft(goblin.tile_ids_on_path.count > 0, "Expected goblin % to have at least one tile on its path, but found none", goblin.id);
+                                                        tile_id_goblin_will_defend_from = goblin.tile_ids_on_path[0];
+
+                                                    // If the goblin is standing still, then we'll want to attack it on the tile it's on.
+                                                    case .NOTHING;   #through;
+                                                    case .DECIDING;  #through;
+                                                    case .ATTACKING;
+                                                        tile_id_goblin_will_defend_from = goblin_current_tile_id;
+                                                }
+
+                                                path_found, tile_ids_to_goblin_target := dijkstra(dwarf_tile_id, tile_id_goblin_will_defend_from, edges);
+                                                
+                                                if path_found {
+                                                    // If the dwarf is right up against where it's going to attack the goblin already, then start fighting
+                                                    if is_tile_id_neighbor_of_tile_id(dwarf_tile_id, tile_id_goblin_will_defend_from) {
+                                                        dwarf.state = .ATTACKING;
+                                                    } else {
+                                                        // PERF: can probably just decrement the count and move the data pointer forward like a rat.
+                                                        //
+                                                        // Since we started pathfinding on the goblin's current tile, we need to pop that off the front
+                                                        // so we don't softlock on it.
+                                                        pop_front(*tile_ids_to_goblin_target);
+
+                                                        array_reset(*dwarf.tile_ids_on_path);
+                                                        array_copy(*dwarf.tile_ids_on_path, tile_ids_to_goblin_target);
+
+                                                        dwarf.state = .MOVING;
+                                                    }
+                                                } else {
+                                                    print("WARN: Dwarf % tried to find a path to goblin % but couldn't", dwarf.id, goblin.id);
+                                                }
+                                            }
+                                            // TODO: DRY up with digger decision
+                                            //
+                                            // If no goblins are nearby, continue patrolling. Warriors prefer to patrol around
+                                            // bases. If they are within a base, they stay within it. Every so often, they'll check
+                                            // if they're next to a base, and if they are, they'll try to enter it to patrol. Otherwise,
+                                            // they go in random directions, like diggers do, except they don't mine into walls unless
+                                            // explicitly ordered to.
+                                            else if dwarf.tile_ids_on_path.count == 0 {
+                                                on_top_of_base, base := table_find(*tile_ids_to_bases, dwarf_tile_id); 
+                                                // If we're standing on a base right now, just keep walking in the direction you're currently going.
+                                                if on_top_of_base {
+                                                    try_to_set_dwarf_target_to_one_block_in_the_direction_its_facing(dwarf);
+                                                } else {
+                                                    base_neighbor_detected, base, base_direction := detect_base_neighbor_cardinal(dwarf_tile_id, *tile_ids_to_bases);
+
+                                                    // If we have a base within a cardinal direction, just keep walking in the direction you're currently going.
+                                                    if base_neighbor_detected {
+                                                        try_to_set_dwarf_target_to_one_block_in_the_direction_its_facing(dwarf);
+                                                    } else {
+                                                        base_neighbor_detected, base, base_direction := detect_base_neighbor(dwarf_tile_id, *tile_ids_to_bases);
+
+                                                        // If we have a base within a diagonal direction, turn clockwise and then walk forward.
+                                                        if base_neighbor_detected {
+                                                            dwarf.direction = get_next_direction_to_face_from_base_neighbor_direction(base_direction);
+                                                            result := try_to_set_dwarf_target_to_one_block_in_the_direction_its_facing(dwarf);
+                                                            if result == .NO_DIRECTION_FOUND {
+                                                                dwarf.direction = opposite_cardinal_direction(dwarf.direction);
+                                                                try_to_set_dwarf_target_to_one_block_in_the_direction_its_facing(dwarf);
+                                                            }
+                                                        } else {
+                                                            // TODO: wander somewhat towards the nearest base
+                                                        }
+                                                    }
+                                                }
                                             }
                                         }
 
@@ -1214,6 +1314,7 @@ main :: () {
 
                                         assert_soft(dwarf.pos.x == target_tile_pos.x || dwarf.pos.y == target_tile_pos.y, "Dwarf % is going at an angle", dwarf.id);
 
+                                        // TODO: #if DEBUG
                                         if !is_tile_id_walkable(target_tile_id) {
                                             is_fully_mined    := table_contains(*fully_mined_tile_ids_set, target_tile_id);
                                             is_actively_mined := table_contains(*actively_mined_tile_ids_to_health_table, target_tile_id);
@@ -1244,7 +1345,7 @@ main :: () {
                                             assert_soft(false, "Dwarf % is trying to move into the unmined tile %\n", dwarf.id, target_tile_id);
                                         }
 
-                                        // Calculate the squared distance
+                                        // Calculate the squared distance (use squared distances so we can avoid a sqrtf).
                                         dx := target_tile_pos.x - dwarf.pos.x;
                                         dy := target_tile_pos.y - dwarf.pos.y;
                                         distance_squared := (dx * dx) + (dy * dy);
@@ -1253,7 +1354,6 @@ main :: () {
                                         step_size := DWARF_MOVE_SPEED * dt_seconds;
                                         step_size_squared := step_size * step_size;
 
-                                        // Use squared distances so we can avoid a sqrtf
                                         dwarf_pretty_much_reached_target := distance_squared <= step_size_squared;
 
                                         if dwarf_pretty_much_reached_target {
@@ -1300,7 +1400,7 @@ main :: () {
                                                     
                                                     set_tile_as_type(dwarf.tile_id_mining, .MINED, true, *game_state);
 
-                                                    if just_mined_iron {
+                                                    if just_mined_iron && dwarf.type == .DIGGER {
                                                         found_next_iron_in_deposit, next_iron_tile_id := detect_iron_tile_id_within_radius(dwarf_tile_id, 3);
                                                         if found_next_iron_in_deposit {
                                                             tile_ids_to_next_iron_tile := get_tile_ids_along_path(get_tile_pos_by_id(dwarf_tile_id), get_tile_pos_by_id(next_iron_tile_id));
@@ -1396,7 +1496,7 @@ main :: () {
                                         path_found, tile_ids_to_dwarf_target := dijkstra(goblin_tile_id, tile_id_dwarf_will_defend_from, edges);
                                         
                                         if path_found {
-                                            // If the goblin is right up against where it's going to  dwarf already, then start fighting
+                                            // If the goblin is right up against where it's going to attack the dwarf already, then start fighting
                                             if is_tile_id_neighbor_of_tile_id(goblin_tile_id, tile_id_dwarf_will_defend_from) {
                                                 goblin.state = .ATTACKING;
                                             } else {
@@ -1605,7 +1705,7 @@ main :: () {
                         #if DWARF_SPAWN_ENABLED {
                             for *base: bases {
                                 if base.spawn_dwarf_cooldown_ms <= 0 {
-                                    create_dwarf(Vector2.{ base.pos.x, base.pos.y });
+                                    create_dwarf(Vector2.{ base.pos.x, base.pos.y }, .DIGGER);
 
                                     base.spawn_dwarf_cooldown_ms = DWARF_SPAWN_MS;
                                 } else {
@@ -1897,8 +1997,10 @@ main :: () {
                 // Draw dwarves
                 {
                     for dwarf: dwarves_in_viewport {
+                        index : float = ifx dwarf.type == .DIGGER then 1.0 else 6.0;
+
                         source := Rectangle.{
-                            1 * TILEMAP_GENERAL_TILE_WIDTH,
+                            index * TILEMAP_GENERAL_TILE_WIDTH,
                             0 * TILEMAP_GENERAL_TILE_HEIGHT,
                             TILEMAP_GENERAL_TILE_WIDTH,
                             TILEMAP_GENERAL_TILE_HEIGHT,
@@ -2019,8 +2121,8 @@ main :: () {
                             DrawText(tprint("tile_ids_on_path: %\0", it.tile_ids_on_path).data,     xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                             DrawText(tprint("mining_cooldown_ms: %\0", it.mining_cooldown_ms).data, xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                             DrawText(tprint("tile_id_mining: %\0", it.tile_id_mining).data,         xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                            DrawText(tprint("was_mining_resource: %\0", it.was_mining_resource).data,         xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                             DrawText(tprint("direction: %\0", it.direction).data,                   xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                            DrawText(tprint("type: %\0", it.type).data,                             xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                         }
                     }
                     
@@ -2315,6 +2417,31 @@ main :: () {
 
 // Functions
 
+opposite_cardinal_direction :: (direction: Direction) -> Direction {
+    if direction == .NORTH return .SOUTH;
+    if direction == .SOUTH return .NORTH;
+    if direction == .EAST  return .WEST;
+    if direction == .WEST  return .EAST;
+    assert_soft(false, "I don't think this should happen idk (direction: %)\n", direction);
+    return .CENTER; // return center to keep the compiler happy
+}
+
+get_next_direction_to_face_from_base_neighbor_direction :: (direction: Direction) -> Direction {
+    if #complete direction == {
+        case .NORTH;      return .EAST;
+        case .SOUTH;      return .WEST;
+        case .EAST;       return .SOUTH;
+        case .WEST;       return .NORTH;
+        case .NORTH_EAST; return .NORTH;
+        case .NORTH_WEST; return .WEST;
+        case .SOUTH_EAST; return .EAST;
+        case .SOUTH_WEST; return .SOUTH;
+        case .CENTER;
+            assert_soft(false, "I don't think this should happen idk (direction: %)\n", direction);
+            return .CENTER; // return center to keep the compiler happy
+    }
+}
+
 reset_memory :: () {
     table_reset(*actively_mined_tile_ids_to_health_table);
     table_reset(*fully_mined_tile_ids_set);
@@ -2442,16 +2569,24 @@ initialize_game :: () -> game_state: GameState, camera: Camera2D {
     // Initialize dwarves
     GENERATE_DWARVES_ENABLED :: true;
     #if GENERATE_DWARVES_ENABLED {
-        for 1..DWARF_START_COUNT {
-            // Figure out where to spawn it based off of the home base
-            dx := TILE_DIRECTION_DELTAS[0][0];
-            dy := TILE_DIRECTION_DELTAS[0][1];
-            assert(bases.count > 0);
-            home_base    := bases[0];
-            neighbor_pos := Vector2.{ home_base.pos.x + dx, home_base.pos.y + dy };
+        dx, dy : float;
+        neighbor_pos: Vector2;
+        assert(bases.count > 0);
 
-            create_dwarf(neighbor_pos);
+        for 1..DWARF_START_COUNT {
+            // Initialize digger dwarves
+            dx = TILE_DIRECTION_DELTAS[xx Direction.NORTH][0];
+            dy = TILE_DIRECTION_DELTAS[xx Direction.NORTH][1];
+            neighbor_pos = Vector2.{ home_base.pos.x + dx, home_base.pos.y + dy };
+
+            create_dwarf(neighbor_pos, .DIGGER);
         }
+        
+        // Initialize warrior dwarf
+        dx = TILE_DIRECTION_DELTAS[xx Direction.EAST][0];
+        dy = TILE_DIRECTION_DELTAS[xx Direction.EAST][1];
+        neighbor_pos = Vector2.{ home_base.pos.x + dx, home_base.pos.y + dy };
+        create_dwarf(neighbor_pos, .WARRIOR);
     }
 
     // Initialize camera
@@ -2478,19 +2613,31 @@ SetDwarfRandomNewTargetReturnStatus :: enum {
 
 try_to_set_dwarf_random_new_target :: (dwarf: *Dwarf) -> SetDwarfRandomNewTargetReturnStatus {
     dwarf_tile_id_current := get_tile_id_by_pos(dwarf.pos);
+    can_target_unmined_tiles := dwarf.type == .DIGGER;
 
     // Enumerate the different directions the dwarf can go
-    is_north_valid := is_tile_id_walkable_or_mineable(get_neighbor_tile_id_by_direction(dwarf_tile_id_current, .NORTH));
-    is_south_valid := is_tile_id_walkable_or_mineable(get_neighbor_tile_id_by_direction(dwarf_tile_id_current, .SOUTH));
-    is_east_valid  := is_tile_id_walkable_or_mineable(get_neighbor_tile_id_by_direction(dwarf_tile_id_current, .EAST));
-    is_west_valid  := is_tile_id_walkable_or_mineable(get_neighbor_tile_id_by_direction(dwarf_tile_id_current, .WEST));
+    is_north_valid := ifx can_target_unmined_tiles
+        then is_tile_id_walkable_or_mineable(get_neighbor_tile_id_by_direction(dwarf_tile_id_current, .NORTH))
+        else             is_tile_id_walkable(get_neighbor_tile_id_by_direction(dwarf_tile_id_current, .NORTH));
+
+    is_south_valid := ifx can_target_unmined_tiles
+        then is_tile_id_walkable_or_mineable(get_neighbor_tile_id_by_direction(dwarf_tile_id_current, .SOUTH))
+        else             is_tile_id_walkable(get_neighbor_tile_id_by_direction(dwarf_tile_id_current, .SOUTH));
+
+    is_east_valid  := ifx can_target_unmined_tiles
+        then is_tile_id_walkable_or_mineable(get_neighbor_tile_id_by_direction(dwarf_tile_id_current, .EAST))
+        else             is_tile_id_walkable(get_neighbor_tile_id_by_direction(dwarf_tile_id_current, .EAST));
+
+    is_west_valid  := ifx can_target_unmined_tiles
+        then is_tile_id_walkable_or_mineable(get_neighbor_tile_id_by_direction(dwarf_tile_id_current, .WEST))
+        else             is_tile_id_walkable(get_neighbor_tile_id_by_direction(dwarf_tile_id_current, .WEST));
 
     if !is_north_valid && !is_south_valid && !is_east_valid && !is_west_valid return .NO_DIRECTION_FOUND;
 
     new_direction := dwarf.direction;
 
     change_direction_rng := random_get_within_range(0, 1);
-    if change_direction_rng < 0.1 {
+    if change_direction_rng < 0.1 || !can_target_unmined_tiles {
 
         go_left := change_direction_rng < 0.05;
 
@@ -2498,17 +2645,19 @@ try_to_set_dwarf_random_new_target :: (dwarf: *Dwarf) -> SetDwarfRandomNewTarget
             if go_left {
                 if      is_west_valid  new_direction = .WEST;
                 else if is_east_valid  new_direction = .EAST;
-                else if is_south_valid new_direction = .SOUTH;
+                else if is_north_valid new_direction = .NORTH;
+                else if !can_target_unmined_tiles new_direction = .SOUTH;
                 else {
-                    print_vars(is_north_valid, is_south_valid, is_east_valid, is_west_valid, dwarf);
+                    print_vars(is_north_valid, is_south_valid, is_east_valid, is_west_valid, dwarf.*);
                     assert_soft(false, "Expected at least one direction to be valid, but found none for dwarf %\n", dwarf.id);
                 }
             } else {
                 if      is_east_valid  new_direction = .EAST;
                 else if is_west_valid  new_direction = .WEST;
-                else if is_south_valid new_direction = .SOUTH;
+                else if is_north_valid new_direction = .NORTH;
+                else if !can_target_unmined_tiles new_direction = .SOUTH;
                 else {
-                    print_vars(is_north_valid, is_south_valid, is_east_valid, is_west_valid, dwarf);
+                    print_vars(is_north_valid, is_south_valid, is_east_valid, is_west_valid, dwarf.*);
                     assert_soft(false, "Expected at least one direction to be valid, but found none for dwarf %\n", dwarf.id);
                 }
             }
@@ -2518,16 +2667,18 @@ try_to_set_dwarf_random_new_target :: (dwarf: *Dwarf) -> SetDwarfRandomNewTarget
                 if      is_east_valid  new_direction = .EAST;
                 else if is_west_valid  new_direction = .WEST;
                 else if is_south_valid new_direction = .SOUTH;
+                else if !can_target_unmined_tiles new_direction = .NORTH;
                 else {
-                    print_vars(is_north_valid, is_south_valid, is_east_valid, is_west_valid, dwarf);
+                    print_vars(is_north_valid, is_south_valid, is_east_valid, is_west_valid, dwarf.*);
                     assert_soft(false, "Expected at least one direction to be valid, but found none for dwarf %\n", dwarf.id);
                 }
             } else {
                 if      is_west_valid  new_direction = .WEST;
                 else if is_east_valid  new_direction = .EAST;
                 else if is_south_valid new_direction = .SOUTH;
+                else if !can_target_unmined_tiles new_direction = .NORTH;
                 else {
-                    print_vars(is_north_valid, is_south_valid, is_east_valid, is_west_valid, dwarf);
+                    print_vars(is_north_valid, is_south_valid, is_east_valid, is_west_valid, dwarf.*);
                     assert_soft(false, "Expected at least one direction to be valid, but found none for dwarf %\n", dwarf.id);
                 }
             }
@@ -2535,44 +2686,48 @@ try_to_set_dwarf_random_new_target :: (dwarf: *Dwarf) -> SetDwarfRandomNewTarget
         else if dwarf.direction == .EAST  {
             if go_left {
                 if      is_south_valid new_direction = .SOUTH;
-                else if is_east_valid  new_direction = .NORTH;
-                else if is_west_valid  new_direction = .WEST;
+                else if is_north_valid new_direction = .NORTH;
+                else if is_east_valid  new_direction = .EAST;
+                else if !can_target_unmined_tiles new_direction = .WEST;
                 else {
-                    print_vars(is_north_valid, is_south_valid, is_east_valid, is_west_valid, dwarf);
+                    print_vars(is_north_valid, is_south_valid, is_east_valid, is_west_valid, dwarf.*);
                     assert_soft(false, "Expected at least one direction to be valid, but found none for dwarf %\n", dwarf.id);
                 }
             } else {
-                if      is_east_valid new_direction  = .NORTH;
+                if      is_north_valid new_direction = .NORTH;
                 else if is_south_valid new_direction = .SOUTH;
-                else if is_west_valid new_direction  = .WEST;
+                else if is_east_valid  new_direction = .EAST;
+                else if !can_target_unmined_tiles new_direction = .WEST;
                 else {
-                    print_vars(is_north_valid, is_south_valid, is_east_valid, is_west_valid, dwarf);
+                    print_vars(is_north_valid, is_south_valid, is_east_valid, is_west_valid, dwarf.*);
                     assert_soft(false, "Expected at least one direction to be valid, but found none for dwarf %\n", dwarf.id);
                 }
             }
         }
         else if dwarf.direction == .WEST  {
             if go_left {
-                if      is_east_valid  new_direction = .NORTH;
-                else if is_south_valid new_direction = .SOUTH;
+                if      is_south_valid new_direction = .SOUTH;
+                else if is_north_valid new_direction = .NORTH;
                 else if is_west_valid  new_direction = .WEST;
+                else if !can_target_unmined_tiles new_direction = .EAST;
                 else {
-                    print_vars(is_north_valid, is_south_valid, is_east_valid, is_west_valid, dwarf);
+                    print_vars(is_north_valid, is_south_valid, is_east_valid, is_west_valid, dwarf.*);
                     assert_soft(false, "Expected at least one direction to be valid, but found none for dwarf %\n", dwarf.id);
                 }
             } else {
                 if      is_south_valid new_direction = .SOUTH;
-                else if is_east_valid new_direction  = .NORTH;
-                else if is_west_valid new_direction  = .WEST;
+                else if is_north_valid new_direction = .NORTH;
+                else if is_west_valid  new_direction = .WEST;
+                else if !can_target_unmined_tiles new_direction = .EAST;
                 else {
-                    print_vars(is_north_valid, is_south_valid, is_east_valid, is_west_valid, dwarf);
+                    print_vars(is_north_valid, is_south_valid, is_east_valid, is_west_valid, dwarf.*);
                     assert_soft(false, "Expected at least one direction to be valid, but found none for dwarf %\n", dwarf.id);
                 }
             }
         }
         // TODO: #complete this somehow so we don't need this assert
         else {
-            print_vars(is_north_valid, is_south_valid, is_east_valid, is_west_valid, dwarf);
+            print_vars(is_north_valid, is_south_valid, is_east_valid, is_west_valid, dwarf.*);
             assert_soft(false, "Expected at least one direction to be valid, but found none for dwarf %\n", dwarf.id);
         }
 
@@ -2590,7 +2745,24 @@ try_to_set_dwarf_random_new_target :: (dwarf: *Dwarf) -> SetDwarfRandomNewTarget
     return .DIRECTION_FOUND;
 }
 
-detect_goblin_neighbor :: (tile_id: s32, tile_ids_to_goblins: *Table) -> goblin_neighbor_detected: bool, goblin: Goblin, direction: Direction {
+try_to_set_dwarf_target_to_one_block_in_the_direction_its_facing :: (dwarf: *Dwarf) -> SetDwarfRandomNewTargetReturnStatus {
+    dwarf_tile_id_current := get_tile_id_by_pos(dwarf.pos);
+
+    is_tile_valid := ifx dwarf.type == .DIGGER
+        then is_tile_id_walkable_or_mineable(get_neighbor_tile_id_by_direction(dwarf_tile_id_current, dwarf.direction))
+        else is_tile_id_walkable(get_neighbor_tile_id_by_direction(dwarf_tile_id_current, dwarf.direction));
+    if !is_tile_valid return .NO_DIRECTION_FOUND;
+
+    new_target_tile_id := get_neighbor_tile_id_by_direction(dwarf_tile_id_current, dwarf.direction);
+
+    // TODO: extract
+    array_reset(*dwarf.tile_ids_on_path);
+    array_add(*dwarf.tile_ids_on_path, new_target_tile_id);
+
+    return .DIRECTION_FOUND;
+}
+
+detect_goblin_neighbor_cardinal :: (tile_id: s32, tile_ids_to_goblins: *Table) -> goblin_neighbor_detected: bool, goblin: Goblin, direction: Direction {
     found: bool;
     goblin: Goblin;
 
@@ -2606,7 +2778,43 @@ detect_goblin_neighbor :: (tile_id: s32, tile_ids_to_goblins: *Table) -> goblin_
     found, goblin = table_find(tile_ids_to_goblins, tile_id - 1);
     if (found) return true, goblin, .WEST;
 
-    return false, Goblin.{}, .CENTER;
+    return false, goblin, .CENTER;
+}
+
+// TODO: DRY up these detect neighbor functions maybe
+detect_base_neighbor :: (tile_id: s32, tile_ids_to_bases: *Table) -> base_neighbor_detected: bool, base: Base, direction: Direction {
+    found: bool;
+    base: Base;
+
+    for i: 0..7 {
+        dx := TILE_DIRECTION_ID_DELTAS[i][0];
+        dy := TILE_DIRECTION_ID_DELTAS[i][1];
+
+        neighbor_id := tile_id + dx + dy;
+
+        found, base = table_find(tile_ids_to_bases, neighbor_id);
+        if (found) return true, base, cast(Direction) i;
+    }
+
+    return false, base, .CENTER;
+}
+
+// TODO: DRY up these detect neighbor functions maybe
+detect_base_neighbor_cardinal :: (tile_id: s32, tile_ids_to_bases: *Table) -> base_neighbor_detected: bool, base: Base, direction: Direction {
+    found: bool;
+    base: Base;
+
+    for i: 0..3 {
+        dx := TILE_DIRECTION_ID_DELTAS[i][0];
+        dy := TILE_DIRECTION_ID_DELTAS[i][1];
+
+        neighbor_id := tile_id + dx + dy;
+
+        found, base = table_find(tile_ids_to_bases, neighbor_id);
+        if (found) return true, base, cast(Direction) i;
+    }
+
+    return false, base, .CENTER;
 }
 
 is_tile_id_neighbor_of_tile_id :: (my_tile_id: s32, your_tile_id: s32) -> bool {
@@ -2668,7 +2876,7 @@ set_dwarf_direction_to_face_next_target :: (dwarf: *Dwarf) {
     else assert(false);
 }
 
-create_dwarf :: (pos: Vector2) -> Dwarf {
+create_dwarf :: (pos: Vector2, dwarf_type: DwarfType) -> Dwarf {
     dwarf_id  := increment_then_read(*dwarf_id_counter);
     direction := cast(Direction) cast(int) random_get_within_range(0, 3);
 
@@ -2677,10 +2885,16 @@ create_dwarf :: (pos: Vector2) -> Dwarf {
         pos       = pos,
         state     = .DECIDING,
         direction = direction,
+        mining_cooldown_ms  = 0,
+        tile_id_mining      = 0,
+        goblin_id_attacking = 0,
+        type = dwarf_type,
+        // direction intentionally not set
         // tile_ids_on_path intentionally not set
     };
 
     dwarf_tile_id := get_tile_id_by_pos(pos);
+    // TODO
     // chunk := find_or_create_chunk_by_tile_id(dwarf_tile_id);
     // array_add(*chunk.dwarf_ids, dwarf_id);
     table_set(*dwarf_id_to_index, dwarf_id, dwarves.count);
@@ -3937,6 +4151,53 @@ detect_dwarf_within_radius :: (
     }
 
     return false, Dwarf.{};
+}
+
+// TODO: probably want to DRY up these detector functions
+detect_goblin_within_radius :: (
+    starting_tile_id: s32,
+    radius: s32,
+    tile_ids_to_goblins: *Table
+) -> found: bool, goblin: Goblin {
+    max_tile_id := WORLD_COLS * WORLD_ROWS;
+
+    ids_to_process : [..] s32;
+    ids_to_process.allocator = temp;
+
+    ids_processed_set : Table(s32, s32);
+    ids_processed_set.allocator = temp;
+
+    array_add(*ids_to_process, starting_tile_id);
+
+    while ids_to_process.count > 0 {
+        // Get the next id to process
+        id := pop_front(*ids_to_process);
+
+        // Make sure the id is valid and hasn't already been processed
+        if table_contains(*ids_processed_set, id) continue;
+        if id <= 0 continue;
+        if id > max_tile_id continue;
+        if !table_contains(*fully_mined_tile_ids_set, id) continue;
+        if id == starting_tile_id - (WORLD_ROWS * (radius + 1)) continue; // north
+        if id == starting_tile_id + (WORLD_ROWS * (radius + 1)) continue; // south
+        if id == starting_tile_id + (radius + 1)                continue; // east
+        if id == starting_tile_id - (radius + 1)                continue; // west
+
+        // If a goblin is detected, return
+        detected, goblin := table_find(tile_ids_to_goblins, id);
+        if (detected) return true, goblin;
+
+        // Mark it as processed
+        table_set(*ids_processed_set, id, 1738);
+
+        // Add neighbors as needing to be processed
+        array_add(*ids_to_process, id - WORLD_ROWS);
+        array_add(*ids_to_process, id + WORLD_ROWS);
+        array_add(*ids_to_process, id + 1);
+        array_add(*ids_to_process, id - 1);
+    }
+
+    return false, Goblin.{};
 }
 
 // TODO: probably want to DRY up these detector functions 

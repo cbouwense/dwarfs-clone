@@ -27,6 +27,7 @@
 
 ## Not demo
 
+- dwarf level ups
 - base canons
 - base spawn diggers control
 - base spawn warriors control
@@ -39,6 +40,8 @@
 - bases cannot be placed down on caves
 - dwarves and goblins should not pass through each other
 - mined tile sprites
+- shaman
+- spider queen
 
 # Performance
 
