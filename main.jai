@@ -30,18 +30,34 @@ DIRT_HEALTH :: 100;
 IRON_HEALTH :: 200;
 WALL_HEALTH :: 200;
 
-DWARF_START_COUNT :: 1;
 DWARF_MOVE_SPEED :: 33;
-DWARF_MINE_COOLDOWN_MS :: 1000;
-DWARF_MINE_DAMAGE_PER_SWING :: 50;
-DWARF_SPAWN_MS :: 10000;
-DWARF_SPAWN_ENABLED :: true;
+// TODO: DWARF_MOVE_SPEED_TARGETING :: DWARF_MOVE_SPEED * 2;
+
+DWARF_DIGGER_START_COUNT :: 1;
+DWARF_DIGGER_DIG_COOLDOWN_MS    :: 1000;
+DWARF_DIGGER_ATTACK_COOLDOWN_MS :: 2000;
+DWARF_DIGGER_DAMAGE_DIG_PER_SWING    :: 50;
+DWARF_DIGGER_DAMAGE_ATTACK_PER_SWING :: 25;
+DWARF_DIGGER_HIT_CHANCE :: 0.50; // TODO: will have to be based on level
+DWARF_DIGGER_SPAWN_MS :: 10000;
+DWARF_DIGGER_SPAWN_ENABLED :: true;
+DWARF_DIGGER_STARTING_HP :: 75;
+
+DWARF_WARRIOR_START_COUNT :: 1;
+DWARF_WARRIOR_DIG_COOLDOWN_MS    :: 2000;
+DWARF_WARRIOR_ATTACK_COOLDOWN_MS :: 1000;
+DWARF_WARRIOR_DAMAGE_DIG_PER_SWING    :: 25;
+DWARF_WARRIOR_DAMAGE_ATTACK_PER_SWING :: 50;
+DWARF_WARRIOR_HIT_CHANCE :: 0.80; // TODO: will have to be based on level
+DWARF_WARRIOR_SPAWN_ENABLED :: true;
+DWARF_WARRIOR_STARTING_HP :: 100;
 
 GOBLIN_MOVE_SPEED :: 50;
 GOBLIN_ATTACK_COOLDOWN_MS :: 1000;
 GOBLIN_ATTACK_DAMAGE_PER_SWING :: 5;
 GOBLIN_HIT_CHANCE :: 0.80; // TODO: will have to be based on level
 GOBLIN_SPAWN_ENABLED :: true;
+GOBLIN_STARTING_HP :: 100;
 
 LAVA_DAMAGE_PER_HIT :: 20;
 
@@ -335,8 +351,10 @@ Dwarf :: struct {
     mining_cooldown_ms  : s32;
     tile_id_mining      : s32;
     goblin_id_attacking : s32; // TODO: is this right? feels overly specific
+    attack_cooldown_ms  : s32;
     direction           : Direction;
     type                : DwarfType;
+    hp                  : s32;
 }
 
 GoblinState :: enum {
@@ -354,6 +372,7 @@ Goblin :: struct {
     attack_cooldown_ms : s32;
     dwarf_id_attacking : s32;
     direction          : Direction;
+    hp                 : s32;
 }
 
 Path :: struct {
@@ -1393,7 +1412,7 @@ main :: () {
                                             found_tile_dwarf_is_mining, current_health := table_find(*actively_mined_tile_ids_to_health_table, dwarf.tile_id_mining);
                                             
                                             if found_tile_dwarf_is_mining {
-                                                new_health := current_health - DWARF_MINE_DAMAGE_PER_SWING;
+                                                new_health := current_health - dwarf_get_dig_damage(dwarf);
 
                                                 if new_health <= 0 {
                                                     just_mined_iron := table_contains(*iron_tile_ids_set, dwarf.tile_id_mining);
@@ -1437,7 +1456,7 @@ main :: () {
                                                 }
 
                                                 // Reset cooldown
-                                                dwarf.mining_cooldown_ms = DWARF_MINE_COOLDOWN_MS;
+                                                dwarf.mining_cooldown_ms = dwarf_get_mining_cooldown(dwarf);
                                             } else {
                                                 if metagame.debug_mode print("INFO: Dwarf was mining tile % but suddenly it was removed from the table of actively mined tiles.\n", dwarf.tile_id_mining);
                                                 // It's possible for the tile the dwarf is mining to suddenly be changed, like into obsidian.
@@ -1449,6 +1468,40 @@ main :: () {
                                         }
 
                                     case .ATTACKING;
+                                        if dwarf.attack_cooldown_ms > 0 {
+                                            dwarf.attack_cooldown_ms -= xx (dt_seconds * 1000);
+                                        } else {
+                                            dwarf.attack_cooldown_ms = dwarf_get_attack_cooldown(dwarf);
+                                            // TODO: swing animation, I guess
+
+                                            // Make sure the goblin is still alive, it's possible that other dwarves have killed it this frame.
+                                            found, goblin_index := table_find(*goblin_id_to_index, dwarf.goblin_id_attacking);
+                                            if (found) {
+                                                goblin := *goblins[goblin_index];
+
+                                                assert_soft(dwarf.goblin_id_attacking == goblin.id, "Dwarf % thinks he's attacking goblin % but really found goblin %", dwarf.id, dwarf.goblin_id_attacking, goblin.id);
+
+                                                // Hit check
+                                                rng := random_get_within_range(0, 1);
+                                                swing_connected := rng <= GOBLIN_HIT_CHANCE;
+                                                print("dwarf % connected hit on goblin %\n", dwarf.id, goblin.id);
+
+                                                if swing_connected {
+                                                    goblin.hp -= dwarf_get_attack_damage(dwarf);
+
+                                                    if goblin.hp <= 0 {
+                                                        print_vars(goblin_id_to_index);
+                                                        kill_goblin_by_id(goblin.id);
+
+                                                        dwarf.state = .DECIDING;
+                                                        dwarf.goblin_id_attacking = 0;
+                                                    }
+                                                }
+                                            } else {
+                                                dwarf.state = .DECIDING;
+                                                dwarf.goblin_id_attacking = 0;
+                                            }
+                                        }
                                     case .NOTHING;
                                 }
                             }
@@ -1702,12 +1755,12 @@ main :: () {
                             create_base(Vector2.{ base_rect.x, base_rect.y }, false, *game_state);
                         }
 
-                        #if DWARF_SPAWN_ENABLED {
+                        #if DWARF_DIGGER_SPAWN_ENABLED {
                             for *base: bases {
                                 if base.spawn_dwarf_cooldown_ms <= 0 {
                                     create_dwarf(Vector2.{ base.pos.x, base.pos.y }, .DIGGER);
 
-                                    base.spawn_dwarf_cooldown_ms = DWARF_SPAWN_MS;
+                                    base.spawn_dwarf_cooldown_ms = DWARF_DIGGER_SPAWN_MS;
                                 } else {
                                     base.spawn_dwarf_cooldown_ms -= xx (dt_seconds * 1000);
                                 }
@@ -2120,6 +2173,7 @@ main :: () {
                             DrawText(tprint("state: %\0", it.state).data,                           xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                             DrawText(tprint("tile_ids_on_path: %\0", it.tile_ids_on_path).data,     xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                             DrawText(tprint("mining_cooldown_ms: %\0", it.mining_cooldown_ms).data, xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                            DrawText(tprint("attack_cooldown_ms: %\0", it.attack_cooldown_ms).data, xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                             DrawText(tprint("tile_id_mining: %\0", it.tile_id_mining).data,         xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                             DrawText(tprint("direction: %\0", it.direction).data,                   xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                             DrawText(tprint("type: %\0", it.type).data,                             xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
@@ -2417,6 +2471,50 @@ main :: () {
 
 // Functions
 
+// TODO: Different file?
+// TODO: fancy macro or metaprogram or something to generate these?
+dwarf_get_dig_damage :: (dwarf: Dwarf) -> s32 {
+    if #complete dwarf.type == {
+        case .DIGGER;  return DWARF_DIGGER_DAMAGE_DIG_PER_SWING;
+        case .WARRIOR; return DWARF_WARRIOR_DAMAGE_DIG_PER_SWING;
+    }
+}
+
+dwarf_get_attack_damage :: (dwarf: Dwarf) -> s32 {
+    if #complete dwarf.type == {
+        case .DIGGER;  return DWARF_DIGGER_DAMAGE_ATTACK_PER_SWING;
+        case .WARRIOR; return DWARF_WARRIOR_DAMAGE_ATTACK_PER_SWING;
+    }
+}
+
+dwarf_get_hit_chance :: (dwarf: Dwarf) -> float {
+    if #complete dwarf.type == {
+        case .DIGGER;  return DWARF_DIGGER_HIT_CHANCE;
+        case .WARRIOR; return DWARF_WARRIOR_HIT_CHANCE;
+    }
+}
+
+dwarf_get_mining_cooldown :: (dwarf: Dwarf) -> s32 {
+    if #complete dwarf.type == {
+        case .DIGGER;  return DWARF_DIGGER_DIG_COOLDOWN_MS;
+        case .WARRIOR; return DWARF_WARRIOR_DIG_COOLDOWN_MS;
+    }
+}
+
+dwarf_get_attack_cooldown :: (dwarf: Dwarf) -> s32 {
+    if #complete dwarf.type == {
+        case .DIGGER;  return DWARF_DIGGER_ATTACK_COOLDOWN_MS;
+        case .WARRIOR; return DWARF_WARRIOR_ATTACK_COOLDOWN_MS;
+    }
+}
+
+dwarf_starting_hp_by_type :: (dwarf_type: DwarfType) -> s32 {
+    if #complete dwarf_type == {
+        case .DIGGER;  return DWARF_DIGGER_STARTING_HP;
+        case .WARRIOR; return DWARF_WARRIOR_STARTING_HP;
+    }
+}
+
 opposite_cardinal_direction :: (direction: Direction) -> Direction {
     if direction == .NORTH return .SOUTH;
     if direction == .SOUTH return .NORTH;
@@ -2573,7 +2671,7 @@ initialize_game :: () -> game_state: GameState, camera: Camera2D {
         neighbor_pos: Vector2;
         assert(bases.count > 0);
 
-        for 1..DWARF_START_COUNT {
+        for 1..DWARF_DIGGER_START_COUNT {
             // Initialize digger dwarves
             dx = TILE_DIRECTION_DELTAS[xx Direction.NORTH][0];
             dy = TILE_DIRECTION_DELTAS[xx Direction.NORTH][1];
@@ -2877,8 +2975,8 @@ set_dwarf_direction_to_face_next_target :: (dwarf: *Dwarf) {
 }
 
 create_dwarf :: (pos: Vector2, dwarf_type: DwarfType) -> Dwarf {
-    dwarf_id  := increment_then_read(*dwarf_id_counter);
-    direction := cast(Direction) cast(int) random_get_within_range(0, 3);
+    dwarf_id    := increment_then_read(*dwarf_id_counter);
+    direction   := cast(Direction) cast(int) random_get_within_range(0, 3);
 
     dwarf := Dwarf.{
         id        = dwarf_id,
@@ -2889,6 +2987,7 @@ create_dwarf :: (pos: Vector2, dwarf_type: DwarfType) -> Dwarf {
         tile_id_mining      = 0,
         goblin_id_attacking = 0,
         type = dwarf_type,
+        hp   = dwarf_starting_hp_by_type(dwarf_type),
         // direction intentionally not set
         // tile_ids_on_path intentionally not set
     };
@@ -2914,6 +3013,7 @@ create_goblin :: (pos: Vector2) -> Goblin {
         direction = direction,
         // tile_ids_on_path intentionally not set
         attack_cooldown_ms = GOBLIN_ATTACK_COOLDOWN_MS,
+        hp        = GOBLIN_STARTING_HP,
     };
 
     tile_id := get_tile_id_by_pos(pos);
@@ -2928,7 +3028,7 @@ create_goblin :: (pos: Vector2) -> Goblin {
 create_base :: (pos: Vector2, is_home_base: bool, game_state: *GameState) -> Base {
     base := Base.{
         pos = pos,
-        spawn_dwarf_cooldown_ms = DWARF_SPAWN_MS,
+        spawn_dwarf_cooldown_ms = DWARF_DIGGER_SPAWN_MS,
         is_home_base = is_home_base,
     };
 
@@ -3023,6 +3123,24 @@ kill_dwarf_by_id :: (dwarf_id: s32) {
     found, dwarf_index := table_find(*dwarf_id_to_index, dwarf_id);
     assert(found);
     kill_dwarf_by_index(dwarf_index);
+}
+
+kill_goblin_by_index :: (goblin_index: s64) {
+    goblin_id_being_swapped := goblins[goblins.count - 1].id;
+    goblin_id_being_killed  := goblins[goblin_index].id;
+
+    if goblin_id_being_swapped != goblin_id_being_killed {
+        table_set(*goblin_id_to_index, goblin_id_being_swapped, goblin_index);
+    }
+    table_remove(*goblin_id_to_index, goblin_id_being_killed);
+
+    array_unordered_remove_by_index(*goblins, goblin_index);
+}
+
+kill_goblin_by_id :: (goblin_id: s32) {
+    found, goblin_index := table_find(*goblin_id_to_index, goblin_id);
+    assert(found);
+    kill_goblin_by_index(goblin_index);
 }
 
 get_neighbor_tile_id_by_index :: (tile_id: s32, direction_index: s64) -> s32 {

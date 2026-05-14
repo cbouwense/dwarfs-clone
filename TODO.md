@@ -1,6 +1,6 @@
 # In progress
 
-
+- dwarf attacking
 
 # Bugs
 
@@ -11,6 +11,14 @@
     - cause:
     - correction:
     - confirmation:
+- dwarves and goblins can fail targeting and crash the game?
+    - condition: reproducible on d48ab20
+    - cause:
+    - correction:
+    - confirmation:
+
+## After demo
+
 - goblins do not wander around convincingly
     - condition: reproducible on 279d68e
     - cause:
@@ -21,11 +29,11 @@
 
 ## Demo
 
+- goblin attacking
 - HUD
-- warriors
 - mouse icon for what mode you're in (wall, dynamite, etc)
 
-## Not demo
+## After demo
 
 - dwarf level ups
 - base canons
@@ -49,7 +57,9 @@
 
 ## Demo
 
-## Not demo
+- Saner defaults for controls
+
+## After demo
 
 - Paths should just be two single paths, not bends
 
