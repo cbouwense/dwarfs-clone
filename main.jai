@@ -54,7 +54,7 @@ DWARF_WARRIOR_STARTING_HP :: 100;
 
 GOBLIN_MOVE_SPEED :: 50;
 GOBLIN_ATTACK_COOLDOWN_MS :: 1000;
-GOBLIN_ATTACK_DAMAGE_PER_SWING :: 5;
+GOBLIN_ATTACK_DAMAGE_PER_SWING :: 25;
 GOBLIN_HIT_CHANCE :: 0.80; // TODO: will have to be based on level
 GOBLIN_SPAWN_ENABLED :: true;
 GOBLIN_STARTING_HP :: 100;
@@ -1483,14 +1483,15 @@ main :: () {
 
                                                 // Hit check
                                                 rng := random_get_within_range(0, 1);
-                                                swing_connected := rng <= GOBLIN_HIT_CHANCE;
+                                                swing_connected := rng <= dwarf_get_hit_chance(dwarf);
                                                 print("dwarf % connected hit on goblin %\n", dwarf.id, goblin.id);
 
                                                 if swing_connected {
+                                                    print("goblin % hp went from % ", goblin.id, goblin.hp);
                                                     goblin.hp -= dwarf_get_attack_damage(dwarf);
+                                                    print("to %\n", goblin.hp);
 
                                                     if goblin.hp <= 0 {
-                                                        print_vars(goblin_id_to_index);
                                                         kill_goblin_by_id(goblin.id);
 
                                                         dwarf.state = .DECIDING;
@@ -1653,13 +1654,33 @@ main :: () {
                                         goblin.attack_cooldown_ms = GOBLIN_ATTACK_COOLDOWN_MS;
                                         // TODO: swing animation, I guess
 
-                                        // Hit check
-                                        rng := random_get_within_range(0, 1);
-                                        swing_connected := rng <= GOBLIN_HIT_CHANCE;
-                                        // print_vars(swing_connected);
+                                        // Make sure the goblin is still alive, it's possible that other dwarves have killed it this frame.
+                                        found, dwarf_index := table_find(*dwarf_id_to_index, goblin.dwarf_id_attacking);
+                                        if (found) {
+                                            dwarf := *dwarves[dwarf_index];
 
-                                        if swing_connected {
-                                            // TODO
+                                            assert_soft(goblin.dwarf_id_attacking == dwarf.id, "Goblin % thinks he's attacking dwarf % but really found dwarf %", goblin.id, goblin.dwarf_id_attacking, dwarf.id);
+
+                                            // Hit check
+                                            rng := random_get_within_range(0, 1);
+                                            swing_connected := rng <= GOBLIN_HIT_CHANCE;
+                                            print("goblin % connected hit on dwarf %\n", goblin.id, dwarf.id);
+
+                                            if swing_connected {
+                                                print("dwarf % hp went from % ", dwarf.id, dwarf.hp);
+                                                dwarf.hp -= GOBLIN_ATTACK_DAMAGE_PER_SWING;
+                                                print("to %\n", dwarf.hp);
+
+                                                if dwarf.hp <= 0 {
+                                                    kill_dwarf_by_id(dwarf.id);
+
+                                                    goblin.state = .DECIDING;
+                                                    goblin.dwarf_id_attacking = 0;
+                                                }
+                                            }
+                                        } else {
+                                            goblin.state = .DECIDING;
+                                            goblin.dwarf_id_attacking = 0;
                                         }
                                     }
                                 case .NOTHING;

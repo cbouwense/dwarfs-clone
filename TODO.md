@@ -1,6 +1,6 @@
 # In progress
 
-- dwarf attacking
+- goblins attack bases
 
 # Bugs
 
@@ -12,7 +12,9 @@
     - correction:
     - confirmation:
 - dwarves and goblins can fail targeting and crash the game?
-    - condition: reproducible on d48ab20
+    - condition:
+        - reproducible on d48ab20
+        - seems to happen in straightaways
     - cause:
     - correction:
     - confirmation:
@@ -29,7 +31,6 @@
 
 ## Demo
 
-- goblin attacking
 - HUD
 - mouse icon for what mode you're in (wall, dynamite, etc)
 
