@@ -321,7 +321,10 @@ Moveable :: struct {
 }
 
 Base :: struct {
+    id  : s32;
     pos : Vector2;
+    hp  : s32;
+
     spawn_dwarf_cooldown_ms : s32;
     is_home_base : bool;
 }
@@ -344,8 +347,10 @@ DwarfType :: enum {
 }
 
 Dwarf :: struct {
-    id                  : s32;
-    pos                 : Vector2;
+    id  : s32;
+    pos : Vector2;
+    hp  : s32;
+
     state               : DwarfState;
     tile_ids_on_path    : [..] s32; // TODO: might just want a static size
     mining_cooldown_ms  : s32;
@@ -354,7 +359,6 @@ Dwarf :: struct {
     attack_cooldown_ms  : s32;
     direction           : Direction;
     type                : DwarfType;
-    hp                  : s32;
 }
 
 GoblinState :: enum {
@@ -365,14 +369,15 @@ GoblinState :: enum {
 }
 
 Goblin :: struct {
-    id                 : s32;
-    pos                : Vector2;
+    id  : s32;
+    pos : Vector2;
+    hp  : s32;
+
     state              : GoblinState;
     tile_ids_on_path   : [..] s32; // TODO: might just want a static size
     attack_cooldown_ms : s32;
     dwarf_id_attacking : s32;
     direction          : Direction;
-    hp                 : s32;
 }
 
 Path :: struct {
@@ -394,7 +399,7 @@ Chunk :: struct {
     lava_still_tile_ids     : [..] s32;
     lava_flowing_tile_ids   : [..] s32;
     hole_tile_ids           : [..] s32;
-    base_ids                : [..] s32;
+    base_tile_ids           : [..] s32;
 
     // TODO: Will probably want these
     // dwarf_ids               : [..] s32;
@@ -450,6 +455,8 @@ wall_tile_ids_set         : Table(s32, s32);
 wall_tile_ids_in_viewport : [..] s32;
 
 bases             : [..] Base;
+base_id_to_index  : Table(s32, s64);
+base_id_counter   : s32 = 0;
 bases_in_viewport : [..] Base;
 
 dwarves             : [..] Dwarf;
@@ -588,7 +595,7 @@ main :: () {
     tile_ids_to_goblins: Table(s32, Goblin);
     tile_ids_to_goblins.allocator = temp;
 
-    tile_ids_to_bases: Table(s32, Base);
+    tile_ids_to_bases: Table(s32, *Base);
     tile_ids_to_bases.allocator = temp;
 
     // Keeps track of how many milliseconds remain until the player can panic pause again.
@@ -640,7 +647,7 @@ main :: () {
             table_set(*tile_ids_to_goblins, goblin_tile_id, goblin);
         }
 
-        for base: bases {
+        for *base: bases {
             base_center  := get_rect_center(get_world_rect_from_pos(base.pos));
             base_tile_id := get_tile_id_by_pos(base_center);
             table_set(*tile_ids_to_bases, base_tile_id, base);
@@ -1484,12 +1491,9 @@ main :: () {
                                                 // Hit check
                                                 rng := random_get_within_range(0, 1);
                                                 swing_connected := rng <= dwarf_get_hit_chance(dwarf);
-                                                print("dwarf % connected hit on goblin %\n", dwarf.id, goblin.id);
 
                                                 if swing_connected {
-                                                    print("goblin % hp went from % ", goblin.id, goblin.hp);
                                                     goblin.hp -= dwarf_get_attack_damage(dwarf);
-                                                    print("to %\n", goblin.hp);
 
                                                     if goblin.hp <= 0 {
                                                         kill_goblin_by_id(goblin.id);
@@ -1569,44 +1573,71 @@ main :: () {
                                             print("WARN: Goblin % tried to find a path to dwarf % but couldn't", goblin.id, dwarf.id);
                                         }
                                     }
-                                    // TODO: detect bases
-                                    
-                                    // No targets detected
+                                    // If there are no dwarves nearby, detect any bases
                                     else {
-                                        // If the goblin still has target tiles, then move to the next one
-                                        if goblin.tile_ids_on_path.count > 0 {
-                                            goblin.state = .MOVING;
-                                        }
-                                        // If the goblin has no more target tiles, then wander around
-                                        else {
-                                            new_direction := goblin.direction;
+                                        detected, base := detect_base_within_radius(goblin_tile_id, 10, *tile_ids_to_bases);
 
-                                            // Find a new target by picking a random cardinal direction 1 tile away
-                                            change_direction_rng := random_get_within_range(0, 1);
-                                            if change_direction_rng < 0.1 {
-                                                go_left := change_direction_rng < 0.05;
+                                        if detected {
+                                            base_tile_id := get_tile_id_by_pos(base.pos);
+                                            path_found, tile_ids_to_base := dijkstra(goblin_tile_id, base_tile_id, edges);
+                                            
+                                            if path_found {
+                                                // If the goblin is right up against the base, then start attacking
+                                                if is_tile_id_neighbor_of_tile_id(goblin_tile_id, base_tile_id) {
+                                                    goblin.state = .ATTACKING;
+                                                } else {
+                                                    // PERF: can probably just decrement the count and move the data pointer forward like a rat.
+                                                    //
+                                                    // Since we started pathfinding on the goblin's current tile, we need to pop that off the front
+                                                    // so we don't softlock on it.
+                                                    pop_front(*tile_ids_to_base);
 
-                                                if goblin.direction == .NORTH {
-                                                    new_direction = ifx go_left then .WEST  else .EAST;
+                                                    array_reset(*goblin.tile_ids_on_path);
+                                                    array_copy(*goblin.tile_ids_on_path, tile_ids_to_base);
+
+                                                    goblin.state = .MOVING;
                                                 }
-                                                else if goblin.direction == .SOUTH {
-                                                    new_direction = ifx go_left then .EAST  else .WEST;
-                                                }
-                                                else if goblin.direction == .EAST  {
-                                                    new_direction = ifx go_left then .NORTH else .SOUTH;
-                                                }
-                                                else if goblin.direction == .WEST  {
-                                                    new_direction = ifx go_left then .SOUTH else .NORTH;
-                                                }
-                                                else assert(false);
+                                            } else {
+                                                print("WARN: Goblin % tried to find a path to dwarf % but couldn't", goblin.id, dwarf.id);
                                             }
+                                        }
+                                        // No targets detected
+                                        else {
+                                            // If the goblin still has target tiles, then move to the next one
+                                            if goblin.tile_ids_on_path.count > 0 {
+                                                goblin.state = .MOVING;
+                                            }
+                                            // If the goblin has no more target tiles, then wander around
+                                            else {
+                                                new_direction := goblin.direction;
 
-                                            goblin.direction = new_direction;
+                                                // Find a new target by picking a random cardinal direction 1 tile away
+                                                change_direction_rng := random_get_within_range(0, 1);
+                                                if change_direction_rng < 0.1 {
+                                                    go_left := change_direction_rng < 0.05;
 
-                                            new_target_tile_id := get_neighbor_tile_id_by_direction(goblin_tile_id, new_direction);
-                                            array_add(*goblin.tile_ids_on_path, new_target_tile_id);
+                                                    if goblin.direction == .NORTH {
+                                                        new_direction = ifx go_left then .WEST  else .EAST;
+                                                    }
+                                                    else if goblin.direction == .SOUTH {
+                                                        new_direction = ifx go_left then .EAST  else .WEST;
+                                                    }
+                                                    else if goblin.direction == .EAST  {
+                                                        new_direction = ifx go_left then .NORTH else .SOUTH;
+                                                    }
+                                                    else if goblin.direction == .WEST  {
+                                                        new_direction = ifx go_left then .SOUTH else .NORTH;
+                                                    }
+                                                    else assert(false);
+                                                }
 
-                                            goblin.state = .MOVING;
+                                                goblin.direction = new_direction;
+
+                                                new_target_tile_id := get_neighbor_tile_id_by_direction(goblin_tile_id, new_direction);
+                                                array_add(*goblin.tile_ids_on_path, new_target_tile_id);
+
+                                                goblin.state = .MOVING;
+                                            }
                                         }
                                     }
 
@@ -1654,33 +1685,54 @@ main :: () {
                                         goblin.attack_cooldown_ms = GOBLIN_ATTACK_COOLDOWN_MS;
                                         // TODO: swing animation, I guess
 
-                                        // Make sure the goblin is still alive, it's possible that other dwarves have killed it this frame.
-                                        found, dwarf_index := table_find(*dwarf_id_to_index, goblin.dwarf_id_attacking);
-                                        if (found) {
-                                            dwarf := *dwarves[dwarf_index];
-
-                                            assert_soft(goblin.dwarf_id_attacking == dwarf.id, "Goblin % thinks he's attacking dwarf % but really found dwarf %", goblin.id, goblin.dwarf_id_attacking, dwarf.id);
+                                        // If we're in attack mode and we don't have a dwarf that we're targeting, then we probably should be
+                                        // attacking a base.
+                                        if goblin.dwarf_id_attacking == 0 {
+                                            base_neighbor_detected, base, _direction := detect_base_neighbor_cardinal(goblin_tile_id, *tile_ids_to_bases);
+                                            assert_soft(base_neighbor_detected, "Goblin % is attacking, but has no dwarf target and is not next to a base, so, that's wrong.\n");
 
                                             // Hit check
                                             rng := random_get_within_range(0, 1);
                                             swing_connected := rng <= GOBLIN_HIT_CHANCE;
-                                            print("goblin % connected hit on dwarf %\n", goblin.id, dwarf.id);
 
                                             if swing_connected {
-                                                print("dwarf % hp went from % ", dwarf.id, dwarf.hp);
-                                                dwarf.hp -= GOBLIN_ATTACK_DAMAGE_PER_SWING;
-                                                print("to %\n", dwarf.hp);
+                                                base.hp -= GOBLIN_ATTACK_DAMAGE_PER_SWING;
 
-                                                if dwarf.hp <= 0 {
-                                                    kill_dwarf_by_id(dwarf.id);
+                                                if base.hp <= 0 {
+                                                    kill_base_by_id(base.id);
 
                                                     goblin.state = .DECIDING;
                                                     goblin.dwarf_id_attacking = 0;
                                                 }
                                             }
-                                        } else {
-                                            goblin.state = .DECIDING;
-                                            goblin.dwarf_id_attacking = 0;
+                                        }
+                                        // If we do have a dwarf id we're attacking, then attack it
+                                        else {
+                                            // Make sure the dwarf is still alive, it's possible that other goblins have killed it this frame.
+                                            found, dwarf_index := table_find(*dwarf_id_to_index, goblin.dwarf_id_attacking);
+                                            if (found) {
+                                                dwarf := *dwarves[dwarf_index];
+
+                                                assert_soft(goblin.dwarf_id_attacking == dwarf.id, "Goblin % thinks he's attacking dwarf % but really found dwarf %", goblin.id, goblin.dwarf_id_attacking, dwarf.id);
+
+                                                // Hit check
+                                                rng := random_get_within_range(0, 1);
+                                                swing_connected := rng <= GOBLIN_HIT_CHANCE;
+
+                                                if swing_connected {
+                                                    dwarf.hp -= GOBLIN_ATTACK_DAMAGE_PER_SWING;
+
+                                                    if dwarf.hp <= 0 {
+                                                        kill_dwarf_by_id(dwarf.id);
+
+                                                        goblin.state = .DECIDING;
+                                                        goblin.dwarf_id_attacking = 0;
+                                                    }
+                                                }
+                                            } else {
+                                                goblin.state = .DECIDING;
+                                                goblin.dwarf_id_attacking = 0;
+                                            }
                                         }
                                     }
                                 case .NOTHING;
@@ -2585,6 +2637,8 @@ reset_memory :: () {
     table_reset(*wall_tile_ids_set);
 
     array_reset(*bases);
+    table_reset(*base_id_to_index);
+    base_id_counter = 0;
 
     array_reset(*dwarves);
     table_reset(*dwarf_id_to_index);
@@ -2901,9 +2955,9 @@ detect_goblin_neighbor_cardinal :: (tile_id: s32, tile_ids_to_goblins: *Table) -
 }
 
 // TODO: DRY up these detect neighbor functions maybe
-detect_base_neighbor :: (tile_id: s32, tile_ids_to_bases: *Table) -> base_neighbor_detected: bool, base: Base, direction: Direction {
+detect_base_neighbor :: (tile_id: s32, tile_ids_to_bases: *Table) -> base_neighbor_detected: bool, base: *Base, direction: Direction {
     found: bool;
-    base: Base;
+    base: *Base;
 
     for i: 0..7 {
         dx := TILE_DIRECTION_ID_DELTAS[i][0];
@@ -2919,9 +2973,9 @@ detect_base_neighbor :: (tile_id: s32, tile_ids_to_bases: *Table) -> base_neighb
 }
 
 // TODO: DRY up these detect neighbor functions maybe
-detect_base_neighbor_cardinal :: (tile_id: s32, tile_ids_to_bases: *Table) -> base_neighbor_detected: bool, base: Base, direction: Direction {
+detect_base_neighbor_cardinal :: (tile_id: s32, tile_ids_to_bases: *Table) -> base_neighbor_detected: bool, base: *Base, direction: Direction {
     found: bool;
-    base: Base;
+    base: *Base;
 
     for i: 0..3 {
         dx := TILE_DIRECTION_ID_DELTAS[i][0];
@@ -3047,15 +3101,21 @@ create_goblin :: (pos: Vector2) -> Goblin {
 }
 
 create_base :: (pos: Vector2, is_home_base: bool, game_state: *GameState) -> Base {
+    base_id := increment_then_read(*base_id_counter);
+
     base := Base.{
+        id  = base_id,
         pos = pos,
         spawn_dwarf_cooldown_ms = DWARF_DIGGER_SPAWN_MS,
         is_home_base = is_home_base,
+        hp = 1000
     };
 
     base_tile_id := get_tile_id_by_pos(base.pos);
     _result, chunk := find_or_create_chunk_by_tile_id(base_tile_id);
-    array_add(*chunk.base_ids, xx bases.count);
+    array_add(*chunk.base_tile_ids, xx bases.count);
+
+    table_set(*base_id_to_index, base_id, bases.count);
     array_add(*bases, base);
 
     // Give a little breathing room with caves for the home base
@@ -3128,6 +3188,8 @@ kill_any_dynamite_touching_tile_id :: (tile_id: s32) {
     }
 }
 
+// TODO: DRY up kill by functions
+
 kill_dwarf_by_index :: (dwarf_index: s64) {
     dwarf_id_being_swapped := dwarves[dwarves.count - 1].id;
     dwarf_id_being_killed  := dwarves[dwarf_index].id;
@@ -3162,6 +3224,34 @@ kill_goblin_by_id :: (goblin_id: s32) {
     found, goblin_index := table_find(*goblin_id_to_index, goblin_id);
     assert(found);
     kill_goblin_by_index(goblin_index);
+}
+
+kill_base_by_index :: (base_index: s64) {
+    base_being_killed := bases[base_index];
+    if base_being_killed.is_home_base {
+        metagame.state = .GAME_OVER;
+    }
+
+    base_id_being_swapped := bases[bases.count - 1].id;
+    base_id_being_killed  := bases[base_index].id;
+
+    tile_id_of_base_being_killed := get_tile_id_by_pos(base_being_killed.pos);
+
+    _result, chunk := find_or_create_chunk_by_tile_id(tile_id_of_base_being_killed);
+    array_unordered_remove_by_value(*chunk.base_tile_ids, tile_id_of_base_being_killed);
+
+    if base_id_being_swapped != base_id_being_killed {
+        table_set(*base_id_to_index, base_id_being_swapped, base_index);
+    }
+    table_remove(*base_id_to_index, base_id_being_killed);
+
+    array_unordered_remove_by_index(*bases, base_index);
+}
+
+kill_base_by_id :: (base_id: s32) {
+    found, base_index := table_find(*base_id_to_index, base_id);
+    assert(found);
+    kill_base_by_index(base_index);
 }
 
 get_neighbor_tile_id_by_index :: (tile_id: s32, direction_index: s64) -> s32 {
@@ -4293,6 +4383,53 @@ detect_dwarf_within_radius :: (
 }
 
 // TODO: probably want to DRY up these detector functions
+detect_base_within_radius :: (
+    starting_tile_id: s32,
+    radius: s32,
+    tile_ids_to_bases: *Table
+) -> found: bool, base: Base {
+    max_tile_id := WORLD_COLS * WORLD_ROWS;
+
+    ids_to_process : [..] s32;
+    ids_to_process.allocator = temp;
+
+    ids_processed_set : Table(s32, s32);
+    ids_processed_set.allocator = temp;
+
+    array_add(*ids_to_process, starting_tile_id);
+
+    while ids_to_process.count > 0 {
+        // Get the next id to process
+        id := pop_front(*ids_to_process);
+
+        // Make sure the id is valid and hasn't already been processed
+        if table_contains(*ids_processed_set, id) continue;
+        if id <= 0 continue;
+        if id > max_tile_id continue;
+        if !table_contains(*fully_mined_tile_ids_set, id) continue;
+        if id == starting_tile_id - (WORLD_ROWS * (radius + 1)) continue; // north
+        if id == starting_tile_id + (WORLD_ROWS * (radius + 1)) continue; // south
+        if id == starting_tile_id + (radius + 1)                continue; // east
+        if id == starting_tile_id - (radius + 1)                continue; // west
+
+        // If a base is detected, return
+        detected, base := table_find(tile_ids_to_bases, id);
+        if (detected) return true, base;
+
+        // Mark it as processed
+        table_set(*ids_processed_set, id, 1738);
+
+        // Add neighbors as needing to be processed
+        array_add(*ids_to_process, id - WORLD_ROWS);
+        array_add(*ids_to_process, id + WORLD_ROWS);
+        array_add(*ids_to_process, id + 1);
+        array_add(*ids_to_process, id - 1);
+    }
+
+    return false, Base.{};
+}
+
+// TODO: probably want to DRY up these detector functions
 detect_goblin_within_radius :: (
     starting_tile_id: s32,
     radius: s32,
@@ -4577,7 +4714,7 @@ derive_entities_in_viewport :: (camera: Camera2D) {
             }
 
             // Bases
-            for base_id: chunk.base_ids {
+            for base_id: chunk.base_tile_ids {
                 base := bases[base_id];
 
                 if base.pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
