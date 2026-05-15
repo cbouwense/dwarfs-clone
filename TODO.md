@@ -1,6 +1,12 @@
 # In progress
 
-- goblins attack bases
+- dwarves and goblins can fail targeting and crash the game?
+    - condition:
+        - reproducible on d48ab20
+        - seems to happen in straightaways
+    - cause:
+    - correction:
+    - confirmation:
 
 # Bugs
 
@@ -11,13 +17,7 @@
     - cause:
     - correction:
     - confirmation:
-- dwarves and goblins can fail targeting and crash the game?
-    - condition:
-        - reproducible on d48ab20
-        - seems to happen in straightaways
-    - cause:
-    - correction:
-    - confirmation:
+
 
 ## After demo
 
@@ -68,3 +68,4 @@
 
 - search feature for tiles, dwarves, etc.
 - hotreloading
+- pos_by_id cache and vice versa?

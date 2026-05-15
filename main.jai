@@ -399,7 +399,7 @@ Chunk :: struct {
     lava_still_tile_ids     : [..] s32;
     lava_flowing_tile_ids   : [..] s32;
     hole_tile_ids           : [..] s32;
-    base_tile_ids           : [..] s32;
+    base_ids                : [..] s32;
 
     // TODO: Will probably want these
     // dwarf_ids               : [..] s32;
@@ -484,7 +484,7 @@ path_being_traced : Path;
 paths             : [..] Path;
 paths_in_viewport : [..] Path;
 
-active_chunks: Table(u64, *Chunk);
+created_chunks: Table(u64, *Chunk);
 
 edges : [..] Edge; // List of edges between tiles for pathfinding
 
@@ -1860,7 +1860,7 @@ main :: () {
                             iron_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
                             tile_pos  := Vector2.{ iron_rect.x, iron_rect.y };
                             tile_id   := get_tile_id_by_pos(tile_pos);
-                            spawn_iron(xx tile_id, IRON_VEIN_SIZE_MIN, IRON_VEIN_SIZE_MAX, WORLD_COLS, WORLD_ROWS, *active_chunks, *iron_tile_ids_set);
+                            spawn_iron(xx tile_id, IRON_VEIN_SIZE_MIN, IRON_VEIN_SIZE_MAX, WORLD_COLS, WORLD_ROWS, *created_chunks, *iron_tile_ids_set);
                         }
                     }
 
@@ -2668,7 +2668,7 @@ reset_memory :: () {
     // path_being_traced : Path;
     array_reset(*paths);
 
-    table_reset(*active_chunks);
+    table_reset(*created_chunks);
 
     array_reset(*edges);
 }
@@ -2729,7 +2729,7 @@ initialize_game :: () -> game_state: GameState, camera: Camera2D {
 
                 iron_spawn_dice_roll := cast(int) random_get_within_range(IRON_SPAWN_CHANCE_NUMERATOR, IRON_SPAWN_CHANCE_DENOMINATOR);
                 if iron_spawn_dice_roll <= IRON_SPAWN_CHANCE_NUMERATOR {
-                    spawn_iron(xx tile_id, IRON_VEIN_SIZE_MIN, IRON_VEIN_SIZE_MAX, WORLD_COLS, WORLD_ROWS, *active_chunks, *iron_tile_ids_set);
+                    spawn_iron(xx tile_id, IRON_VEIN_SIZE_MIN, IRON_VEIN_SIZE_MAX, WORLD_COLS, WORLD_ROWS, *created_chunks, *iron_tile_ids_set);
                 }
             }
         }
@@ -3122,7 +3122,7 @@ create_base :: (pos: Vector2, is_home_base: bool, game_state: *GameState) -> Bas
 
     base_tile_id := get_tile_id_by_pos(base.pos);
     _result, chunk := find_or_create_chunk_by_tile_id(base_tile_id);
-    array_add(*chunk.base_tile_ids, xx bases.count);
+    array_add(*chunk.base_ids, base_id);
 
     table_set(*base_id_to_index, base_id, bases.count);
     array_add(*bases, base);
@@ -3247,7 +3247,7 @@ kill_base_by_index :: (base_index: s64) {
     tile_id_of_base_being_killed := get_tile_id_by_pos(base_being_killed.pos);
 
     _result, chunk := find_or_create_chunk_by_tile_id(tile_id_of_base_being_killed);
-    array_unordered_remove_by_value(*chunk.base_tile_ids, tile_id_of_base_being_killed);
+    array_unordered_remove_by_value(*chunk.base_ids, base_id_being_killed);
 
     if base_id_being_swapped != base_id_being_killed {
         table_set(*base_id_to_index, base_id_being_swapped, base_index);
@@ -3812,13 +3812,13 @@ find_or_create_chunk :: (chunk_x: s32, chunk_y: s32) -> (status: FindOrCreateChu
     key_is_within_map_bounds, key := find_chunk_key(chunk_x, chunk_y);
     if !key_is_within_map_bounds return .CHUNK_WOULD_BE_OUT_OF_BOUNDS, null;
 
-    found_chunk, chunk := table_find(*active_chunks, key);
+    found_chunk, chunk := table_find(*created_chunks, key);
     if found_chunk return .CHUNK_FOUND, chunk;
 
     // The chunk doesn't exist yet, so let's make a new one.
     new_chunk := New(Chunk);
     
-    table_set(*active_chunks, key, new_chunk);
+    table_set(*created_chunks, key, new_chunk);
     
     return .CHUNK_CREATED, new_chunk;
 }
@@ -4256,7 +4256,7 @@ spawn_iron :: (
     vein_size_max: s32, 
     world_columns: s32, 
     world_rows: s32, 
-    active_chunks: *Table,
+    created_chunks: *Table,
     iron_tile_ids_set : *Table
 ) {
     size := cast(int) random_get_within_range(xx vein_size_min, xx vein_size_max);
@@ -4573,7 +4573,7 @@ derive_entities_in_viewport :: (camera: Camera2D) {
             // This happens if the camera is looking out of bounds.
             if !key_was_valid continue;
 
-            found, chunk := table_find(*active_chunks, key);
+            found, chunk := table_find(*created_chunks, key);
             // If the chunk doesn't exist, nobody has mined or walked here, so just move on.
             if !found continue; 
 
@@ -4723,8 +4723,10 @@ derive_entities_in_viewport :: (camera: Camera2D) {
             }
 
             // Bases
-            for base_id: chunk.base_tile_ids {
-                base := bases[base_id];
+            for base_id: chunk.base_ids {
+                found, base_index := table_find(*base_id_to_index, base_id);
+                assert(found);
+                base := bases[base_index];
 
                 if base.pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
                 if base.pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
