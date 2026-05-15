@@ -33,14 +33,14 @@ WALL_HEALTH :: 200;
 DWARF_MOVE_SPEED :: 33;
 // TODO: DWARF_MOVE_SPEED_TARGETING :: DWARF_MOVE_SPEED * 2;
 
-DWARF_DIGGER_START_COUNT :: 1;
+DWARF_DIGGER_START_COUNT :: 0;
 DWARF_DIGGER_DIG_COOLDOWN_MS    :: 1000;
 DWARF_DIGGER_ATTACK_COOLDOWN_MS :: 2000;
 DWARF_DIGGER_DAMAGE_DIG_PER_SWING    :: 50;
 DWARF_DIGGER_DAMAGE_ATTACK_PER_SWING :: 25;
 DWARF_DIGGER_HIT_CHANCE :: 0.50; // TODO: will have to be based on level
 DWARF_DIGGER_SPAWN_MS :: 10000;
-DWARF_DIGGER_SPAWN_ENABLED :: true;
+DWARF_DIGGER_SPAWN_ENABLED :: false;
 DWARF_DIGGER_STARTING_HP :: 75;
 
 DWARF_WARRIOR_START_COUNT :: 1;
@@ -1582,8 +1582,12 @@ main :: () {
                                             path_found, tile_ids_to_base := dijkstra(goblin_tile_id, base_tile_id, edges);
                                             
                                             if path_found {
+                                                // If the goblin is on top of the base, then just start attacking I guess
+                                                if goblin_tile_id == base_tile_id {
+                                                    goblin.state = .ATTACKING;
+                                                }
                                                 // If the goblin is right up against the base, then start attacking
-                                                if is_tile_id_neighbor_of_tile_id(goblin_tile_id, base_tile_id) {
+                                                else if is_tile_id_neighbor_of_tile_id(goblin_tile_id, base_tile_id) {
                                                     goblin.state = .ATTACKING;
                                                 } else {
                                                     // PERF: can probably just decrement the count and move the data pointer forward like a rat.
@@ -1641,10 +1645,10 @@ main :: () {
                                         }
                                     }
 
-                                    assert_soft(goblin.state != .DECIDING, "Goblin % got to end of DECIDING state without making a decision", goblin.id);
+                                    assert_soft(goblin.state != .DECIDING, "Goblin % got to end of DECIDING state without making a decision\n", goblin.id);
 
                                 case .MOVING;
-                                    assert_soft(goblin.tile_ids_on_path.count > 0, "Goblin % was moving somewhere but has no target", goblin.id);
+                                    assert_soft(goblin.tile_ids_on_path.count > 0, "Goblin % was moving somewhere but has no target\n", goblin.id);
                                     if metagame.state == .RUNNING {
                                         target_tile_id  := goblin.tile_ids_on_path[0];
                                         target_tile_pos := get_tile_pos_by_id(target_tile_id);
@@ -1688,8 +1692,13 @@ main :: () {
                                         // If we're in attack mode and we don't have a dwarf that we're targeting, then we probably should be
                                         // attacking a base.
                                         if goblin.dwarf_id_attacking == 0 {
-                                            base_neighbor_detected, base, _direction := detect_base_neighbor_cardinal(goblin_tile_id, *tile_ids_to_bases);
-                                            assert_soft(base_neighbor_detected, "Goblin % is attacking, but has no dwarf target and is not next to a base, so, that's wrong.\n");
+                                            // Check to see if goblin is on top of base, somehow
+                                            is_on_base, base := table_find(*tile_ids_to_bases, goblin_tile_id);
+                                            if !is_on_base {
+                                                base_neighbor_detected, base_neighbor, _direction := detect_base_neighbor_cardinal(goblin_tile_id, *tile_ids_to_bases);
+                                                assert_soft(base_neighbor_detected, "Goblin % is attacking, but has no dwarf target, is not on top of a base, and is not next to a base. So, that's wrong.\n");
+                                                base = base_neighbor;
+                                            }
 
                                             // Hit check
                                             rng := random_get_within_range(0, 1);
@@ -2756,10 +2765,10 @@ initialize_game :: () -> game_state: GameState, camera: Camera2D {
         }
         
         // Initialize warrior dwarf
-        dx = TILE_DIRECTION_DELTAS[xx Direction.EAST][0];
-        dy = TILE_DIRECTION_DELTAS[xx Direction.EAST][1];
-        neighbor_pos = Vector2.{ home_base.pos.x + dx, home_base.pos.y + dy };
-        create_dwarf(neighbor_pos, .WARRIOR);
+        // dx = TILE_DIRECTION_DELTAS[xx Direction.EAST][0];
+        // dy = TILE_DIRECTION_DELTAS[xx Direction.EAST][1];
+        // neighbor_pos = Vector2.{ home_base.pos.x + dx, home_base.pos.y + dy };
+        // create_dwarf(neighbor_pos, .WARRIOR);
     }
 
     // Initialize camera
