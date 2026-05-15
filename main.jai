@@ -33,14 +33,14 @@ WALL_HEALTH :: 200;
 DWARF_MOVE_SPEED :: 33;
 // TODO: DWARF_MOVE_SPEED_TARGETING :: DWARF_MOVE_SPEED * 2;
 
-DWARF_DIGGER_START_COUNT :: 0;
+DWARF_DIGGER_START_COUNT :: 1;
 DWARF_DIGGER_DIG_COOLDOWN_MS    :: 1000;
 DWARF_DIGGER_ATTACK_COOLDOWN_MS :: 2000;
 DWARF_DIGGER_DAMAGE_DIG_PER_SWING    :: 50;
 DWARF_DIGGER_DAMAGE_ATTACK_PER_SWING :: 25;
 DWARF_DIGGER_HIT_CHANCE :: 0.50; // TODO: will have to be based on level
 DWARF_DIGGER_SPAWN_MS :: 10000;
-DWARF_DIGGER_SPAWN_ENABLED :: false;
+DWARF_DIGGER_SPAWN_ENABLED :: true;
 DWARF_DIGGER_STARTING_HP :: 75;
 
 DWARF_WARRIOR_START_COUNT :: 1;
@@ -170,48 +170,50 @@ init_sprites :: () {
 // Controls
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-select_is_pressed_once   : bool;
-select_is_held_down      : bool;
-add_base_mode            : bool;
-add_iron                 : bool;
-select_as_place_dwarf    : bool;
-select_as_place_dynamite : bool;
-select_as_place_goblin   : bool;
-select_as_place_obsidian : bool;
-select_as_place_wall     : bool;
-started_to_draw_path     : bool;
-drawing_path             : bool;
-drag_cam_pressed         : bool;
-drag_cam_down            : bool;
-move_camera_up           : bool;
-move_camera_down         : bool;
-move_camera_left         : bool;
-move_camera_right        : bool;
-select_as_remove_path    : bool;
-panic_pause              : bool;
-fast_forward             : bool;
+select_is_pressed_once        : bool;
+select_is_held_down           : bool;
+add_base_mode                 : bool;
+add_iron                      : bool;
+select_as_place_digger_dwarf  : bool;
+select_as_place_warrior_dwarf : bool;
+select_as_place_dynamite      : bool;
+select_as_place_goblin        : bool;
+select_as_place_obsidian      : bool;
+select_as_place_wall          : bool;
+started_to_draw_path          : bool;
+drawing_path                  : bool;
+drag_cam_pressed              : bool;
+drag_cam_down                 : bool;
+move_camera_up                : bool;
+move_camera_down              : bool;
+move_camera_left              : bool;
+move_camera_right             : bool;
+select_as_remove_path         : bool;
+panic_pause                   : bool;
+fast_forward                  : bool;
 
 // TODO: macro?
-select_is_pressed_once_prev   : bool;
-select_is_held_down_prev      : bool;
-add_base_mode_prev            : bool;
-add_iron_prev                 : bool;
-select_as_place_dwarf_prev    : bool;
-select_as_place_dynamite_prev : bool;
-select_as_place_goblin_prev   : bool;
-select_as_place_obsidian_prev : bool;
-select_as_place_wall_prev     : bool;
-started_to_draw_path_prev     : bool;
-drawing_path_prev             : bool;
-drag_cam_pressed_prev         : bool;
-drag_cam_down_prev            : bool;
-move_camera_up_prev           : bool;
-move_camera_down_prev         : bool;
-move_camera_left_prev         : bool;
-move_camera_right_prev        : bool;
-select_as_remove_path_prev    : bool;
-panic_pause_prev              : bool;
-fast_forward_prev             : bool;
+select_is_pressed_once_prev        : bool;
+select_is_held_down_prev           : bool;
+add_base_mode_prev                 : bool;
+add_iron_prev                      : bool;
+select_as_place_digger_dwarf_prev  : bool;
+select_as_place_warrior_dwarf_prev : bool;
+select_as_place_dynamite_prev      : bool;
+select_as_place_goblin_prev        : bool;
+select_as_place_obsidian_prev      : bool;
+select_as_place_wall_prev          : bool;
+started_to_draw_path_prev          : bool;
+drawing_path_prev                  : bool;
+drag_cam_pressed_prev              : bool;
+drag_cam_down_prev                 : bool;
+move_camera_up_prev                : bool;
+move_camera_down_prev              : bool;
+move_camera_left_prev              : bool;
+move_camera_right_prev             : bool;
+select_as_remove_path_prev         : bool;
+panic_pause_prev                   : bool;
+fast_forward_prev                  : bool;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Other
@@ -245,11 +247,12 @@ Direction :: enum u8 #specified {
     CENTER     :: 8; // essentially no direction
 }
 
+// TODO: use these everywhere I can
 DIRECTIONS_CARDINAL :: #run array_view(enum_values_as_enum(Direction), 0, 4);
 DIRECTIONS_COMPASS  :: #run array_view(enum_values_as_enum(Direction), 0, enum_highest_value(Direction));
 DIRECTIONS_ALL      :: #run array_view(enum_values_as_enum(Direction), 0, enum_highest_value(Direction) + 1);
 
-TILE_DIRECTION_DELTAS :: [2]float32.[
+TILE_DIRECTION_DELTAS :: [2] float32.[
     .[0.0, -TILEMAP_GENERAL_WORLD_HEIGHT], // north
     .[0.0, +TILEMAP_GENERAL_WORLD_HEIGHT], // south
     .[+TILEMAP_GENERAL_WORLD_WIDTH, 0.0],  // east
@@ -261,7 +264,7 @@ TILE_DIRECTION_DELTAS :: [2]float32.[
     .[0.0, 0.0], // center
 ];
 
-TILE_DIRECTION_ID_DELTAS :: [2]s32.[
+TILE_DIRECTION_ID_DELTAS :: [2] s32.[
     .[0, -WORLD_COLS],  // north
     .[0, +WORLD_COLS],  // south
     .[+1, 0],           // east
@@ -546,8 +549,11 @@ main :: () {
         controls.add_iron.name = "DEBUG: Add iron deposit";
         controls.add_iron.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_I };
 
-        controls.select_as_place_dwarf.name = "DEBUG: Add dwarf";
-        controls.select_as_place_dwarf.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_D };
+        controls.select_as_place_digger_dwarf.name = "DEBUG: Add digger dwarf";
+        controls.select_as_place_digger_dwarf.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_D };
+
+        controls.select_as_place_warrior_dwarf.name = "DEBUG: Add warrior dwarf";
+        controls.select_as_place_warrior_dwarf.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_W };
 
         controls.select_as_place_dynamite.name = "Add dynamite mode";
         controls.select_as_place_dynamite.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_E };
@@ -672,23 +678,24 @@ main :: () {
                                 // TODO: do this somewhat intelligently
                                 //
                                 // Set any binds currently being set to not being set
-                                for *controls.select.binds                   it.is_being_rebound = false;
-                                for *controls.add_base_mode.binds            it.is_being_rebound = false;
-                                for *controls.add_iron.binds                 it.is_being_rebound = false;
-                                for *controls.select_as_place_dwarf.binds    it.is_being_rebound = false;
-                                for *controls.select_as_place_dynamite.binds it.is_being_rebound = false;
-                                for *controls.select_as_place_goblin.binds   it.is_being_rebound = false;
-                                for *controls.select_as_place_obsidian.binds it.is_being_rebound = false;
-                                for *controls.select_as_place_wall.binds     it.is_being_rebound = false;
-                                for *controls.drag_as_create_path.binds      it.is_being_rebound = false;
-                                for *controls.drag_cam.binds                 it.is_being_rebound = false;
-                                for *controls.move_camera_up.binds           it.is_being_rebound = false;
-                                for *controls.move_camera_down.binds         it.is_being_rebound = false;
-                                for *controls.move_camera_left.binds         it.is_being_rebound = false;
-                                for *controls.move_camera_right.binds        it.is_being_rebound = false;
-                                for *controls.select_as_remove_path.binds    it.is_being_rebound = false;
-                                for *controls.panic_pause.binds              it.is_being_rebound = false;
-                                for *controls.fast_forward.binds             it.is_being_rebound = false;
+                                for *controls.select.binds                        it.is_being_rebound = false;
+                                for *controls.add_base_mode.binds                 it.is_being_rebound = false;
+                                for *controls.add_iron.binds                      it.is_being_rebound = false;
+                                for *controls.select_as_place_digger_dwarf.binds  it.is_being_rebound = false;
+                                for *controls.select_as_place_warrior_dwarf.binds it.is_being_rebound = false;
+                                for *controls.select_as_place_dynamite.binds      it.is_being_rebound = false;
+                                for *controls.select_as_place_goblin.binds        it.is_being_rebound = false;
+                                for *controls.select_as_place_obsidian.binds      it.is_being_rebound = false;
+                                for *controls.select_as_place_wall.binds          it.is_being_rebound = false;
+                                for *controls.drag_as_create_path.binds           it.is_being_rebound = false;
+                                for *controls.drag_cam.binds                      it.is_being_rebound = false;
+                                for *controls.move_camera_up.binds                it.is_being_rebound = false;
+                                for *controls.move_camera_down.binds              it.is_being_rebound = false;
+                                for *controls.move_camera_left.binds              it.is_being_rebound = false;
+                                for *controls.move_camera_right.binds             it.is_being_rebound = false;
+                                for *controls.select_as_remove_path.binds         it.is_being_rebound = false;
+                                for *controls.panic_pause.binds                   it.is_being_rebound = false;
+                                for *controls.fast_forward.binds                  it.is_being_rebound = false;
 
                                 metagame.pause_state = .MENU;
                         }
@@ -705,23 +712,24 @@ main :: () {
             // Controls from last frame
             {
                 // TODO: macro or something
-                select_is_pressed_once_prev   = select_is_pressed_once;
-                select_is_held_down_prev      = select_is_held_down;
-                add_base_mode_prev            = add_base_mode;
-                add_iron_prev                 = add_iron;
-                select_as_place_dwarf_prev    = select_as_place_dwarf;
-                select_as_place_dynamite_prev = select_as_place_dynamite;
-                select_as_place_obsidian_prev = select_as_place_obsidian;
-                select_as_place_wall_prev     = select_as_place_wall;
-                select_as_remove_path_prev    = select_as_remove_path;
-                panic_pause_prev              = panic_pause;
-                drag_cam_pressed_prev         = drag_cam_pressed;
-                drag_cam_down_prev            = drag_cam_down;
-                move_camera_up_prev           = move_camera_up;
-                move_camera_down_prev         = move_camera_down;
-                move_camera_left_prev         = move_camera_left;
-                move_camera_right_prev        = move_camera_right;
-                fast_forward_prev             = fast_forward;
+                select_is_pressed_once_prev        = select_is_pressed_once;
+                select_is_held_down_prev           = select_is_held_down;
+                add_base_mode_prev                 = add_base_mode;
+                add_iron_prev                      = add_iron;
+                select_as_place_digger_dwarf_prev  = select_as_place_digger_dwarf;
+                select_as_place_warrior_dwarf_prev = select_as_place_warrior_dwarf;
+                select_as_place_dynamite_prev      = select_as_place_dynamite;
+                select_as_place_obsidian_prev      = select_as_place_obsidian;
+                select_as_place_wall_prev          = select_as_place_wall;
+                select_as_remove_path_prev         = select_as_remove_path;
+                panic_pause_prev                   = panic_pause;
+                drag_cam_pressed_prev              = drag_cam_pressed;
+                drag_cam_down_prev                 = drag_cam_down;
+                move_camera_up_prev                = move_camera_up;
+                move_camera_down_prev              = move_camera_down;
+                move_camera_left_prev              = move_camera_left;
+                move_camera_right_prev             = move_camera_right;
+                fast_forward_prev                  = fast_forward;
 
                 started_to_draw_path_prev   = started_to_draw_path;
                 drawing_path_prev  = drawing_path;
@@ -729,33 +737,35 @@ main :: () {
 
             // Controls this frame
             {
-                select_is_pressed_once   = control_is_pressed(controls.select);
-                select_is_held_down      = control_is_down(controls.select);
-                add_base_mode            = control_is_down(controls.add_base_mode);
-                add_iron                 = control_is_pressed(controls.add_iron);
-                select_as_place_dwarf    = control_is_down(controls.select_as_place_dwarf);
-                select_as_place_dynamite = control_is_down(controls.select_as_place_dynamite);
-                select_as_place_goblin   = control_is_down(controls.select_as_place_goblin);
-                select_as_place_obsidian = control_is_down(controls.select_as_place_obsidian);
-                select_as_place_wall     = control_is_down(controls.select_as_place_wall);
-                select_as_remove_path    = control_is_down(controls.select_as_remove_path);
-                drag_cam_pressed         = control_is_pressed(controls.drag_cam);
-                drag_cam_down            = control_is_down(controls.drag_cam);
-                move_camera_up           = control_is_down(controls.move_camera_up);
-                move_camera_down         = control_is_down(controls.move_camera_down);
-                move_camera_left         = control_is_down(controls.move_camera_left);
-                move_camera_right        = control_is_down(controls.move_camera_right);
-                panic_pause              = control_is_pressed(controls.panic_pause);
-                fast_forward             = control_is_down(controls.fast_forward);
+                select_is_pressed_once        = control_is_pressed(controls.select);
+                select_is_held_down           = control_is_down(controls.select);
+                add_base_mode                 = control_is_down(controls.add_base_mode);
+                add_iron                      = control_is_pressed(controls.add_iron);
+                select_as_place_digger_dwarf  = control_is_down(controls.select_as_place_digger_dwarf);
+                select_as_place_warrior_dwarf = control_is_down(controls.select_as_place_warrior_dwarf);
+                select_as_place_dynamite      = control_is_down(controls.select_as_place_dynamite);
+                select_as_place_goblin        = control_is_down(controls.select_as_place_goblin);
+                select_as_place_obsidian      = control_is_down(controls.select_as_place_obsidian);
+                select_as_place_wall          = control_is_down(controls.select_as_place_wall);
+                select_as_remove_path         = control_is_down(controls.select_as_remove_path);
+                drag_cam_pressed              = control_is_pressed(controls.drag_cam);
+                drag_cam_down                 = control_is_down(controls.drag_cam);
+                move_camera_up                = control_is_down(controls.move_camera_up);
+                move_camera_down              = control_is_down(controls.move_camera_down);
+                move_camera_left              = control_is_down(controls.move_camera_left);
+                move_camera_right             = control_is_down(controls.move_camera_right);
+                panic_pause                   = control_is_pressed(controls.panic_pause);
+                fast_forward                  = control_is_down(controls.fast_forward);
 
                 started_to_draw_path = (
-                    select_is_pressed_once      &&
-                    !select_as_place_dwarf      &&
-                    !select_as_place_dynamite   &&
-                    !select_as_place_goblin     &&
-                    !select_as_place_obsidian   &&
-                    !select_as_place_wall       &&
-                    !select_as_remove_path_prev &&
+                    select_is_pressed_once         &&
+                    !select_as_place_digger_dwarf  &&
+                    !select_as_place_warrior_dwarf &&
+                    !select_as_place_dynamite      &&
+                    !select_as_place_goblin        &&
+                    !select_as_place_obsidian      &&
+                    !select_as_place_wall          &&
+                    !select_as_remove_path_prev    &&
                     !IsKeyDown(KeyboardKey.KEY_LEFT_CONTROL) // debug control to mine blocks
                 );
                 drawing_path = select_is_held_down && (drawing_path_prev || started_to_draw_path_prev);
@@ -895,11 +905,19 @@ main :: () {
                             }
                         }
                     }
-                    else if select_as_place_dwarf {
+                    else if select_as_place_digger_dwarf {
                         if select_is_pressed_once {
                             if metagame.debug_mode {
                                 tile_id := get_tile_id_by_pos(mouse_pos_in_world);
                                 create_dwarf(get_tile_pos_by_id(tile_id), .DIGGER);
+                            }
+                        }
+                    }
+                    else if select_as_place_warrior_dwarf {
+                        if select_is_pressed_once {
+                            if metagame.debug_mode {
+                                tile_id := get_tile_id_by_pos(mouse_pos_in_world);
+                                create_dwarf(get_tile_pos_by_id(tile_id), .WARRIOR);
                             }
                         }
                     }
@@ -1049,10 +1067,11 @@ main :: () {
                 if !panic_pause_is_active {
                     // Update dwarves
                     {
-                        done_updating_this_dwarf := false;
                         dwarf_ids_to_kill_this_frame : [..] s32;
 
                         for *dwarf, dwarf_index: dwarves {
+                            done_updating_this_dwarf := false;
+
                             dwarf_center   := get_rect_center(get_world_rect_from_pos(dwarf.pos));
                             dwarf_tile_id  := get_tile_id_by_pos(dwarf_center);
                             dwarf_tile_pos := get_tile_pos_by_id(dwarf_tile_id);
@@ -1096,6 +1115,7 @@ main :: () {
                                         dwarf.goblin_id_attacking = goblin.id;
                                         dwarf.direction = direction_of_goblin;
                                         dwarf.state = .ATTACKING;
+                                        done_updating_this_dwarf = true;
                                     }
                                 }
                             }
@@ -1109,6 +1129,7 @@ main :: () {
                                         // can remain in the deciding state - like if he is somehow completely unable to move.
                                         dwarf_can_remain_undecided := false;
 
+                                        // TODO: wait what, where's the code for this?
                                         // If there isn't a goblin to defend against, then next you should check if you just landed on a path arrow.
 
                                         // TODO: faster walk and mine speed when on a path, I think
@@ -1159,33 +1180,35 @@ main :: () {
                                         // If the dwarf is a warrior, actively seek out goblins
                                         if dwarf.type == .WARRIOR {
                                             detected, goblin := detect_goblin_within_radius(dwarf_tile_id, 5, *tile_ids_to_goblins);
+                                            print("dwarf %: detected %\n", dwarf.id, detected);
                                             // TODO: extract this
                                             if detected {
                                                 dwarf.goblin_id_attacking = goblin.id;
 
                                                 goblin_center          := get_rect_center(get_world_rect_from_pos(goblin.pos));
                                                 goblin_current_tile_id := get_tile_id_by_pos(goblin_center);
-                                                tile_id_goblin_will_defend_from : s32;
+                                                tile_id_goblin_is_moving_to : s32;
 
                                                 if #complete goblin.state == {
                                                     // If the goblin is moving towards a tile, aim to where the puck is going.
                                                     case .MOVING;
-                                                        assert_soft(goblin.tile_ids_on_path.count > 0, "Expected goblin % to have at least one tile on its path, but found none", goblin.id);
-                                                        tile_id_goblin_will_defend_from = goblin.tile_ids_on_path[0];
+                                                        assert_soft(goblin.tile_ids_on_path.count > 0, "Expected goblin % to have at least one tile on its path, but found none\n", goblin.id);
+                                                        tile_id_goblin_is_moving_to = goblin.tile_ids_on_path[0];
 
                                                     // If the goblin is standing still, then we'll want to attack it on the tile it's on.
                                                     case .NOTHING;   #through;
                                                     case .DECIDING;  #through;
                                                     case .ATTACKING;
-                                                        tile_id_goblin_will_defend_from = goblin_current_tile_id;
+                                                        tile_id_goblin_is_moving_to = goblin_current_tile_id;
                                                 }
 
-                                                path_found, tile_ids_to_goblin_target := dijkstra(dwarf_tile_id, tile_id_goblin_will_defend_from, edges);
+                                                path_found, tile_ids_to_goblin_target := dijkstra(dwarf_tile_id, tile_id_goblin_is_moving_to, edges);
                                                 
                                                 if path_found {
                                                     // If the dwarf is right up against where it's going to attack the goblin already, then start fighting
-                                                    if is_tile_id_neighbor_of_tile_id(dwarf_tile_id, tile_id_goblin_will_defend_from) {
+                                                    if is_tile_id_neighbor_of_tile_id_cardinal(dwarf_tile_id, tile_id_goblin_is_moving_to) {
                                                         dwarf.state = .ATTACKING;
+                                                        done_updating_this_dwarf = true;
                                                     } else {
                                                         // PERF: can probably just decrement the count and move the data pointer forward like a rat.
                                                         //
@@ -1555,7 +1578,7 @@ main :: () {
                                         
                                         if path_found {
                                             // If the goblin is right up against where it's going to attack the dwarf already, then start fighting
-                                            if is_tile_id_neighbor_of_tile_id(goblin_tile_id, tile_id_dwarf_will_defend_from) {
+                                            if is_tile_id_neighbor_of_tile_id_cardinal(goblin_tile_id, tile_id_dwarf_will_defend_from) {
                                                 goblin.state = .ATTACKING;
                                             } else {
                                                 // PERF: can probably just decrement the count and move the data pointer forward like a rat.
@@ -1587,7 +1610,7 @@ main :: () {
                                                     goblin.state = .ATTACKING;
                                                 }
                                                 // If the goblin is right up against the base, then start attacking
-                                                else if is_tile_id_neighbor_of_tile_id(goblin_tile_id, base_tile_id) {
+                                                else if is_tile_id_neighbor_of_tile_id_cardinal(goblin_tile_id, base_tile_id) {
                                                     goblin.state = .ATTACKING;
                                                 } else {
                                                     // PERF: can probably just decrement the count and move the data pointer forward like a rat.
@@ -2224,7 +2247,7 @@ main :: () {
                         DrawText(tprint("select_is_held_down: %\0", select_is_held_down).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
                         DrawText(tprint("add_base_mode: %\0", add_base_mode).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
                         DrawText(tprint("add_iron: %\0", add_iron).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                        DrawText(tprint("select_as_place_dwarf: %\0", select_as_place_dwarf).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                        DrawText(tprint("select_as_place_digger_dwarf: %\0", select_as_place_digger_dwarf).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
                         DrawText(tprint("select_as_place_dynamite: %\0", select_as_place_dynamite).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
                         DrawText(tprint("select_as_place_obsidian: %\0", select_as_place_obsidian).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
                         DrawText(tprint("select_as_place_wall: %\0", select_as_place_wall).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
@@ -2259,6 +2282,7 @@ main :: () {
                             DrawText(tprint("tile_id_mining: %\0", it.tile_id_mining).data,         xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                             DrawText(tprint("direction: %\0", it.direction).data,                   xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                             DrawText(tprint("type: %\0", it.type).data,                             xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                            DrawText(tprint("hp: %\0", it.hp).data,                                 xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                         }
                     }
                     
@@ -2269,6 +2293,7 @@ main :: () {
                             DrawText(tprint("state: %\0", it.state).data,                           xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                             DrawText(tprint("tile_ids_on_path: %\0", it.tile_ids_on_path).data,     xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                             DrawText(tprint("direction: %\0", it.direction).data,                   xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                            DrawText(tprint("hp: %\0", it.hp).data,                                 xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                         }
                     }
                 }
@@ -2765,10 +2790,10 @@ initialize_game :: () -> game_state: GameState, camera: Camera2D {
         }
         
         // Initialize warrior dwarf
-        // dx = TILE_DIRECTION_DELTAS[xx Direction.EAST][0];
-        // dy = TILE_DIRECTION_DELTAS[xx Direction.EAST][1];
-        // neighbor_pos = Vector2.{ home_base.pos.x + dx, home_base.pos.y + dy };
-        // create_dwarf(neighbor_pos, .WARRIOR);
+        dx = TILE_DIRECTION_DELTAS[xx Direction.EAST][0];
+        dy = TILE_DIRECTION_DELTAS[xx Direction.EAST][1];
+        neighbor_pos = Vector2.{ home_base.pos.x + dx, home_base.pos.y + dy };
+        create_dwarf(neighbor_pos, .WARRIOR);
     }
 
     // Initialize camera
@@ -2828,20 +2853,12 @@ try_to_set_dwarf_random_new_target :: (dwarf: *Dwarf) -> SetDwarfRandomNewTarget
                 if      is_west_valid  new_direction = .WEST;
                 else if is_east_valid  new_direction = .EAST;
                 else if is_north_valid new_direction = .NORTH;
-                else if !can_target_unmined_tiles new_direction = .SOUTH;
-                else {
-                    print_vars(is_north_valid, is_south_valid, is_east_valid, is_west_valid, dwarf.*);
-                    assert_soft(false, "Expected at least one direction to be valid, but found none for dwarf %\n", dwarf.id);
-                }
+                else                   new_direction = .SOUTH;
             } else {
                 if      is_east_valid  new_direction = .EAST;
                 else if is_west_valid  new_direction = .WEST;
                 else if is_north_valid new_direction = .NORTH;
-                else if !can_target_unmined_tiles new_direction = .SOUTH;
-                else {
-                    print_vars(is_north_valid, is_south_valid, is_east_valid, is_west_valid, dwarf.*);
-                    assert_soft(false, "Expected at least one direction to be valid, but found none for dwarf %\n", dwarf.id);
-                }
+                else                   new_direction = .SOUTH;
             }
         }
         else if dwarf.direction == .SOUTH {
@@ -2849,20 +2866,12 @@ try_to_set_dwarf_random_new_target :: (dwarf: *Dwarf) -> SetDwarfRandomNewTarget
                 if      is_east_valid  new_direction = .EAST;
                 else if is_west_valid  new_direction = .WEST;
                 else if is_south_valid new_direction = .SOUTH;
-                else if !can_target_unmined_tiles new_direction = .NORTH;
-                else {
-                    print_vars(is_north_valid, is_south_valid, is_east_valid, is_west_valid, dwarf.*);
-                    assert_soft(false, "Expected at least one direction to be valid, but found none for dwarf %\n", dwarf.id);
-                }
+                else                   new_direction = .NORTH;
             } else {
                 if      is_west_valid  new_direction = .WEST;
                 else if is_east_valid  new_direction = .EAST;
                 else if is_south_valid new_direction = .SOUTH;
-                else if !can_target_unmined_tiles new_direction = .NORTH;
-                else {
-                    print_vars(is_north_valid, is_south_valid, is_east_valid, is_west_valid, dwarf.*);
-                    assert_soft(false, "Expected at least one direction to be valid, but found none for dwarf %\n", dwarf.id);
-                }
+                else                   new_direction = .NORTH;
             }
         }
         else if dwarf.direction == .EAST  {
@@ -2870,20 +2879,12 @@ try_to_set_dwarf_random_new_target :: (dwarf: *Dwarf) -> SetDwarfRandomNewTarget
                 if      is_south_valid new_direction = .SOUTH;
                 else if is_north_valid new_direction = .NORTH;
                 else if is_east_valid  new_direction = .EAST;
-                else if !can_target_unmined_tiles new_direction = .WEST;
-                else {
-                    print_vars(is_north_valid, is_south_valid, is_east_valid, is_west_valid, dwarf.*);
-                    assert_soft(false, "Expected at least one direction to be valid, but found none for dwarf %\n", dwarf.id);
-                }
+                else                   new_direction = .WEST;
             } else {
                 if      is_north_valid new_direction = .NORTH;
                 else if is_south_valid new_direction = .SOUTH;
                 else if is_east_valid  new_direction = .EAST;
-                else if !can_target_unmined_tiles new_direction = .WEST;
-                else {
-                    print_vars(is_north_valid, is_south_valid, is_east_valid, is_west_valid, dwarf.*);
-                    assert_soft(false, "Expected at least one direction to be valid, but found none for dwarf %\n", dwarf.id);
-                }
+                else                   new_direction = .WEST;
             }
         }
         else if dwarf.direction == .WEST  {
@@ -2891,20 +2892,12 @@ try_to_set_dwarf_random_new_target :: (dwarf: *Dwarf) -> SetDwarfRandomNewTarget
                 if      is_south_valid new_direction = .SOUTH;
                 else if is_north_valid new_direction = .NORTH;
                 else if is_west_valid  new_direction = .WEST;
-                else if !can_target_unmined_tiles new_direction = .EAST;
-                else {
-                    print_vars(is_north_valid, is_south_valid, is_east_valid, is_west_valid, dwarf.*);
-                    assert_soft(false, "Expected at least one direction to be valid, but found none for dwarf %\n", dwarf.id);
-                }
+                else                   new_direction = .EAST;
             } else {
                 if      is_south_valid new_direction = .SOUTH;
                 else if is_north_valid new_direction = .NORTH;
                 else if is_west_valid  new_direction = .WEST;
-                else if !can_target_unmined_tiles new_direction = .EAST;
-                else {
-                    print_vars(is_north_valid, is_south_valid, is_east_valid, is_west_valid, dwarf.*);
-                    assert_soft(false, "Expected at least one direction to be valid, but found none for dwarf %\n", dwarf.id);
-                }
+                else                   new_direction = .EAST;
             }
         }
         // TODO: #complete this somehow so we don't need this assert
@@ -2999,7 +2992,7 @@ detect_base_neighbor_cardinal :: (tile_id: s32, tile_ids_to_bases: *Table) -> ba
     return false, base, .CENTER;
 }
 
-is_tile_id_neighbor_of_tile_id :: (my_tile_id: s32, your_tile_id: s32) -> bool {
+is_tile_id_neighbor_of_tile_id_cardinal :: (my_tile_id: s32, your_tile_id: s32) -> bool {
     return (
         my_tile_id == your_tile_id - WORLD_COLS || // north
         my_tile_id == your_tile_id + WORLD_COLS || // south

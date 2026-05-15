@@ -10,23 +10,24 @@ Control :: struct {
 }
 
 Controls :: struct {
-    select                   : Control;
-    add_base_mode            : Control;
-    add_iron                 : Control;
-    select_as_place_dwarf    : Control;
-    select_as_place_dynamite : Control;
-    select_as_place_goblin   : Control;
-    select_as_place_obsidian : Control;
-    select_as_place_wall     : Control;
-    drag_as_create_path      : Control;
-    drag_cam                 : Control;
-    move_camera_up           : Control;
-    move_camera_down         : Control;
-    move_camera_left         : Control;
-    move_camera_right        : Control;
-    select_as_remove_path    : Control;
-    panic_pause              : Control;
-    fast_forward             : Control;
+    select                        : Control;
+    add_base_mode                 : Control;
+    add_iron                      : Control;
+    select_as_place_digger_dwarf  : Control;
+    select_as_place_warrior_dwarf : Control;
+    select_as_place_dynamite      : Control;
+    select_as_place_goblin        : Control;
+    select_as_place_obsidian      : Control;
+    select_as_place_wall          : Control;
+    drag_as_create_path           : Control;
+    drag_cam                      : Control;
+    move_camera_up                : Control;
+    move_camera_down              : Control;
+    move_camera_left              : Control;
+    move_camera_right             : Control;
+    select_as_remove_path         : Control;
+    panic_pause                   : Control;
+    fast_forward                  : Control;
 }
 
 control_is_down :: (control: Control) -> bool {

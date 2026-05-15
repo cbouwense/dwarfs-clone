@@ -1,12 +1,6 @@
 # In progress
 
-- dwarves and goblins can fail targeting and crash the game?
-    - condition:
-        - reproducible on d48ab20
-        - seems to happen in straightaways
-    - cause:
-    - correction:
-    - confirmation:
+- dwarves don't actually do damage to goblins
 
 # Bugs
 
@@ -18,10 +12,9 @@
     - correction:
     - confirmation:
 
-
 ## After demo
 
-- goblins do not wander around convincingly
+- goblins do not wander around convincingly / spam deciding and moving
     - condition: reproducible on 279d68e
     - cause:
     - correction:
