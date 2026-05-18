@@ -33,23 +33,23 @@ WALL_HEALTH :: 200;
 DWARF_MOVE_SPEED :: 33;
 // TODO: DWARF_MOVE_SPEED_TARGETING :: DWARF_MOVE_SPEED * 2;
 
-DWARF_DIGGER_START_COUNT :: 1;
+DWARF_DIGGER_START_COUNT :: 0; //1;
 DWARF_DIGGER_DIG_COOLDOWN_MS    :: 1000;
 DWARF_DIGGER_ATTACK_COOLDOWN_MS :: 2000;
 DWARF_DIGGER_DAMAGE_DIG_PER_SWING    :: 50;
 DWARF_DIGGER_DAMAGE_ATTACK_PER_SWING :: 25;
 DWARF_DIGGER_HIT_CHANCE :: 0.50; // TODO: will have to be based on level
 DWARF_DIGGER_SPAWN_MS :: 10000;
-DWARF_DIGGER_SPAWN_ENABLED :: true;
+DWARF_DIGGER_SPAWN_ENABLED :: false; //true;
 DWARF_DIGGER_STARTING_HP :: 75;
 
-DWARF_WARRIOR_START_COUNT :: 1;
+DWARF_WARRIOR_START_COUNT :: 0; //1;
 DWARF_WARRIOR_DIG_COOLDOWN_MS    :: 2000;
 DWARF_WARRIOR_ATTACK_COOLDOWN_MS :: 1000;
 DWARF_WARRIOR_DAMAGE_DIG_PER_SWING    :: 25;
 DWARF_WARRIOR_DAMAGE_ATTACK_PER_SWING :: 50;
 DWARF_WARRIOR_HIT_CHANCE :: 0.80; // TODO: will have to be based on level
-DWARF_WARRIOR_SPAWN_ENABLED :: true;
+DWARF_WARRIOR_SPAWN_ENABLED :: false; //true;
 DWARF_WARRIOR_STARTING_HP :: 100;
 
 GOBLIN_MOVE_SPEED :: 50;
@@ -1107,9 +1107,9 @@ main :: () {
                                 }
                             }
 
-                            // Second of all, unless you're moving, if there's a goblin up your ass deal with it.
+                            // Second of all, unless you're moving or already attacking, if there's a goblin up your ass deal with it.
                             if !done_updating_this_dwarf {
-                                if dwarf.state != .MOVING {
+                                if dwarf.state != .MOVING && dwarf.state != .ATTACKING {
                                     detected, goblin, direction_of_goblin := detect_goblin_neighbor_cardinal(dwarf_tile_id, *tile_ids_to_goblins);
                                     if detected {
                                         dwarf.goblin_id_attacking = goblin.id;
@@ -2294,6 +2294,7 @@ main :: () {
                             DrawText(tprint("tile_ids_on_path: %\0", it.tile_ids_on_path).data,     xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                             DrawText(tprint("direction: %\0", it.direction).data,                   xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                             DrawText(tprint("hp: %\0", it.hp).data,                                 xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                            DrawText(tprint("attack_cooldown_ms: %\0", it.attack_cooldown_ms).data, xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                         }
                     }
                 }
@@ -2615,6 +2616,13 @@ dwarf_get_attack_cooldown :: (dwarf: Dwarf) -> s32 {
     }
 }
 
+dwarf_get_attack_cooldown_by_type :: (dwarf_type: DwarfType) -> s32 {
+    if #complete dwarf_type == {
+        case .DIGGER;  return DWARF_DIGGER_ATTACK_COOLDOWN_MS;
+        case .WARRIOR; return DWARF_WARRIOR_ATTACK_COOLDOWN_MS;
+    }
+}
+
 dwarf_starting_hp_by_type :: (dwarf_type: DwarfType) -> s32 {
     if #complete dwarf_type == {
         case .DIGGER;  return DWARF_DIGGER_STARTING_HP;
@@ -2789,11 +2797,14 @@ initialize_game :: () -> game_state: GameState, camera: Camera2D {
             create_dwarf(neighbor_pos, .DIGGER);
         }
         
-        // Initialize warrior dwarf
-        dx = TILE_DIRECTION_DELTAS[xx Direction.EAST][0];
-        dy = TILE_DIRECTION_DELTAS[xx Direction.EAST][1];
-        neighbor_pos = Vector2.{ home_base.pos.x + dx, home_base.pos.y + dy };
-        create_dwarf(neighbor_pos, .WARRIOR);
+        for 1..DWARF_WARRIOR_START_COUNT {
+            // Initialize warrior dwarf
+            dx = TILE_DIRECTION_DELTAS[xx Direction.EAST][0];
+            dy = TILE_DIRECTION_DELTAS[xx Direction.EAST][1];
+            neighbor_pos = Vector2.{ home_base.pos.x + dx, home_base.pos.y + dy };
+
+            create_dwarf(neighbor_pos, .WARRIOR);
+        }
     }
 
     // Initialize camera
@@ -3065,6 +3076,7 @@ create_dwarf :: (pos: Vector2, dwarf_type: DwarfType) -> Dwarf {
         goblin_id_attacking = 0,
         type = dwarf_type,
         hp   = dwarf_starting_hp_by_type(dwarf_type),
+        attack_cooldown_ms = dwarf_get_attack_cooldown_by_type(dwarf_type)
         // direction intentionally not set
         // tile_ids_on_path intentionally not set
     };

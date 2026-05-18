@@ -1,6 +1,6 @@
 # In progress
 
-- dwarves don't actually do damage to goblins
+
 
 # Bugs
 
