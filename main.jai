@@ -145,6 +145,26 @@ metagame := Metagame.{
 // Textures
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+TILEMAP_SOURCE_RECT_BASE := Rectangle.{
+    0, 0,
+    TILEMAP_GENERAL_TILE_WIDTH,
+    TILEMAP_GENERAL_TILE_HEIGHT,
+};
+
+TILEMAP_SOURCE_RECT_DYNAMITE :: Rectangle.{
+    4 * TILEMAP_GENERAL_TILE_WIDTH,
+    0 * TILEMAP_GENERAL_TILE_HEIGHT,
+    TILEMAP_GENERAL_TILE_WIDTH,
+    TILEMAP_GENERAL_TILE_HEIGHT,
+};
+
+TILEMAP_SOURCE_RECT_REMOVE :: Rectangle.{
+    7 * TILEMAP_GENERAL_TILE_WIDTH,
+    0 * TILEMAP_GENERAL_TILE_HEIGHT,
+    TILEMAP_GENERAL_TILE_WIDTH,
+    TILEMAP_GENERAL_TILE_HEIGHT,
+};
+
 tilemap_texture_general : Texture;
 dirt_texture            : Texture;
 
@@ -2171,15 +2191,9 @@ main :: () {
                 DRAW_BASES :: true;
                 #if DRAW_BASES {
                     for base: bases_in_viewport {
-                        source := Rectangle.{
-                            0, 0,
-                            TILEMAP_GENERAL_TILE_WIDTH,
-                            TILEMAP_GENERAL_TILE_HEIGHT,
-                        };
-
                         dest := get_world_rect_from_pos(base.pos);
 
-                        DrawTexturePro(tilemap_texture_general, source, dest, Vector2.{0,0}, 0.0, WHITE);
+                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_BASE, dest, Vector2.{0,0}, 0.0, WHITE);
                     }
                 }
 
@@ -2235,17 +2249,10 @@ main :: () {
                 DRAW_DYNAMITE :: true;
                 #if DRAW_DYNAMITE {
                     for tiles_with_dynamite_ids_in_viewport {
-                        source := Rectangle.{
-                            4 * TILEMAP_GENERAL_TILE_WIDTH,
-                            0 * TILEMAP_GENERAL_TILE_HEIGHT,
-                            TILEMAP_GENERAL_TILE_WIDTH,
-                            TILEMAP_GENERAL_TILE_HEIGHT,
-                        };
-
                         pos  := get_tile_pos_by_id(it);
                         dest := get_world_rect_from_pos(pos);
 
-                        DrawTexturePro(tilemap_texture_general, source, dest, Vector2.{0,0}, 0.0, WHITE);
+                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_DYNAMITE, dest, Vector2.{0,0}, 0.0, WHITE);
                     }
                 }
 
@@ -2621,6 +2628,18 @@ main :: () {
                             
                             case .LOOK_AROUND; // Don't render anything
                         }       
+                }
+
+                // Draw control mode cursor icon
+                cursor_mode_icon_rect := Rectangle.{ mouse_pos_in_ui.x + 15, mouse_pos_in_ui.y + 15, 40, 40 };
+
+                if #complete game_state.control_mode == {
+                    case .NORMAL;       // no op
+                    case .ADD_BASE;     DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_BASE, cursor_mode_icon_rect, Vector2.{0,0}, 0.0, WHITE);
+                    case .ADD_DYNAMITE; DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_DYNAMITE, cursor_mode_icon_rect, Vector2.{0,0}, 0.0, WHITE);
+                    case .ADD_OBSIDIAN; DrawRectangleRec(cursor_mode_icon_rect, DARKGRAY); // TODO: draw actual icon
+                    case .ADD_WALL;     DrawRectangleRec(cursor_mode_icon_rect, DARKPURPLE); // TODO: draw actual icon
+                    case .REMOVE;       DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_REMOVE, cursor_mode_icon_rect, Vector2.{0,0}, 0.0, WHITE);
                 }
             }
         }

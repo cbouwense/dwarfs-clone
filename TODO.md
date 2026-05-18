@@ -1,13 +1,13 @@
 # In progress
 
-- Saner defaults for controls / toggle modes
+
 
 # Bugs
 
 ## Demo
 
 - can move camera with keybinds while paused
-
+- onion skin for what mode you're in
 - dwarves can move into goblins when they should be attacking
     - condition: reproducible on df6c8f0
     - cause:
@@ -32,9 +32,8 @@
 
 ## Demo
 
-- Base placement validity
+- Base placement validity / onion skin
 - HUD
-- mouse icon for what mode you're in (wall, dynamite, etc)
 
 ## After demo
 
