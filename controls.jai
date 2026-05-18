@@ -5,27 +5,28 @@ Bind :: struct {
 }
 
 Control :: struct {
-    name  : string; // What shows up in the keybind menu;
+    name  : string; // What shows up in the keybind menu.
     binds : [3] Bind;
+    rebindable_by_user : bool; // Some controls really ought not to be rebindable.
 }
 
 Controls :: struct {
     select                        : Control;
-    add_base_mode                 : Control;
+    toggle_base_mode                 : Control;
     add_iron                      : Control;
     select_as_place_digger_dwarf  : Control;
     select_as_place_warrior_dwarf : Control;
-    select_as_place_dynamite      : Control;
+    toggle_dynamite_mode      : Control;
     select_as_place_goblin        : Control;
-    select_as_place_obsidian      : Control;
-    select_as_place_wall          : Control;
+    toggle_obsidian_mode      : Control;
+    toggle_wall_mode          : Control;
     drag_as_create_path           : Control;
     drag_cam                      : Control;
     move_camera_up                : Control;
     move_camera_down              : Control;
     move_camera_left              : Control;
     move_camera_right             : Control;
-    select_as_remove_path         : Control;
+    toggle_remove_mode         : Control;
     panic_pause                   : Control;
     fast_forward                  : Control;
 }

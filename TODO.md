@@ -1,10 +1,18 @@
 # In progress
 
-
+- Saner defaults for controls / toggle modes
 
 # Bugs
 
 ## Demo
+
+- can move camera with keybinds while paused
+
+- dwarves can move into goblins when they should be attacking
+    - condition: reproducible on df6c8f0
+    - cause:
+    - correction:
+    - confirmation:
 
 - cannot move dwarfs out of combat manually
     - condition: reproducible on 279d68e
@@ -24,6 +32,7 @@
 
 ## Demo
 
+- Base placement validity
 - HUD
 - mouse icon for what mode you're in (wall, dynamite, etc)
 
@@ -50,9 +59,6 @@
 # Nitpicks
 
 ## Demo
-
-- Saner defaults for controls
-
 ## After demo
 
 - Paths should just be two single paths, not bends
