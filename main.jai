@@ -337,7 +337,7 @@ Tile :: struct {
 }
 
 DwarfState :: enum {
-    NOTHING;
+    IDLE;
     DECIDING;
     MOVING;
     ATTACKING;
@@ -365,7 +365,7 @@ Dwarf :: struct {
 }
 
 GoblinState :: enum {
-    NOTHING;
+    IDLE;
     DECIDING;
     MOVING;
     ATTACKING;
@@ -982,7 +982,7 @@ main :: () {
                                 dwarves[selected_dwarf_index].pos = get_rect_pos(tile_rect);
                                 
                                 // Stop the dwarf from moving so you can think while dragging a path
-                                dwarves[selected_dwarf_index].state = .NOTHING;
+                                dwarves[selected_dwarf_index].state = .IDLE;
 
                                 // Remove its current pathing
                                 array_reset(*(dwarves[selected_dwarf_index].tile_ids_on_path));
@@ -1196,7 +1196,7 @@ main :: () {
                                                         tile_id_goblin_is_moving_to = goblin.tile_ids_on_path[0];
 
                                                     // If the goblin is standing still, then we'll want to attack it on the tile it's on.
-                                                    case .NOTHING;   #through;
+                                                    case .IDLE;   #through;
                                                     case .DECIDING;  #through;
                                                     case .ATTACKING;
                                                         tile_id_goblin_is_moving_to = goblin_current_tile_id;
@@ -1530,7 +1530,7 @@ main :: () {
                                                 dwarf.goblin_id_attacking = 0;
                                             }
                                         }
-                                    case .NOTHING;
+                                    case .IDLE;
                                 }
                             }
                         }
@@ -1567,7 +1567,7 @@ main :: () {
                                                 tile_id_dwarf_will_defend_from = dwarf.tile_ids_on_path[0];
 
                                             // If the dwarf is standing still, then we'll want to attack it on the tile it's on.
-                                            case .NOTHING;   #through;
+                                            case .IDLE;   #through;
                                             case .DECIDING;  #through;
                                             case .ATTACKING; #through;
                                             case .MINING;
@@ -1767,7 +1767,7 @@ main :: () {
                                             }
                                         }
                                     }
-                                case .NOTHING;
+                                case .IDLE;
                             }
                         }
                     }
