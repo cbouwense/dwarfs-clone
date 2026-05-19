@@ -392,6 +392,7 @@ Dwarf :: struct {
     attack_cooldown_ms  : s32;
     direction           : Direction;
     type                : DwarfType;
+    ignore_goblins      : bool;
 }
 
 GoblinState :: enum {
@@ -1022,7 +1023,6 @@ main :: () {
 
                                     if !metagame.debug_mode game_state.gold -= tile_id_count_on_path * GOLD_COST_PATH_STEP;
 
-                                    // TODO: do we even need to do this? I feel like we could just set it to moving and it would handle itself.
                                     if game_state.selected_dwarf_id > 0 {
                                         found, selected_dwarf_index := table_find(*dwarf_id_to_index, game_state.selected_dwarf_id);
                                         assert(found);
@@ -1032,10 +1032,18 @@ main :: () {
                                         // on an arrow, and will inherit its tile path. Then why even set this dwarf's tile ids? I think
                                         // without having a target, the dwarf will choose a random direction. This feels like a bug, but the
                                         // behavior is acceptable and causes no real performance issues as I can see right now.
-                                        array_reset(*(dwarves[selected_dwarf_index].tile_ids_on_path));
-                                        array_copy(*(dwarves[selected_dwarf_index].tile_ids_on_path), tile_ids_on_first_leg);
 
-                                        dwarves[selected_dwarf_index].state = .MOVING;
+                                        // Don't include the tile with the arrow on it, because we're already on it.
+                                        tile_ids_on_first_leg.data  += 1;
+                                        tile_ids_on_first_leg.count -= 1;
+
+                                        if tile_ids_on_first_leg.count > 0 && is_tile_id_walkable(tile_ids_on_first_leg.data[0]) {
+                                            array_reset(*(dwarves[selected_dwarf_index].tile_ids_on_path));
+                                            array_copy(*(dwarves[selected_dwarf_index].tile_ids_on_path), tile_ids_on_first_leg);
+
+                                            dwarves[selected_dwarf_index].state = .MOVING;
+                                        }
+                                        
                                         game_state.selected_dwarf_id = 0;
                                     }
                                 }
@@ -1183,7 +1191,7 @@ main :: () {
                                 }
                             }
 
-                            // Second of all, unless you're moving or already attacking, if there's a goblin up your ass deal with it.
+                            // Second of all, unless you're moving, already attacking, or are under orders to ignore if there's a goblin up your ass deal with it.
                             if !done_updating_this_dwarf {
                                 if dwarf.state != .MOVING && dwarf.state != .ATTACKING {
                                     detected, goblin, direction_of_goblin := detect_goblin_neighbor_cardinal(dwarf_tile_id, *tile_ids_to_goblins);

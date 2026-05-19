@@ -2,18 +2,13 @@
 
 
 
+
 # Bugs
 
 ## Demo
 
 - dwarves can move into goblins when they should be attacking
     - condition: reproducible on df6c8f0
-    - cause:
-    - correction:
-    - confirmation:
-
-- cannot move dwarfs out of combat manually
-    - condition: reproducible on 279d68e
     - cause:
     - correction:
     - confirmation:
@@ -30,6 +25,7 @@
 
 ## Demo
 
+- Single use abilities should clear their mode after use
 - Base placement validity / onion skin
 - HUD
 
