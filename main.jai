@@ -856,10 +856,12 @@ main :: () {
                     CAMERA_ZOOM_MIN :: 0.01;
                     CAMERA_ZOOM_MAX :: 13.0;
 
-                    if move_camera_up    camera.target.y -= CAMERA_MOVE_SPEED_BASE;
-                    if move_camera_down  camera.target.y += CAMERA_MOVE_SPEED_BASE;
-                    if move_camera_left  camera.target.x -= CAMERA_MOVE_SPEED_BASE;
-                    if move_camera_right camera.target.x += CAMERA_MOVE_SPEED_BASE;
+                    can_move_camera := metagame.debug_mode || metagame.state == .RUNNING || (metagame.state == .GAME_OVER && metagame.game_over_state == .LOOK_AROUND);
+
+                    if can_move_camera && move_camera_up    camera.target.y -= CAMERA_MOVE_SPEED_BASE;
+                    if can_move_camera && move_camera_down  camera.target.y += CAMERA_MOVE_SPEED_BASE;
+                    if can_move_camera && move_camera_left  camera.target.x -= CAMERA_MOVE_SPEED_BASE;
+                    if can_move_camera && move_camera_right camera.target.x += CAMERA_MOVE_SPEED_BASE;
 
                     camera.offset = Vector2.{ GetScreenWidth() / 2.0, GetScreenHeight() / 2.0 };
 
@@ -868,7 +870,6 @@ main :: () {
                         mouse_drag_began_at_pos = mouse_pos_in_world;
                     }
 
-                    can_move_camera := metagame.debug_mode || metagame.state == .RUNNING || (metagame.state == .GAME_OVER && metagame.game_over_state == .LOOK_AROUND);
                     if drag_cam_down && can_move_camera {
                         world_delta := Vector2Subtract(mouse_drag_began_at_pos, mouse_pos_in_world);
                         

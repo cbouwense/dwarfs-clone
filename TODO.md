@@ -6,8 +6,6 @@
 
 ## Demo
 
-- can move camera with keybinds while paused
-- onion skin for what mode you're in
 - dwarves can move into goblins when they should be attacking
     - condition: reproducible on df6c8f0
     - cause:
@@ -37,6 +35,7 @@
 
 ## After demo
 
+- onion skin for what mode you're in
 - dwarf level ups
 - base canons
 - base spawn diggers control
@@ -58,6 +57,7 @@
 # Nitpicks
 
 ## Demo
+
 ## After demo
 
 - Paths should just be two single paths, not bends
