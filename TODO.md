@@ -2,6 +2,7 @@
 # In progress
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+- dwarves and goblins should not pass through each other
 - dwarves can move into goblins when they should be attacking
     - condition: reproducible on df6c8f0
     - cause:
@@ -52,7 +53,6 @@
 - main menu
 - fullscreen and resizability
 - bases cannot be placed down on caves
-- dwarves and goblins should not pass through each other
 - mined tile sprites
 - shaman
 - spider queen

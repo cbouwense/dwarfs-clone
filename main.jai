@@ -488,19 +488,18 @@ obsidian_tile_ids_in_viewport : [..] s32;
 wall_tile_ids_set         : Table(s32, s32);
 wall_tile_ids_in_viewport : [..] s32;
 
+entity_id_counter : s32 = 0;
+
 bases             : [..] Base;
 base_id_to_index  : Table(s32, s64);
-base_id_counter   : s32 = 0;
 bases_in_viewport : [..] Base;
 
 dwarves             : [..] Dwarf;
 dwarf_id_to_index   : Table(s32, s64);
-dwarf_id_counter    : s32 = 0;
 dwarves_in_viewport : [..] Dwarf;
 
 goblins             : [..] Goblin;
 goblin_id_to_index  : Table(s32, s64);
-goblin_id_counter   : s32 = 0;
 goblins_in_viewport : [..] Goblin;
 
 tiles_with_dynamite_ids             : [..] s32;
@@ -518,11 +517,17 @@ path_being_traced : Path;
 paths             : [..] Path;
 paths_in_viewport : [..] Path;
 
+// TODO: do we need dwarf and goblin pointers in these?
+tile_ids_to_dwarfs  : Table(s32, Dwarf);
+tile_ids_to_goblins : Table(s32, Goblin);
+tile_ids_to_bases   : Table(s32, *Base);
+
 created_chunks: Table(u64, *Chunk);
 
 edges : [..] Edge; // List of edges between tiles for pathfinding
 
 main :: () {
+    // Set temp allocator for various things.
     {
         fully_mined_tile_ids_in_viewport.allocator    = temp;
         actively_mined_tile_ids_in_viewport.allocator = temp;
@@ -542,6 +547,9 @@ main :: () {
         hole_tile_ids_in_viewport.allocator           = temp;
         paths_in_viewport.allocator                   = temp;
         bases_in_viewport.allocator                   = temp;
+        tile_ids_to_dwarfs.allocator                  = temp;
+        tile_ids_to_goblins.allocator                 = temp;
+        tile_ids_to_bases.allocator                   = temp;
     }
 
     random_seed(123456789);
@@ -642,15 +650,6 @@ main :: () {
         controls.fast_forward.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_S };
     }
 
-    tile_ids_to_dwarfs: Table(s32, Dwarf);
-    tile_ids_to_dwarfs.allocator = temp;
-    
-    tile_ids_to_goblins: Table(s32, Goblin);
-    tile_ids_to_goblins.allocator = temp;
-
-    tile_ids_to_bases: Table(s32, *Base);
-    tile_ids_to_bases.allocator = temp;
-
     // Keeps track of how many milliseconds remain until the player can panic pause again.
     // Less than or equal to 0 means "can panic pause right now".
     panic_pause_is_active := false;
@@ -674,12 +673,12 @@ main :: () {
         dt_seconds : float;
         if dt_seconds_raw > 0.033 {
             dt_seconds = 0.033;
-         } else {
+        } else {
             dt_seconds = dt_seconds_raw;
             if fast_forward {
                 dt_seconds *= DT_MULTIPLIER_FAST_FORWARD;
             }
-         }
+        }
 
         panic_pause_is_active = game_state.panic_pause_timer_ms > 0 && game_state.panic_pause_timer_ms >= PANIC_PAUSE_COOLDOWN_MS - PANIC_PAUSE_DURATION_MS;
         panic_pause_is_cooling_down = game_state.panic_pause_timer_ms > 0;
@@ -689,17 +688,47 @@ main :: () {
         mouse_wheel_move   := GetMouseWheelMove();
 
         for dwarf: dwarves {
-            dwarf_center   := get_rect_center(get_world_rect_from_pos(dwarf.pos));
-            dwarf_tile_id  := get_tile_id_by_pos(dwarf_center);
+            dwarf_tile_id: s32;
+
+            if #complete dwarf.state == {
+                // If the dwarf is dead center on a tile and not moving, it's on that tile.
+                case .IDLE;      #through;
+                case .DECIDING;  #through;
+                case .ATTACKING; #through;
+                case .MINING;
+                    dwarf_tile_id = get_tile_id_by_pos(dwarf.pos);
+
+                // If the dwarf is moving, then they're "on" the tile that they're moving to.
+                case .MOVING;
+                    assert_soft(dwarf.tile_ids_on_path.count > 0, "Dwarf was in move state but had nowhere to go\n");
+                    dwarf_tile_id = dwarf.tile_ids_on_path[0];
+            }
+
+            assert_soft(dwarf_tile_id > 0, "Expected dwarf_tile_id to have been set, but got %\n", dwarf_tile_id);
             table_set(*tile_ids_to_dwarfs, dwarf_tile_id, dwarf);
         }
 
         for goblin: goblins {
-            goblin_center  := get_rect_center(get_world_rect_from_pos(goblin.pos));
-            goblin_tile_id := get_tile_id_by_pos(goblin_center);
+            goblin_tile_id: s32;
+
+            if #complete goblin.state == {
+                // If the goblin is dead center on a tile and not moving, it's on that tile.
+                case .IDLE;     #through;
+                case .DECIDING; #through;
+                case .ATTACKING;
+                    goblin_tile_id = get_tile_id_by_pos(goblin.pos);
+
+                // If the goblin is moving, then they're "on" the tile that they're moving to.
+                case .MOVING;
+                    assert_soft(goblin.tile_ids_on_path.count > 0, "Goblin was in move state but had nowhere to go\n");
+                    goblin_tile_id = goblin.tile_ids_on_path[0];
+            }
+
+            assert_soft(goblin_tile_id > 0, "Expected goblin_tile_id to have been set, but got %\n", goblin_tile_id);
             table_set(*tile_ids_to_goblins, goblin_tile_id, goblin);
         }
 
+        // PERF: caching this might not even be faster
         for *base: bases {
             base_center  := get_rect_center(get_world_rect_from_pos(base.pos));
             base_tile_id := get_tile_id_by_pos(base_center);
@@ -1320,7 +1349,7 @@ main :: () {
                                         tile_id_next_in_dwarfs_path := dwarf.tile_ids_on_path[0];
 
                                         // If it's walkable, proceed
-                                        if is_tile_id_walkable(tile_id_next_in_dwarfs_path) {
+                                        if is_tile_id_walkable_for_entity(tile_id_next_in_dwarfs_path, dwarf.id) {
                                             dwarf.state = .MOVING;
                                         }
                                         // If it's unmined, then they'll have to mine it
@@ -1406,7 +1435,7 @@ main :: () {
                                     assert_soft(dwarf.pos.x == target_tile_pos.x || dwarf.pos.y == target_tile_pos.y, "Dwarf % is going at an angle", dwarf.id);
 
                                     // TODO: #if DEBUG
-                                    if !is_tile_id_walkable(target_tile_id) {
+                                    if !is_tile_id_walkable_for_entity(target_tile_id, dwarf.id) {
                                         is_fully_mined    := table_contains(*fully_mined_tile_ids_set, target_tile_id);
                                         is_actively_mined := table_contains(*actively_mined_tile_ids_to_health_table, target_tile_id);
                                         is_cave           := table_contains(*cave_tile_ids_set, target_tile_id);
@@ -1419,6 +1448,8 @@ main :: () {
                                         is_obsidian       := table_contains(*obsidian_tile_ids_set, target_tile_id);
                                         is_wall           := table_contains(*wall_tile_ids_set, target_tile_id);
                                         is_hole           := table_contains(*hole_tile_ids_set, target_tile_id);
+                                        is_dwarf          := table_contains(*tile_ids_to_dwarfs, target_tile_id);
+                                        is_goblin         := table_contains(*tile_ids_to_goblins, target_tile_id);
                                         print_vars(
                                             is_fully_mined,
                                             is_actively_mined,
@@ -1431,7 +1462,9 @@ main :: () {
                                             is_lava_flowing,
                                             is_obsidian,
                                             is_wall,
-                                            is_hole
+                                            is_hole,
+                                            is_dwarf,
+                                            is_goblin
                                         );
                                         assert_soft(false, "Dwarf % is trying to move into the unmined tile %\n", dwarf.id, target_tile_id);
                                     }
@@ -2774,15 +2807,12 @@ reset_memory :: () {
 
     array_reset(*bases);
     table_reset(*base_id_to_index);
-    base_id_counter = 0;
 
     array_reset(*dwarves);
     table_reset(*dwarf_id_to_index);
-    dwarf_id_counter = 0;
 
     array_reset(*goblins);
     table_reset(*goblin_id_to_index);
-    goblin_id_counter = 0;
 
     array_reset(*tiles_with_dynamite_ids);
 
@@ -2930,20 +2960,20 @@ try_to_set_dwarf_random_new_target :: (dwarf: *Dwarf) -> SetDwarfRandomNewTarget
 
     // Enumerate the different directions the dwarf can go
     is_north_valid := ifx can_target_unmined_tiles
-        then is_tile_id_walkable_or_mineable(get_neighbor_tile_id_by_direction(dwarf_tile_id_current, .NORTH))
-        else             is_tile_id_walkable(get_neighbor_tile_id_by_direction(dwarf_tile_id_current, .NORTH));
+        then is_tile_id_walkable_or_mineable_for_entity(get_neighbor_tile_id_by_direction(dwarf_tile_id_current, .NORTH), dwarf.id)
+        else             is_tile_id_walkable_for_entity(get_neighbor_tile_id_by_direction(dwarf_tile_id_current, .NORTH), dwarf.id);
 
     is_south_valid := ifx can_target_unmined_tiles
-        then is_tile_id_walkable_or_mineable(get_neighbor_tile_id_by_direction(dwarf_tile_id_current, .SOUTH))
-        else             is_tile_id_walkable(get_neighbor_tile_id_by_direction(dwarf_tile_id_current, .SOUTH));
+        then is_tile_id_walkable_or_mineable_for_entity(get_neighbor_tile_id_by_direction(dwarf_tile_id_current, .SOUTH), dwarf.id)
+        else             is_tile_id_walkable_for_entity(get_neighbor_tile_id_by_direction(dwarf_tile_id_current, .SOUTH), dwarf.id);
 
     is_east_valid  := ifx can_target_unmined_tiles
-        then is_tile_id_walkable_or_mineable(get_neighbor_tile_id_by_direction(dwarf_tile_id_current, .EAST))
-        else             is_tile_id_walkable(get_neighbor_tile_id_by_direction(dwarf_tile_id_current, .EAST));
+        then is_tile_id_walkable_or_mineable_for_entity(get_neighbor_tile_id_by_direction(dwarf_tile_id_current, .EAST), dwarf.id)
+        else             is_tile_id_walkable_for_entity(get_neighbor_tile_id_by_direction(dwarf_tile_id_current, .EAST), dwarf.id);
 
     is_west_valid  := ifx can_target_unmined_tiles
-        then is_tile_id_walkable_or_mineable(get_neighbor_tile_id_by_direction(dwarf_tile_id_current, .WEST))
-        else             is_tile_id_walkable(get_neighbor_tile_id_by_direction(dwarf_tile_id_current, .WEST));
+        then is_tile_id_walkable_or_mineable_for_entity(get_neighbor_tile_id_by_direction(dwarf_tile_id_current, .WEST), dwarf.id)
+        else             is_tile_id_walkable_for_entity(get_neighbor_tile_id_by_direction(dwarf_tile_id_current, .WEST), dwarf.id);
 
     if !is_north_valid && !is_south_valid && !is_east_valid && !is_west_valid return .NO_DIRECTION_FOUND;
 
@@ -3030,8 +3060,8 @@ try_to_set_dwarf_target_to_one_block_in_the_direction_its_facing :: (dwarf: *Dwa
     dwarf_tile_id_current := get_tile_id_by_pos(dwarf.pos);
 
     is_tile_valid := ifx dwarf.type == .DIGGER
-        then is_tile_id_walkable_or_mineable(get_neighbor_tile_id_by_direction(dwarf_tile_id_current, dwarf.direction))
-        else is_tile_id_walkable(get_neighbor_tile_id_by_direction(dwarf_tile_id_current, dwarf.direction));
+        then is_tile_id_walkable_or_mineable_for_entity(get_neighbor_tile_id_by_direction(dwarf_tile_id_current, dwarf.direction), dwarf.id)
+        else is_tile_id_walkable_for_entity(get_neighbor_tile_id_by_direction(dwarf_tile_id_current, dwarf.direction), dwarf.id);
     if !is_tile_valid return .NO_DIRECTION_FOUND;
 
     new_target_tile_id := get_neighbor_tile_id_by_direction(dwarf_tile_id_current, dwarf.direction);
@@ -3158,7 +3188,7 @@ set_dwarf_direction_to_face_next_target :: (dwarf: *Dwarf) {
 }
 
 create_dwarf :: (pos: Vector2, dwarf_type: DwarfType) -> Dwarf {
-    dwarf_id    := increment_then_read(*dwarf_id_counter);
+    dwarf_id    := increment_then_read(*entity_id_counter);
     direction   := cast(Direction) cast(int) random_get_within_range(0, 3);
 
     dwarf := Dwarf.{
@@ -3187,7 +3217,7 @@ create_dwarf :: (pos: Vector2, dwarf_type: DwarfType) -> Dwarf {
 }
 
 create_goblin :: (pos: Vector2) -> Goblin {
-    goblin_id  := increment_then_read(*goblin_id_counter);
+    goblin_id := increment_then_read(*entity_id_counter);
     direction := cast(Direction) cast(int) random_get_within_range(0, 3);
 
     goblin := Goblin.{
@@ -3210,7 +3240,7 @@ create_goblin :: (pos: Vector2) -> Goblin {
 }
 
 create_base :: (pos: Vector2, is_home_base: bool, game_state: *GameState) -> Base {
-    base_id := increment_then_read(*base_id_counter);
+    base_id := increment_then_read(*entity_id_counter);
 
     base := Base.{
         id  = base_id,
@@ -3439,26 +3469,47 @@ is_tile_id_dirt :: (tile_id: s32) -> bool {
     // and I would like a way to know I'm not missing anything from this list at 
     // compile time.
     return (
-        !is_tile_id_fully_mined(tile_id) &&
-        !is_tile_id_cave(tile_id) && 
-        !is_tile_id_iron(tile_id) && 
-        !is_tile_id_water_still(tile_id) && 
+        !is_tile_id_fully_mined(tile_id)   &&
+        !is_tile_id_cave(tile_id)          && 
+        !is_tile_id_iron(tile_id)          && 
+        !is_tile_id_water_still(tile_id)   && 
         !is_tile_id_water_flowing(tile_id) && 
-        !is_tile_id_lava_still(tile_id) && 
-        !is_tile_id_lava_flowing(tile_id) && 
-        !is_tile_id_obsidian(tile_id) &&
-        !is_tile_id_wall(tile_id) &&
+        !is_tile_id_lava_still(tile_id)    && 
+        !is_tile_id_lava_flowing(tile_id)  && 
+        !is_tile_id_obsidian(tile_id)      &&
+        !is_tile_id_wall(tile_id)          &&
         !is_tile_id_hole(tile_id)
     );
 }
 
-// TODO: check for dwarves and goblins
 is_tile_id_walkable :: (tile_id: s32) -> bool {
+    found_dwarf := table_contains(*tile_ids_to_dwarfs, tile_id);
+    if found_dwarf return false;
+
+    found_goblin := table_contains(*tile_ids_to_goblins, tile_id);
+    if found_goblin return false;
+
     return (
-        is_tile_id_fully_mined(tile_id) ||
-        is_tile_id_water_still(tile_id) ||
+        is_tile_id_fully_mined(tile_id)   ||
+        is_tile_id_water_still(tile_id)   ||
         is_tile_id_water_flowing(tile_id) ||
-        is_tile_id_lava_still(tile_id) ||
+        is_tile_id_lava_still(tile_id)    ||
+        is_tile_id_lava_flowing(tile_id)
+    );
+}
+
+is_tile_id_walkable_for_entity :: (tile_id: s32, entity_id: s32) -> bool {
+    found_dwarf, dwarf := table_find(*tile_ids_to_dwarfs, tile_id);
+    if found_dwarf && dwarf.id != entity_id return false;
+
+    found_goblin, goblin := table_find(*tile_ids_to_goblins, tile_id);
+    if found_goblin && goblin.id != entity_id return false;
+
+    return (
+        is_tile_id_fully_mined(tile_id)   ||
+        is_tile_id_water_still(tile_id)   ||
+        is_tile_id_water_flowing(tile_id) ||
+        is_tile_id_lava_still(tile_id)    ||
         is_tile_id_lava_flowing(tile_id)
     );
 }
@@ -3473,6 +3524,10 @@ is_tile_id_mineable :: (tile_id: s32) -> bool {
 
 is_tile_id_walkable_or_mineable :: (tile_id: s32) -> bool {
     return is_tile_id_walkable(tile_id) || is_tile_id_mineable(tile_id);
+}
+
+is_tile_id_walkable_or_mineable_for_entity :: (tile_id: s32, entity_id: s32) -> bool {
+    return is_tile_id_walkable_for_entity(tile_id, entity_id) || is_tile_id_mineable(tile_id);
 }
 
 get_neighbor_tile_ids_of_type :: (tile_id: s32, tile_type: TileType) -> [..] s32 {
