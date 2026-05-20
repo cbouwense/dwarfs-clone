@@ -524,7 +524,8 @@ tile_ids_to_bases   : Table(s32, *Base);
 
 created_chunks: Table(u64, *Chunk);
 
-edges : [..] Edge; // List of edges between tiles for pathfinding
+edges : [..] Edge; // List of all edges between tiles for pathfinding
+edges_valid_this_frame : [..] Edge; // List of edges without collidable entities on them this frame
 
 main :: () {
     // Set temp allocator for various things.
@@ -550,6 +551,7 @@ main :: () {
         tile_ids_to_dwarfs.allocator                  = temp;
         tile_ids_to_goblins.allocator                 = temp;
         tile_ids_to_bases.allocator                   = temp;
+        edges_valid_this_frame.allocator              = temp;
     }
 
     random_seed(123456789);
@@ -666,6 +668,7 @@ main :: () {
         table_reset(*tile_ids_to_dwarfs);
         table_reset(*tile_ids_to_goblins);
         table_reset(*tile_ids_to_bases);
+        array_reset_keeping_memory(*edges_valid_this_frame);
         reset_temporary_storage();
 
         dt_seconds_raw := GetFrameTime();
@@ -687,52 +690,67 @@ main :: () {
         mouse_pos_in_world := GetScreenToWorld2D(mouse_pos_in_ui, camera);
         mouse_wheel_move   := GetMouseWheelMove();
 
-        for dwarf: dwarves {
-            dwarf_tile_id: s32;
+        // Populate caches
+        {
+            for dwarf: dwarves {
+                dwarf_tile_id: s32;
 
-            if #complete dwarf.state == {
-                // If the dwarf is dead center on a tile and not moving, it's on that tile.
-                case .IDLE;      #through;
-                case .DECIDING;  #through;
-                case .ATTACKING; #through;
-                case .MINING;
-                    dwarf_tile_id = get_tile_id_by_pos(dwarf.pos);
+                if #complete dwarf.state == {
+                    // If the dwarf is dead center on a tile and not moving, it's on that tile.
+                    case .IDLE;      #through;
+                    case .DECIDING;  #through;
+                    case .ATTACKING; #through;
+                    case .MINING;
+                        dwarf_tile_id = get_tile_id_by_pos(dwarf.pos);
 
-                // If the dwarf is moving, then they're "on" the tile that they're moving to.
-                case .MOVING;
-                    assert_soft(dwarf.tile_ids_on_path.count > 0, "Dwarf was in move state but had nowhere to go\n");
-                    dwarf_tile_id = dwarf.tile_ids_on_path[0];
+                    // If the dwarf is moving, then they're "on" the tile that they're moving to.
+                    case .MOVING;
+                        assert_soft(dwarf.tile_ids_on_path.count > 0, "Dwarf was in move state but had nowhere to go\n");
+                        dwarf_tile_id = dwarf.tile_ids_on_path[0];
+                }
+
+                assert_soft(dwarf_tile_id > 0, "Expected dwarf_tile_id to have been set, but got %\n", dwarf_tile_id);
+                table_set(*tile_ids_to_dwarfs, dwarf_tile_id, dwarf);
             }
 
-            assert_soft(dwarf_tile_id > 0, "Expected dwarf_tile_id to have been set, but got %\n", dwarf_tile_id);
-            table_set(*tile_ids_to_dwarfs, dwarf_tile_id, dwarf);
-        }
+            for goblin: goblins {
+                goblin_tile_id: s32;
 
-        for goblin: goblins {
-            goblin_tile_id: s32;
+                if #complete goblin.state == {
+                    // If the goblin is dead center on a tile and not moving, it's on that tile.
+                    case .IDLE;     #through;
+                    case .DECIDING; #through;
+                    case .ATTACKING;
+                        goblin_tile_id = get_tile_id_by_pos(goblin.pos);
 
-            if #complete goblin.state == {
-                // If the goblin is dead center on a tile and not moving, it's on that tile.
-                case .IDLE;     #through;
-                case .DECIDING; #through;
-                case .ATTACKING;
-                    goblin_tile_id = get_tile_id_by_pos(goblin.pos);
+                    // If the goblin is moving, then they're "on" the tile that they're moving to.
+                    case .MOVING;
+                        assert_soft(goblin.tile_ids_on_path.count > 0, "Goblin was in move state but had nowhere to go\n");
+                        goblin_tile_id = goblin.tile_ids_on_path[0];
+                }
 
-                // If the goblin is moving, then they're "on" the tile that they're moving to.
-                case .MOVING;
-                    assert_soft(goblin.tile_ids_on_path.count > 0, "Goblin was in move state but had nowhere to go\n");
-                    goblin_tile_id = goblin.tile_ids_on_path[0];
+                assert_soft(goblin_tile_id > 0, "Expected goblin_tile_id to have been set, but got %\n", goblin_tile_id);
+                table_set(*tile_ids_to_goblins, goblin_tile_id, goblin);
             }
 
-            assert_soft(goblin_tile_id > 0, "Expected goblin_tile_id to have been set, but got %\n", goblin_tile_id);
-            table_set(*tile_ids_to_goblins, goblin_tile_id, goblin);
-        }
+            // PERF: caching this might not even be faster
+            for *base: bases {
+                base_center  := get_rect_center(get_world_rect_from_pos(base.pos));
+                base_tile_id := get_tile_id_by_pos(base_center);
+                table_set(*tile_ids_to_bases, base_tile_id, base);
+            }
 
-        // PERF: caching this might not even be faster
-        for *base: bases {
-            base_center  := get_rect_center(get_world_rect_from_pos(base.pos));
-            base_tile_id := get_tile_id_by_pos(base_center);
-            table_set(*tile_ids_to_bases, base_tile_id, base);
+            // PERF: how terrible is this?
+            for edge: edges {
+                if table_contains(*tile_ids_to_dwarfs,  edge.to)   continue;
+                if table_contains(*tile_ids_to_dwarfs,  edge.from) continue;
+                if table_contains(*tile_ids_to_goblins, edge.to)   continue;
+                if table_contains(*tile_ids_to_goblins, edge.from) continue;
+                if table_contains(*tile_ids_to_bases,   edge.to)   continue;
+                if table_contains(*tile_ids_to_bases,   edge.from) continue;
+
+                array_add(*edges_valid_this_frame, edge);
+            }
         }
 
         //
@@ -1613,7 +1631,7 @@ main :: () {
                     }
 
                     // Update goblins
-                    {
+                    #if false {
                         for *goblin: goblins {
                             goblin_center   := get_rect_center(get_world_rect_from_pos(goblin.pos));
                             goblin_tile_id  := get_tile_id_by_pos(goblin_center);
@@ -1634,6 +1652,7 @@ main :: () {
                                         dwarf_current_tile_id := get_tile_id_by_pos(dwarf_center);
                                         tile_id_dwarf_will_defend_from : s32;
 
+                                        // TODO: basically just remove this, right?
                                         if #complete dwarf.state == {
                                             // If the dwarf is moving towards a tile, aim to where the puck is going.
                                             case .MOVING;
@@ -1648,7 +1667,7 @@ main :: () {
                                                 tile_id_dwarf_will_defend_from = dwarf_current_tile_id;
                                         }
 
-                                        path_found, tile_ids_to_dwarf_target := dijkstra(goblin_tile_id, tile_id_dwarf_will_defend_from, edges);
+                                        path_found, tile_ids_to_dwarf_target := dijkstra(goblin_tile_id, tile_id_dwarf_will_defend_from, edges_valid_this_frame);
                                         
                                         if path_found {
                                             // If the goblin is right up against where it's going to attack the dwarf already, then start fighting
@@ -1676,8 +1695,7 @@ main :: () {
 
                                         if detected {
                                             base_tile_id := get_tile_id_by_pos(base.pos);
-                                            path_found, tile_ids_to_base := dijkstra(goblin_tile_id, base_tile_id, edges);
-                                            
+                                            path_found, tile_ids_to_base := dijkstra(goblin_tile_id, base_tile_id, edges_valid_this_frame);
                                             if path_found {
                                                 // If the goblin is on top of the base, then just start attacking I guess
                                                 if goblin_tile_id == base_tile_id {
@@ -2655,51 +2673,30 @@ DealWithNearbyGoblinResult :: enum {
 
 deal_with_nearby_goblins :: (dwarf: *Dwarf, tile_ids_to_goblins: *Table) -> DealWithNearbyGoblinResult {
     // TODO: assert dwarf is directly on tile, I think
-    dwarf_center     := get_rect_center(get_world_rect_from_pos(dwarf.pos));
-    dwarf_tile_id    := get_tile_id_by_pos(dwarf_center);
-    detected, goblin := detect_goblin_within_radius(dwarf_tile_id, 2, tile_ids_to_goblins);
+    dwarf_center  := get_rect_center(get_world_rect_from_pos(dwarf.pos));
+    dwarf_tile_id := get_tile_id_by_pos(dwarf_center);
+    detected, goblin, tile_ids_to_goblin_target := detect_goblin_within_radius(dwarf_tile_id, 2, tile_ids_to_goblins);
     
     if detected {
         dwarf.goblin_id_attacking = goblin.id;
 
-        goblin_center          := get_rect_center(get_world_rect_from_pos(goblin.pos));
-        goblin_current_tile_id := get_tile_id_by_pos(goblin_center);
-        tile_id_goblin_is_moving_to : s32;
+        goblin_tile_id := get_tile_id_by_pos(goblin.pos);
 
-        if #complete goblin.state == {
-            // If the goblin is moving towards a tile, aim to where the puck is going.
-            case .MOVING;
-                assert_soft(goblin.tile_ids_on_path.count > 0, "Expected goblin % to have at least one tile on its path, but found none\n", goblin.id);
-                tile_id_goblin_is_moving_to = goblin.tile_ids_on_path[0];
+        // If the dwarf is right up against where it's going to attack the goblin already, then start fighting
+        if is_tile_id_neighbor_of_tile_id_cardinal(dwarf_tile_id, goblin_tile_id) {
+            dwarf.state = .ATTACKING;
+        } else if dwarf.type == .WARRIOR {
+            // PERF: can probably just decrement the count and move the data pointer forward like a rat.
+            //
+            // Since we started pathfinding on the goblin's current tile, we need to pop that off the front
+            // so we don't softlock on it.
+            print_vars(tile_ids_to_goblin_target);
+            // pop_front(*tile_ids_to_goblin_target);
 
-            // If the goblin is standing still, then we'll want to attack it on the tile it's on.
-            case .IDLE;   #through;
-            case .DECIDING;  #through;
-            case .ATTACKING;
-                tile_id_goblin_is_moving_to = goblin_current_tile_id;
-        }
+            array_reset(*dwarf.tile_ids_on_path);
+            array_copy(*dwarf.tile_ids_on_path, tile_ids_to_goblin_target);
 
-        path_found, tile_ids_to_goblin_target := dijkstra(dwarf_tile_id, tile_id_goblin_is_moving_to, edges);
-        
-        if path_found {
-            // If the dwarf is right up against where it's going to attack the goblin already, then start fighting
-            if is_tile_id_neighbor_of_tile_id_cardinal(dwarf_tile_id, tile_id_goblin_is_moving_to) {
-                dwarf.state = .ATTACKING;
-                return .NEARBY_GOBLIN_FOUND;
-            } else if dwarf.type == .WARRIOR {
-                // PERF: can probably just decrement the count and move the data pointer forward like a rat.
-                //
-                // Since we started pathfinding on the goblin's current tile, we need to pop that off the front
-                // so we don't softlock on it.
-                pop_front(*tile_ids_to_goblin_target);
-
-                array_reset(*dwarf.tile_ids_on_path);
-                array_copy(*dwarf.tile_ids_on_path, tile_ids_to_goblin_target);
-
-                dwarf.state = .MOVING;
-            }
-        } else {
-            print("WARN: Dwarf % tried to find a path to goblin % but couldn't", dwarf.id, goblin.id);
+            dwarf.state = .MOVING;
         }
     }
 
@@ -4595,7 +4592,7 @@ detect_base_within_radius :: (
 }
 
 // TODO: probably want to DRY up these detector functions
-detect_goblin_within_radius :: (
+detect_goblin_within_radius_old :: (
     starting_tile_id: s32,
     radius: s32,
     tile_ids_to_goblins: *Table
@@ -4615,14 +4612,14 @@ detect_goblin_within_radius :: (
         id := pop_front(*ids_to_process);
 
         // Make sure the id is valid and hasn't already been processed
-        if table_contains(*ids_processed_set, id) continue;
-        if id <= 0 continue;
-        if id > max_tile_id continue;
-        if !table_contains(*fully_mined_tile_ids_set, id) continue;
+        if id <= 0                                              continue;
+        if id > max_tile_id                                     continue;
         if id == starting_tile_id - (WORLD_ROWS * (radius + 1)) continue; // north
         if id == starting_tile_id + (WORLD_ROWS * (radius + 1)) continue; // south
         if id == starting_tile_id + (radius + 1)                continue; // east
         if id == starting_tile_id - (radius + 1)                continue; // west
+        if table_contains(*ids_processed_set, id)               continue;
+        if table_contains(*tile_ids_to_dwarfs, id)              continue;
 
         // If a goblin is detected, return
         detected, goblin := table_find(tile_ids_to_goblins, id);
@@ -4639,6 +4636,90 @@ detect_goblin_within_radius :: (
     }
 
     return false, Goblin.{};
+}
+
+detect_goblin_within_radius :: (
+    starting_tile_id: s32,
+    radius: s32,
+    tile_ids_to_goblins: *Table
+) -> found: bool, goblin: Goblin, tile_id_path_to_goblin: [..] s32 {
+    max_tile_id := WORLD_COLS * WORLD_ROWS;
+    empty_path: [..] s32; // Returned if no goblin is found
+
+    ids_to_process : [..] s32;
+    ids_to_process.allocator = temp;
+
+    // Key = Current Tile ID, Value = Parent Tile ID
+    came_from_map : Table(s32, s32);
+    came_from_map.allocator = temp;
+
+    array_add(*ids_to_process, starting_tile_id);
+    
+    // Mark the starting tile so we don't process it twice.
+    // -1 indicates it has no parent.
+    table_set(*came_from_map, starting_tile_id, -1); 
+
+    i : s32 = 0;
+    while ids_to_process.count > 0 {
+        print("doin it %\n", read_then_increment(*i));
+        // Get the next id to process
+        id := pop_front(*ids_to_process);
+
+        // Make sure the id is valid
+        if id <= 0                                              continue;
+        if id > max_tile_id                                     continue;
+        if id == starting_tile_id - (WORLD_ROWS * (radius + 1)) continue; // north
+        if id == starting_tile_id + (WORLD_ROWS * (radius + 1)) continue; // south
+        if id == starting_tile_id + (radius + 1)                continue; // east
+        if id == starting_tile_id - (radius + 1)                continue; // west
+        if table_contains(*tile_ids_to_dwarfs, id)              continue;
+        if !table_contains(*fully_mined_tile_ids_set, id)       continue;
+        // if table_contains(*came_from_map, id)                   continue; // functions as processed set
+
+        // If a goblin is detected, return
+        detected, goblin := table_find(tile_ids_to_goblins, id);
+        if detected {
+            path: [..] s32;
+            path.allocator = temp;
+            
+            current_id := id;
+            while current_id != starting_tile_id {
+                array_add(*path, current_id);
+                // Look up the parent tile that led us to this one
+                found_parent, parent_id := table_find(*came_from_map, current_id);
+                if !found_parent break; // Failsafe
+                
+                current_id = parent_id;
+            }
+            
+            // Since we backtracked from Goblin -> Start, the array is backwards.
+            // Reversing it gives us Start -> Goblin.
+            for i: 0..path.count / 2 - 1 {
+                temp_val := path[i];
+                path[i] = path[path.count - 1 - i];
+                path[path.count - 1 - i] = temp_val;
+            }
+            
+            return true, goblin, path;
+        }
+
+        // Using a macro/inline block to prevent repeating code
+        queue_neighbor :: (neighbor_id: s32, parent_id: s32) #expand {
+            // Only add if we haven't visited this tile yet
+            if !table_contains(*came_from_map, neighbor_id) {
+                table_set(*came_from_map, neighbor_id, parent_id);
+                array_add(*ids_to_process, neighbor_id);
+            }
+        }
+
+        // Add neighbors as needing to be processed
+        queue_neighbor(id - WORLD_ROWS, id);
+        queue_neighbor(id + WORLD_ROWS, id);
+        queue_neighbor(id + 1, id);
+        queue_neighbor(id - 1, id);
+    }
+
+    return false, Goblin.{}, empty_path;
 }
 
 // TODO: probably want to DRY up these detector functions 
