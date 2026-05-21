@@ -3,11 +3,6 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 - dwarves and goblins should not pass through each other
-- dwarves can move into goblins when they should be attacking
-    - condition: reproducible on df6c8f0
-    - cause:
-    - correction:
-    - confirmation:
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Bugs
@@ -16,9 +11,11 @@
 ## Demo
 
 - warriors ignore arrows while patrolling
+- reset game state on restart 
 
 ## After demo
 
+- lots of goblins crash the game
 - goblins pathing is kinda just fucked up overall
     - condition: reproducible on 279d68e
     - cause:

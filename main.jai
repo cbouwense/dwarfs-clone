@@ -33,14 +33,14 @@ WALL_HEALTH :: 200;
 DWARF_MOVE_SPEED :: 33;
 // TODO: DWARF_MOVE_SPEED_TARGETING :: DWARF_MOVE_SPEED * 2;
 
-DWARF_DIGGER_START_COUNT :: 0;
+DWARF_DIGGER_START_COUNT :: 1;
 DWARF_DIGGER_DIG_COOLDOWN_MS    :: 1000;
 DWARF_DIGGER_ATTACK_COOLDOWN_MS :: 2000;
 DWARF_DIGGER_DAMAGE_DIG_PER_SWING    :: 50;
 DWARF_DIGGER_DAMAGE_ATTACK_PER_SWING :: 25;
 DWARF_DIGGER_HIT_CHANCE :: 0.50; // TODO: will have to be based on level
 DWARF_DIGGER_SPAWN_MS :: 10000;
-DWARF_DIGGER_SPAWN_ENABLED :: false;
+DWARF_DIGGER_SPAWN_ENABLED :: true;
 DWARF_DIGGER_STARTING_HP :: 75;
 
 DWARF_WARRIOR_START_COUNT :: 1;
@@ -1609,7 +1609,7 @@ main :: () {
                     }
 
                     // Update goblins
-                    #if false {
+                    #if true {
                         for *goblin: goblins {
                             goblin_center   := get_rect_center(get_world_rect_from_pos(goblin.pos));
                             goblin_tile_id  := get_tile_id_by_pos(goblin_center);
@@ -4162,36 +4162,43 @@ get_arrow_rotation :: (start_pos: Vector2, end_pos: Vector2) -> float32 {
 
 set_cave_as_mined :: (tile_id: s32, cave_type: CaveType, grant_points: bool, game_state: *GameState) {
     tile_type : TileType;
-    if #complete cave_type == {
-        case .EMPTY;
-            tile_type = .MINED;
-        case .WATER;
-            tile_type = .WATER_FLOWING;
-        case .LAVA;
-            tile_type = .LAVA_FLOWING;
-        case .TREASURE;
-            tile_type = .MINED;
 
-            rng := random_get_within_range(0, 1);
-            is_treasure := rng <= 0.333;
-            if is_treasure {
-                array_add(*tiles_with_treasure_ids, tile_id);
-                table_set(*tiles_with_treasure_ids_set, tile_id, 1738);
-            }
+    // Only spawn goblin caves
+    #if true {
+        tile_type = .MINED;
+        create_goblin(get_tile_pos_by_id(tile_id));
+    } else {
+        if #complete cave_type == {
+            case .EMPTY;
+                tile_type = .MINED;
+            case .WATER;
+                tile_type = .WATER_FLOWING;
+            case .LAVA;
+                tile_type = .LAVA_FLOWING;
+            case .TREASURE;
+                tile_type = .MINED;
 
-        case .GOBLIN;
-            tile_type = .MINED;
-
-            #if GOBLIN_SPAWN_ENABLED {
                 rng := random_get_within_range(0, 1);
-                is_goblin := rng <= 0.25;
-                if is_goblin create_goblin(get_tile_pos_by_id(tile_id));
-            }
+                is_treasure := rng <= 0.333;
+                if is_treasure {
+                    array_add(*tiles_with_treasure_ids, tile_id);
+                    table_set(*tiles_with_treasure_ids_set, tile_id, 1738);
+                }
 
-        case .SHAMAN;
-            tile_type = .MINED;
-        case .SPIDER_QUEEN;
-            tile_type = .MINED;
+            case .GOBLIN;
+                tile_type = .MINED;
+
+                #if GOBLIN_SPAWN_ENABLED {
+                    rng := random_get_within_range(0, 1);
+                    is_goblin := rng <= 0.25;
+                    if is_goblin create_goblin(get_tile_pos_by_id(tile_id));
+                }
+
+            case .SHAMAN;
+                tile_type = .MINED;
+            case .SPIDER_QUEEN;
+                tile_type = .MINED;
+        }
     }
 
     set_tile_as_type(tile_id, tile_type, grant_points, game_state);
