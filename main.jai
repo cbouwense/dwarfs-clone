@@ -33,14 +33,14 @@ WALL_HEALTH :: 200;
 DWARF_MOVE_SPEED :: 33;
 // TODO: DWARF_MOVE_SPEED_TARGETING :: DWARF_MOVE_SPEED * 2;
 
-DWARF_DIGGER_START_COUNT :: 1;
+DWARF_DIGGER_START_COUNT :: 0;
 DWARF_DIGGER_DIG_COOLDOWN_MS    :: 1000;
 DWARF_DIGGER_ATTACK_COOLDOWN_MS :: 2000;
 DWARF_DIGGER_DAMAGE_DIG_PER_SWING    :: 50;
 DWARF_DIGGER_DAMAGE_ATTACK_PER_SWING :: 25;
 DWARF_DIGGER_HIT_CHANCE :: 0.50; // TODO: will have to be based on level
 DWARF_DIGGER_SPAWN_MS :: 10000;
-DWARF_DIGGER_SPAWN_ENABLED :: true;
+DWARF_DIGGER_SPAWN_ENABLED :: false;
 DWARF_DIGGER_STARTING_HP :: 75;
 
 DWARF_WARRIOR_START_COUNT :: 1;
@@ -525,7 +525,7 @@ tile_ids_to_bases   : Table(s32, *Base);
 created_chunks: Table(u64, *Chunk);
 
 edges : [..] Edge; // List of all edges between tiles for pathfinding
-edges_valid_this_frame : [..] Edge; // List of edges without collidable entities on them this frame
+// edges_valid_this_frame : [..] Edge; // List of edges without collidable entities on them this frame
 
 main :: () {
     // Set temp allocator for various things.
@@ -551,7 +551,7 @@ main :: () {
         tile_ids_to_dwarfs.allocator                  = temp;
         tile_ids_to_goblins.allocator                 = temp;
         tile_ids_to_bases.allocator                   = temp;
-        edges_valid_this_frame.allocator              = temp;
+        // edges_valid_this_frame.allocator              = temp;
     }
 
     random_seed(123456789);
@@ -668,7 +668,7 @@ main :: () {
         table_reset(*tile_ids_to_dwarfs);
         table_reset(*tile_ids_to_goblins);
         table_reset(*tile_ids_to_bases);
-        array_reset_keeping_memory(*edges_valid_this_frame);
+        // array_reset_keeping_memory(*edges_valid_this_frame);
         reset_temporary_storage();
 
         dt_seconds_raw := GetFrameTime();
@@ -738,18 +738,6 @@ main :: () {
                 base_center  := get_rect_center(get_world_rect_from_pos(base.pos));
                 base_tile_id := get_tile_id_by_pos(base_center);
                 table_set(*tile_ids_to_bases, base_tile_id, base);
-            }
-
-            // PERF: how terrible is this?
-            for edge: edges {
-                if table_contains(*tile_ids_to_dwarfs,  edge.to)   continue;
-                if table_contains(*tile_ids_to_dwarfs,  edge.from) continue;
-                if table_contains(*tile_ids_to_goblins, edge.to)   continue;
-                if table_contains(*tile_ids_to_goblins, edge.from) continue;
-                if table_contains(*tile_ids_to_bases,   edge.to)   continue;
-                if table_contains(*tile_ids_to_bases,   edge.from) continue;
-
-                array_add(*edges_valid_this_frame, edge);
             }
         }
 
@@ -1667,7 +1655,7 @@ main :: () {
                                                 tile_id_dwarf_will_defend_from = dwarf_current_tile_id;
                                         }
 
-                                        path_found, tile_ids_to_dwarf_target := dijkstra(goblin_tile_id, tile_id_dwarf_will_defend_from, edges_valid_this_frame);
+                                        path_found, tile_ids_to_dwarf_target := dijkstra(goblin_tile_id, tile_id_dwarf_will_defend_from, edges);
                                         
                                         if path_found {
                                             // If the goblin is right up against where it's going to attack the dwarf already, then start fighting
@@ -1695,7 +1683,7 @@ main :: () {
 
                                         if detected {
                                             base_tile_id := get_tile_id_by_pos(base.pos);
-                                            path_found, tile_ids_to_base := dijkstra(goblin_tile_id, base_tile_id, edges_valid_this_frame);
+                                            path_found, tile_ids_to_base := dijkstra(goblin_tile_id, base_tile_id, edges);
                                             if path_found {
                                                 // If the goblin is on top of the base, then just start attacking I guess
                                                 if goblin_tile_id == base_tile_id {
@@ -4232,6 +4220,7 @@ set_cave_as_mined :: (tile_id: s32, cave_type: CaveType, grant_points: bool, gam
 set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, game_state: *GameState) {
     _result, chunk := find_or_create_chunk_by_tile_id(tile_id);
 
+    tile_was_fully_mined := table_contains(*fully_mined_tile_ids_set, tile_id);
     tile_was_iron := table_contains(*iron_tile_ids_set, tile_id);
     tile_was_dirt := !tile_was_iron && !table_contains(*fully_mined_tile_ids_set, tile_id);
 
@@ -4352,13 +4341,15 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, game_
         // Add edges for pathing to any neighbors who are also open
         case .CAVE; #through;
         case .MINED;
-            for DIRECTIONS_CARDINAL {
-                neighbor_id := get_neighbor_tile_id_by_direction(tile_id, it);
-                neighbor_is_mined := table_contains(*fully_mined_tile_ids_set, neighbor_id);
-                if neighbor_is_mined {
-                    // PERF: don't add 2?
-                    array_add(*edges, Edge.{ from = tile_id,     to = neighbor_id, distance = 1 });
-                    array_add(*edges, Edge.{ from = neighbor_id, to = tile_id, distance = 1 });
+            if !tile_was_fully_mined {
+                for DIRECTIONS_CARDINAL {
+                    neighbor_id := get_neighbor_tile_id_by_direction(tile_id, it);
+                    neighbor_is_mined := table_contains(*fully_mined_tile_ids_set, neighbor_id);
+                    if neighbor_is_mined {
+                        // PERF: don't add 2?
+                        array_add(*edges, Edge.{ from = tile_id,     to = neighbor_id, distance = 1 });
+                        array_add(*edges, Edge.{ from = neighbor_id, to = tile_id,     distance = 1 });
+                    }
                 }
             }
 
