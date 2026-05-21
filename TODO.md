@@ -15,6 +15,8 @@
 
 ## Demo
 
+- warriors ignore arrows while patrolling
+
 ## After demo
 
 - goblins pathing is kinda just fucked up overall
@@ -22,7 +24,7 @@
     - cause:
     - correction:
     - confirmation:
-- goblins can attack dwarves that are walking away
+- goblins can attack dwarves that are out of reach
     - condition: reproducible on 279d68e
     - cause:
     - correction:

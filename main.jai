@@ -392,7 +392,7 @@ Dwarf :: struct {
     attack_cooldown_ms  : s32;
     direction           : Direction;
     type                : DwarfType;
-    ignore_goblins      : bool;
+    ignore_goblins_for  : int;
 }
 
 GoblinState :: enum {
@@ -1068,7 +1068,7 @@ main :: () {
                                         assert(found);
 
                                         dwarves[selected_dwarf_index].state = .DECIDING;
-                                        dwarves[selected_dwarf_index].ignore_goblins = true;
+                                        dwarves[selected_dwarf_index].ignore_goblins_for = 2;
 
                                         game_state.selected_dwarf_id = 0;
                                     }
@@ -1229,7 +1229,9 @@ main :: () {
                                     // can remain in the deciding state - like if he is somehow completely unable to move.
                                     dwarf_can_remain_undecided := false;
 
-                                    if !dwarf.ignore_goblins {
+                                    // Regardless of the type of dwarf, if there's a goblin right on your ass, defend yourself unless you're
+                                    // under strict orders to stand down.
+                                    if dwarf.ignore_goblins_for == 0 {
                                         detected, goblin, direction_of_goblin := detect_goblin_neighbor_cardinal(dwarf_tile_id, *tile_ids_to_goblins);
                                         if detected {
                                             dwarf.goblin_id_attacking = goblin.id;
@@ -1237,6 +1239,8 @@ main :: () {
                                             dwarf.state = .ATTACKING;
                                             is_dwarf_done_deciding = true;
                                         }
+                                    } else {
+                                        dwarf.ignore_goblins_for -= 1;
                                     }
 
                                     // TODO: faster walk and mine speed when on a path, I think
@@ -1319,23 +1323,9 @@ main :: () {
                                                 }
                                             }
 
-                                            if dwarf.ignore_goblins {
-                                                dwarf_warrior_wander(dwarf, *tile_ids_to_bases);
-                                            } else {
-                                                dealing_with_goblin := deal_with_nearby_goblins(dwarf, *tile_ids_to_goblins);
+                                            dealing_with_goblin := deal_with_nearby_goblins(dwarf, *tile_ids_to_goblins);
 
-                                                // TODO: DRY up with digger decision
-                                                //
-                                                // If no goblins are nearby, continue patrolling. Warriors prefer to patrol around
-                                                // bases. If they are within a base, they stay within it. Every so often, they'll check
-                                                // if they're next to a base, and if they are, they'll try to enter it to patrol. Otherwise,
-                                                // they go in random directions, like diggers do, except they don't mine into walls unless
-                                                // explicitly ordered to.
-                                                // else if dwarf.tile_ids_on_path.count == 0 {
-                                                //     dwarf_warrior_wander(dwarf, *tile_ids_to_bases);
-                                                // }
-                                            }
-
+                                            if dealing_with_goblin == .NEARBY_GOBLIN_NOT_FOUND dwarf_warrior_wander(dwarf, *tile_ids_to_bases);
                                         }
 
                                         // If the dwarf has no targets, give him a new one
@@ -2345,7 +2335,7 @@ main :: () {
                             DrawText(tprint("direction: %\0", it.direction).data,                   xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                             DrawText(tprint("type: %\0", it.type).data,                             xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                             DrawText(tprint("hp: %\0", it.hp).data,                                 xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                            DrawText(tprint("ignore_goblins: %\0", it.ignore_goblins).data,         xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                            DrawText(tprint("ignore_goblins_for: %\0", it.ignore_goblins_for).data, xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                         }
                     }
                     
@@ -2663,7 +2653,7 @@ deal_with_nearby_goblins :: (dwarf: *Dwarf, tile_ids_to_goblins: *Table) -> Deal
     // TODO: assert dwarf is directly on tile, I think
     dwarf_center  := get_rect_center(get_world_rect_from_pos(dwarf.pos));
     dwarf_tile_id := get_tile_id_by_pos(dwarf_center);
-    detected, goblin, tile_ids_to_goblin_target := detect_goblin_within_radius(dwarf_tile_id, 2, tile_ids_to_goblins);
+    detected, goblin, tile_ids_to_goblin_target := detect_goblin_within_radius(dwarf_tile_id, 3, tile_ids_to_goblins, dwarf.id);
     
     if detected {
         dwarf.goblin_id_attacking = goblin.id;
@@ -4631,43 +4621,42 @@ detect_goblin_within_radius_old :: (
 
 detect_goblin_within_radius :: (
     starting_tile_id: s32,
-    radius: s32,
-    tile_ids_to_goblins: *Table
+    max_depth: s32,
+    tile_ids_to_goblins: *Table,
+    dwarf_id: s32
 ) -> found: bool, goblin: Goblin, tile_id_path_to_goblin: [..] s32 {
     max_tile_id := WORLD_COLS * WORLD_ROWS;
-    empty_path: [..] s32; // Returned if no goblin is found
+    empty_path: [..] s32; 
 
-    ids_to_process : [..] s32;
+    Queue_Item :: struct {
+        id: s32;
+        depth: s32;
+    }
+
+    ids_to_process : [..] Queue_Item;
     ids_to_process.allocator = temp;
 
-    // Key = Current Tile ID, Value = Parent Tile ID
     came_from_map : Table(s32, s32);
     came_from_map.allocator = temp;
 
-    array_add(*ids_to_process, starting_tile_id);
-    
-    // Mark the starting tile so we don't process it twice.
-    // -1 indicates it has no parent.
+    array_add(*ids_to_process, .{starting_tile_id, 0});
     table_set(*came_from_map, starting_tile_id, -1); 
 
-    i : s32 = 0;
+    // i : s32 = 0;
     while ids_to_process.count > 0 {
-        print("doin it %\n", read_then_increment(*i));
-        // Get the next id to process
-        id := pop_front(*ids_to_process);
+        // print("doin it %\n", read_then_increment(*i));
 
-        // Make sure the id is valid
-        if id <= 0                                              continue;
-        if id > max_tile_id                                     continue;
-        if id == starting_tile_id - (WORLD_ROWS * (radius + 1)) continue; // north
-        if id == starting_tile_id + (WORLD_ROWS * (radius + 1)) continue; // south
-        if id == starting_tile_id + (radius + 1)                continue; // east
-        if id == starting_tile_id - (radius + 1)                continue; // west
-        if table_contains(*tile_ids_to_dwarfs, id)              continue;
-        if !table_contains(*fully_mined_tile_ids_set, id)       continue;
-        // if table_contains(*came_from_map, id)                   continue; // functions as processed set
+        item := pop_front(*ids_to_process);
+        id := item.id;
+        depth := item.depth;
 
-        // If a goblin is detected, return
+        if depth > max_depth                              continue; 
+        if id <= 0                                        continue;
+        if id > max_tile_id                               continue;
+        if !table_contains(*fully_mined_tile_ids_set, id) continue;
+        found_dwarf, dwarf := table_find(*tile_ids_to_dwarfs, id);
+        if found_dwarf && dwarf.id != dwarf_id            continue;
+
         detected, goblin := table_find(tile_ids_to_goblins, id);
         if detected {
             path: [..] s32;
@@ -4676,15 +4665,12 @@ detect_goblin_within_radius :: (
             current_id := id;
             while current_id != starting_tile_id {
                 array_add(*path, current_id);
-                // Look up the parent tile that led us to this one
                 found_parent, parent_id := table_find(*came_from_map, current_id);
-                if !found_parent break; // Failsafe
+                if !found_parent break; 
                 
                 current_id = parent_id;
             }
             
-            // Since we backtracked from Goblin -> Start, the array is backwards.
-            // Reversing it gives us Start -> Goblin.
             for i: 0..path.count / 2 - 1 {
                 temp_val := path[i];
                 path[i] = path[path.count - 1 - i];
@@ -4694,25 +4680,22 @@ detect_goblin_within_radius :: (
             return true, goblin, path;
         }
 
-        // Using a macro/inline block to prevent repeating code
-        queue_neighbor :: (neighbor_id: s32, parent_id: s32) #expand {
-            // Only add if we haven't visited this tile yet
+        queue_neighbor :: (neighbor_id: s32, parent_id: s32, next_depth: s32) #expand {
             if !table_contains(*came_from_map, neighbor_id) {
                 table_set(*came_from_map, neighbor_id, parent_id);
-                array_add(*ids_to_process, neighbor_id);
+                array_add(*ids_to_process, .{neighbor_id, next_depth});
             }
         }
 
-        // Add neighbors as needing to be processed
-        queue_neighbor(id - WORLD_ROWS, id);
-        queue_neighbor(id + WORLD_ROWS, id);
-        queue_neighbor(id + 1, id);
-        queue_neighbor(id - 1, id);
+        // Add neighbors, incrementing the distance by 1
+        queue_neighbor(id - WORLD_ROWS, id, depth + 1);
+        queue_neighbor(id + WORLD_ROWS, id, depth + 1);
+        queue_neighbor(id + 1, id, depth + 1);
+        queue_neighbor(id - 1, id, depth + 1);
     }
 
     return false, Goblin.{}, empty_path;
 }
-
 // TODO: probably want to DRY up these detector functions 
 detect_iron_tile_id_within_radius :: (
     starting_tile_id: s32,
