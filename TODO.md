@@ -16,7 +16,7 @@
 ## After demo
 
 - lots of goblins crash the game
-- goblins pathing is kinda just fucked up overall
+- goblins decisions making is kinda just fucked up overall
     - condition: reproducible on 279d68e
     - cause:
     - correction:
@@ -35,12 +35,11 @@
 
 - Path arrows need to destroy existing path arrows
 - Single use abilities should clear their mode after use
-- Base placement validity / onion skin
 - HUD
 
 ## After demo
 
-- onion skin for what mode you're in
+- Base placement validity / onion skin
 - dwarf level ups
 - base canons
 - base spawn diggers control
@@ -81,3 +80,4 @@
 - search feature for tiles, dwarves, etc.
 - hotreloading
 - pos_by_id cache and vice versa?
+- entity refactor / DRY up duplicated logic

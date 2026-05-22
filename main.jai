@@ -1617,6 +1617,9 @@ main :: () {
 
                             if #complete goblin.state == {
                                 case .DECIDING;
+                                    is_goblin_done_deciding     := false;
+                                    goblin_can_remain_undecided := false;
+
                                     assert_soft(xx Vector2Equals(goblin.pos, goblin_tile_pos), "Goblin % was not precisely on its tile while deciding what to do next.", goblin.id);
 
                                     // Check if there are any attack targets nearby.
@@ -1675,78 +1678,58 @@ main :: () {
                                         }
                                         // No targets detected
                                         else {
-                                            // If the goblin still has target tiles, then move to the next one
-                                            if goblin.tile_ids_on_path.count > 0 {
-                                                goblin.state = .MOVING;
-                                            }
-                                            // If the goblin has no more target tiles, then wander around
-                                            else {
-                                                new_direction := goblin.direction;
-
-                                                // Find a new target by picking a random cardinal direction 1 tile away
-                                                change_direction_rng := random_get_within_range(0, 1);
-                                                if change_direction_rng < 0.1 {
-                                                    go_left := change_direction_rng < 0.05;
-
-                                                    if goblin.direction == .NORTH {
-                                                        new_direction = ifx go_left then .WEST  else .EAST;
-                                                    }
-                                                    else if goblin.direction == .SOUTH {
-                                                        new_direction = ifx go_left then .EAST  else .WEST;
-                                                    }
-                                                    else if goblin.direction == .EAST  {
-                                                        new_direction = ifx go_left then .NORTH else .SOUTH;
-                                                    }
-                                                    else if goblin.direction == .WEST  {
-                                                        new_direction = ifx go_left then .SOUTH else .NORTH;
-                                                    }
-                                                    else assert(false);
+                                            if goblin.tile_ids_on_path.count == 0 {
+                                                result := try_to_set_goblin_random_new_target(goblin);
+                                                if result == .NO_DIRECTION_FOUND {
+                                                    is_goblin_done_deciding = true;
+                                                    goblin_can_remain_undecided = true;
                                                 }
+                                            }
 
-                                                goblin.direction = new_direction;
+                                            if !is_goblin_done_deciding {
+                                                tile_id_next_in_dwarfs_path := goblin.tile_ids_on_path[0];
 
-                                                new_target_tile_id := get_neighbor_tile_id_by_direction(goblin_tile_id, new_direction);
-                                                array_add(*goblin.tile_ids_on_path, new_target_tile_id);
-
-                                                goblin.state = .MOVING;
+                                                // If it's walkable, proceed
+                                                if is_tile_id_walkable_for_entity(tile_id_next_in_dwarfs_path, goblin.id) {
+                                                    goblin.state = .MOVING;
+                                                }
                                             }
                                         }
                                     }
 
-                                    assert_soft(goblin.state != .DECIDING, "Goblin % got to end of DECIDING state without making a decision\n", goblin.id);
+                                    assert_soft(goblin_can_remain_undecided || goblin.state != .DECIDING, "Goblin % got to end of DECIDING state without making a decision\n", goblin.id);
 
                                 case .MOVING;
                                     assert_soft(goblin.tile_ids_on_path.count > 0, "Goblin % was moving somewhere but has no target\n", goblin.id);
-                                    if metagame.state == .RUNNING {
-                                        target_tile_id  := goblin.tile_ids_on_path[0];
-                                        target_tile_pos := get_tile_pos_by_id(target_tile_id);
 
-                                        assert_soft(goblin.pos.x == target_tile_pos.x || goblin.pos.y == target_tile_pos.y, "Goblin id % is going at an angle", goblin.id);
+                                    target_tile_id  := goblin.tile_ids_on_path[0];
+                                    target_tile_pos := get_tile_pos_by_id(target_tile_id);
 
-                                        tile_id_next_in_goblin_path := goblin.tile_ids_on_path[0];
+                                    assert_soft(goblin.pos.x == target_tile_pos.x || goblin.pos.y == target_tile_pos.y, "Goblin id % is going at an angle", goblin.id);
 
-                                        // If it's mined, then proceed
-                                        if table_contains(*fully_mined_tile_ids_set, tile_id_next_in_goblin_path) {
-                                            goblin_pretty_much_reached_target := values_are_close(goblin.pos, target_tile_pos, 1);
-                                            if goblin_pretty_much_reached_target {
-                                                // Teleport goblin to the target tile to remove any floating point weirdness.
-                                                goblin.pos = target_tile_pos;
+                                    tile_id_next_in_goblin_path := goblin.tile_ids_on_path[0];
 
-                                                // Remove the target from the tile ids on path
-                                                array_ordered_remove_by_index(*goblin.tile_ids_on_path, 0);
+                                    // If it's mined, then proceed
+                                    if table_contains(*fully_mined_tile_ids_set, tile_id_next_in_goblin_path) {
+                                        goblin_pretty_much_reached_target := values_are_close(goblin.pos, target_tile_pos, 1);
+                                        if goblin_pretty_much_reached_target {
+                                            // Teleport goblin to the target tile to remove any floating point weirdness.
+                                            goblin.pos = target_tile_pos;
 
-                                                // Figure out what to do next
-                                                goblin.state = .DECIDING;
-                                            } else {
-                                                move_one_step_towards_its_next_target_cardinal(goblin, GOBLIN_MOVE_SPEED, dt_seconds);
-                                            }
-                                        }
-                                        // TODO: doesn't this softlock actually?
-                                        //
-                                        // If it's unmined, then they'll have to do something else, because they can't go through it
-                                        else {
+                                            // Remove the target from the tile ids on path
+                                            array_ordered_remove_by_index(*goblin.tile_ids_on_path, 0);
+
+                                            // Figure out what to do next
                                             goblin.state = .DECIDING;
+                                        } else {
+                                            move_one_step_towards_its_next_target_cardinal(goblin, GOBLIN_MOVE_SPEED, dt_seconds);
                                         }
+                                    }
+                                    // TODO: doesn't this softlock actually?
+                                    //
+                                    // If it's unmined, then they'll have to do something else, because they can't go through it
+                                    else {
+                                        goblin.state = .DECIDING;
                                     }
 
                                 case .ATTACKING;
@@ -2172,18 +2155,6 @@ main :: () {
                     for path: paths_in_viewport draw_path(path);
                 }
 
-                // Draw hovered tile
-                {
-                    hovered_tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
-                    DrawRectangleRec(hovered_tile_rect, TRANSPARENT_WHITE);
-                    if metagame.debug_mode {
-                        found_tile, tile_id := find_tile_id_by_pos(get_rect_pos(hovered_tile_rect));
-                        if found_tile {
-                            DrawText(tprint("%\0", tile_id).data, xx hovered_tile_rect.x, xx hovered_tile_rect.y, 12, WHITE);
-                        }
-                    }
-                }
-
                 // Draw dwarves
                 {
                     for dwarf: dwarves_in_viewport {
@@ -2240,6 +2211,18 @@ main :: () {
                         dest := get_world_rect_from_pos(pos);
 
                         DrawTexturePro(tilemap_texture_general, source, dest, Vector2.{0,0}, 0.0, WHITE);
+                    }
+                }
+
+                // Draw hovered tile
+                {
+                    hovered_tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
+                    DrawRectangleRec(hovered_tile_rect, TRANSPARENT_WHITE);
+                    if metagame.debug_mode {
+                        found_tile, tile_id := find_tile_id_by_pos(get_rect_pos(hovered_tile_rect));
+                        if found_tile {
+                            DrawText(tprint("%\0", tile_id).data, xx hovered_tile_rect.x, xx hovered_tile_rect.y, 12, WHITE);
+                        }
                     }
                 }
             }
@@ -3016,6 +2999,107 @@ try_to_set_dwarf_target_to_one_block_in_the_direction_its_facing :: (dwarf: *Dwa
     array_add(*dwarf.tile_ids_on_path, new_target_tile_id);
 
     return .DIRECTION_FOUND;
+}
+
+try_to_set_goblin_random_new_target :: (goblin: *Goblin) -> SetDwarfRandomNewTargetReturnStatus {
+    goblin_tile_id_current := get_tile_id_by_pos(goblin.pos);
+
+    // Enumerate the different directions the dwarf can go
+    is_north_valid := is_tile_id_walkable_for_entity(get_neighbor_tile_id_by_direction(goblin_tile_id_current, .NORTH), goblin.id);
+    is_south_valid := is_tile_id_walkable_for_entity(get_neighbor_tile_id_by_direction(goblin_tile_id_current, .SOUTH), goblin.id);
+    is_east_valid  := is_tile_id_walkable_for_entity(get_neighbor_tile_id_by_direction(goblin_tile_id_current, .EAST),  goblin.id);
+    is_west_valid  := is_tile_id_walkable_for_entity(get_neighbor_tile_id_by_direction(goblin_tile_id_current, .WEST),  goblin.id);
+    if !is_north_valid && !is_south_valid && !is_east_valid && !is_west_valid return .NO_DIRECTION_FOUND;
+
+    new_direction := goblin.direction;
+
+    change_direction_rng := random_get_within_range(0, 1);
+    if change_direction_rng < 0.1 {
+        go_left := change_direction_rng < 0.05;
+
+        if goblin.direction == .NORTH {
+            if go_left {
+                if      is_west_valid  new_direction = .WEST;
+                else if is_east_valid  new_direction = .EAST;
+                else if is_north_valid new_direction = .NORTH;
+                else                   new_direction = .SOUTH;
+            } else {
+                if      is_east_valid  new_direction = .EAST;
+                else if is_west_valid  new_direction = .WEST;
+                else if is_north_valid new_direction = .NORTH;
+                else                   new_direction = .SOUTH;
+            }
+        }
+        else if goblin.direction == .SOUTH {
+            if go_left {
+                if      is_east_valid  new_direction = .EAST;
+                else if is_west_valid  new_direction = .WEST;
+                else if is_south_valid new_direction = .SOUTH;
+                else                   new_direction = .NORTH;
+            } else {
+                if      is_west_valid  new_direction = .WEST;
+                else if is_east_valid  new_direction = .EAST;
+                else if is_south_valid new_direction = .SOUTH;
+                else                   new_direction = .NORTH;
+            }
+        }
+        else if goblin.direction == .EAST  {
+            if go_left {
+                if      is_south_valid new_direction = .SOUTH;
+                else if is_north_valid new_direction = .NORTH;
+                else if is_east_valid  new_direction = .EAST;
+                else                   new_direction = .WEST;
+            } else {
+                if      is_north_valid new_direction = .NORTH;
+                else if is_south_valid new_direction = .SOUTH;
+                else if is_east_valid  new_direction = .EAST;
+                else                   new_direction = .WEST;
+            }
+        }
+        else if goblin.direction == .WEST  {
+            if go_left {
+                if      is_south_valid new_direction = .SOUTH;
+                else if is_north_valid new_direction = .NORTH;
+                else if is_west_valid  new_direction = .WEST;
+                else                   new_direction = .EAST;
+            } else {
+                if      is_south_valid new_direction = .SOUTH;
+                else if is_north_valid new_direction = .NORTH;
+                else if is_west_valid  new_direction = .WEST;
+                else                   new_direction = .EAST;
+            }
+        }
+        // TODO: #complete this somehow so we don't need this assert
+        else {
+            print_vars(is_north_valid, is_south_valid, is_east_valid, is_west_valid, goblin.*);
+            assert_soft(false, "Expected at least one direction to be valid, but found none for goblin %\n", goblin.id);
+        }
+
+    }
+
+    goblin.direction = new_direction;
+    goblin_tile_id := get_tile_id_by_pos(goblin.pos);
+    new_target_tile_id := get_neighbor_tile_id_by_direction(goblin_tile_id, new_direction);
+
+    // TODO: extract
+    array_reset(*goblin.tile_ids_on_path);
+    array_add(*goblin.tile_ids_on_path, new_target_tile_id);
+    set_goblin_direction_to_face_next_target(goblin);
+
+    return .DIRECTION_FOUND;
+}
+
+set_goblin_direction_to_face_next_target :: (goblin: *Goblin) {
+    assert(goblin.tile_ids_on_path.count > 0);
+    target_tile_id := goblin.tile_ids_on_path[0];
+    goblin_tile_id  := get_tile_id_by_pos(goblin.pos);
+    assert(target_tile_id != goblin_tile_id, "goblin is softlocked trying to get it the id it's already on, I think.");
+
+    if      target_tile_id == goblin_tile_id - WORLD_ROWS goblin.direction = .NORTH;
+    else if target_tile_id == goblin_tile_id + WORLD_ROWS goblin.direction = .SOUTH;
+    else if target_tile_id == goblin_tile_id + 1          goblin.direction = .EAST;
+    else if target_tile_id == goblin_tile_id - 1          goblin.direction = .WEST;
+    else assert(false);
 }
 
 detect_goblin_neighbor_cardinal :: (tile_id: s32, tile_ids_to_goblins: *Table) -> goblin_neighbor_detected: bool, goblin: Goblin, direction: Direction {
