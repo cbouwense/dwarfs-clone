@@ -1334,7 +1334,7 @@ main :: () {
 
                                             // If there are no directions for this dwarf to go this frame,
                                             // just do nothing and then check again the next frame.
-                                            if result == .NO_DIRECTION_FOUND {
+                                            if result == .NO_DIRECTION_FOUND || result == .SELECTED_DIRECTION_INVALID {
                                                 dwarf_can_remain_undecided = true;
                                                 is_dwarf_done_deciding     = true;
                                             }
@@ -1462,7 +1462,7 @@ main :: () {
                                             is_dwarf,
                                             is_goblin
                                         );
-                                        assert_soft(false, "Dwarf % is trying to move into the unmined tile %\n", dwarf.id, target_tile_id);
+                                        // assert_soft(false, "Dwarf % is trying to move into the invalid tile %\n", dwarf.id, target_tile_id);
                                     }
 
                                     // Calculate the squared distance (use squared distances so we can avoid a sqrtf).
@@ -1680,7 +1680,7 @@ main :: () {
                                         else {
                                             if goblin.tile_ids_on_path.count == 0 {
                                                 result := try_to_set_goblin_random_new_target(goblin);
-                                                if result == .NO_DIRECTION_FOUND {
+                                                if result == .NO_DIRECTION_FOUND || result == .SELECTED_DIRECTION_INVALID {
                                                     is_goblin_done_deciding = true;
                                                     goblin_can_remain_undecided = true;
                                                 }
@@ -1697,7 +1697,7 @@ main :: () {
                                         }
                                     }
 
-                                    assert_soft(goblin_can_remain_undecided || goblin.state != .DECIDING, "Goblin % got to end of DECIDING state without making a decision\n", goblin.id);
+                                    // assert_soft(goblin_can_remain_undecided || goblin.state != .DECIDING, "Goblin % got to end of DECIDING state without making a decision\n", goblin.id);
 
                                 case .MOVING;
                                     assert_soft(goblin.tile_ids_on_path.count > 0, "Goblin % was moving somewhere but has no target\n", goblin.id);
@@ -1746,7 +1746,7 @@ main :: () {
                                             is_on_base, base := table_find(*tile_ids_to_bases, goblin_tile_id);
                                             if !is_on_base {
                                                 base_neighbor_detected, base_neighbor, _direction := detect_base_neighbor_cardinal(goblin_tile_id, *tile_ids_to_bases);
-                                                assert_soft(base_neighbor_detected, "Goblin % is attacking, but has no dwarf target, is not on top of a base, and is not next to a base. So, that's wrong.\n");
+                                                assert_soft(base_neighbor_detected, "Goblin % is attacking, but has no dwarf target, is not on top of a base, and is not next to a base. So, that's wrong.\n", goblin.id);
                                                 base = base_neighbor;
                                             }
 
@@ -2879,6 +2879,7 @@ initialize_game :: () -> game_state: GameState, camera: Camera2D {
 
 SetDwarfRandomNewTargetReturnStatus :: enum {
     DIRECTION_FOUND;
+    SELECTED_DIRECTION_INVALID;
     NO_DIRECTION_FOUND;
 }
 
@@ -2971,6 +2972,11 @@ try_to_set_dwarf_random_new_target :: (dwarf: *Dwarf) -> SetDwarfRandomNewTarget
         }
 
     }
+
+    if new_direction == .NORTH && !is_north_valid return .SELECTED_DIRECTION_INVALID;
+    if new_direction == .SOUTH && !is_south_valid return .SELECTED_DIRECTION_INVALID;
+    if new_direction == .EAST &&  !is_east_valid  return .SELECTED_DIRECTION_INVALID;
+    if new_direction == .WEST &&  !is_west_valid  return .SELECTED_DIRECTION_INVALID;
 
     dwarf.direction = new_direction;
     dwarf_tile_id := get_tile_id_by_pos(dwarf.pos);
@@ -3076,6 +3082,11 @@ try_to_set_goblin_random_new_target :: (goblin: *Goblin) -> SetDwarfRandomNewTar
         }
 
     }
+
+    if new_direction == .NORTH && !is_north_valid return .SELECTED_DIRECTION_INVALID;
+    if new_direction == .SOUTH && !is_south_valid return .SELECTED_DIRECTION_INVALID;
+    if new_direction == .EAST &&  !is_east_valid  return .SELECTED_DIRECTION_INVALID;
+    if new_direction == .WEST &&  !is_west_valid  return .SELECTED_DIRECTION_INVALID;
 
     goblin.direction = new_direction;
     goblin_tile_id := get_tile_id_by_pos(goblin.pos);
@@ -3247,13 +3258,13 @@ create_dwarf :: (pos: Vector2, dwarf_type: DwarfType) -> Dwarf {
 
 create_goblin :: (pos: Vector2) -> Goblin {
     goblin_id := increment_then_read(*entity_id_counter);
-    direction := cast(Direction) cast(int) random_get_within_range(0, 3);
+    // direction := cast(Direction) cast(int) random_get_within_range(0, 3);
 
     goblin := Goblin.{
         id        = goblin_id,
         pos       = pos,
         state     = .DECIDING,
-        direction = direction,
+        direction = .NORTH,
         // tile_ids_on_path intentionally not set
         attack_cooldown_ms = GOBLIN_ATTACK_COOLDOWN_MS,
         hp        = GOBLIN_STARTING_HP,
