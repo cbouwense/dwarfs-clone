@@ -33,23 +33,23 @@ WALL_HEALTH :: 200;
 DWARF_MOVE_SPEED :: 33;
 // TODO: DWARF_MOVE_SPEED_TARGETING :: DWARF_MOVE_SPEED * 2;
 
-DWARF_DIGGER_START_COUNT :: 1;
+DWARF_DIGGER_START_COUNT :: 0;//1;
 DWARF_DIGGER_DIG_COOLDOWN_MS    :: 1000;
 DWARF_DIGGER_ATTACK_COOLDOWN_MS :: 2000;
 DWARF_DIGGER_DAMAGE_DIG_PER_SWING    :: 50;
 DWARF_DIGGER_DAMAGE_ATTACK_PER_SWING :: 25;
 DWARF_DIGGER_HIT_CHANCE :: 0.50; // TODO: will have to be based on level
 DWARF_DIGGER_SPAWN_MS :: 10000;
-DWARF_DIGGER_SPAWN_ENABLED :: true;
+DWARF_DIGGER_SPAWN_ENABLED :: false;//true;
 DWARF_DIGGER_STARTING_HP :: 75;
 
-DWARF_WARRIOR_START_COUNT :: 1;
+DWARF_WARRIOR_START_COUNT :: 0;//1;
 DWARF_WARRIOR_DIG_COOLDOWN_MS    :: 2000;
 DWARF_WARRIOR_ATTACK_COOLDOWN_MS :: 1000;
 DWARF_WARRIOR_DAMAGE_DIG_PER_SWING    :: 25;
 DWARF_WARRIOR_DAMAGE_ATTACK_PER_SWING :: 50;
 DWARF_WARRIOR_HIT_CHANCE :: 0.80; // TODO: will have to be based on level
-DWARF_WARRIOR_SPAWN_ENABLED :: true;
+DWARF_WARRIOR_SPAWN_ENABLED :: false;//true;
 DWARF_WARRIOR_STARTING_HP :: 100;
 
 GOBLIN_MOVE_SPEED :: 50;
@@ -715,23 +715,30 @@ main :: () {
             }
 
             for goblin: goblins {
-                goblin_tile_id: s32;
-
                 if #complete goblin.state == {
                     // If the goblin is dead center on a tile and not moving, it's on that tile.
                     case .IDLE;     #through;
                     case .DECIDING; #through;
                     case .ATTACKING;
-                        goblin_tile_id = get_tile_id_by_pos(goblin.pos);
+                        goblin_tile_id := get_tile_id_by_pos(goblin.pos);
 
-                    // If the goblin is moving, then they're "on" the tile that they're moving to.
+                        assert_soft(goblin_tile_id > 0, "Expected goblin_tile_id to have been set, but got % \n", goblin_tile_id);
+
+                        table_set(*tile_ids_to_goblins, goblin_tile_id, goblin);
+
+                    // If the goblin is moving, then count both the tile they're moving from and to.
                     case .MOVING;
                         assert_soft(goblin.tile_ids_on_path.count > 0, "Goblin was in move state but had nowhere to go\n");
-                        goblin_tile_id = goblin.tile_ids_on_path[0];
-                }
 
-                assert_soft(goblin_tile_id > 0, "Expected goblin_tile_id to have been set, but got %\n", goblin_tile_id);
-                table_set(*tile_ids_to_goblins, goblin_tile_id, goblin);
+                        goblin_tile_id_from := get_previous_tile_id(goblin);
+                        goblin_tile_id_to   := goblin.tile_ids_on_path[0];
+
+                        assert_soft(goblin_tile_id_from > 0, "Expected goblin_tile_id_from to have been set, but got % \n", goblin_tile_id_from);
+                        assert_soft(goblin_tile_id_to > 0,   "Expected goblin_tile_id_to to have been set, but got % \n",   goblin_tile_id_to);
+
+                        table_set(*tile_ids_to_goblins, goblin_tile_id_to,   goblin);
+                        table_set(*tile_ids_to_goblins, goblin_tile_id_from, goblin);
+                }
             }
 
             // PERF: caching this might not even be faster
@@ -1262,7 +1269,7 @@ main :: () {
                                                 // TODO: extract this
                                                 array_reset(*(dwarf.tile_ids_on_path));
                                                 array_copy(*(dwarf.tile_ids_on_path), tile_ids_on_path);
-                                                set_dwarf_direction_to_face_next_target(dwarf);
+                                                set_entity_direction_to_face_next_target(dwarf);
 
                                                 break;
                                             }
@@ -1282,7 +1289,7 @@ main :: () {
                                                 // TODO: extract this
                                                 array_reset(*(dwarf.tile_ids_on_path));
                                                 array_copy(*(dwarf.tile_ids_on_path), tile_ids_on_path);
-                                                set_dwarf_direction_to_face_next_target(dwarf);
+                                                set_entity_direction_to_face_next_target(dwarf);
 
                                                 break;
                                             }
@@ -1654,9 +1661,7 @@ main :: () {
                                         detected, _, tile_ids_path := find_line_of_sight_dwarf(goblin_tile_id, GOBLIN_LINE_OF_SIGHT_TILE_COUNT, true);
 
                                         if detected {
-                                            // TODO: set goblin direction
-                                            
-                                            set_tile_ids_on_path_goblin(goblin, *tile_ids_path);
+                                            set_tile_ids_on_path(goblin, *tile_ids_path);
                                             is_goblin_done_deciding = true;
                                         }
                                     }
@@ -1666,9 +1671,7 @@ main :: () {
                                         detected, dwarf, tile_ids_path := detect_dwarf_within_radius(goblin_tile_id, 3, goblin.id);
 
                                         if detected {
-                                            // TODO: set goblin direction
-                                            
-                                            set_tile_ids_on_path_goblin(goblin, *tile_ids_path);
+                                            set_tile_ids_on_path(goblin, *tile_ids_path);
                                             is_goblin_done_deciding = true;
                                         }
                                     }
@@ -1678,9 +1681,7 @@ main :: () {
                                         detected, base, tile_ids_path := find_line_of_sight_base(goblin_tile_id, GOBLIN_LINE_OF_SIGHT_TILE_COUNT, true);
 
                                         if detected {
-                                            // TODO: set goblin direction
-
-                                            set_tile_ids_on_path_goblin(goblin, *tile_ids_path);
+                                            set_tile_ids_on_path(goblin, *tile_ids_path);
                                             is_goblin_done_deciding = true;
                                         }
                                     }
@@ -1690,9 +1691,7 @@ main :: () {
                                         detected, base, tile_ids_path := detect_base_within_radius(goblin_tile_id, 10, goblin.id);
 
                                         if detected {
-                                            // TODO: set goblin direction
-                                            
-                                            set_tile_ids_on_path_goblin(goblin, *tile_ids_path);
+                                            set_tile_ids_on_path(goblin, *tile_ids_path);
                                             is_goblin_done_deciding = true;
                                         }
                                     }
@@ -1718,7 +1717,7 @@ main :: () {
                                     target_tile_id  := goblin.tile_ids_on_path[0];
                                     target_tile_pos := get_tile_pos_by_id(target_tile_id);
 
-                                    assert_soft(goblin.pos.x == target_tile_pos.x || goblin.pos.y == target_tile_pos.y, "Goblin id % is going at an angle", goblin.id);
+                                    // assert_soft(goblin.pos.x == target_tile_pos.x || goblin.pos.y == target_tile_pos.y, "Goblin id % is going at an angle", goblin.id);
 
                                     tile_id_next_in_goblin_path := goblin.tile_ids_on_path[0];
 
@@ -1870,7 +1869,7 @@ main :: () {
 
                                         array_reset(*dwarf.tile_ids_on_path);
                                         array_copy(*dwarf.tile_ids_on_path, tile_ids_to_new_treasure);
-                                        set_dwarf_direction_to_face_next_target(dwarf);
+                                        set_entity_direction_to_face_next_target(dwarf);
                                         dwarf.state = .DECIDING;
                                     }
 
@@ -2607,19 +2606,63 @@ main :: () {
 
 // Functions
 
-set_tile_ids_on_path_goblin :: (goblin: *Goblin, tile_ids: *[] s32) {
-    assert_soft(tile_ids.count > 0, "Tried to set goblin % tile ids to an empty path\n", goblin.id);
+get_previous_tile_id :: (entity: Goblin) -> s32 {
+    assert_soft(entity.tile_ids_on_path.count > 0, "Tried getting entity %'s previous tile id, but entity wasn't even going anywhere\n", entity.id);
+
+    if #complete entity.state == {
+        case .IDLE;      #through;
+        case .DECIDING;  #through;
+        case .ATTACKING; return get_tile_id_by_pos(entity.pos);
+
+        case .MOVING;
+            for DIRECTIONS_CARDINAL {
+                if entity.direction == it {
+                    opposite_direction := opposite_cardinal_direction(it);
+                    return get_neighbor_tile_id_by_direction(entity.tile_ids_on_path.data[0], opposite_direction);
+                }
+            }
+    }
+
+    assert_soft(false, "Tried getting entity %'s previous tile id but didn't find shit\n", entity.id);
+    return -1;
+}
+
+get_previous_tile_id :: (entity: Dwarf) -> s32 {
+    assert_soft(entity.tile_ids_on_path.count > 0, "Tried getting entity %'s previous tile id, but entity wasn't even going anywhere\n", entity.id);
+
+    if #complete entity.state == {
+        case .MINING;    #through;
+        case .IDLE;      #through;
+        case .DECIDING;  #through;
+        case .ATTACKING; return get_tile_id_by_pos(entity.pos);
+
+        case .MOVING;
+            for DIRECTIONS_CARDINAL {
+                if entity.direction == it {
+                    opposite_direction := opposite_cardinal_direction(it);
+                    return get_neighbor_tile_id_by_direction(entity.tile_ids_on_path.data[0], opposite_direction);
+                }
+            }
+    }
+
+    assert_soft(false, "Tried getting entity %'s previous tile id but didn't find shit\n", entity.id);
+    return -1;
+}
+
+// TODO: use this everywhere
+set_tile_ids_on_path :: (entity: *$T/interface Moveable, tile_ids: *[] s32) {
+    assert_soft(tile_ids.count > 0, "Tried to set entity % tile ids to an empty path\n", entity.id);
     // TODO: assert right on tile
 
-    goblin_tile_id := get_tile_id_by_pos(goblin.pos);
+    goblin_tile_id := get_tile_id_by_pos(entity.pos);
 
     if tile_ids.data[0] == goblin_tile_id {
         tile_ids.data  += 1;
         tile_ids.count -= 1;
     }
     
-    array_reset(*goblin.tile_ids_on_path);
-    array_copy(*goblin.tile_ids_on_path, tile_ids.*);
+    array_reset(*entity.tile_ids_on_path);
+    array_copy(*entity.tile_ids_on_path, tile_ids.*);
 }
 
 DealWithNearbyGoblinResult :: enum {
@@ -3005,7 +3048,7 @@ try_to_set_dwarf_random_new_target :: (dwarf: *Dwarf) -> SetDwarfRandomNewTarget
     // TODO: extract
     array_reset(*dwarf.tile_ids_on_path);
     array_add(*dwarf.tile_ids_on_path, new_target_tile_id);
-    set_dwarf_direction_to_face_next_target(dwarf);
+    set_entity_direction_to_face_next_target(dwarf);
 
     return .DIRECTION_FOUND;
 }
@@ -3225,35 +3268,41 @@ taunt_dwarf :: (dwarf_id: s32, taunter_tile_id: s32) {
     dwarves[dwarf_index].direction = direction_to_face_taunter;
 }
 
-move_one_step_towards_its_next_target_cardinal :: (thing: *$T/interface Moveable, speed: int, dt_seconds: float) {
-    target_pos := get_tile_pos_by_id(thing.tile_ids_on_path[0]);
+move_one_step_towards_its_next_target_cardinal :: (entity: *$T/interface Moveable, speed: int, dt_seconds: float) {
+    target_pos := get_tile_pos_by_id(entity.tile_ids_on_path[0]);
     step_size  := cast(float) speed * dt_seconds;
 
     // Since movement is strictly cardinal, we only need to change X *or* Y.
     // (i.e. no vectors, no normalization, no square roots).
-    if thing.pos.x < target_pos.x {
-        thing.pos.x += step_size;
-    } else if thing.pos.x > target_pos.x {
-        thing.pos.x -= step_size;
-    } else if thing.pos.y < target_pos.y {
-        thing.pos.y += step_size;
-    } else if thing.pos.y > target_pos.y {
-        thing.pos.y -= step_size;
+    if entity.pos.x < target_pos.x {
+        entity.pos.x += step_size;
+    } else if entity.pos.x > target_pos.x {
+        entity.pos.x -= step_size;
+    } else if entity.pos.y < target_pos.y {
+        entity.pos.y += step_size;
+    } else if entity.pos.y > target_pos.y {
+        entity.pos.y -= step_size;
     } else {
-        assert_soft(false, "Thing % had nowhere to go, even though it should have", thing.id);
+        assert_soft(false, "Entity % had nowhere to go, even though it should have", entity.id);
     }
 }
 
-set_dwarf_direction_to_face_next_target :: (dwarf: *Dwarf) {
-    assert(dwarf.tile_ids_on_path.count > 0);
-    target_tile_id := dwarf.tile_ids_on_path[0];
-    dwarf_tile_id  := get_tile_id_by_pos(dwarf.pos);
-    assert(target_tile_id != dwarf_tile_id, "dwarf is softlocked trying to get it the id it's already on, I think.");
+set_entity_direction_to_face_next_target :: (entity: *$T/interface Moveable) {
+    assert_soft(entity.tile_ids_on_path.count > 0, "Tried setting entity % direction to face next target, but entity has no target.\n", entity.id);
 
-    if      target_tile_id == dwarf_tile_id - WORLD_ROWS dwarf.direction = .NORTH;
-    else if target_tile_id == dwarf_tile_id + WORLD_ROWS dwarf.direction = .SOUTH;
-    else if target_tile_id == dwarf_tile_id + 1          dwarf.direction = .EAST;
-    else if target_tile_id == dwarf_tile_id - 1          dwarf.direction = .WEST;
+    target_tile_id   := entity.tile_ids_on_path[0];
+    previous_tile_id := get_previous_tile_id(entity);
+
+    assert_soft(
+        target_tile_id != previous_tile_id,
+        "entity % is softlocked trying to get it the id it's already on, I think. that, or this was called before the entity moved.\n",
+        entity.id
+    );
+
+    if      target_tile_id == previous_tile_id - WORLD_ROWS entity.direction = .NORTH;
+    else if target_tile_id == previous_tile_id + WORLD_ROWS entity.direction = .SOUTH;
+    else if target_tile_id == previous_tile_id + 1          entity.direction = .EAST;
+    else if target_tile_id == previous_tile_id - 1          entity.direction = .WEST;
     else assert(false);
 }
 
