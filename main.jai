@@ -33,23 +33,23 @@ WALL_HEALTH :: 200;
 DWARF_MOVE_SPEED :: 33;
 // TODO: DWARF_MOVE_SPEED_TARGETING :: DWARF_MOVE_SPEED * 2;
 
-DWARF_DIGGER_START_COUNT :: 0;//1;
+DWARF_DIGGER_START_COUNT :: 1;
 DWARF_DIGGER_DIG_COOLDOWN_MS    :: 1000;
 DWARF_DIGGER_ATTACK_COOLDOWN_MS :: 2000;
 DWARF_DIGGER_DAMAGE_DIG_PER_SWING    :: 50;
 DWARF_DIGGER_DAMAGE_ATTACK_PER_SWING :: 25;
 DWARF_DIGGER_HIT_CHANCE :: 0.50; // TODO: will have to be based on level
 DWARF_DIGGER_SPAWN_MS :: 10000;
-DWARF_DIGGER_SPAWN_ENABLED :: false;//true;
+DWARF_DIGGER_SPAWN_ENABLED :: true;
 DWARF_DIGGER_STARTING_HP :: 75;
 
-DWARF_WARRIOR_START_COUNT :: 0;//1;
+DWARF_WARRIOR_START_COUNT :: 1;
 DWARF_WARRIOR_DIG_COOLDOWN_MS    :: 2000;
 DWARF_WARRIOR_ATTACK_COOLDOWN_MS :: 1000;
 DWARF_WARRIOR_DAMAGE_DIG_PER_SWING    :: 25;
 DWARF_WARRIOR_DAMAGE_ATTACK_PER_SWING :: 50;
 DWARF_WARRIOR_HIT_CHANCE :: 0.80; // TODO: will have to be based on level
-DWARF_WARRIOR_SPAWN_ENABLED :: false;//true;
+DWARF_WARRIOR_SPAWN_ENABLED :: true;
 DWARF_WARRIOR_STARTING_HP :: 100;
 
 GOBLIN_MOVE_SPEED :: 50;
@@ -1671,7 +1671,9 @@ main :: () {
                                         detected, dwarf, tile_ids_path := detect_dwarf_within_radius(goblin_tile_id, 3, goblin.id);
 
                                         if detected {
-                                            set_tile_ids_on_path(goblin, *tile_ids_path);
+                                            if goblin_tile_id != get_tile_id_by_pos(dwarf.pos) {
+                                                set_tile_ids_on_path(goblin, *tile_ids_path);
+                                            }
                                             is_goblin_done_deciding = true;
                                         }
                                     }
@@ -1691,7 +1693,9 @@ main :: () {
                                         detected, base, tile_ids_path := detect_base_within_radius(goblin_tile_id, 10, goblin.id);
 
                                         if detected {
-                                            set_tile_ids_on_path(goblin, *tile_ids_path);
+                                            if goblin_tile_id != get_tile_id_by_pos(base.pos) {
+                                                set_tile_ids_on_path(goblin, *tile_ids_path);
+                                            }
                                             is_goblin_done_deciding = true;
                                         }
                                     }
@@ -1747,26 +1751,28 @@ main :: () {
                                         // If we're in attack mode and we don't have a dwarf that we're targeting, then we probably should be
                                         // attacking a base.
                                         if goblin.dwarf_id_attacking == 0 {
-                                            // Check to see if goblin is on top of base, somehow
+                                            // Check to see if goblin is on top of base
                                             is_on_base, base := table_find(*tile_ids_to_bases, goblin_tile_id);
                                             if !is_on_base {
                                                 base_neighbor_detected, base_neighbor, _direction := detect_base_neighbor_cardinal(goblin_tile_id, *tile_ids_to_bases);
-                                                assert_soft(base_neighbor_detected, "Goblin % is attacking, but has no dwarf target, is not on top of a base, and is not next to a base. So, that's wrong.\n", goblin.id);
-                                                base = base_neighbor;
-                                            }
+                                                if base_neighbor_detected {
+                                                    base = base_neighbor;
 
-                                            // Hit check
-                                            rng := random_get_within_range(0, 1);
-                                            swing_connected := rng <= GOBLIN_HIT_CHANCE;
+                                                    // Hit check
+                                                    rng := random_get_within_range(0, 1);
+                                                    swing_connected := rng <= GOBLIN_HIT_CHANCE;
 
-                                            if swing_connected {
-                                                base.hp -= GOBLIN_ATTACK_DAMAGE_PER_SWING;
+                                                    if swing_connected {
+                                                        base.hp -= GOBLIN_ATTACK_DAMAGE_PER_SWING;
 
-                                                if base.hp <= 0 {
-                                                    kill_base_by_id(base.id);
-
+                                                        if base.hp == 0 {
+                                                            kill_base_by_id(base.id);
+                                                            goblin.state = .DECIDING;
+                                                        }
+                                                    }
+                                                } else {
                                                     goblin.state = .DECIDING;
-                                                    goblin.dwarf_id_attacking = 0;
+                                                    print("WARN: Goblin % is attacking, but has no dwarf target, is not on top of a base, and is not next to a base. So, that's weird.\n", goblin.id);
                                                 }
                                             }
                                         }
@@ -2651,7 +2657,7 @@ get_previous_tile_id :: (entity: Dwarf) -> s32 {
 
 // TODO: use this everywhere
 set_tile_ids_on_path :: (entity: *$T/interface Moveable, tile_ids: *[] s32) {
-    assert_soft(tile_ids.count > 0, "Tried to set entity % tile ids to an empty path\n", entity.id);
+    assert(tile_ids.count > 0, "Tried to set entity % tile ids to an empty path\n", entity.id);
     // TODO: assert right on tile
 
     goblin_tile_id := get_tile_id_by_pos(entity.pos);
