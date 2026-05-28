@@ -339,11 +339,11 @@ Entity :: struct {
     kind : Type;
 }
 
-Moveable :: struct {
-    id               : s32;
-    pos              : Vector2;
-    tile_ids_on_path : [..] s32;
+MoveableEntity :: struct {
+    using basee: Entity;
+
     direction        : Direction;
+    tile_ids_on_path : [..] s32;
 }
 
 Base :: struct {
@@ -352,10 +352,6 @@ Base :: struct {
 
     spawn_dwarf_cooldown_ms : s32;
     is_home_base : bool;
-}
-
-Tile :: struct {
-    pos : Vector2;
 }
 
 DwarfState :: enum {
@@ -372,16 +368,14 @@ DwarfType :: enum {
 }
 
 Dwarf :: struct {
-    #as using base: Entity;
+    #as using base: MoveableEntity;
     kind = Dwarf;
 
     state               : DwarfState;
-    tile_ids_on_path    : [..] s32; // TODO: might just want a static size
     mining_cooldown_ms  : s32;
     tile_id_mining      : s32;
     goblin_id_attacking : s32; // TODO: is this right? feels overly specific
     attack_cooldown_ms  : s32;
-    direction           : Direction;
     dwarf_type          : DwarfType;
     ignore_goblins_for  : int;
 }
@@ -394,14 +388,12 @@ GoblinState :: enum {
 }
 
 Goblin :: struct {
-    #as using base: Entity;
+    #as using base: MoveableEntity;
     kind = Goblin;
 
     state              : GoblinState;
-    tile_ids_on_path   : [..] s32; // TODO: might just want a static size
     attack_cooldown_ms : s32;
     dwarf_id_attacking : s32;
-    direction          : Direction;
 }
 
 Path :: struct {
@@ -2645,7 +2637,7 @@ get_previous_tile_id :: (entity: Dwarf) -> s32 {
 }
 
 // TODO: use this everywhere
-set_tile_ids_on_path :: (entity: *$T/interface Moveable, tile_ids: *[] s32) {
+set_tile_ids_on_path :: (entity: *$T/interface MoveableEntity, tile_ids: *[] s32) {
     assert(tile_ids.count > 0, "Tried to set entity % tile ids to an empty path\n", entity.id);
     // TODO: assert right on tile
 
@@ -3158,7 +3150,7 @@ try_to_set_goblin_random_new_target :: (goblin: *Goblin) -> SetDwarfRandomNewTar
     return .DIRECTION_FOUND;
 }
 
-can_entity_make_progress :: (entity: *$T/interface Moveable) -> bool {
+can_entity_make_progress :: (entity: *$T/interface MoveableEntity) -> bool {
     if entity.tile_ids_on_path.count == 0 return false;
 
     target_tile_id := entity.tile_ids_on_path[0];
@@ -3263,7 +3255,7 @@ taunt_dwarf :: (dwarf_id: s32, taunter_tile_id: s32) {
     dwarves[dwarf_index].direction = direction_to_face_taunter;
 }
 
-move_one_step_towards_its_next_target_cardinal :: (entity: *$T/interface Moveable, speed: int, dt_seconds: float) {
+move_one_step_towards_its_next_target_cardinal :: (entity: *$T/interface MoveableEntity, speed: int, dt_seconds: float) {
     target_pos := get_tile_pos_by_id(entity.tile_ids_on_path[0]);
     step_size  := cast(float) speed * dt_seconds;
 
@@ -3282,7 +3274,7 @@ move_one_step_towards_its_next_target_cardinal :: (entity: *$T/interface Moveabl
     }
 }
 
-set_entity_direction_to_face_next_target :: (entity: *$T/interface Moveable) {
+set_entity_direction_to_face_next_target :: (entity: *$T/interface MoveableEntity) {
     assert_soft(entity.tile_ids_on_path.count > 0, "Tried setting entity % direction to face next target, but entity has no target.\n", entity.id);
 
     target_tile_id   := entity.tile_ids_on_path[0];
