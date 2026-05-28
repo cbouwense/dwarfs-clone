@@ -339,9 +339,7 @@ Entity :: struct {
     kind : Type;
 }
 
-MoveableEntity :: struct {
-    using basee: Entity;
-
+Moveable :: struct {
     direction        : Direction;
     tile_ids_on_path : [..] s32;
 }
@@ -368,7 +366,8 @@ DwarfType :: enum {
 }
 
 Dwarf :: struct {
-    #as using base: MoveableEntity;
+    #as using base: Entity;
+    using move: Moveable;
     kind = Dwarf;
 
     state               : DwarfState;
@@ -388,7 +387,8 @@ GoblinState :: enum {
 }
 
 Goblin :: struct {
-    #as using base: MoveableEntity;
+    #as using base: Entity;
+    using move: Moveable;
     kind = Goblin;
 
     state              : GoblinState;
@@ -1613,7 +1613,7 @@ main :: () {
 
                                     // If there are any cardinal neighbor dwarves, turn and fight them.
                                     if !is_goblin_done_deciding {
-                                        detected, dwarf := find_cardinal_neighbor_dwarf(goblin_tile_id);
+                                        detected, dwarf := find_cardinal_neighbor_entity(goblin_tile_id, Dwarf);
 
                                         if detected {
                                             // TODO: set goblin direction
@@ -1626,7 +1626,7 @@ main :: () {
 
                                     // If there are any cardinal neighbor bases, turn and fight them.
                                     if !is_goblin_done_deciding {
-                                        detected, base := find_cardinal_neighbor_base(goblin_tile_id);
+                                        detected, base := find_cardinal_neighbor_entity(goblin_tile_id, Base);
 
                                         if detected {
                                             // TODO: set goblin direction
@@ -2637,7 +2637,7 @@ get_previous_tile_id :: (entity: Dwarf) -> s32 {
 }
 
 // TODO: use this everywhere
-set_tile_ids_on_path :: (entity: *$T/interface MoveableEntity, tile_ids: *[] s32) {
+set_tile_ids_on_path :: (entity: *$T/interface Moveable, tile_ids: *[] s32) {
     assert(tile_ids.count > 0, "Tried to set entity % tile ids to an empty path\n", entity.id);
     // TODO: assert right on tile
 
@@ -3150,7 +3150,7 @@ try_to_set_goblin_random_new_target :: (goblin: *Goblin) -> SetDwarfRandomNewTar
     return .DIRECTION_FOUND;
 }
 
-can_entity_make_progress :: (entity: *$T/interface MoveableEntity) -> bool {
+can_entity_make_progress :: (entity: *$T/interface Moveable) -> bool {
     if entity.tile_ids_on_path.count == 0 return false;
 
     target_tile_id := entity.tile_ids_on_path[0];
@@ -3255,7 +3255,7 @@ taunt_dwarf :: (dwarf_id: s32, taunter_tile_id: s32) {
     dwarves[dwarf_index].direction = direction_to_face_taunter;
 }
 
-move_one_step_towards_its_next_target_cardinal :: (entity: *$T/interface MoveableEntity, speed: int, dt_seconds: float) {
+move_one_step_towards_its_next_target_cardinal :: (entity: *$T/interface Moveable, speed: int, dt_seconds: float) {
     target_pos := get_tile_pos_by_id(entity.tile_ids_on_path[0]);
     step_size  := cast(float) speed * dt_seconds;
 
@@ -3274,7 +3274,7 @@ move_one_step_towards_its_next_target_cardinal :: (entity: *$T/interface Moveabl
     }
 }
 
-set_entity_direction_to_face_next_target :: (entity: *$T/interface MoveableEntity) {
+set_entity_direction_to_face_next_target :: (entity: *$T/interface Moveable) {
     assert_soft(entity.tile_ids_on_path.count > 0, "Tried setting entity % direction to face next target, but entity has no target.\n", entity.id);
 
     target_tile_id   := entity.tile_ids_on_path[0];
@@ -4691,28 +4691,38 @@ detect_dwarf_within_radius :: (
     return false, Dwarf.{}, empty_path;
 }
 
-// TODO: Entity type with a switch statement
-find_cardinal_neighbor_dwarf :: (tile_id: s32) -> bool, Dwarf {
+find_cardinal_neighbor_entity :: (tile_id: s32, kind: Type) -> bool, *Entity {
     for DIRECTIONS_CARDINAL {
         neighbor_id := get_neighbor_tile_id_by_direction(tile_id, it);
-        neighbor_has_dwarf, dwarf := table_find(*tile_ids_to_dwarfs, neighbor_id);
 
-        if neighbor_has_dwarf return true, dwarf;
-    }
-
-    return false, Dwarf.{};
-}
-
-find_cardinal_neighbor_base :: (tile_id: s32) -> bool, *Base {
-    for DIRECTIONS_CARDINAL {
-        neighbor_id := get_neighbor_tile_id_by_direction(tile_id, it);
-        neighbor_has_base, base := table_find(*tile_ids_to_bases, neighbor_id);
-
-        if neighbor_has_base return true, base;
+        if kind == {
+            case Dwarf;
+                neighbor_has_entity, entity := table_find(*tile_ids_to_dwarfs, neighbor_id);
+                if neighbor_has_entity return true, *entity;
+            case Goblin;
+                neighbor_has_entity, entity := table_find(*tile_ids_to_goblins, neighbor_id);
+                if neighbor_has_entity return true, *entity;
+            case Base;
+                neighbor_has_entity, entity := table_find(*tile_ids_to_bases, neighbor_id);
+                if neighbor_has_entity return true, entity;
+            case;
+                assert(false, "Unrecognized entity type");
+        }   
     }
 
     return false, null;
 }
+
+// find_cardinal_neighbor_base :: (tile_id: s32) -> bool, *Base {
+//     for DIRECTIONS_CARDINAL {
+//         neighbor_id := get_neighbor_tile_id_by_direction(tile_id, it);
+//         neighbor_has_base, base := table_find(*tile_ids_to_bases, neighbor_id);
+
+//         if neighbor_has_base return true, base;
+//     }
+
+//     return false, null;
+// }
 
 find_line_of_sight_dwarf :: (tile_id: s32, line_of_sight_tile_count: int, skip_immediate_neighbors: bool) -> bool, Dwarf, tile_ids_path: [] s32 {
     tile_ids_path : [..] s32;
