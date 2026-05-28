@@ -335,16 +335,8 @@ TileType :: enum u8 {
 Entity :: struct {
     id   : s32;
     pos  : Vector2;
-
-    sprite_rect   : Rectangle;
-    bounding_rect : Rectangle; // Used for collision
-
-    texture_map_source_pos : Vector2;
-}
-
-// This is the interface thing
-HasPos :: struct {
-    pos : Vector2;
+    hp   : s32;
+    kind : Type;
 }
 
 Moveable :: struct {
@@ -355,9 +347,8 @@ Moveable :: struct {
 }
 
 Base :: struct {
-    id  : s32;
-    pos : Vector2;
-    hp  : s32;
+    #as using base: Entity;
+    kind = Base;
 
     spawn_dwarf_cooldown_ms : s32;
     is_home_base : bool;
@@ -381,9 +372,8 @@ DwarfType :: enum {
 }
 
 Dwarf :: struct {
-    id  : s32;
-    pos : Vector2;
-    hp  : s32;
+    #as using base: Entity;
+    kind = Dwarf;
 
     state               : DwarfState;
     tile_ids_on_path    : [..] s32; // TODO: might just want a static size
@@ -392,7 +382,7 @@ Dwarf :: struct {
     goblin_id_attacking : s32; // TODO: is this right? feels overly specific
     attack_cooldown_ms  : s32;
     direction           : Direction;
-    type                : DwarfType;
+    dwarf_type          : DwarfType;
     ignore_goblins_for  : int;
 }
 
@@ -404,9 +394,8 @@ GoblinState :: enum {
 }
 
 Goblin :: struct {
-    id  : s32;
-    pos : Vector2;
-    hp  : s32;
+    #as using base: Entity;
+    kind = Goblin;
 
     state              : GoblinState;
     tile_ids_on_path   : [..] s32; // TODO: might just want a static size
@@ -1298,7 +1287,7 @@ main :: () {
                                         // PERF: is this too expensive to do every frame?
                                         //
                                         // If the dwarf is a warrior, actively seek out goblins
-                                        if dwarf.type == .WARRIOR {
+                                        if dwarf.dwarf_type == .WARRIOR {
                                             dwarf_warrior_wander :: (dwarf: *Dwarf, tile_ids_to_bases: *Table) {
                                                 dwarf_center  := get_rect_center(get_world_rect_from_pos(dwarf.pos));
                                                 dwarf_tile_id := get_tile_id_by_pos(dwarf_center);
@@ -1528,7 +1517,7 @@ main :: () {
                                                 
                                                 set_tile_as_type(dwarf.tile_id_mining, .MINED, true, *game_state);
 
-                                                if just_mined_iron && dwarf.type == .DIGGER {
+                                                if just_mined_iron && dwarf.dwarf_type == .DIGGER {
                                                     found_next_iron_in_deposit, next_iron_tile_id := detect_iron_tile_id_within_radius(dwarf_tile_id, 3);
                                                     if found_next_iron_in_deposit {
                                                         tile_ids_to_next_iron_tile := get_tile_ids_along_path(get_tile_pos_by_id(dwarf_tile_id), get_tile_pos_by_id(next_iron_tile_id));
@@ -2169,7 +2158,7 @@ main :: () {
                 // Draw dwarves
                 {
                     for dwarf: dwarves_in_viewport {
-                        index : float = ifx dwarf.type == .DIGGER then 1.0 else 6.0;
+                        index : float = ifx dwarf.dwarf_type == .DIGGER then 1.0 else 6.0;
 
                         source := Rectangle.{
                             index * TILEMAP_GENERAL_TILE_WIDTH,
@@ -2301,7 +2290,7 @@ main :: () {
                             DrawText(tprint("attack_cooldown_ms: %\0", it.attack_cooldown_ms).data, xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                             DrawText(tprint("tile_id_mining: %\0", it.tile_id_mining).data,         xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                             DrawText(tprint("direction: %\0", it.direction).data,                   xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                            DrawText(tprint("type: %\0", it.type).data,                             xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                            DrawText(tprint("dwarf_type: %\0", it.dwarf_type).data,                             xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                             DrawText(tprint("hp: %\0", it.hp).data,                                 xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                             DrawText(tprint("ignore_goblins_for: %\0", it.ignore_goblins_for).data, xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                         }
@@ -2692,7 +2681,7 @@ deal_with_nearby_goblins :: (dwarf: *Dwarf) -> DealWithNearbyGoblinResult {
             // If the dwarf is right up against where it's going to attack the goblin already, then start fighting
             if is_tile_id_neighbor_of_tile_id_cardinal(dwarf_tile_id, goblin_tile_id) {
                 dwarf.state = .ATTACKING;
-            } else if dwarf.type == .WARRIOR {
+            } else if dwarf.dwarf_type == .WARRIOR {
                 array_reset(*dwarf.tile_ids_on_path);
                 array_copy(*dwarf.tile_ids_on_path, tile_ids_to_goblin_target);
 
@@ -2707,35 +2696,35 @@ deal_with_nearby_goblins :: (dwarf: *Dwarf) -> DealWithNearbyGoblinResult {
 // TODO: Different file?
 // TODO: fancy macro or metaprogram or something to generate these?
 dwarf_get_dig_damage :: (dwarf: Dwarf) -> s32 {
-    if #complete dwarf.type == {
+    if #complete dwarf.dwarf_type == {
         case .DIGGER;  return DWARF_DIGGER_DAMAGE_DIG_PER_SWING;
         case .WARRIOR; return DWARF_WARRIOR_DAMAGE_DIG_PER_SWING;
     }
 }
 
 dwarf_get_attack_damage :: (dwarf: Dwarf) -> s32 {
-    if #complete dwarf.type == {
+    if #complete dwarf.dwarf_type == {
         case .DIGGER;  return DWARF_DIGGER_DAMAGE_ATTACK_PER_SWING;
         case .WARRIOR; return DWARF_WARRIOR_DAMAGE_ATTACK_PER_SWING;
     }
 }
 
 dwarf_get_hit_chance :: (dwarf: Dwarf) -> float {
-    if #complete dwarf.type == {
+    if #complete dwarf.dwarf_type == {
         case .DIGGER;  return DWARF_DIGGER_HIT_CHANCE;
         case .WARRIOR; return DWARF_WARRIOR_HIT_CHANCE;
     }
 }
 
 dwarf_get_mining_cooldown :: (dwarf: Dwarf) -> s32 {
-    if #complete dwarf.type == {
+    if #complete dwarf.dwarf_type == {
         case .DIGGER;  return DWARF_DIGGER_DIG_COOLDOWN_MS;
         case .WARRIOR; return DWARF_WARRIOR_DIG_COOLDOWN_MS;
     }
 }
 
 dwarf_get_attack_cooldown :: (dwarf: Dwarf) -> s32 {
-    if #complete dwarf.type == {
+    if #complete dwarf.dwarf_type == {
         case .DIGGER;  return DWARF_DIGGER_ATTACK_COOLDOWN_MS;
         case .WARRIOR; return DWARF_WARRIOR_ATTACK_COOLDOWN_MS;
     }
@@ -2954,7 +2943,7 @@ SetDwarfRandomNewTargetReturnStatus :: enum {
 
 try_to_set_dwarf_random_new_target :: (dwarf: *Dwarf) -> SetDwarfRandomNewTargetReturnStatus {
     dwarf_tile_id_current := get_tile_id_by_pos(dwarf.pos);
-    can_target_unmined_tiles := dwarf.type == .DIGGER;
+    can_target_unmined_tiles := dwarf.dwarf_type == .DIGGER;
 
     // Enumerate the different directions the dwarf can go
     is_north_valid := ifx can_target_unmined_tiles
@@ -3062,7 +3051,7 @@ try_to_set_dwarf_random_new_target :: (dwarf: *Dwarf) -> SetDwarfRandomNewTarget
 try_to_set_dwarf_target_to_one_block_in_the_direction_its_facing :: (dwarf: *Dwarf) -> SetDwarfRandomNewTargetReturnStatus {
     dwarf_tile_id_current := get_tile_id_by_pos(dwarf.pos);
 
-    is_tile_valid := ifx dwarf.type == .DIGGER
+    is_tile_valid := ifx dwarf.dwarf_type == .DIGGER
         then is_tile_id_walkable_or_mineable_for_entity(get_neighbor_tile_id_by_direction(dwarf_tile_id_current, dwarf.direction), dwarf.id)
         else is_tile_id_walkable_for_entity(get_neighbor_tile_id_by_direction(dwarf_tile_id_current, dwarf.direction), dwarf.id);
     if !is_tile_valid return .NO_DIRECTION_FOUND;
@@ -3317,16 +3306,17 @@ create_dwarf :: (pos: Vector2, dwarf_type: DwarfType) -> Dwarf {
     direction   := cast(Direction) cast(int) random_get_within_range(0, 3);
 
     dwarf := Dwarf.{
-        id        = dwarf_id,
-        pos       = pos,
-        state     = .DECIDING,
-        direction = direction,
-        mining_cooldown_ms  = 0,
-        tile_id_mining      = 0,
-        goblin_id_attacking = 0,
-        type = dwarf_type,
-        hp   = dwarf_starting_hp_by_type(dwarf_type),
-        attack_cooldown_ms = dwarf_get_attack_cooldown_by_type(dwarf_type)
+        kind                  = Dwarf,
+        id                    = dwarf_id,
+        pos                   = pos,
+        hp                    = dwarf_starting_hp_by_type(dwarf_type),
+        state                 = .DECIDING,
+        direction             = direction,
+        dwarf_type            = dwarf_type,
+        mining_cooldown_ms    = 0,
+        tile_id_mining        = 0,
+        goblin_id_attacking   = 0,
+        attack_cooldown_ms    = dwarf_get_attack_cooldown_by_type(dwarf_type)
         // direction intentionally not set
         // tile_ids_on_path intentionally not set
     };
@@ -3348,11 +3338,11 @@ create_goblin :: (pos: Vector2) -> Goblin {
     goblin := Goblin.{
         id        = goblin_id,
         pos       = pos,
+        hp        = GOBLIN_STARTING_HP,
         state     = .DECIDING,
         direction = .NORTH,
         // tile_ids_on_path intentionally not set
         attack_cooldown_ms = GOBLIN_ATTACK_COOLDOWN_MS,
-        hp        = GOBLIN_STARTING_HP,
     };
 
     tile_id := get_tile_id_by_pos(pos);
@@ -5338,20 +5328,6 @@ reveal_cave_if_necessary :: (tile_id: s32, grant_points: bool, game_state: *Game
 
 get_rect_center :: (rect: Rectangle) -> Vector2 {
     return Vector2.{ rect.x + rect.width/2, rect.y + rect.height/2 };
-}
-
-get_pos_from_thing_with_rect :: (rect_enjoyer: $T/interface HasPos) -> Vector2 {
-    return Vector2.{ rect_enjoyer.rect.x, rect_enjoyer.rect.y };
-}
-
-set_pos_of_thing_with_rect :: (rect_enjoyer: *$T/interface HasPos, x: float, y: float) {
-    rect_enjoyer.rect.x = x;
-    rect_enjoyer.rect.y = y;
-}
-
-set_pos_of_thing_with_rect :: (rect_enjoyer: *$T/interface HasPos, pos: Vector2) {
-    rect_enjoyer.rect.x = pos.x;
-    rect_enjoyer.rect.y = pos.y;
 }
 
 get_tile_rect_that_pos_is_within :: (world_width: int, world_height: int, tile_width: int, tile_height: int, mouse_pos_in_world: Vector2) -> Rectangle {

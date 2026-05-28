@@ -2,25 +2,14 @@
 # In progress
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-
+- entity refactor / DRY up duplicated logic
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Bugs
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-## Demo
-
 - warriors ignore arrows while patrolling
 - reset game state on restart
-
-## After demo
-
-- lots of goblins crash the game
-- goblins decisions making is kinda just fucked up overall
-    - condition: reproducible on 279d68e
-    - cause:
-    - correction:
-    - confirmation:
 - goblins can attack dwarves that are out of reach
     - condition: reproducible on 279d68e
     - cause:
@@ -33,8 +22,7 @@
 
 ## Demo
 
-- Path arrows need to destroy existing path arrows
-- Single use abilities should clear their mode after use
+- Paths need to destroy existing path arrows
 - HUD
 
 ## After demo
@@ -80,4 +68,3 @@
 - search feature for tiles, dwarves, etc.
 - hotreloading
 - pos_by_id cache and vice versa?
-- entity refactor / DRY up duplicated logic
