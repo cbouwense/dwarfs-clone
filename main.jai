@@ -278,7 +278,6 @@ Direction :: enum u8 #specified {
     CENTER     :: 8; // essentially no direction
 }
 
-// TODO: use these everywhere I can
 DIRECTIONS_CARDINAL :: #run array_view(enum_values_as_enum(Direction), 0, 4);
 DIRECTIONS_COMPASS  :: #run array_view(enum_values_as_enum(Direction), 0, enum_highest_value(Direction));
 DIRECTIONS_ALL      :: #run array_view(enum_values_as_enum(Direction), 0, enum_highest_value(Direction) + 1);

@@ -1,37 +1,76 @@
 #import "Basic";
-#import "Hash_Table";
-#import "Input";
-Math :: #import "Math";
+#import "Compiler";
 #import "Print_Vars";
-#import "Random";
-#import "Sloppy_Math";
-#import "Sort";
-#import "String";
-#import "System";
+
+Entity :: struct {
+    id: s32;
+}
+
+Dwarf :: struct {
+    #as using entity: Entity;
+    axe_id: s32;
+}
+
+Goblin :: struct {
+    #as using entity: Entity;
+    sword_id: s32;
+}
+
+foo :: () -> string {
+    entity_subclasses : [..] string;
+
+    table := get_type_table();         // (1) 
+
+    print("The type table has % entries: \n", table.count); 
+
+    for ti: table {
+        if uses_entity_with_as(ti) {
+            print("%: ", it_index);
+            print("  type: % ", ti.type); 
+            print("FOUND YOU\n");
+            tis := cast(*Type_Info_Struct) ti;
+            array_add(*entity_subclasses, tis.name);
+        }
+    }
+
+    // print_vars(entity_subclasses);
+
+    builder: String_Builder;
+    print_to_builder(*builder, "EntityKind :: enum {\n");
+    for entity_subclasses {
+        print_to_builder(*builder, "    %;\n", it);
+    }
+    print_to_builder(*builder, "}\n");
+    
+    // return builder_to_string(*builder);
+
+    return builder_to_string(*builder);
+};
+
+#insert #run foo();
 
 main :: () {
-    while true {
-        derive_entities_in_viewport();
+    x1 := 3.14;
+    
+    kind : EntityKind = .Dwarf;
+
+    if #complete kind == {
+        case .Dwarf; { print("im a dwarf"); }
+        case .Goblin; { print("im a dwarf"); }
     }
 }
 
-derive_entities_in_viewport :: () {    
-    for cy: 1..90001 {
-        for cx: 1..90001 {
-            
-            find_chunk_key_tmp :: (chunk_x: s32, chunk_y: s32) -> (found: bool, key: u64) {
-                if chunk_x < 0 return false, 0;
-                if chunk_y < 0 return false, 0;
+uses_entity_with_as :: (ti: *Type_Info) -> bool #compile_time {
+    if ti.type != .STRUCT return false;
 
-                x_u64 : u64 = 0xFFFFFFFF00000000;
-                y_u64 : u64 = 0x00000000FFFFFFFF;
+    tis := cast(*Type_Info_Struct) ti;
+    for tis.members {
+        if !(it.flags & .AS)             continue;
+        if it.type != type_info(Entity) continue;
 
-                return false, 0xFFFFFFFFFFFFFFFF;
-            }
-
-            key_was_valid, key := find_chunk_key_tmp(xx cx, xx cy);
-            // This happens if the camera is looking out of bounds.
-            if !key_was_valid continue;
-        }
+        // We found a relevant member!
+        return true;
     }
+
+    return false;
 }
