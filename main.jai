@@ -344,7 +344,8 @@ Moveable :: struct {
 }
 
 Base :: struct {
-    #as using base: Entity;
+    #as using entity: Entity;
+
     kind = Base;
 
     spawn_dwarf_cooldown_ms : s32;
@@ -365,8 +366,9 @@ DwarfType :: enum {
 }
 
 Dwarf :: struct {
-    #as using base: Entity;
+    #as using entity: Entity;
     using move: Moveable;
+
     kind = Dwarf;
 
     state               : DwarfState;
@@ -386,8 +388,9 @@ GoblinState :: enum {
 }
 
 Goblin :: struct {
-    #as using base: Entity;
+    #as using entity: Entity;
     using move: Moveable;
+
     kind = Goblin;
 
     state              : GoblinState;
@@ -498,15 +501,16 @@ path_being_traced : Path;
 paths             : [..] Path;
 paths_in_viewport : [..] Path;
 
-// TODO: do we need dwarf and goblin pointers in these?
-tile_ids_to_dwarfs  : Table(s32, Dwarf);
-tile_ids_to_goblins : Table(s32, Goblin);
+tile_ids_to_dwarfs  : Table(s32, *Dwarf);
+tile_ids_to_goblins : Table(s32, *Goblin);
 tile_ids_to_bases   : Table(s32, *Base);
 
 created_chunks: Table(u64, *Chunk);
 
 edges : [..] Edge; // List of all edges between tiles for pathfinding
 // edges_valid_this_frame : [..] Edge; // List of edges without collidable entities on them this frame
+
+#insert #run generate_kind_enum_from_base_struct(Entity);
 
 main :: () {
     // Set temp allocator for various things.
@@ -673,7 +677,7 @@ main :: () {
 
         // Populate caches
         {
-            for dwarf: dwarves {
+            for *dwarf: dwarves {
                 dwarf_tile_id: s32;
 
                 if #complete dwarf.state == {
@@ -694,7 +698,7 @@ main :: () {
                 table_set(*tile_ids_to_dwarfs, dwarf_tile_id, dwarf);
             }
 
-            for goblin: goblins {
+            for *goblin: goblins {
                 if #complete goblin.state == {
                     // If the goblin is dead center on a tile and not moving, it's on that tile.
                     case .IDLE;     #through;
@@ -1638,7 +1642,7 @@ main :: () {
 
                                     // If there are any dwarves within line of sight, move towards the tile they're spotted on.
                                     if !is_goblin_done_deciding {
-                                        detected, _, tile_ids_path := find_line_of_sight_dwarf(goblin_tile_id, GOBLIN_LINE_OF_SIGHT_TILE_COUNT, true);
+                                        detected, _, tile_ids_path := find_line_of_sight_entity(goblin_tile_id, EntityKind.Dwarf, GOBLIN_LINE_OF_SIGHT_TILE_COUNT, true);
 
                                         if detected {
                                             set_tile_ids_on_path(goblin, *tile_ids_path);
@@ -1660,8 +1664,8 @@ main :: () {
 
                                     // If there are any bases within line of sight, move towards the tile they're spotted on.
                                     if !is_goblin_done_deciding {
-                                        detected, base, tile_ids_path := find_line_of_sight_base(goblin_tile_id, GOBLIN_LINE_OF_SIGHT_TILE_COUNT, true);
-
+                                        detected, _, tile_ids_path := find_line_of_sight_entity(goblin_tile_id, EntityKind.Base, GOBLIN_LINE_OF_SIGHT_TILE_COUNT, true);
+                                        
                                         if detected {
                                             set_tile_ids_on_path(goblin, *tile_ids_path);
                                             is_goblin_done_deciding = true;
@@ -3297,7 +3301,6 @@ create_dwarf :: (pos: Vector2, dwarf_type: DwarfType) -> Dwarf {
     direction   := cast(Direction) cast(int) random_get_within_range(0, 3);
 
     dwarf := Dwarf.{
-        kind                  = Dwarf,
         id                    = dwarf_id,
         pos                   = pos,
         hp                    = dwarf_starting_hp_by_type(dwarf_type),
@@ -3588,6 +3591,7 @@ is_tile_id_dirt :: (tile_id: s32) -> bool {
     );
 }
 
+// TODO: entity kind, probably
 is_tile_id_walkable :: (tile_id: s32) -> bool {
     found_dwarf := table_contains(*tile_ids_to_dwarfs, tile_id);
     if found_dwarf return false;
@@ -3604,6 +3608,7 @@ is_tile_id_walkable :: (tile_id: s32) -> bool {
     );
 }
 
+// TODO: entity kind, probably
 is_tile_id_walkable_for_entity :: (tile_id: s32, entity_id: s32) -> bool {
     found_dwarf, dwarf := table_find(*tile_ids_to_dwarfs, tile_id);
     if found_dwarf && dwarf.id != entity_id return false;
@@ -4690,40 +4695,26 @@ detect_dwarf_within_radius :: (
     return false, Dwarf.{}, empty_path;
 }
 
-find_cardinal_neighbor_entity :: (tile_id: s32, kind: Type) -> bool, *Entity {
+find_cardinal_neighbor_entity :: (tile_id: s32, $T: Type) -> found_entity: bool, entity: *T
+#modify return uses_entity_with_as(cast(*Type_Info) T, Entity);
+{
     for DIRECTIONS_CARDINAL {
         neighbor_id := get_neighbor_tile_id_by_direction(tile_id, it);
 
-        if kind == {
-            case Dwarf;
-                neighbor_has_entity, entity := table_find(*tile_ids_to_dwarfs, neighbor_id);
-                if neighbor_has_entity return true, *entity;
-            case Goblin;
-                neighbor_has_entity, entity := table_find(*tile_ids_to_goblins, neighbor_id);
-                if neighbor_has_entity return true, *entity;
-            case Base;
-                neighbor_has_entity, entity := table_find(*tile_ids_to_bases, neighbor_id);
-                if neighbor_has_entity return true, entity;
-            case;
-                assert(false, "Unrecognized entity type");
-        }   
+        tile_ids_to_entity : Table(s32, *T);
+        #if T == Dwarf  tile_ids_to_entity = tile_ids_to_dwarfs;
+        #if T == Goblin tile_ids_to_entity = tile_ids_to_goblins;
+        #if T == Base   tile_ids_to_entity = tile_ids_to_bases;
+
+        neighbor_has_entity, entity := table_find(*tile_ids_to_entity, neighbor_id);
+        if neighbor_has_entity return true, entity;
     }
 
     return false, null;
 }
 
-// find_cardinal_neighbor_base :: (tile_id: s32) -> bool, *Base {
-//     for DIRECTIONS_CARDINAL {
-//         neighbor_id := get_neighbor_tile_id_by_direction(tile_id, it);
-//         neighbor_has_base, base := table_find(*tile_ids_to_bases, neighbor_id);
-
-//         if neighbor_has_base return true, base;
-//     }
-
-//     return false, null;
-// }
-
-find_line_of_sight_dwarf :: (tile_id: s32, line_of_sight_tile_count: int, skip_immediate_neighbors: bool) -> bool, Dwarf, tile_ids_path: [] s32 {
+// TODO: somehow give a generic for return type of entity
+find_line_of_sight_entity :: (tile_id: s32, entity_kind: EntityKind, line_of_sight_tile_count: int, skip_immediate_neighbors: bool) -> bool, Entity, tile_ids_path: [] s32 {
     tile_ids_path : [..] s32;
     tile_ids_path.allocator = temp;
 
@@ -4734,43 +4725,28 @@ find_line_of_sight_dwarf :: (tile_id: s32, line_of_sight_tile_count: int, skip_i
         dx := TILE_DIRECTION_ID_DELTAS[direction_index][0];
         dy := TILE_DIRECTION_ID_DELTAS[direction_index][1];
 
+        neighbor_has_entity : bool;
+        entity : Entity;
+        tile_ids_to_entity : Table(s32, *Entity);
+
         for distance_multiplier: starting_diff..line_of_sight_tile_count {
             neighbor_id := tile_id + (distance_multiplier * dx) + (distance_multiplier * dy);
             array_add(*tile_ids_path, xx neighbor_id);
 
-            neighbor_has_dwarf, dwarf := table_find(*tile_ids_to_dwarfs, xx neighbor_id);
+            if #complete entity_kind == {
+                case .Dwarf;  tile_ids_to_entity = cast,force(Table(s32, *Entity)) tile_ids_to_dwarfs;
+                case .Goblin; tile_ids_to_entity = cast,force(Table(s32, *Entity)) tile_ids_to_goblins;
+                case .Base;   tile_ids_to_entity = cast,force(Table(s32, *Entity)) tile_ids_to_bases;
+            }
 
-            if neighbor_has_dwarf return true, dwarf, tile_ids_path;
+            neighbor_has_entity, entity = table_find(*tile_ids_to_entity, xx neighbor_id);
+            if neighbor_has_entity return true, entity, tile_ids_path;
         }
     }
 
     // I want to have the count of this be zero to avoid any seriously stupid errors.
     array_reset_keeping_memory(*tile_ids_path);
-    return false, Dwarf.{}, tile_ids_path;
-}
-
-find_line_of_sight_base :: (tile_id: s32, line_of_sight_tile_count: int, skip_immediate_neighbors: bool) -> bool, *Base, tile_ids_path: [] s32 {
-    tile_ids_path : [..] s32;
-    tile_ids_path.allocator = temp;
-
-    starting_diff := ifx skip_immediate_neighbors then 2 else 1;
-    
-    for direction: DIRECTIONS_CARDINAL {
-        direction_index : s64 = cast(s64) direction;
-        dx := TILE_DIRECTION_ID_DELTAS[direction_index][0];
-        dy := TILE_DIRECTION_ID_DELTAS[direction_index][1];
-
-        for distance_multiplier: starting_diff..line_of_sight_tile_count {
-            neighbor_id := tile_id + (distance_multiplier * dx) + (distance_multiplier * dy);
-            array_add(*tile_ids_path, xx neighbor_id);
-
-            neighbor_has_base, base := table_find(*tile_ids_to_bases, xx neighbor_id);
-
-            if neighbor_has_base return true, base, tile_ids_path;
-        }
-    }
-
-    return false, null, tile_ids_path;
+    return false, Entity.{}, tile_ids_path;
 }
 
 // TODO: probably want to DRY up these detector functions
