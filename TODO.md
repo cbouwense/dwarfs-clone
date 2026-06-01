@@ -27,6 +27,7 @@
 
 ## After demo
 
+- Alerts
 - Time
 - Base placement validity / onion skin
 - dwarf level ups

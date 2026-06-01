@@ -12,21 +12,21 @@ Control :: struct {
 
 Controls :: struct {
     select                        : Control;
-    toggle_base_mode                 : Control;
+    toggle_base_mode              : Control;
     add_iron                      : Control;
-    select_as_place_miner_dwarf  : Control;
+    select_as_place_miner_dwarf   : Control;
     select_as_place_warrior_dwarf : Control;
-    toggle_dynamite_mode      : Control;
+    toggle_dynamite_mode          : Control;
     select_as_place_goblin        : Control;
-    toggle_obsidian_mode      : Control;
-    toggle_wall_mode          : Control;
+    toggle_obsidian_mode          : Control;
+    toggle_wall_mode              : Control;
     drag_as_create_path           : Control;
     drag_cam                      : Control;
     move_camera_up                : Control;
     move_camera_down              : Control;
     move_camera_left              : Control;
     move_camera_right             : Control;
-    toggle_remove_mode         : Control;
+    toggle_remove_mode            : Control;
     panic_pause                   : Control;
     fast_forward                  : Control;
 }
@@ -47,4 +47,18 @@ control_is_pressed :: (control: Control) -> bool {
     }
 
     return false;
+}
+
+bind_to_readable_name_cstr :: (bind: Bind) -> *u8 {
+    if bind.is_being_rebound return to_c_string("...");
+    if bind.value == 0 return to_c_string("<None>");
+
+    mouse_info    := type_info(MouseButton);
+    keyboard_info := type_info(KeyboardKey);
+
+    info := ifx bind.type == MouseButton then mouse_info else keyboard_info;
+    found, index := array_find(info.values, bind.value);
+    assert(found);
+
+    return to_c_string(info.names[index]);
 }

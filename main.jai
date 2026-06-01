@@ -763,7 +763,7 @@ main :: () {
                                 for *controls.select.binds                        it.is_being_rebound = false;
                                 for *controls.toggle_base_mode.binds              it.is_being_rebound = false;
                                 for *controls.add_iron.binds                      it.is_being_rebound = false;
-                                for *controls.select_as_place_miner_dwarf.binds  it.is_being_rebound = false;
+                                for *controls.select_as_place_miner_dwarf.binds   it.is_being_rebound = false;
                                 for *controls.select_as_place_warrior_dwarf.binds it.is_being_rebound = false;
                                 for *controls.toggle_dynamite_mode.binds          it.is_being_rebound = false;
                                 for *controls.select_as_place_goblin.binds        it.is_being_rebound = false;
@@ -2315,22 +2315,64 @@ main :: () {
                 // Draw HUD
                 DRAW_HUD :: true;
                 #if DRAW_HUD {
-                    // PERF: only do screen sizing / divisions once?
-                    HUD_PADDING :: 10;
-                    HUD_SEGMENT_COUNT :: 7;
-                    HUD_SEGMENT_WIDTH := GetScreenWidth() / HUD_SEGMENT_COUNT;
-                    INCREMENT_X := HUD_SEGMENT_WIDTH;
-                    hud_x := HUD_SEGMENT_WIDTH;
-                    // HUD_HEIGHT  :: GetScreenHeight() / 35;
-
-                    // Draw dwarf miner count
+                    // Draw information
                     {
-                        DrawText(tprint("Miner dwarves: %\0",   dwarf_miner_count).data,   xx (read_then_increment(*hud_x, INCREMENT_X) + HUD_PADDING), xx (HUD_PADDING), 18, WHITE);
-                        DrawText(tprint("Warrior dwarves: %\0", dwarf_warrior_count).data, xx (read_then_increment(*hud_x, INCREMENT_X) + HUD_PADDING), xx (HUD_PADDING), 18, WHITE);
-                        DrawText(tprint("Gold: %\0",            game_state.gold).data,     xx (read_then_increment(*hud_x, INCREMENT_X) + HUD_PADDING), xx (HUD_PADDING), 18, WHITE);
-                        DrawText(tprint("Points: %\0",          game_state.points).data,   xx (read_then_increment(*hud_x, INCREMENT_X) + HUD_PADDING), xx (HUD_PADDING), 18, WHITE);
+                        HUD_INFO_PADDING       :: 10;
+                        HUD_INFO_SEGMENT_COUNT :: 7;
+                        HUD_INFO_SEGMENT_WIDTH := GetScreenWidth() / HUD_INFO_SEGMENT_COUNT;
+                        HUD_INFO_INCREMENT_X   := HUD_INFO_SEGMENT_WIDTH;
+                        hud_info_x             := HUD_INFO_SEGMENT_WIDTH;
+                        
+                        DrawText(tprint("Miner dwarves: %\0",   dwarf_miner_count).data,   xx (read_then_increment(*hud_info_x, HUD_INFO_INCREMENT_X) + HUD_INFO_PADDING), xx (HUD_INFO_PADDING), 18, WHITE);
+                        DrawText(tprint("Warrior dwarves: %\0", dwarf_warrior_count).data, xx (read_then_increment(*hud_info_x, HUD_INFO_INCREMENT_X) + HUD_INFO_PADDING), xx (HUD_INFO_PADDING), 18, WHITE);
+                        DrawText(tprint("Gold: %\0",            game_state.gold).data,     xx (read_then_increment(*hud_info_x, HUD_INFO_INCREMENT_X) + HUD_INFO_PADDING), xx (HUD_INFO_PADDING), 18, WHITE);
+                        DrawText(tprint("Points: %\0",          game_state.points).data,   xx (read_then_increment(*hud_info_x, HUD_INFO_INCREMENT_X) + HUD_INFO_PADDING), xx (HUD_INFO_PADDING), 18, WHITE);
                         // TODO: time
-                        // DrawText(tprint("Time: %\0",            game_state.gold).data,     xx (read_then_increment(*hud_x, INCREMENT_X) + HUD_PADDING), xx (HUD_PADDING), 18, WHITE);
+                        // DrawText(tprint("Time: %\0",            game_state.time).data,     xx (read_then_increment(*hud_x, INCREMENT_X) + HUD_PADDING), xx (HUD_PADDING), 18, WHITE);
+                    }
+
+                    // Draw controls
+                    {
+                        HUD_CONTROLS_PADDING       :: 10;
+                        HUD_CONTROLS_SEGMENT_COUNT :: 10;
+                        HUD_CONTROLS_SEGMENT_WIDTH := GetScreenWidth() / HUD_CONTROLS_SEGMENT_COUNT;
+                        HUD_CONTROLS_INCREMENT_X   := HUD_CONTROLS_SEGMENT_WIDTH;
+                        HUD_CONTROLS_GAP_X         :: 10;
+                        HUD_CONTROLS_HEIGHT        :: 50;
+                        hud_controls_x             := HUD_CONTROLS_SEGMENT_WIDTH;
+                        HUD_CONTROLS_LABEL_Y       := GetScreenHeight()    - HUD_CONTROLS_PADDING * 2;
+                        HUD_CONTROLS_Y             := HUD_CONTROLS_LABEL_Y - HUD_CONTROLS_HEIGHT;
+
+                        draw_hud_control_icon :: (control: Control, rect: Rectangle) #expand {
+                            DrawText(
+                                bind_to_readable_name_cstr(control.binds[0]),
+                                xx (hud_controls_x + HUD_CONTROLS_PADDING), xx (HUD_CONTROLS_LABEL_Y), 18, WHITE
+                            );
+                            DrawTexturePro(
+                                tilemap_texture_general, rect,
+                                Rectangle.{ xx read_then_increment(*hud_controls_x, HUD_CONTROLS_INCREMENT_X), xx HUD_CONTROLS_Y, xx HUD_CONTROLS_HEIGHT, xx HUD_CONTROLS_HEIGHT },
+                                Vector2.{0,0}, 0.0, WHITE
+                            );
+                        }
+
+                        draw_hud_control_color :: (control: Control, color: Color) #expand {
+                            DrawText(
+                                bind_to_readable_name_cstr(control.binds[0]),
+                                xx (hud_controls_x + HUD_CONTROLS_PADDING), xx (HUD_CONTROLS_LABEL_Y), 18, WHITE
+                            );
+                            DrawRectangleRec(
+                                Rectangle.{ xx read_then_increment(*hud_controls_x, HUD_CONTROLS_INCREMENT_X), xx HUD_CONTROLS_Y, xx HUD_CONTROLS_HEIGHT, xx HUD_CONTROLS_HEIGHT },
+                                color
+                            );
+                        }
+
+                        draw_hud_control_icon(controls.toggle_remove_mode,    TILEMAP_SOURCE_RECT_REMOVE);
+                        draw_hud_control_icon(controls.toggle_dynamite_mode,  TILEMAP_SOURCE_RECT_DYNAMITE);
+                        draw_hud_control_icon(controls.toggle_base_mode,      TILEMAP_SOURCE_RECT_BASE);
+                        draw_hud_control_color(controls.toggle_wall_mode,     DARKPURPLE);
+                        draw_hud_control_color(controls.toggle_obsidian_mode, DARKGRAY);
+                        draw_hud_control_color(controls.panic_pause,          GRAY);
+                        draw_hud_control_color(controls.fast_forward,         SKYBLUE);
                     }
                 }
 
@@ -2444,21 +2486,6 @@ main :: () {
                                     
                                     BIND_BUTTON_WIDTH  := screen_width * 0.25;
                                     BIND_BUTTON_HEIGHT := BIND_BUTTON_WIDTH * 0.15;
-
-                                    // PERF: cache these / tables
-                                    bind_to_readable_name_cstr :: (bind: Bind) -> *u8 {
-                                        if bind.is_being_rebound return to_c_string("...");
-                                        if bind.value == 0 return to_c_string("<None>");
-
-                                        mouse_info    := type_info(MouseButton);
-                                        keyboard_info := type_info(KeyboardKey);
-
-                                        info := ifx bind.type == MouseButton then mouse_info else keyboard_info;
-                                        found, index := array_find(info.values, bind.value);
-                                        assert(found);
-
-                                        return to_c_string(info.names[index]);
-                                    }
 
                                     keybind_row :: (control: *Control) #expand {
                                         DrawText(to_c_string(control.name), `ACTION_COLUMN_X, xx `options_row_y, `OPTIONS_ROW_FONT_SIZE, WHITE);
