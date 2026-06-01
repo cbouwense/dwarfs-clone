@@ -33,15 +33,15 @@ WALL_HEALTH :: 200;
 DWARF_MOVE_SPEED :: 33;
 // TODO: DWARF_MOVE_SPEED_TARGETING :: DWARF_MOVE_SPEED * 2;
 
-DWARF_DIGGER_START_COUNT :: 1;
-DWARF_DIGGER_DIG_COOLDOWN_MS    :: 1000;
-DWARF_DIGGER_ATTACK_COOLDOWN_MS :: 2000;
-DWARF_DIGGER_DAMAGE_DIG_PER_SWING    :: 50;
-DWARF_DIGGER_DAMAGE_ATTACK_PER_SWING :: 25;
-DWARF_DIGGER_HIT_CHANCE :: 0.50; // TODO: will have to be based on level
-DWARF_DIGGER_SPAWN_MS :: 10000;
-DWARF_DIGGER_SPAWN_ENABLED :: true;
-DWARF_DIGGER_STARTING_HP :: 75;
+DWARF_MINER_START_COUNT :: 1;
+DWARF_MINER_DIG_COOLDOWN_MS    :: 1000;
+DWARF_MINER_ATTACK_COOLDOWN_MS :: 2000;
+DWARF_MINER_DAMAGE_DIG_PER_SWING    :: 50;
+DWARF_MINER_DAMAGE_ATTACK_PER_SWING :: 25;
+DWARF_MINER_HIT_CHANCE :: 0.50; // TODO: will have to be based on level
+DWARF_MINER_SPAWN_MS :: 10000;
+DWARF_MINER_SPAWN_ENABLED :: true;
+DWARF_MINER_STARTING_HP :: 75;
 
 DWARF_WARRIOR_START_COUNT :: 1;
 DWARF_WARRIOR_DIG_COOLDOWN_MS    :: 2000;
@@ -199,7 +199,7 @@ toggle_obsidian_mode          : bool;
 toggle_wall_mode              : bool;
 toggle_remove_mode            : bool;
 add_iron                      : bool;
-select_as_place_digger_dwarf  : bool;
+select_as_place_miner_dwarf  : bool;
 select_as_place_warrior_dwarf : bool;
 select_as_place_goblin        : bool;
 started_to_draw_path          : bool;
@@ -222,7 +222,7 @@ toggle_obsidian_mode_prev          : bool;
 toggle_wall_mode_prev              : bool;
 toggle_remove_mode_prev            : bool;
 add_iron_prev                      : bool;
-select_as_place_digger_dwarf_prev  : bool;
+select_as_place_miner_dwarf_prev  : bool;
 select_as_place_warrior_dwarf_prev : bool;
 select_as_place_goblin_prev        : bool;
 started_to_draw_path_prev          : bool;
@@ -361,7 +361,7 @@ DwarfState :: enum {
 }
 
 DwarfType :: enum {
-    DIGGER;
+    MINER;
     WARRIOR;
 }
 
@@ -577,9 +577,9 @@ main :: () {
         controls.add_iron.rebindable_by_user = false;
         controls.add_iron.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_I };
 
-        controls.select_as_place_digger_dwarf.name = "DEBUG: Add digger dwarf";
-        controls.select_as_place_digger_dwarf.rebindable_by_user = false;
-        controls.select_as_place_digger_dwarf.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_D };
+        controls.select_as_place_miner_dwarf.name = "DEBUG: Add miner dwarf";
+        controls.select_as_place_miner_dwarf.rebindable_by_user = false;
+        controls.select_as_place_miner_dwarf.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_D };
 
         controls.select_as_place_warrior_dwarf.name = "DEBUG: Add warrior dwarf";
         controls.select_as_place_warrior_dwarf.rebindable_by_user = false;
@@ -675,6 +675,10 @@ main :: () {
         mouse_pos_in_world := GetScreenToWorld2D(mouse_pos_in_ui, camera);
         mouse_wheel_move   := GetMouseWheelMove();
 
+        // TODO: save this in game_state or something
+        dwarf_miner_count   := 0;
+        dwarf_warrior_count := 0;
+
         // Populate caches
         {
             for *dwarf: dwarves {
@@ -696,6 +700,10 @@ main :: () {
 
                 assert_soft(dwarf_tile_id > 0, "Expected dwarf_tile_id to have been set, but got %\n", dwarf_tile_id);
                 table_set(*tile_ids_to_dwarfs, dwarf_tile_id, dwarf);
+
+                if      dwarf.dwarf_type == .MINER   dwarf_miner_count += 1;
+                else if dwarf.dwarf_type == .WARRIOR dwarf_warrior_count += 1;
+                else    assert_soft(false, "Dwarf % was neither a miner nor warrior\n", dwarf.id);
             }
 
             for *goblin: goblins {
@@ -755,7 +763,7 @@ main :: () {
                                 for *controls.select.binds                        it.is_being_rebound = false;
                                 for *controls.toggle_base_mode.binds              it.is_being_rebound = false;
                                 for *controls.add_iron.binds                      it.is_being_rebound = false;
-                                for *controls.select_as_place_digger_dwarf.binds  it.is_being_rebound = false;
+                                for *controls.select_as_place_miner_dwarf.binds  it.is_being_rebound = false;
                                 for *controls.select_as_place_warrior_dwarf.binds it.is_being_rebound = false;
                                 for *controls.toggle_dynamite_mode.binds          it.is_being_rebound = false;
                                 for *controls.select_as_place_goblin.binds        it.is_being_rebound = false;
@@ -790,7 +798,7 @@ main :: () {
                 select_is_held_down_prev           = select_is_held_down;
                 toggle_base_mode_prev              = toggle_base_mode;
                 add_iron_prev                      = add_iron;
-                select_as_place_digger_dwarf_prev  = select_as_place_digger_dwarf;
+                select_as_place_miner_dwarf_prev  = select_as_place_miner_dwarf;
                 select_as_place_warrior_dwarf_prev = select_as_place_warrior_dwarf;
                 toggle_dynamite_mode_prev          = toggle_dynamite_mode;
                 toggle_obsidian_mode_prev          = toggle_obsidian_mode;
@@ -819,7 +827,7 @@ main :: () {
                 toggle_wall_mode              = control_is_pressed(controls.toggle_wall_mode);
                 toggle_remove_mode            = control_is_pressed(controls.toggle_remove_mode);
                 add_iron                      = control_is_pressed(controls.add_iron);
-                select_as_place_digger_dwarf  = control_is_down(controls.select_as_place_digger_dwarf);
+                select_as_place_miner_dwarf  = control_is_down(controls.select_as_place_miner_dwarf);
                 select_as_place_warrior_dwarf = control_is_down(controls.select_as_place_warrior_dwarf);
                 select_as_place_goblin        = control_is_down(controls.select_as_place_goblin);
                 drag_cam_pressed              = control_is_pressed(controls.drag_cam);
@@ -833,7 +841,7 @@ main :: () {
 
                 started_to_draw_path = (
                     select_is_pressed_once             &&
-                    !select_as_place_digger_dwarf      &&
+                    !select_as_place_miner_dwarf      &&
                     !select_as_place_warrior_dwarf     &&
                     !select_as_place_goblin            &&
                     game_state.control_mode == .NORMAL &&
@@ -950,11 +958,11 @@ main :: () {
 
                     if #complete game_state.control_mode == {
                         case .NORMAL;
-                            if select_as_place_digger_dwarf {
+                            if select_as_place_miner_dwarf {
                                 if select_is_pressed_once {
                                     if metagame.debug_mode {
                                         tile_id := get_tile_id_by_pos(mouse_pos_in_world);
-                                        create_dwarf(get_tile_pos_by_id(tile_id), .DIGGER);
+                                        create_dwarf(get_tile_pos_by_id(tile_id), .MINER);
                                     }
                                 }
                             }
@@ -1512,7 +1520,7 @@ main :: () {
                                                 
                                                 set_tile_as_type(dwarf.tile_id_mining, .MINED, true, *game_state);
 
-                                                if just_mined_iron && dwarf.dwarf_type == .DIGGER {
+                                                if just_mined_iron && dwarf.dwarf_type == .MINER {
                                                     found_next_iron_in_deposit, next_iron_tile_id := detect_iron_tile_id_within_radius(dwarf_tile_id, 3);
                                                     if found_next_iron_in_deposit {
                                                         tile_ids_to_next_iron_tile := get_tile_ids_along_path(get_tile_pos_by_id(dwarf_tile_id), get_tile_pos_by_id(next_iron_tile_id));
@@ -1876,12 +1884,12 @@ main :: () {
 
                     // Update bases
                     {
-                        #if DWARF_DIGGER_SPAWN_ENABLED {
+                        #if DWARF_MINER_SPAWN_ENABLED {
                             for *base: bases {
                                 if base.spawn_dwarf_cooldown_ms <= 0 {
-                                    create_dwarf(Vector2.{ base.pos.x, base.pos.y }, .DIGGER);
+                                    create_dwarf(Vector2.{ base.pos.x, base.pos.y }, .MINER);
 
-                                    base.spawn_dwarf_cooldown_ms = DWARF_DIGGER_SPAWN_MS;
+                                    base.spawn_dwarf_cooldown_ms = DWARF_MINER_SPAWN_MS;
                                 } else {
                                     base.spawn_dwarf_cooldown_ms -= xx (dt_seconds * 1000);
                                 }
@@ -2153,7 +2161,7 @@ main :: () {
                 // Draw dwarves
                 {
                     for dwarf: dwarves_in_viewport {
-                        index : float = ifx dwarf.dwarf_type == .DIGGER then 1.0 else 6.0;
+                        index : float = ifx dwarf.dwarf_type == .MINER then 1.0 else 6.0;
 
                         source := Rectangle.{
                             index * TILEMAP_GENERAL_TILE_WIDTH,
@@ -2251,7 +2259,7 @@ main :: () {
                         DrawText(tprint("select_is_held_down: %\0", select_is_held_down).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
                         DrawText(tprint("toggle_base_mode: %\0", toggle_base_mode).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
                         DrawText(tprint("add_iron: %\0", add_iron).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                        DrawText(tprint("select_as_place_digger_dwarf: %\0", select_as_place_digger_dwarf).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                        DrawText(tprint("select_as_place_miner_dwarf: %\0", select_as_place_miner_dwarf).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
                         DrawText(tprint("toggle_dynamite_mode: %\0", toggle_dynamite_mode).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
                         DrawText(tprint("toggle_obsidian_mode: %\0", toggle_obsidian_mode).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
                         DrawText(tprint("toggle_wall_mode: %\0", toggle_wall_mode).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
@@ -2285,7 +2293,7 @@ main :: () {
                             DrawText(tprint("attack_cooldown_ms: %\0", it.attack_cooldown_ms).data, xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                             DrawText(tprint("tile_id_mining: %\0", it.tile_id_mining).data,         xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                             DrawText(tprint("direction: %\0", it.direction).data,                   xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                            DrawText(tprint("dwarf_type: %\0", it.dwarf_type).data,                             xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                            DrawText(tprint("dwarf_type: %\0", it.dwarf_type).data,                 xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                             DrawText(tprint("hp: %\0", it.hp).data,                                 xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                             DrawText(tprint("ignore_goblins_for: %\0", it.ignore_goblins_for).data, xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                         }
@@ -2304,6 +2312,29 @@ main :: () {
                     }
                 }
 
+                // Draw HUD
+                DRAW_HUD :: true;
+                #if DRAW_HUD {
+                    // PERF: only do screen sizing / divisions once?
+                    HUD_PADDING :: 10;
+                    HUD_SEGMENT_COUNT :: 7;
+                    HUD_SEGMENT_WIDTH := GetScreenWidth() / HUD_SEGMENT_COUNT;
+                    INCREMENT_X := HUD_SEGMENT_WIDTH;
+                    hud_x := HUD_SEGMENT_WIDTH;
+                    // HUD_HEIGHT  :: GetScreenHeight() / 35;
+
+                    // Draw dwarf miner count
+                    {
+                        DrawText(tprint("Miner dwarves: %\0",   dwarf_miner_count).data,   xx (read_then_increment(*hud_x, INCREMENT_X) + HUD_PADDING), xx (HUD_PADDING), 18, WHITE);
+                        DrawText(tprint("Warrior dwarves: %\0", dwarf_warrior_count).data, xx (read_then_increment(*hud_x, INCREMENT_X) + HUD_PADDING), xx (HUD_PADDING), 18, WHITE);
+                        DrawText(tprint("Gold: %\0",            game_state.gold).data,     xx (read_then_increment(*hud_x, INCREMENT_X) + HUD_PADDING), xx (HUD_PADDING), 18, WHITE);
+                        DrawText(tprint("Points: %\0",          game_state.points).data,   xx (read_then_increment(*hud_x, INCREMENT_X) + HUD_PADDING), xx (HUD_PADDING), 18, WHITE);
+                        // TODO: time
+                        // DrawText(tprint("Time: %\0",            game_state.gold).data,     xx (read_then_increment(*hud_x, INCREMENT_X) + HUD_PADDING), xx (HUD_PADDING), 18, WHITE);
+                    }
+                }
+
+                // Draw menus
                 if #complete metagame.state == {
                     case .RUNNING; // no op
 
@@ -2692,49 +2723,49 @@ deal_with_nearby_goblins :: (dwarf: *Dwarf) -> DealWithNearbyGoblinResult {
 // TODO: fancy macro or metaprogram or something to generate these?
 dwarf_get_dig_damage :: (dwarf: Dwarf) -> s32 {
     if #complete dwarf.dwarf_type == {
-        case .DIGGER;  return DWARF_DIGGER_DAMAGE_DIG_PER_SWING;
+        case .MINER;   return DWARF_MINER_DAMAGE_DIG_PER_SWING;
         case .WARRIOR; return DWARF_WARRIOR_DAMAGE_DIG_PER_SWING;
     }
 }
 
 dwarf_get_attack_damage :: (dwarf: Dwarf) -> s32 {
     if #complete dwarf.dwarf_type == {
-        case .DIGGER;  return DWARF_DIGGER_DAMAGE_ATTACK_PER_SWING;
+        case .MINER;   return DWARF_MINER_DAMAGE_ATTACK_PER_SWING;
         case .WARRIOR; return DWARF_WARRIOR_DAMAGE_ATTACK_PER_SWING;
     }
 }
 
 dwarf_get_hit_chance :: (dwarf: Dwarf) -> float {
     if #complete dwarf.dwarf_type == {
-        case .DIGGER;  return DWARF_DIGGER_HIT_CHANCE;
+        case .MINER;   return DWARF_MINER_HIT_CHANCE;
         case .WARRIOR; return DWARF_WARRIOR_HIT_CHANCE;
     }
 }
 
 dwarf_get_mining_cooldown :: (dwarf: Dwarf) -> s32 {
     if #complete dwarf.dwarf_type == {
-        case .DIGGER;  return DWARF_DIGGER_DIG_COOLDOWN_MS;
+        case .MINER;   return DWARF_MINER_DIG_COOLDOWN_MS;
         case .WARRIOR; return DWARF_WARRIOR_DIG_COOLDOWN_MS;
     }
 }
 
 dwarf_get_attack_cooldown :: (dwarf: Dwarf) -> s32 {
     if #complete dwarf.dwarf_type == {
-        case .DIGGER;  return DWARF_DIGGER_ATTACK_COOLDOWN_MS;
+        case .MINER;   return DWARF_MINER_ATTACK_COOLDOWN_MS;
         case .WARRIOR; return DWARF_WARRIOR_ATTACK_COOLDOWN_MS;
     }
 }
 
 dwarf_get_attack_cooldown_by_type :: (dwarf_type: DwarfType) -> s32 {
     if #complete dwarf_type == {
-        case .DIGGER;  return DWARF_DIGGER_ATTACK_COOLDOWN_MS;
+        case .MINER;   return DWARF_MINER_ATTACK_COOLDOWN_MS;
         case .WARRIOR; return DWARF_WARRIOR_ATTACK_COOLDOWN_MS;
     }
 }
 
 dwarf_starting_hp_by_type :: (dwarf_type: DwarfType) -> s32 {
     if #complete dwarf_type == {
-        case .DIGGER;  return DWARF_DIGGER_STARTING_HP;
+        case .MINER;   return DWARF_MINER_STARTING_HP;
         case .WARRIOR; return DWARF_WARRIOR_STARTING_HP;
     }
 }
@@ -2895,13 +2926,13 @@ initialize_game :: () -> game_state: GameState, camera: Camera2D {
         neighbor_pos: Vector2;
         assert(bases.count > 0);
 
-        for 1..DWARF_DIGGER_START_COUNT {
-            // Initialize digger dwarves
+        for 1..DWARF_MINER_START_COUNT {
+            // Initialize miner dwarves
             dx = TILE_DIRECTION_DELTAS[xx Direction.NORTH][0];
             dy = TILE_DIRECTION_DELTAS[xx Direction.NORTH][1];
             neighbor_pos = Vector2.{ home_base.pos.x + dx, home_base.pos.y + dy };
 
-            create_dwarf(neighbor_pos, .DIGGER);
+            create_dwarf(neighbor_pos, .MINER);
         }
         
         for 1..DWARF_WARRIOR_START_COUNT {
@@ -2938,7 +2969,7 @@ SetDwarfRandomNewTargetReturnStatus :: enum {
 
 try_to_set_dwarf_random_new_target :: (dwarf: *Dwarf) -> SetDwarfRandomNewTargetReturnStatus {
     dwarf_tile_id_current := get_tile_id_by_pos(dwarf.pos);
-    can_target_unmined_tiles := dwarf.dwarf_type == .DIGGER;
+    can_target_unmined_tiles := dwarf.dwarf_type == .MINER;
 
     // Enumerate the different directions the dwarf can go
     is_north_valid := ifx can_target_unmined_tiles
@@ -3046,7 +3077,7 @@ try_to_set_dwarf_random_new_target :: (dwarf: *Dwarf) -> SetDwarfRandomNewTarget
 try_to_set_dwarf_target_to_one_block_in_the_direction_its_facing :: (dwarf: *Dwarf) -> SetDwarfRandomNewTargetReturnStatus {
     dwarf_tile_id_current := get_tile_id_by_pos(dwarf.pos);
 
-    is_tile_valid := ifx dwarf.dwarf_type == .DIGGER
+    is_tile_valid := ifx dwarf.dwarf_type == .MINER
         then is_tile_id_walkable_or_mineable_for_entity(get_neighbor_tile_id_by_direction(dwarf_tile_id_current, dwarf.direction), dwarf.id)
         else is_tile_id_walkable_for_entity(get_neighbor_tile_id_by_direction(dwarf_tile_id_current, dwarf.direction), dwarf.id);
     if !is_tile_valid return .NO_DIRECTION_FOUND;
@@ -3336,7 +3367,7 @@ create_base :: (pos: Vector2, is_home_base: bool, game_state: *GameState) -> Bas
     base := Base.{
         id  = base_id,
         pos = pos,
-        spawn_dwarf_cooldown_ms = DWARF_DIGGER_SPAWN_MS,
+        spawn_dwarf_cooldown_ms = DWARF_MINER_SPAWN_MS,
         is_home_base = is_home_base,
         hp = 1000
     };
@@ -4281,42 +4312,36 @@ get_arrow_rotation :: (start_pos: Vector2, end_pos: Vector2) -> float32 {
 set_cave_as_mined :: (tile_id: s32, cave_type: CaveType, grant_points: bool, game_state: *GameState) {
     tile_type : TileType;
 
-    // Only spawn goblin caves
-    #if true {
-        tile_type = .MINED;
-        create_goblin(get_tile_pos_by_id(tile_id));
-    } else {
-        if #complete cave_type == {
-            case .EMPTY;
-                tile_type = .MINED;
-            case .WATER;
-                tile_type = .WATER_FLOWING;
-            case .LAVA;
-                tile_type = .LAVA_FLOWING;
-            case .TREASURE;
-                tile_type = .MINED;
+    if #complete cave_type == {
+        case .EMPTY;
+            tile_type = .MINED;
+        case .WATER;
+            tile_type = .WATER_FLOWING;
+        case .LAVA;
+            tile_type = .LAVA_FLOWING;
+        case .TREASURE;
+            tile_type = .MINED;
 
+            rng := random_get_within_range(0, 1);
+            is_treasure := rng <= 0.333;
+            if is_treasure {
+                array_add(*tiles_with_treasure_ids, tile_id);
+                table_set(*tiles_with_treasure_ids_set, tile_id, 1738);
+            }
+
+        case .GOBLIN;
+            tile_type = .MINED;
+
+            #if GOBLIN_SPAWN_ENABLED {
                 rng := random_get_within_range(0, 1);
-                is_treasure := rng <= 0.333;
-                if is_treasure {
-                    array_add(*tiles_with_treasure_ids, tile_id);
-                    table_set(*tiles_with_treasure_ids_set, tile_id, 1738);
-                }
+                is_goblin := rng <= 0.25;
+                if is_goblin create_goblin(get_tile_pos_by_id(tile_id));
+            }
 
-            case .GOBLIN;
-                tile_type = .MINED;
-
-                #if GOBLIN_SPAWN_ENABLED {
-                    rng := random_get_within_range(0, 1);
-                    is_goblin := rng <= 0.25;
-                    if is_goblin create_goblin(get_tile_pos_by_id(tile_id));
-                }
-
-            case .SHAMAN;
-                tile_type = .MINED;
-            case .SPIDER_QUEEN;
-                tile_type = .MINED;
-        }
+        case .SHAMAN;
+            tile_type = .MINED;
+        case .SPIDER_QUEEN;
+            tile_type = .MINED;
     }
 
     set_tile_as_type(tile_id, tile_type, grant_points, game_state);

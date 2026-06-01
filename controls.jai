@@ -14,7 +14,7 @@ Controls :: struct {
     select                        : Control;
     toggle_base_mode                 : Control;
     add_iron                      : Control;
-    select_as_place_digger_dwarf  : Control;
+    select_as_place_miner_dwarf  : Control;
     select_as_place_warrior_dwarf : Control;
     toggle_dynamite_mode      : Control;
     select_as_place_goblin        : Control;

@@ -2,7 +2,7 @@
 # In progress
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- entity refactor / DRY up duplicated logic
+- HUD
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Bugs
@@ -23,10 +23,11 @@
 ## Demo
 
 - Paths need to destroy existing path arrows
-- HUD
+- Restrict base construction by gold
 
 ## After demo
 
+- Time
 - Base placement validity / onion skin
 - dwarf level ups
 - base canons
