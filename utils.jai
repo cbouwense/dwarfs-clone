@@ -187,7 +187,7 @@ assert_soft :: (condition: bool, format_string: string, args: .. Any) #expand {
     }
 }
 
-uses_entity_with_as :: (ti: *Type_Info, $ as_struct: Type) -> bool #compile_time {
+uses_entity_with_as :: (ti: *Type_Info, $as_struct: Type) -> bool #compile_time {
     if ti.type != .STRUCT return false;
 
     type_info_struct := cast(*Type_Info_Struct) ti;
