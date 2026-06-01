@@ -2343,27 +2343,38 @@ main :: () {
                         HUD_CONTROLS_LABEL_Y       := GetScreenHeight()    - HUD_CONTROLS_PADDING * 2;
                         HUD_CONTROLS_Y             := HUD_CONTROLS_LABEL_Y - HUD_CONTROLS_HEIGHT;
 
-                        draw_hud_control_icon :: (control: Control, rect: Rectangle) #expand {
+                        get_hud_controls_rect :: () -> Rectangle #expand {
+                            return Rectangle.{
+                                xx read_then_increment(*`hud_controls_x, HUD_CONTROLS_INCREMENT_X),
+                                xx HUD_CONTROLS_Y,
+                                xx HUD_CONTROLS_HEIGHT,
+                                xx HUD_CONTROLS_HEIGHT,
+                            };
+                        }
+
+                        draw_hud_control :: (control: Control) -> dest_recangle: Rectangle #expand {
                             DrawText(
                                 bind_to_readable_name_cstr(control.binds[0]),
                                 xx (hud_controls_x + HUD_CONTROLS_PADDING), xx (HUD_CONTROLS_LABEL_Y), 18, WHITE
                             );
-                            DrawTexturePro(
-                                tilemap_texture_general, rect,
-                                Rectangle.{ xx read_then_increment(*hud_controls_x, HUD_CONTROLS_INCREMENT_X), xx HUD_CONTROLS_Y, xx HUD_CONTROLS_HEIGHT, xx HUD_CONTROLS_HEIGHT },
-                                Vector2.{0,0}, 0.0, WHITE
-                            );
+
+                            return get_hud_controls_rect();
+                        }
+
+                        draw_hud_control_icon :: (control: Control, icon_source_rect: Rectangle) #expand {
+                            dest_rect := draw_hud_control(control);
+                            DrawTexturePro(tilemap_texture_general, icon_source_rect, dest_rect, Vector2.{0,0}, 0.0, WHITE);
+                            if CheckCollisionPointRec(mouse_pos_in_ui, dest_rect) {
+                                DrawText(tprint("%\0", control.name).data, xx (mouse_pos_in_ui.x), xx (mouse_pos_in_ui.y - HUD_CONTROLS_PADDING), 18, WHITE);
+                            }
                         }
 
                         draw_hud_control_color :: (control: Control, color: Color) #expand {
-                            DrawText(
-                                bind_to_readable_name_cstr(control.binds[0]),
-                                xx (hud_controls_x + HUD_CONTROLS_PADDING), xx (HUD_CONTROLS_LABEL_Y), 18, WHITE
-                            );
-                            DrawRectangleRec(
-                                Rectangle.{ xx read_then_increment(*hud_controls_x, HUD_CONTROLS_INCREMENT_X), xx HUD_CONTROLS_Y, xx HUD_CONTROLS_HEIGHT, xx HUD_CONTROLS_HEIGHT },
-                                color
-                            );
+                            dest_rect := draw_hud_control(control);
+                            DrawRectangleRec(dest_rect, color);
+                            if CheckCollisionPointRec(mouse_pos_in_ui, dest_rect) {
+                                DrawText(tprint("%\0", control.name).data, xx (mouse_pos_in_ui.x), xx (mouse_pos_in_ui.y - HUD_CONTROLS_PADDING), 18, WHITE);
+                            }
                         }
 
                         draw_hud_control_icon(controls.toggle_remove_mode,    TILEMAP_SOURCE_RECT_REMOVE);
