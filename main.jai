@@ -193,13 +193,14 @@ init_sprites :: () {
 
 select_is_pressed_once        : bool;
 select_is_held_down           : bool;
+selection_cleared             : bool;
 toggle_base_mode              : bool;
 toggle_dynamite_mode          : bool;
 toggle_obsidian_mode          : bool;
 toggle_wall_mode              : bool;
 toggle_remove_mode            : bool;
 add_iron                      : bool;
-select_as_place_miner_dwarf  : bool;
+select_as_place_miner_dwarf   : bool;
 select_as_place_warrior_dwarf : bool;
 select_as_place_goblin        : bool;
 started_to_draw_path          : bool;
@@ -213,9 +214,10 @@ move_camera_right             : bool;
 panic_pause                   : bool;
 fast_forward                  : bool;
 
-// TODO: macro?
+// TODO: macro
 select_is_pressed_once_prev        : bool;
 select_is_held_down_prev           : bool;
+selection_cleared_prev             : bool;
 toggle_base_mode_prev              : bool;
 toggle_dynamite_mode_prev          : bool;
 toggle_obsidian_mode_prev          : bool;
@@ -245,15 +247,6 @@ PAUSE_ON_PANIC :: true;
 
 mouse_drag_began_at_pos : Vector2;
 mouse_pos_when_path_creation_started : Vector2;
-
-ControlMode :: enum {
-    NORMAL;
-    ADD_BASE;
-    ADD_DYNAMITE;
-    ADD_OBSIDIAN;
-    ADD_WALL;
-    REMOVE;
-}
 
 GameState :: struct {
     hovered_dwarf_index    : int;
@@ -569,7 +562,13 @@ main :: () {
     {
         controls.select.binds[0] = Bind.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_LEFT };
 
+        controls.clear_selection.name = "Clear selection";
+        controls.clear_selection.control_mode = .NONE;
+        controls.clear_selection.rebindable_by_user = true;
+        controls.clear_selection.binds[0] = Bind.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_RIGHT };
+
         controls.toggle_base_mode.name = "Build base mode";
+        controls.toggle_base_mode.control_mode = .ADD_BASE;
         controls.toggle_base_mode.rebindable_by_user = true;
         controls.toggle_base_mode.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_B };
 
@@ -586,6 +585,7 @@ main :: () {
         controls.select_as_place_warrior_dwarf.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_A };
 
         controls.toggle_dynamite_mode.name = "Place dynamite mode";
+        controls.toggle_dynamite_mode.control_mode = .ADD_DYNAMITE;
         controls.toggle_dynamite_mode.rebindable_by_user = true;
         controls.toggle_dynamite_mode.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_E };
 
@@ -594,12 +594,14 @@ main :: () {
         controls.select_as_place_goblin.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_T };
         
         controls.toggle_obsidian_mode.name = "Obsidian mode";
+        controls.toggle_obsidian_mode.control_mode = .ADD_OBSIDIAN;
         controls.toggle_obsidian_mode.rebindable_by_user = true;
         controls.toggle_obsidian_mode.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_Q           };
         controls.toggle_obsidian_mode.binds[1] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT_SHIFT  };
         controls.toggle_obsidian_mode.binds[2] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT_SHIFT };
         
         controls.toggle_wall_mode.name = "Build wall mode";
+        controls.toggle_wall_mode.control_mode = .ADD_WALL;
         controls.toggle_wall_mode.rebindable_by_user = true;
         controls.toggle_wall_mode.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_W };
         
@@ -761,6 +763,7 @@ main :: () {
                                 //
                                 // Set any binds currently being set to not being set
                                 for *controls.select.binds                        it.is_being_rebound = false;
+                                for *controls.clear_selection.binds               it.is_being_rebound = false;
                                 for *controls.toggle_base_mode.binds              it.is_being_rebound = false;
                                 for *controls.add_iron.binds                      it.is_being_rebound = false;
                                 for *controls.select_as_place_miner_dwarf.binds   it.is_being_rebound = false;
@@ -796,9 +799,10 @@ main :: () {
                 // TODO: macro or something
                 select_is_pressed_once_prev        = select_is_pressed_once;
                 select_is_held_down_prev           = select_is_held_down;
+                selection_cleared_prev             = selection_cleared;
                 toggle_base_mode_prev              = toggle_base_mode;
                 add_iron_prev                      = add_iron;
-                select_as_place_miner_dwarf_prev  = select_as_place_miner_dwarf;
+                select_as_place_miner_dwarf_prev   = select_as_place_miner_dwarf;
                 select_as_place_warrior_dwarf_prev = select_as_place_warrior_dwarf;
                 toggle_dynamite_mode_prev          = toggle_dynamite_mode;
                 toggle_obsidian_mode_prev          = toggle_obsidian_mode;
@@ -821,6 +825,7 @@ main :: () {
             {
                 select_is_pressed_once        = control_is_pressed(controls.select);
                 select_is_held_down           = control_is_down(controls.select);
+                selection_cleared             = control_is_pressed(controls.clear_selection);
                 toggle_base_mode              = control_is_pressed(controls.toggle_base_mode);
                 toggle_dynamite_mode          = control_is_pressed(controls.toggle_dynamite_mode);
                 toggle_obsidian_mode          = control_is_pressed(controls.toggle_obsidian_mode);
@@ -841,7 +846,7 @@ main :: () {
 
                 started_to_draw_path = (
                     select_is_pressed_once             &&
-                    !select_as_place_miner_dwarf      &&
+                    !select_as_place_miner_dwarf       &&
                     !select_as_place_warrior_dwarf     &&
                     !select_as_place_goblin            &&
                     game_state.control_mode == .NORMAL &&
@@ -852,8 +857,12 @@ main :: () {
 
             // TODO: should this go here?
             //
-            // Update game state control mode
+            // Update control mode
             {
+                if selection_cleared {
+                    game_state.control_mode = .NONE;
+                }
+
                 if toggle_base_mode {
                     game_state.control_mode = ifx game_state.control_mode == .ADD_BASE then .NORMAL else .ADD_BASE;
                 }
@@ -957,6 +966,7 @@ main :: () {
                     }
 
                     if #complete game_state.control_mode == {
+                        case .NONE; // no op
                         case .NORMAL;
                             if select_as_place_miner_dwarf {
                                 if select_is_pressed_once {
@@ -2243,6 +2253,7 @@ main :: () {
 
                     // Debug game state
                     {
+                        // TODO: macro
                         DrawText(tprint("hovered_dwarf_index: %\0", game_state.hovered_dwarf_index).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
                         DrawText(tprint("selected_dwarf_id: %\0", game_state.selected_dwarf_id).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
                         DrawText(tprint("water_flow_cooldown_ms: %\0", game_state.water_flow_cooldown_ms).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
@@ -2255,8 +2266,10 @@ main :: () {
 
                     // Debug controls
                     {
+                        // TODO: macro
                         DrawText(tprint("select_is_pressed_once: %\0", select_is_pressed_once).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
                         DrawText(tprint("select_is_held_down: %\0", select_is_held_down).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                        DrawText(tprint("selection_cleared: %\0", selection_cleared).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
                         DrawText(tprint("toggle_base_mode: %\0", toggle_base_mode).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
                         DrawText(tprint("add_iron: %\0", add_iron).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
                         DrawText(tprint("select_as_place_miner_dwarf: %\0", select_as_place_miner_dwarf).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
@@ -2276,6 +2289,7 @@ main :: () {
 
                     // Debug camera
                     {
+                        // TODO: macro
                         DrawText(tprint("offset: %\0", camera.offset).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
                         DrawText(tprint("target: %\0", camera.target).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
                         DrawText(tprint("rotation: %\0", camera.rotation).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
@@ -2343,36 +2357,50 @@ main :: () {
                         HUD_CONTROLS_LABEL_Y       := GetScreenHeight()    - HUD_CONTROLS_PADDING * 2;
                         HUD_CONTROLS_Y             := HUD_CONTROLS_LABEL_Y - HUD_CONTROLS_HEIGHT;
 
-                        get_hud_controls_rect :: () -> Rectangle #expand {
-                            return Rectangle.{
-                                xx read_then_increment(*`hud_controls_x, HUD_CONTROLS_INCREMENT_X),
-                                xx HUD_CONTROLS_Y,
-                                xx HUD_CONTROLS_HEIGHT,
-                                xx HUD_CONTROLS_HEIGHT,
-                            };
+                        get_control_mode_from_control :: (control: Control) -> ControlMode {
+                            assert(control.control_mode != .NONE, "Tried to get a control mode from control \"%\" that doesn't have one.", control.name);
+                            return control.control_mode;
                         }
 
-                        draw_hud_control :: (control: Control) -> dest_recangle: Rectangle #expand {
+                        draw_hud_control :: (control: Control) -> dest_recangle: Rectangle, is_hovered: bool #expand {
                             DrawText(
                                 bind_to_readable_name_cstr(control.binds[0]),
                                 xx (hud_controls_x + HUD_CONTROLS_PADDING), xx (HUD_CONTROLS_LABEL_Y), 18, WHITE
                             );
 
-                            return get_hud_controls_rect();
+                            dest_rectangle := Rectangle.{
+                                xx read_then_increment(*`hud_controls_x, HUD_CONTROLS_INCREMENT_X),
+                                xx HUD_CONTROLS_Y,
+                                xx HUD_CONTROLS_HEIGHT,
+                                xx HUD_CONTROLS_HEIGHT,
+                            };
+
+                            is_hovered := false;
+
+                            if CheckCollisionPointRec(`mouse_pos_in_ui, dest_rectangle) {
+                                is_hovered = true;
+
+                                // TODO: isn't this really bad to mutate state in the draw part or whatever?
+                                if select_is_pressed_once {
+                                    game_state.control_mode = get_control_mode_from_control(control);
+                                }
+                            }
+
+                            return dest_rectangle, is_hovered;
                         }
 
                         draw_hud_control_icon :: (control: Control, icon_source_rect: Rectangle) #expand {
-                            dest_rect := draw_hud_control(control);
+                            dest_rect, is_hovered := draw_hud_control(control);
                             DrawTexturePro(tilemap_texture_general, icon_source_rect, dest_rect, Vector2.{0,0}, 0.0, WHITE);
-                            if CheckCollisionPointRec(mouse_pos_in_ui, dest_rect) {
+                            if is_hovered {
                                 DrawText(tprint("%\0", control.name).data, xx (mouse_pos_in_ui.x), xx (mouse_pos_in_ui.y - HUD_CONTROLS_PADDING), 18, WHITE);
                             }
                         }
 
                         draw_hud_control_color :: (control: Control, color: Color) #expand {
-                            dest_rect := draw_hud_control(control);
+                            dest_rect, is_hovered := draw_hud_control(control);
                             DrawRectangleRec(dest_rect, color);
-                            if CheckCollisionPointRec(mouse_pos_in_ui, dest_rect) {
+                            if is_hovered {
                                 DrawText(tprint("%\0", control.name).data, xx (mouse_pos_in_ui.x), xx (mouse_pos_in_ui.y - HUD_CONTROLS_PADDING), 18, WHITE);
                             }
                         }
@@ -2529,6 +2557,8 @@ main :: () {
                                                 control.binds[bind_index_currently_being_rebound].is_being_rebound = false;
                                             } else {
                                                 mouse_value : s32 = -1;
+                                                // TODO: can't I use type_info here or something
+                                                //
                                                 // Intentionally leaving out MOUSE_BUTTON_LEFT, I don't think we ever want to rebind that.
                                                 if IsMouseButtonPressed(.MOUSE_BUTTON_RIGHT)   mouse_value = 1;
                                                 if IsMouseButtonPressed(.MOUSE_BUTTON_MIDDLE)  mouse_value = 2;
@@ -2651,6 +2681,7 @@ main :: () {
                 cursor_mode_icon_rect := Rectangle.{ mouse_pos_in_ui.x + 15, mouse_pos_in_ui.y + 15, 40, 40 };
 
                 if #complete game_state.control_mode == {
+                    case .NONE;         // no op
                     case .NORMAL;       // no op
                     case .ADD_BASE;     DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_BASE, cursor_mode_icon_rect, Vector2.{0,0}, 0.0, WHITE);
                     case .ADD_DYNAMITE; DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_DYNAMITE, cursor_mode_icon_rect, Vector2.{0,0}, 0.0, WHITE);

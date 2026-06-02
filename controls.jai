@@ -4,14 +4,26 @@ Bind :: struct {
     is_being_rebound : bool;
 }
 
+ControlMode :: enum {
+    NONE :: 0;
+    NORMAL;
+    ADD_BASE;
+    ADD_DYNAMITE;
+    ADD_OBSIDIAN;
+    ADD_WALL;
+    REMOVE;
+}
+
 Control :: struct {
-    name  : string; // What shows up in the keybind menu.
-    binds : [3] Bind;
+    name               : string; // What shows up in the keybind menu.
+    binds              : [3] Bind;
     rebindable_by_user : bool; // Some controls really ought not to be rebindable.
+    control_mode       : ControlMode;
 }
 
 Controls :: struct {
     select                        : Control;
+    clear_selection               : Control;
     toggle_base_mode              : Control;
     add_iron                      : Control;
     select_as_place_miner_dwarf   : Control;
