@@ -559,7 +559,7 @@ main :: () {
 
     // Initialize controls
     controls: Controls;
-    {
+    
         controls.select.binds[0] = Bind.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_LEFT };
 
         controls.clear_selection.name = "Clear selection";
@@ -568,6 +568,8 @@ main :: () {
         controls.clear_selection.binds[0] = Bind.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_RIGHT };
 
         controls.toggle_base_mode.name = "Build base mode";
+        // TODO: This text needs to change dynamically ("Cost: % (Next will cost %)")
+        controls.toggle_base_mode.tooltip_text = "Bases increase your max amount of warriors, and allow you to spawn additional miners. Must be built on a path. Cost more each time you build one.";
         controls.toggle_base_mode.control_mode = .ADD_BASE;
         controls.toggle_base_mode.rebindable_by_user = true;
         controls.toggle_base_mode.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_B };
@@ -585,6 +587,7 @@ main :: () {
         controls.select_as_place_warrior_dwarf.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_A };
 
         controls.toggle_dynamite_mode.name = "Place dynamite mode";
+        controls.toggle_dynamite_mode.tooltip_text = "Blows up a dwarf when stepped on, creating a hole. Holes stop water and lava flows permanently.";
         controls.toggle_dynamite_mode.control_mode = .ADD_DYNAMITE;
         controls.toggle_dynamite_mode.rebindable_by_user = true;
         controls.toggle_dynamite_mode.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_E };
@@ -594,6 +597,7 @@ main :: () {
         controls.select_as_place_goblin.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_T };
         
         controls.toggle_obsidian_mode.name = "Obsidian mode";
+        controls.toggle_obsidian_mode.name = "Turns soil into solid obsidian, making it impenetrable to almost anything.";
         controls.toggle_obsidian_mode.control_mode = .ADD_OBSIDIAN;
         controls.toggle_obsidian_mode.rebindable_by_user = true;
         controls.toggle_obsidian_mode.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_Q           };
@@ -601,6 +605,7 @@ main :: () {
         controls.toggle_obsidian_mode.binds[2] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT_SHIFT };
         
         controls.toggle_wall_mode.name = "Build wall mode";
+        controls.toggle_wall_mode.tooltip_text = "Place a wall that permanently stops water, slows down lava, and blocks warriors and certain enemies. Miners, some enemies, and lava can destroy walls.";
         controls.toggle_wall_mode.control_mode = .ADD_WALL;
         controls.toggle_wall_mode.rebindable_by_user = true;
         controls.toggle_wall_mode.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_W };
@@ -627,17 +632,20 @@ main :: () {
         controls.move_camera_right.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT };
         
         controls.toggle_remove_mode.name = "Remove mode";
+        controls.toggle_remove_mode.tooltip_text = "While active, you can select a created object to destroy it, like dynamite and path arrows.";
         controls.toggle_remove_mode.rebindable_by_user = true; 
         controls.toggle_remove_mode.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_R };
 
         controls.panic_pause.name = "Panic pause";
+        controls.panic_pause.tooltip_text = "Forces time to a halt for a short duration, but has a decently-long cooldown.";
         controls.panic_pause.rebindable_by_user = true;
         controls.panic_pause.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_SPACE };
 
         controls.fast_forward.name = "Fast forward";
+        controls.fast_forward.tooltip_text = "Speeds up the action, takes on resources to do, and has no cooldown.";
         controls.fast_forward.rebindable_by_user = true;
         controls.fast_forward.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_S };
-    }
+    
 
     // Keeps track of how many milliseconds remain until the player can panic pause again.
     // Less than or equal to 0 means "can panic pause right now".
@@ -2357,10 +2365,7 @@ main :: () {
                         HUD_CONTROLS_LABEL_Y       := GetScreenHeight()    - HUD_CONTROLS_PADDING * 2;
                         HUD_CONTROLS_Y             := HUD_CONTROLS_LABEL_Y - HUD_CONTROLS_HEIGHT;
 
-                        get_control_mode_from_control :: (control: Control) -> ControlMode {
-                            assert(control.control_mode != .NONE, "Tried to get a control mode from control \"%\" that doesn't have one.", control.name);
-                            return control.control_mode;
-                        }
+                        
 
                         draw_hud_control :: (control: Control) -> dest_recangle: Rectangle, is_hovered: bool #expand {
                             DrawText(
@@ -2381,6 +2386,7 @@ main :: () {
                                 is_hovered = true;
 
                                 // TODO: isn't this really bad to mutate state in the draw part or whatever?
+                                // TODO: not every control has a control mode, like pause or fast forward
                                 if select_is_pressed_once {
                                     game_state.control_mode = get_control_mode_from_control(control);
                                 }
@@ -2389,19 +2395,45 @@ main :: () {
                             return dest_rectangle, is_hovered;
                         }
 
+                        draw_control_tooltip_text :: (control: Control, rect: Rectangle) {
+                            GuiSetStyle(xx GuiControl.DEFAULT, xx GuiDefaultProperty.TEXT_SIZE, 6);
+                            GuiSetStyle(xx GuiControl.TEXTBOX, xx GuiControlProperty.TEXT_COLOR_NORMAL, ColorToInt(WHITE));
+                            GuiSetStyle(xx GuiControl.TEXTBOX, xx GuiTextBoxProperty.TEXT_READONLY, 1);
+                            GuiSetStyle(xx GuiControl.DEFAULT, xx GuiDefaultProperty.TEXT_WRAP_MODE, xx GuiTextWrapMode.TEXT_WRAP_WORD);
+                            GuiSetStyle(xx GuiControl.DEFAULT, xx GuiDefaultProperty.TEXT_ALIGNMENT_VERTICAL, xx GuiTextAlignmentVertical.TEXT_ALIGN_TOP);
+
+                            GuiTextBox(rect, tprint("%\0", control.tooltip_text).data, xx control.tooltip_text.count, false);
+
+                            // GuiSetStyle(xx GuiControl.TEXTBOX, xx GuiControlProperty.TEXT_COLOR_NORMAL, );
+                            GuiSetStyle(xx GuiControl.DEFAULT, xx GuiDefaultProperty.TEXT_SIZE, 10);
+                            GuiSetStyle(xx GuiControl.DEFAULT, xx GuiDefaultProperty.TEXT_ALIGNMENT_VERTICAL, xx GuiTextAlignmentVertical.TEXT_ALIGN_MIDDLE);
+                            GuiSetStyle(xx GuiControl.DEFAULT, xx GuiDefaultProperty.TEXT_WRAP_MODE, xx GuiTextWrapMode.TEXT_WRAP_NONE);
+                            GuiSetStyle(xx GuiControl.TEXTBOX, xx GuiTextBoxProperty.TEXT_READONLY, 0);
+                        }
+
                         draw_hud_control_icon :: (control: Control, icon_source_rect: Rectangle) #expand {
                             dest_rect, is_hovered := draw_hud_control(control);
+
                             DrawTexturePro(tilemap_texture_general, icon_source_rect, dest_rect, Vector2.{0,0}, 0.0, WHITE);
+
                             if is_hovered {
                                 DrawText(tprint("%\0", control.name).data, xx (mouse_pos_in_ui.x), xx (mouse_pos_in_ui.y - HUD_CONTROLS_PADDING), 18, WHITE);
+                                
+                                tooltip_rect := Rectangle.{ dest_rect.x, dest_rect.y - dest_rect.height * 3, dest_rect.width * 6, dest_rect.height * 3 };
+                                draw_control_tooltip_text(control, tooltip_rect);
                             }
                         }
 
                         draw_hud_control_color :: (control: Control, color: Color) #expand {
                             dest_rect, is_hovered := draw_hud_control(control);
+
                             DrawRectangleRec(dest_rect, color);
+
                             if is_hovered {
                                 DrawText(tprint("%\0", control.name).data, xx (mouse_pos_in_ui.x), xx (mouse_pos_in_ui.y - HUD_CONTROLS_PADDING), 18, WHITE);
+                                
+                                tooltip_rect := Rectangle.{ dest_rect.x, dest_rect.y - dest_rect.height * 3, dest_rect.width * 6, dest_rect.height * 3 };
+                                draw_control_tooltip_text(control, tooltip_rect);
                             }
                         }
 

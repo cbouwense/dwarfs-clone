@@ -15,10 +15,11 @@ ControlMode :: enum {
 }
 
 Control :: struct {
-    name               : string; // What shows up in the keybind menu.
+    name               : string;      // What shows up in the keybind menu.
     binds              : [3] Bind;
-    rebindable_by_user : bool; // Some controls really ought not to be rebindable.
+    rebindable_by_user : bool;        // Some controls really ought not to be rebindable.
     control_mode       : ControlMode;
+    tooltip_text       : string;
 }
 
 Controls :: struct {
@@ -73,4 +74,14 @@ bind_to_readable_name_cstr :: (bind: Bind) -> *u8 {
     assert(found);
 
     return to_c_string(info.names[index]);
+}
+
+get_control_mode_from_control :: (control: Control) -> ControlMode {
+    assert(control.control_mode != .NONE, "Tried to get a control mode from control \"%\" that doesn't have one.", control.name);
+    return control.control_mode;
+}
+
+get_tooltip_text_from_control :: (control: Control) -> string {
+    assert(control.tooltip_text.count > 0, "Tried to get tooltip text from control \"%\" that doesn't have one.", control.name);
+    return control.tooltip_text;
 }
