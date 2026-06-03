@@ -5,8 +5,7 @@ Bind :: struct {
 }
 
 ControlMode :: enum {
-    NONE :: 0;
-    NORMAL;
+    NORMAL :: 0;
     ADD_BASE;
     ADD_DYNAMITE;
     ADD_OBSIDIAN;
@@ -78,12 +77,12 @@ bind_to_readable_name_cstr :: (bind: Bind) -> *u8 {
 }
 
 get_control_mode_from_control :: (control: Control) -> ControlMode {
-    assert(control.control_mode != .NONE, "Tried to get a control mode from control \"%\" that doesn't have one.", control.name);
+    assert(control.control_mode != .NORMAL, "Tried to get a control mode from control \"%\" that doesn't have one.", control.name);
     return control.control_mode;
 }
 
 find_control_mode_from_control :: (control: Control) -> bool, ControlMode {
-    if control.control_mode == .NONE return false, .NONE;
+    if control.control_mode == .NORMAL return false, .NORMAL;
     return true, control.control_mode;
 }
 

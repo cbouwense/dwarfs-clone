@@ -9,7 +9,6 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 - warriors ignore arrows while patrolling
-- reset game state on restart
 - goblins can attack dwarves that are out of reach
     - condition: reproducible on 279d68e
     - cause:

@@ -134,13 +134,7 @@ Metagame :: struct {
     game_over_state  : GameOverState;
 }
 
-metagame := Metagame.{
-    state            = .RUNNING,
-    should_quit_game = false,
-    debug_mode       = false,
-    pause_state      = .MENU,
-    game_over_state  = .MENU,
-};
+metagame : Metagame;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Textures
@@ -501,9 +495,6 @@ tile_ids_to_bases   : Table(s32, *Base);
 
 created_chunks: Table(u64, *Chunk);
 
-edges : [..] Edge; // List of all edges between tiles for pathfinding
-// edges_valid_this_frame : [..] Edge; // List of edges without collidable entities on them this frame
-
 #insert #run generate_kind_enum_from_base_struct(Entity);
 
 main :: () {
@@ -530,7 +521,6 @@ main :: () {
         tile_ids_to_dwarfs.allocator                  = temp;
         tile_ids_to_goblins.allocator                 = temp;
         tile_ids_to_bases.allocator                   = temp;
-        // edges_valid_this_frame.allocator              = temp;
     }
 
     random_seed(123456789);
@@ -565,7 +555,7 @@ main :: () {
 
         controls.clear_selection.id   = read_then_increment(*control_id_counter);
         controls.clear_selection.name = "Clear selection";
-        controls.clear_selection.control_mode = .NONE;
+        controls.clear_selection.control_mode = .NORMAL;
         controls.clear_selection.rebindable_by_user = true;
         controls.clear_selection.binds[0] = Bind.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_RIGHT };
 
@@ -672,7 +662,8 @@ main :: () {
 
     DT_MULTIPLIER_FAST_FORWARD :: 5;
 
-    game_state, camera := initialize_game();
+    game_state, metagame_local, camera := initialize_game();
+    metagame = metagame_local;
 
     while !metagame.should_quit_game {
         defer metagame.should_quit_game = metagame.should_quit_game || WindowShouldClose();
@@ -681,7 +672,6 @@ main :: () {
         table_reset(*tile_ids_to_dwarfs);
         table_reset(*tile_ids_to_goblins);
         table_reset(*tile_ids_to_bases);
-        // array_reset_keeping_memory(*edges_valid_this_frame);
         reset_temporary_storage();
 
         dt_seconds_raw := GetFrameTime();
@@ -843,8 +833,8 @@ main :: () {
                 move_camera_right_prev             = move_camera_right;
                 fast_forward_prev                  = fast_forward;
 
-                started_to_draw_path_prev   = started_to_draw_path;
-                drawing_path_prev  = drawing_path;
+                started_to_draw_path_prev          = started_to_draw_path;
+                drawing_path_prev                  = drawing_path;
             }
 
             // Controls this frame
@@ -886,7 +876,7 @@ main :: () {
             // Update control mode
             {
                 if selection_cleared {
-                    game_state.control_mode = .NONE;
+                    game_state.control_mode = .NORMAL;
                 }
 
                 if toggle_base_mode {
@@ -992,7 +982,6 @@ main :: () {
                     }
 
                     if #complete game_state.control_mode == {
-                        case .NONE; // no op
                         case .NORMAL;
                             if select_as_place_miner_dwarf {
                                 if select_is_pressed_once {
@@ -2404,7 +2393,7 @@ main :: () {
                                 is_hovered = true;
 
                                 // TODO: isn't this really bad to mutate state in the draw part or whatever?
-                                if select_is_pressed_once || select_is_held_down {
+                                if select_is_pressed_once {
                                     has_control_mode := (
                                         control.id == controls.select.id ||                 
                                         control.id == controls.toggle_base_mode.id ||       
@@ -2417,13 +2406,15 @@ main :: () {
                                     if has_control_mode{
                                         game_state.control_mode = get_control_mode_from_control(control);
                                     }
-                        
+
                                     if control.id == controls.panic_pause.id {
                                         if game_state.panic_pause_timer_ms <= 0 {
                                             game_state.panic_pause_timer_ms = PANIC_PAUSE_COOLDOWN_MS;
                                         }
                                     }
-                        
+                                }
+
+                                if select_is_held_down {
                                     if control.id == controls.fast_forward.id {
                                         fast_forward = true;
                                     }
@@ -2714,7 +2705,8 @@ main :: () {
                                     clicked := GuiButton(restart_button, "RESTART");
 
                                     if clicked {
-                                        initialize_game();
+                                        game_state, metagame_local, camera = initialize_game();
+                                        metagame = metagame_local;
                                         metagame.state = .RUNNING;
                                     }
                                 }
@@ -2751,7 +2743,6 @@ main :: () {
                 cursor_mode_icon_rect := Rectangle.{ mouse_pos_in_ui.x + 15, mouse_pos_in_ui.y + 15, 40, 40 };
 
                 if #complete game_state.control_mode == {
-                    case .NONE;         // no op
                     case .NORMAL;       // no op
                     case .ADD_BASE;     DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_BASE, cursor_mode_icon_rect, Vector2.{0,0}, 0.0, WHITE);
                     case .ADD_DYNAMITE; DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_DYNAMITE, cursor_mode_icon_rect, Vector2.{0,0}, 0.0, WHITE);
@@ -2978,11 +2969,9 @@ reset_memory :: () {
     array_reset(*paths);
 
     table_reset(*created_chunks);
-
-    array_reset(*edges);
 }
 
-initialize_game :: () -> game_state: GameState, camera: Camera2D {
+initialize_game :: () -> GameState, Metagame, Camera2D {
     reset_memory();
 
     // Initialize game
@@ -2994,6 +2983,14 @@ initialize_game :: () -> game_state: GameState, camera: Camera2D {
         points = 0,
         gold   = 0,
         control_mode = .NORMAL,
+    };
+
+    metagame := Metagame.{
+        state            = .RUNNING,
+        should_quit_game = false,
+        debug_mode       = false,
+        pause_state      = .MENU,
+        game_over_state  = .MENU,
     };
 
     // Initialize caves
@@ -3098,7 +3095,7 @@ initialize_game :: () -> game_state: GameState, camera: Camera2D {
     camera.rotation = 0.0;
     camera.zoom     = 1.0;
 
-    return game_state, camera;
+    return game_state, metagame, camera;
 }
 
 SetDwarfRandomNewTargetReturnStatus :: enum {
@@ -4614,44 +4611,6 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, game_
         case .DIRT; #through;
         case .IRON; assert(false, "Tried setting block as type %, but that doesn't really make sense.", as_type);
     }
-
-    // Update pathing
-    if #complete as_type == {
-        // Add edges for pathing to any neighbors who are also open
-        case .CAVE; #through;
-        case .MINED;
-            if !tile_was_fully_mined {
-                for DIRECTIONS_CARDINAL {
-                    neighbor_id := get_neighbor_tile_id_by_direction(tile_id, it);
-                    neighbor_is_mined := table_contains(*fully_mined_tile_ids_set, neighbor_id);
-                    if neighbor_is_mined {
-                        // PERF: don't add 2?
-                        array_add(*edges, Edge.{ from = tile_id,     to = neighbor_id, distance = 1 });
-                        array_add(*edges, Edge.{ from = neighbor_id, to = tile_id,     distance = 1 });
-                    }
-                }
-            }
-
-        // Remove edges for pathing to all neighbors
-        case .ENCASED;       #through;
-        case .OBSIDIAN;      #through;
-        case .WALL;          #through;
-        case .HOLE;          #through;
-        case .DIRT;          #through;
-        case .WATER_STILL;   #through;
-        case .WATER_FLOWING; #through;
-        case .LAVA_STILL;    #through;
-        case .LAVA_FLOWING;  #through;
-        case .IRON;
-            dx, dy : float;
-            tile_pos := get_tile_pos_by_id(tile_id);
-
-            for edges {
-                if it.from == tile_id || it.to == tile_id {
-                    array_unordered_remove_by_index(*edges, it_index);
-                }
-            }
-    }
 }
 
 set_tile_as_unmined :: (tile_id: s32) {
@@ -4662,14 +4621,6 @@ set_tile_as_unmined :: (tile_id: s32) {
     array_unordered_remove_by_value(*chunk.cave_tile_ids, tile_id);
     table_remove(*fully_mined_tile_ids_set, tile_id);
     table_remove(*cave_tile_ids_set, tile_id);
-
-    // Clean up pathfinding edges connected to this tile.
-    // We iterate backwards (`for <`) because we are removing elements from the array inline.
-    for < i: 0..edges.count-1 {
-        if edges[i].from == tile_id || edges[i].to == tile_id {
-            array_unordered_remove_by_index(*edges, i);
-        }
-    }
 }
 
 // Flood fill
