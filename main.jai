@@ -380,9 +380,9 @@ Goblin :: struct {
 
     kind = Goblin;
 
-    state              : GoblinState;
-    attack_cooldown_ms : s32;
-    dwarf_id_attacking : s32;
+    state               : GoblinState;
+    attack_cooldown_ms  : s32;
+    entity_id_attacking : s32;
 }
 
 Path :: struct {
@@ -1316,11 +1316,11 @@ main :: () {
                                         //
                                         // If the dwarf is a warrior, actively seek out goblins
                                         if dwarf.dwarf_type == .WARRIOR {
-                                            dwarf_warrior_wander :: (dwarf: *Dwarf, tile_ids_to_bases: *Table) {
+                                            dwarf_warrior_wander :: (dwarf: *Dwarf) {
                                                 dwarf_center  := get_rect_center(get_world_rect_from_pos(dwarf.pos));
                                                 dwarf_tile_id := get_tile_id_by_pos(dwarf_center);
 
-                                                on_top_of_base, base := table_find(tile_ids_to_bases, dwarf_tile_id); 
+                                                on_top_of_base, base := table_find(*tile_ids_to_bases, dwarf_tile_id);
                                                 // If we're standing on a base right now, just keep walking in the direction you're currently going.
                                                 if on_top_of_base {
                                                     try_to_set_dwarf_target_to_one_block_in_the_direction_its_facing(dwarf);
@@ -1350,7 +1350,7 @@ main :: () {
 
                                             dealing_with_goblin := deal_with_nearby_goblins(dwarf);
 
-                                            if dealing_with_goblin == .NEARBY_GOBLIN_NOT_FOUND dwarf_warrior_wander(dwarf, *tile_ids_to_bases);
+                                            if dealing_with_goblin == .NEARBY_GOBLIN_NOT_FOUND dwarf_warrior_wander(dwarf);
                                         }
 
                                         // If the dwarf has no targets, give him a new one
@@ -1647,33 +1647,33 @@ main :: () {
 
                                     assert_soft(xx Vector2Equals(goblin.pos, goblin_tile_pos), "Goblin % was not precisely on its tile while deciding what to do next.", goblin.id);
 
-                                    // If there are any cardinal neighbor dwarves, turn and fight them.
+                                    // If there are any cardinal neighbor dwarves or bases, turn and attack them.
                                     if !is_goblin_done_deciding {
                                         detected, dwarf := find_cardinal_neighbor_entity(goblin_tile_id, Dwarf);
 
                                         if detected {
                                             // TODO: set goblin direction
                                             goblin.state = .ATTACKING;
-                                            goblin.dwarf_id_attacking = dwarf.id;
+                                            goblin.entity_id_attacking = dwarf.id;
 
                                             is_goblin_done_deciding = true;
                                         }
                                     }
 
-                                    // If there are any cardinal neighbor bases, turn and fight them.
-                                    if !is_goblin_done_deciding {
-                                        detected, base := find_cardinal_neighbor_entity(goblin_tile_id, Base);
+                                    // // If there are any cardinal neighbor bases, turn and fight them.
+                                    // if !is_goblin_done_deciding {
+                                    //     detected, base := find_cardinal_neighbor_entity(goblin_tile_id, Base);
 
-                                        if detected {
-                                            // TODO: set goblin direction
-                                            // TODO: set goblin base_id_attacking
-                                            goblin.state = .ATTACKING;
+                                    //     if detected {
+                                    //         // TODO: set goblin direction
+                                    //         goblin.state = .ATTACKING;
+                                    //         goblin.entity_id_attacking = dwarf.id;
 
-                                            is_goblin_done_deciding = true;
-                                        }
-                                    }
+                                    //         is_goblin_done_deciding = true;
+                                    //     }
+                                    // }
 
-                                    // If there are any dwarves within line of sight, move towards the tile they're spotted on.
+                                    // If there are any dwarves  or bases within line of sight, move towards the tile they're spotted on.
                                     if !is_goblin_done_deciding {
                                         detected, _, tile_ids_path := find_line_of_sight_entity(goblin_tile_id, Dwarf, GOBLIN_LINE_OF_SIGHT_TILE_COUNT, true);
 
@@ -1759,6 +1759,8 @@ main :: () {
                                     }
 
                                 case .ATTACKING;
+                                    assert_soft(goblin.entity_id_attacking > 0, "Goblin % is in attack state but has no target\n", goblin.id);
+
                                     if goblin.attack_cooldown_ms > 0 {
                                         goblin.attack_cooldown_ms -= xx (dt_seconds * 1000);
                                     } else {
@@ -1767,60 +1769,76 @@ main :: () {
 
                                         // If we're in attack mode and we don't have a dwarf that we're targeting, then we probably should be
                                         // attacking a base.
-                                        if goblin.dwarf_id_attacking == 0 {
-                                            // Check to see if goblin is on top of base
-                                            is_on_base, base := table_find(*tile_ids_to_bases, goblin_tile_id);
-                                            if !is_on_base {
-                                                base_neighbor_detected, base_neighbor, _direction := detect_neighbor_cardinal(goblin_tile_id, Base);
-                                                if base_neighbor_detected {
-                                                    base = base_neighbor;
+                                        // if goblin.entity_id_attacking == 0 {
+                                        //     // Check to see if goblin is on top of base
+                                        //     is_on_base, base := table_find(*tile_ids_to_bases, goblin_tile_id);
+                                        //     if !is_on_base {
+                                        //         base_neighbor_detected, base_neighbor, _direction := detect_neighbor_cardinal(goblin_tile_id, Base);
+                                        //         if base_neighbor_detected {
+                                        //             base = base_neighbor;
 
-                                                    // Hit check
-                                                    rng := random_get_within_range(0, 1);
-                                                    swing_connected := rng <= GOBLIN_HIT_CHANCE;
+                                        //             // Hit check
+                                        //             rng := random_get_within_range(0, 1);
+                                        //             swing_connected := rng <= GOBLIN_HIT_CHANCE;
 
-                                                    if swing_connected {
-                                                        base.hp -= GOBLIN_ATTACK_DAMAGE_PER_SWING;
+                                        //             if swing_connected {
+                                        //                 base.hp -= GOBLIN_ATTACK_DAMAGE_PER_SWING;
 
-                                                        if base.hp == 0 {
-                                                            kill_base_by_id(base.id);
-                                                            goblin.state = .DECIDING;
-                                                        }
-                                                    }
-                                                } else {
+                                        //                 if base.hp == 0 {
+                                        //                     kill_base_by_id(base.id);
+                                        //                     goblin.state = .DECIDING;
+                                        //                 }
+                                        //             }
+                                        //         } else {
+                                        //             goblin.state = .DECIDING;
+                                        //             print("WARN: Goblin % is attacking, but has no dwarf target, is not on top of a base, and is not next to a base. So, that's weird.\n", goblin.id);
+                                        //         }
+                                        //     }
+                                        // }
+
+                                        // TODO: this blows, fix this!
+                                        //
+                                        // Make sure the entity is still alive, it's possible that other goblins have killed it this frame.
+                                        found: bool;
+                                        entity_index: s64;
+                                        entity: *Entity;
+                                        is_dwarf := false; // TODO: fix this!!!!!!!!!!!!!!!
+
+                                        set_tile_id_to_index(Dwarf);
+                                        found, entity_index = table_find(*tile_id_to_index, goblin.entity_id_attacking);
+                                        if found {
+                                            is_dwarf = true;
+                                            entity = *dwarves[entity_index];
+                                        } else {
+                                            set_tile_id_to_index(Base);
+                                            found, entity_index = table_find(*tile_id_to_index, goblin.entity_id_attacking);
+                                            if found {
+                                                entity = *bases[entity_index];
+                                            }
+                                        }
+
+                                        if (found) {
+                                            assert_soft(goblin.entity_id_attacking == entity.id, "Goblin % thinks he's attacking entity % but really found entity %", goblin.id, goblin.entity_id_attacking, entity.id);
+
+                                            rng := random_get_within_range(0, 1);
+                                            swing_connected := rng <= GOBLIN_HIT_CHANCE;
+
+                                            if swing_connected {
+                                                entity.hp -= GOBLIN_ATTACK_DAMAGE_PER_SWING;
+
+                                                if entity.hp <= 0 {
+                                                    if is_dwarf kill_dwarf_by_id(entity.id);
+                                                    else        kill_base_by_id(entity.id);
+
                                                     goblin.state = .DECIDING;
-                                                    print("WARN: Goblin % is attacking, but has no dwarf target, is not on top of a base, and is not next to a base. So, that's weird.\n", goblin.id);
+                                                    goblin.entity_id_attacking = 0;
                                                 }
                                             }
+                                        } else {
+                                            goblin.state = .DECIDING;
+                                            goblin.entity_id_attacking = 0;
                                         }
-                                        // If we do have a dwarf id we're attacking, then attack it
-                                        else {
-                                            // Make sure the dwarf is still alive, it's possible that other goblins have killed it this frame.
-                                            found, dwarf_index := table_find(*dwarf_id_to_index, goblin.dwarf_id_attacking);
-                                            if (found) {
-                                                dwarf := *dwarves[dwarf_index];
 
-                                                assert_soft(goblin.dwarf_id_attacking == dwarf.id, "Goblin % thinks he's attacking dwarf % but really found dwarf %", goblin.id, goblin.dwarf_id_attacking, dwarf.id);
-
-                                                // Hit check
-                                                rng := random_get_within_range(0, 1);
-                                                swing_connected := rng <= GOBLIN_HIT_CHANCE;
-
-                                                if swing_connected {
-                                                    dwarf.hp -= GOBLIN_ATTACK_DAMAGE_PER_SWING;
-
-                                                    if dwarf.hp <= 0 {
-                                                        kill_dwarf_by_id(dwarf.id);
-
-                                                        goblin.state = .DECIDING;
-                                                        goblin.dwarf_id_attacking = 0;
-                                                    }
-                                                }
-                                            } else {
-                                                goblin.state = .DECIDING;
-                                                goblin.dwarf_id_attacking = 0;
-                                            }
-                                        }
                                     }
                                 case .IDLE;
                             }
@@ -3585,8 +3603,7 @@ kill_any_dynamite_touching_tile_id :: (tile_id: s32) {
     }
 }
 
-// TODO: DRY up kill by functions
-
+// TODO: refactor to entity probably
 kill_dwarf_by_index :: (dwarf_index: s64) {
     dwarf_id_being_swapped := dwarves[dwarves.count - 1].id;
     dwarf_id_being_killed  := dwarves[dwarf_index].id;
@@ -3605,6 +3622,7 @@ kill_dwarf_by_id :: (dwarf_id: s32) {
     kill_dwarf_by_index(dwarf_index);
 }
 
+// TODO: refactor to entity probably
 kill_goblin_by_index :: (goblin_index: s64) {
     goblin_id_being_swapped := goblins[goblins.count - 1].id;
     goblin_id_being_killed  := goblins[goblin_index].id;
@@ -3623,6 +3641,7 @@ kill_goblin_by_id :: (goblin_id: s32) {
     kill_goblin_by_index(goblin_index);
 }
 
+// TODO: refactor to entity probably
 kill_base_by_index :: (base_index: s64) {
     base_being_killed := bases[base_index];
     if base_being_killed.is_home_base {
@@ -5394,5 +5413,15 @@ set_tile_ids_to_entity :: ($T: Type) #expand
     #if      T == Dwarf  `tile_ids_to_entity = tile_ids_to_dwarfs;
     else #if T == Goblin `tile_ids_to_entity = tile_ids_to_goblins;
     else #if T == Base   `tile_ids_to_entity = tile_ids_to_bases;
+    else assert(false); // TODO: what if we didn't need this somehow
+}
+
+set_tile_id_to_index :: ($T: Type) #expand
+#modify { return uses_entity_with_as(cast(*Type_Info) T, Entity); }
+{
+    `tile_id_to_index : Table(s32, s64);
+    #if      T == Dwarf  `tile_id_to_index = dwarf_id_to_index;
+    else #if T == Goblin `tile_id_to_index = goblin_id_to_index;
+    else #if T == Base   `tile_id_to_index = base_id_to_index;
     else assert(false); // TODO: what if we didn't need this somehow
 }
