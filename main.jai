@@ -465,7 +465,8 @@ obsidian_tile_ids_in_viewport : [..] s32;
 wall_tile_ids_set         : Table(s32, s32);
 wall_tile_ids_in_viewport : [..] s32;
 
-entity_id_counter : s32 = 0;
+entity_id_counter  : s32 = 0;
+control_id_counter : s32 = 0;
 
 bases             : [..] Base;
 base_id_to_index  : Table(s32, s64);
@@ -556,17 +557,19 @@ main :: () {
     }
 
     // TODO: Defaults to fall back on
-
+    // TODO: Put in a config file, but keep as jai, and then parse and #insert or something?
     // Initialize controls
     controls: Controls;
-    
+    {
         controls.select.binds[0] = Bind.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_LEFT };
 
+        controls.clear_selection.id   = read_then_increment(*control_id_counter);
         controls.clear_selection.name = "Clear selection";
         controls.clear_selection.control_mode = .NONE;
         controls.clear_selection.rebindable_by_user = true;
         controls.clear_selection.binds[0] = Bind.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_RIGHT };
 
+        controls.toggle_base_mode.id   = read_then_increment(*control_id_counter);
         controls.toggle_base_mode.name = "Build base mode";
         // TODO: This text needs to change dynamically ("Cost: % (Next will cost %)")
         controls.toggle_base_mode.tooltip_text = "Bases increase your max amount of warriors, and allow you to spawn additional miners. Must be built on a path. Cost more each time you build one.";
@@ -574,78 +577,93 @@ main :: () {
         controls.toggle_base_mode.rebindable_by_user = true;
         controls.toggle_base_mode.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_B };
 
+        controls.add_iron.id   = read_then_increment(*control_id_counter);
         controls.add_iron.name = "DEBUG: Add iron deposit";
         controls.add_iron.rebindable_by_user = false;
         controls.add_iron.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_I };
 
+        controls.select_as_place_miner_dwarf.id   = read_then_increment(*control_id_counter);
         controls.select_as_place_miner_dwarf.name = "DEBUG: Add miner dwarf";
         controls.select_as_place_miner_dwarf.rebindable_by_user = false;
         controls.select_as_place_miner_dwarf.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_D };
 
+        controls.select_as_place_warrior_dwarf.id   = read_then_increment(*control_id_counter);
         controls.select_as_place_warrior_dwarf.name = "DEBUG: Add warrior dwarf";
         controls.select_as_place_warrior_dwarf.rebindable_by_user = false;
         controls.select_as_place_warrior_dwarf.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_A };
 
+        controls.toggle_dynamite_mode.id   = read_then_increment(*control_id_counter);
         controls.toggle_dynamite_mode.name = "Place dynamite mode";
         controls.toggle_dynamite_mode.tooltip_text = "Blows up a dwarf when stepped on, creating a hole. Holes stop water and lava flows permanently.";
         controls.toggle_dynamite_mode.control_mode = .ADD_DYNAMITE;
         controls.toggle_dynamite_mode.rebindable_by_user = true;
         controls.toggle_dynamite_mode.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_E };
 
+        controls.select_as_place_goblin.id   = read_then_increment(*control_id_counter);
         controls.select_as_place_goblin.name = "DEBUG: Place goblin";
         controls.select_as_place_goblin.rebindable_by_user = false;
         controls.select_as_place_goblin.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_T };
         
+        controls.toggle_obsidian_mode.id   = read_then_increment(*control_id_counter);
         controls.toggle_obsidian_mode.name = "Obsidian mode";
-        controls.toggle_obsidian_mode.name = "Turns soil into solid obsidian, making it impenetrable to almost anything.";
+        controls.toggle_obsidian_mode.tooltip_text = "Turns soil into solid obsidian, making it impenetrable to almost anything.";
         controls.toggle_obsidian_mode.control_mode = .ADD_OBSIDIAN;
         controls.toggle_obsidian_mode.rebindable_by_user = true;
         controls.toggle_obsidian_mode.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_Q           };
         controls.toggle_obsidian_mode.binds[1] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT_SHIFT  };
         controls.toggle_obsidian_mode.binds[2] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT_SHIFT };
         
+        controls.toggle_wall_mode.id   = read_then_increment(*control_id_counter);
         controls.toggle_wall_mode.name = "Build wall mode";
         controls.toggle_wall_mode.tooltip_text = "Place a wall that permanently stops water, slows down lava, and blocks warriors and certain enemies. Miners, some enemies, and lava can destroy walls.";
         controls.toggle_wall_mode.control_mode = .ADD_WALL;
         controls.toggle_wall_mode.rebindable_by_user = true;
         controls.toggle_wall_mode.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_W };
         
+        controls.drag_cam.id   = read_then_increment(*control_id_counter);
         controls.drag_cam.name = "Drag camera";
         controls.drag_cam.rebindable_by_user = true;
         controls.drag_cam.binds[0] = Bind.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_RIGHT  };
         controls.drag_cam.binds[1] = Bind.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_MIDDLE };
         
+        controls.move_camera_up.id   = read_then_increment(*control_id_counter);
         controls.move_camera_up.name = "Move camera up";
         controls.move_camera_up.rebindable_by_user = true;
         controls.move_camera_up.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_UP };
         
+        controls.move_camera_down.id   = read_then_increment(*control_id_counter);
         controls.move_camera_down.name = "Move camera down";
         controls.move_camera_down.rebindable_by_user = true; 
         controls.move_camera_down.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_DOWN };
         
+        controls.move_camera_left.id   = read_then_increment(*control_id_counter);
         controls.move_camera_left.name = "Move camera left";
         controls.move_camera_left.rebindable_by_user = true; 
         controls.move_camera_left.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT };
         
+        controls.move_camera_right.id   = read_then_increment(*control_id_counter);
         controls.move_camera_right.name = "Move camera right";
         controls.move_camera_right.rebindable_by_user = true; 
         controls.move_camera_right.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT };
         
+        controls.toggle_remove_mode.id   = read_then_increment(*control_id_counter);
         controls.toggle_remove_mode.name = "Remove mode";
         controls.toggle_remove_mode.tooltip_text = "While active, you can select a created object to destroy it, like dynamite and path arrows.";
         controls.toggle_remove_mode.rebindable_by_user = true; 
         controls.toggle_remove_mode.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_R };
 
+        controls.panic_pause.id   = read_then_increment(*control_id_counter);
         controls.panic_pause.name = "Panic pause";
         controls.panic_pause.tooltip_text = "Forces time to a halt for a short duration, but has a decently-long cooldown.";
         controls.panic_pause.rebindable_by_user = true;
         controls.panic_pause.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_SPACE };
 
+        controls.fast_forward.id   = read_then_increment(*control_id_counter);
         controls.fast_forward.name = "Fast forward";
         controls.fast_forward.tooltip_text = "Speeds up the action, takes on resources to do, and has no cooldown.";
         controls.fast_forward.rebindable_by_user = true;
         controls.fast_forward.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_S };
-    
+    }
 
     // Keeps track of how many milliseconds remain until the player can panic pause again.
     // Less than or equal to 0 means "can panic pause right now".
@@ -840,7 +858,7 @@ main :: () {
                 toggle_wall_mode              = control_is_pressed(controls.toggle_wall_mode);
                 toggle_remove_mode            = control_is_pressed(controls.toggle_remove_mode);
                 add_iron                      = control_is_pressed(controls.add_iron);
-                select_as_place_miner_dwarf  = control_is_down(controls.select_as_place_miner_dwarf);
+                select_as_place_miner_dwarf   = control_is_down(controls.select_as_place_miner_dwarf);
                 select_as_place_warrior_dwarf = control_is_down(controls.select_as_place_warrior_dwarf);
                 select_as_place_goblin        = control_is_down(controls.select_as_place_goblin);
                 drag_cam_pressed              = control_is_pressed(controls.drag_cam);
@@ -2386,9 +2404,29 @@ main :: () {
                                 is_hovered = true;
 
                                 // TODO: isn't this really bad to mutate state in the draw part or whatever?
-                                // TODO: not every control has a control mode, like pause or fast forward
-                                if select_is_pressed_once {
-                                    game_state.control_mode = get_control_mode_from_control(control);
+                                if select_is_pressed_once || select_is_held_down {
+                                    has_control_mode := (
+                                        control.id == controls.select.id ||                 
+                                        control.id == controls.toggle_base_mode.id ||       
+                                        control.id == controls.toggle_dynamite_mode.id ||   
+                                        control.id == controls.toggle_obsidian_mode.id ||   
+                                        control.id == controls.toggle_wall_mode.id ||       
+                                        control.id == controls.toggle_remove_mode.id
+                                    );
+
+                                    if has_control_mode{
+                                        game_state.control_mode = get_control_mode_from_control(control);
+                                    }
+                        
+                                    if control.id == controls.panic_pause.id {
+                                        if game_state.panic_pause_timer_ms <= 0 {
+                                            game_state.panic_pause_timer_ms = PANIC_PAUSE_COOLDOWN_MS;
+                                        }
+                                    }
+                        
+                                    if control.id == controls.fast_forward.id {
+                                        fast_forward = true;
+                                    }
                                 }
                             }
 

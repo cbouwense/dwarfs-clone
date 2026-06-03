@@ -15,6 +15,7 @@ ControlMode :: enum {
 }
 
 Control :: struct {
+    id                 : s32;
     name               : string;      // What shows up in the keybind menu.
     binds              : [3] Bind;
     rebindable_by_user : bool;        // Some controls really ought not to be rebindable.
@@ -79,6 +80,11 @@ bind_to_readable_name_cstr :: (bind: Bind) -> *u8 {
 get_control_mode_from_control :: (control: Control) -> ControlMode {
     assert(control.control_mode != .NONE, "Tried to get a control mode from control \"%\" that doesn't have one.", control.name);
     return control.control_mode;
+}
+
+find_control_mode_from_control :: (control: Control) -> bool, ControlMode {
+    if control.control_mode == .NONE return false, .NONE;
+    return true, control.control_mode;
 }
 
 get_tooltip_text_from_control :: (control: Control) -> string {
