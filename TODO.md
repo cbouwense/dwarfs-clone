@@ -64,4 +64,3 @@
 - search feature for tiles, dwarves, etc.
 - hotreloading
 - pos_by_id cache and vice versa?
-- write macros for things like controls _prev
