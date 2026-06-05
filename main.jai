@@ -2292,39 +2292,65 @@ main :: () {
                         }
                     }
 
-                    debug_struct_fields_with_raylib_draw_text :: (c: Code) #expand {
+                    debug_variable_runtime :: (thing: Any, thing_symbol_as_string: string) #expand {
+                        // Format the string dynamically
+                        text := tprint("%: %\0", thing_symbol_as_string, thing);
+                        
+                        DrawText(text.data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                    }
+
+                    debug_with_raylib_draw_text :: (c: Code) #expand {
                         var_name := #run code_to_string(c);
                         var_val  := #insert c;
                         
-                        debug_struct_runtime(var_val, var_name);
+                        ti := type_info(type_of(var_val));
+                        if #complete ti.type == {
+                            case .STRUCT; debug_struct_runtime(var_val, var_name);
+
+                            case .INTEGER; #through;   
+                            case .FLOAT;   #through; 
+                            case .BOOL;    #through;
+                            case .STRING;  #through;  
+                            case .ANY;     #through;
+                            case .POINTER; debug_variable_runtime(var_val, var_name);
+
+                            case .PROCEDURE;            #through;
+                            case .VOID;                 #through;
+                            case .ARRAY;                #through;
+                            case .OVERLOAD_SET;         #through;
+                            case .ENUM;                 #through;
+                            case .POLYMORPHIC_VARIABLE; #through;
+                            case .TYPE;                 #through;
+                            case .CODE;                 #through;
+                            case .UNTYPED_LITERAL;      #through;
+                            case .UNTYPED_ENUM;         #through;
+                            case .VARIANT;              assert(false, "Unsupported debug thing");
+                        }
+                        
                     }
 
-                    Foo :: struct { bar: int; baz: string; };
-                    the_foo := Foo.{ 42, "the answer" };
-
-                    debug_struct_fields_with_raylib_draw_text(#code the_foo);
+                    debug_with_raylib_draw_text(#code game_state);
 
                     // Debug controls
                     {
-                        // TODO: macro
-                        DrawText(tprint("select_is_pressed_once: %\0", select_is_pressed_once).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                        DrawText(tprint("select_is_held_down: %\0", select_is_held_down).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                        DrawText(tprint("selection_cleared: %\0", selection_cleared).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                        DrawText(tprint("toggle_base_mode: %\0", toggle_base_mode).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                        DrawText(tprint("add_iron: %\0", add_iron).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                        DrawText(tprint("select_as_place_miner_dwarf: %\0", select_as_place_miner_dwarf).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                        DrawText(tprint("toggle_dynamite_mode: %\0", toggle_dynamite_mode).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                        DrawText(tprint("toggle_obsidian_mode: %\0", toggle_obsidian_mode).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                        DrawText(tprint("toggle_wall_mode: %\0", toggle_wall_mode).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                        DrawText(tprint("toggle_remove_mode: %\0", toggle_remove_mode).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                        DrawText(tprint("started_to_draw_path: %\0", started_to_draw_path).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                        DrawText(tprint("drag_cam_pressed: %\0", drag_cam_pressed).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                        DrawText(tprint("drag_cam_down: %\0", drag_cam_down).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                        DrawText(tprint("move_camera_up: %\0", move_camera_up).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                        DrawText(tprint("move_camera_down: %\0", move_camera_down).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                        DrawText(tprint("move_camera_left: %\0", move_camera_left).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                        DrawText(tprint("move_camera_right: %\0", move_camera_right).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                        DrawText(tprint("drawing_path: %\0", drawing_path).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                        debug_with_raylib_draw_text(#code select_is_pressed_once);
+                        debug_with_raylib_draw_text(#code select_is_held_down);
+                        debug_with_raylib_draw_text(#code selection_cleared);
+                        debug_with_raylib_draw_text(#code toggle_base_mode);
+                        debug_with_raylib_draw_text(#code add_iron);
+                        debug_with_raylib_draw_text(#code select_as_place_miner_dwarf);
+                        debug_with_raylib_draw_text(#code toggle_dynamite_mode);
+                        debug_with_raylib_draw_text(#code toggle_obsidian_mode);
+                        debug_with_raylib_draw_text(#code toggle_wall_mode);
+                        debug_with_raylib_draw_text(#code toggle_remove_mode);
+                        debug_with_raylib_draw_text(#code started_to_draw_path);
+                        debug_with_raylib_draw_text(#code drag_cam_pressed);
+                        debug_with_raylib_draw_text(#code drag_cam_down);
+                        debug_with_raylib_draw_text(#code move_camera_up);
+                        debug_with_raylib_draw_text(#code move_camera_down);
+                        debug_with_raylib_draw_text(#code move_camera_left);
+                        debug_with_raylib_draw_text(#code move_camera_right);
+                        debug_with_raylib_draw_text(#code drawing_path);
                     }
 
                     // Debug camera
