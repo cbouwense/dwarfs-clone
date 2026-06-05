@@ -1,8 +1,10 @@
 #import "Basic";
+#import "Compiler";
 #import "Hash_Table";
 #import "Input";
 Math :: #import "Math";
 #import "Print_Vars";
+#import "Program_Print";
 #import "Random";
 #import "Sloppy_Math";
 #import "Sort";
@@ -2270,18 +2272,37 @@ main :: () {
                     DrawFPS(10, read_then_increment(*debug_text_y, INCREMENT_Y));
                     DrawText(tprint("dwarf count: %\0", dwarves.count).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 12, WHITE);
 
-                    // Debug game state
-                    {
-                        // TODO: macro
-                        DrawText(tprint("hovered_dwarf_index: %\0", game_state.hovered_dwarf_index).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                        DrawText(tprint("selected_dwarf_id: %\0", game_state.selected_dwarf_id).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                        DrawText(tprint("water_flow_cooldown_ms: %\0", game_state.water_flow_cooldown_ms).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                        DrawText(tprint("lava_flow_cooldown_ms: %\0", game_state.lava_flow_cooldown_ms).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                        DrawText(tprint("gold: %\0", game_state.gold).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                        DrawText(tprint("points: %\0", game_state.points).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                        DrawText(tprint("panic_pause_timer_ms: %\0", game_state.panic_pause_timer_ms).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                        DrawText(tprint("control_mode: %\0", game_state.control_mode).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                    debug_struct_runtime :: (thing: Any, name_prefix: string) #expand {
+                        if thing.type.type != .STRUCT return;
+                        tis := cast(*Type_Info_Struct) thing.type;
+
+                        for tis.members {
+                            // Calculate where this field lives in memory
+                            field_ptr := thing.value_pointer + it.offset_in_bytes;
+                            
+                            // Construct an 'Any' so tprint knows how to format it
+                            field_any: Any;
+                            field_any.type = it.type;
+                            field_any.value_pointer = field_ptr;
+
+                            // Format the string dynamically
+                            text := tprint("%.%: %\0", name_prefix, it.name, field_any);
+                            
+                            DrawText(text.data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                        }
                     }
+
+                    debug_struct_fields_with_raylib_draw_text :: (c: Code) #expand {
+                        var_name := #run code_to_string(c);
+                        var_val  := #insert c;
+                        
+                        debug_struct_runtime(var_val, var_name);
+                    }
+
+                    Foo :: struct { bar: int; baz: string; };
+                    the_foo := Foo.{ 42, "the answer" };
+
+                    debug_struct_fields_with_raylib_draw_text(#code the_foo);
 
                     // Debug controls
                     {

@@ -251,6 +251,17 @@ generate_kind_enum_from_base_struct :: ($ base_struct: Type) -> string #compile_
     return builder_to_string(*builder);
 };
 
+code_to_string :: (c: Code) -> string {
+    root := compiler_get_nodes(c);
+
+    builder: String_Builder;
+    builder.allocator = temp; // TODO: parameter?
+
+    print_expression(*builder, root);
+
+    return builder_to_string(*builder);
+}
+
 #import "Basic";
 #import "Compiler";
 #import "Hash_Table";
