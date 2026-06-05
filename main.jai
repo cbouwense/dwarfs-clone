@@ -187,52 +187,30 @@ init_sprites :: () {
 // Controls
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-select_is_pressed_once        : bool;
-select_is_held_down           : bool;
-selection_cleared             : bool;
-toggle_base_mode              : bool;
-toggle_dynamite_mode          : bool;
-toggle_obsidian_mode          : bool;
-toggle_wall_mode              : bool;
-toggle_remove_mode            : bool;
-add_iron                      : bool;
-select_as_place_miner_dwarf   : bool;
-select_as_place_warrior_dwarf : bool;
-select_as_place_goblin        : bool;
-started_to_draw_path          : bool;
-drawing_path                  : bool;
-drag_cam_pressed              : bool;
-drag_cam_down                 : bool;
-move_camera_up                : bool;
-move_camera_down              : bool;
-move_camera_left              : bool;
-move_camera_right             : bool;
-panic_pause                   : bool;
-fast_forward                  : bool;
-
-// TODO: macro
-select_is_pressed_once_prev        : bool;
-select_is_held_down_prev           : bool;
-selection_cleared_prev             : bool;
-toggle_base_mode_prev              : bool;
-toggle_dynamite_mode_prev          : bool;
-toggle_obsidian_mode_prev          : bool;
-toggle_wall_mode_prev              : bool;
-toggle_remove_mode_prev            : bool;
-add_iron_prev                      : bool;
-select_as_place_miner_dwarf_prev  : bool;
-select_as_place_warrior_dwarf_prev : bool;
-select_as_place_goblin_prev        : bool;
-started_to_draw_path_prev          : bool;
-drawing_path_prev                  : bool;
-drag_cam_pressed_prev              : bool;
-drag_cam_down_prev                 : bool;
-move_camera_up_prev                : bool;
-move_camera_down_prev              : bool;
-move_camera_left_prev              : bool;
-move_camera_right_prev             : bool;
-panic_pause_prev                   : bool;
-fast_forward_prev                  : bool;
+ControlsState :: struct {
+    select_is_pressed_once        : bool;
+    select_is_held_down           : bool;
+    selection_cleared             : bool;
+    toggle_base_mode              : bool;
+    toggle_dynamite_mode          : bool;
+    toggle_obsidian_mode          : bool;
+    toggle_wall_mode              : bool;
+    toggle_remove_mode            : bool;
+    add_iron                      : bool;
+    select_as_place_miner_dwarf   : bool;
+    select_as_place_warrior_dwarf : bool;
+    select_as_place_goblin        : bool;
+    started_to_draw_path          : bool;
+    drawing_path                  : bool;
+    drag_cam_pressed              : bool;
+    drag_cam_down                 : bool;
+    move_camera_up                : bool;
+    move_camera_down              : bool;
+    move_camera_left              : bool;
+    move_camera_right             : bool;
+    panic_pause                   : bool;
+    fast_forward                  : bool;
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Other
@@ -245,14 +223,16 @@ mouse_drag_began_at_pos : Vector2;
 mouse_pos_when_path_creation_started : Vector2;
 
 GameState :: struct {
-    hovered_dwarf_index    : int;
-    selected_dwarf_id      : s32;
-    water_flow_cooldown_ms : int;
-    lava_flow_cooldown_ms  : int;
-    points                 : int;
-    gold                   : int;
-    control_mode           : ControlMode;
-    panic_pause_timer_ms   : int;
+    hovered_dwarf_index       : int;
+    selected_dwarf_id         : s32;
+    water_flow_cooldown_ms    : int;
+    lava_flow_cooldown_ms     : int;
+    points                    : int;
+    gold                      : int;
+    control_mode              : ControlMode;
+    panic_pause_timer_ms      : int;
+    controls_state_this_frame : ControlsState;
+    controls_state_prev_frame : ControlsState;
 }
 
 Direction :: enum u8 #specified {
@@ -683,7 +663,7 @@ main :: () {
             dt_seconds = 0.033;
         } else {
             dt_seconds = dt_seconds_raw;
-            if fast_forward {
+            if game_state.controls_state_this_frame.fast_forward {
                 dt_seconds *= DT_MULTIPLIER_FAST_FORWARD;
             }
         }
@@ -812,92 +792,72 @@ main :: () {
 
             if IsKeyPressed(.KEY_G) metagame.debug_mode = !metagame.debug_mode;
 
-            // Controls from last frame
+            // Update previous controls state
+            game_state.controls_state_prev_frame = game_state.controls_state_this_frame;
+
+            // Update controls this frame
             {
-                // TODO: macro or something
-                select_is_pressed_once_prev        = select_is_pressed_once;
-                select_is_held_down_prev           = select_is_held_down;
-                selection_cleared_prev             = selection_cleared;
-                toggle_base_mode_prev              = toggle_base_mode;
-                add_iron_prev                      = add_iron;
-                select_as_place_miner_dwarf_prev   = select_as_place_miner_dwarf;
-                select_as_place_warrior_dwarf_prev = select_as_place_warrior_dwarf;
-                toggle_dynamite_mode_prev          = toggle_dynamite_mode;
-                toggle_obsidian_mode_prev          = toggle_obsidian_mode;
-                toggle_wall_mode_prev              = toggle_wall_mode;
-                toggle_remove_mode_prev            = toggle_remove_mode;
-                panic_pause_prev                   = panic_pause;
-                drag_cam_pressed_prev              = drag_cam_pressed;
-                drag_cam_down_prev                 = drag_cam_down;
-                move_camera_up_prev                = move_camera_up;
-                move_camera_down_prev              = move_camera_down;
-                move_camera_left_prev              = move_camera_left;
-                move_camera_right_prev             = move_camera_right;
-                fast_forward_prev                  = fast_forward;
+                game_state.controls_state_this_frame.select_is_pressed_once        = control_is_pressed(controls.select);
+                game_state.controls_state_this_frame.select_is_held_down           = control_is_down(controls.select);
+                game_state.controls_state_this_frame.selection_cleared             = control_is_pressed(controls.clear_selection);
+                game_state.controls_state_this_frame.toggle_base_mode              = control_is_pressed(controls.toggle_base_mode);
+                game_state.controls_state_this_frame.toggle_dynamite_mode          = control_is_pressed(controls.toggle_dynamite_mode);
+                game_state.controls_state_this_frame.toggle_obsidian_mode          = control_is_pressed(controls.toggle_obsidian_mode);
+                game_state.controls_state_this_frame.toggle_wall_mode              = control_is_pressed(controls.toggle_wall_mode);
+                game_state.controls_state_this_frame.toggle_remove_mode            = control_is_pressed(controls.toggle_remove_mode);
+                game_state.controls_state_this_frame.add_iron                      = control_is_pressed(controls.add_iron);
+                game_state.controls_state_this_frame.select_as_place_miner_dwarf   = control_is_down(controls.select_as_place_miner_dwarf);
+                game_state.controls_state_this_frame.select_as_place_warrior_dwarf = control_is_down(controls.select_as_place_warrior_dwarf);
+                game_state.controls_state_this_frame.select_as_place_goblin        = control_is_down(controls.select_as_place_goblin);
+                game_state.controls_state_this_frame.drag_cam_pressed              = control_is_pressed(controls.drag_cam);
+                game_state.controls_state_this_frame.drag_cam_down                 = control_is_down(controls.drag_cam);
+                game_state.controls_state_this_frame.move_camera_up                = control_is_down(controls.move_camera_up);
+                game_state.controls_state_this_frame.move_camera_down              = control_is_down(controls.move_camera_down);
+                game_state.controls_state_this_frame.move_camera_left              = control_is_down(controls.move_camera_left);
+                game_state.controls_state_this_frame.move_camera_right             = control_is_down(controls.move_camera_right);
+                game_state.controls_state_this_frame.panic_pause                   = control_is_pressed(controls.panic_pause);
+                game_state.controls_state_this_frame.fast_forward                  = control_is_down(controls.fast_forward);
 
-                started_to_draw_path_prev          = started_to_draw_path;
-                drawing_path_prev                  = drawing_path;
-            }
-
-            // Controls this frame
-            {
-                select_is_pressed_once        = control_is_pressed(controls.select);
-                select_is_held_down           = control_is_down(controls.select);
-                selection_cleared             = control_is_pressed(controls.clear_selection);
-                toggle_base_mode              = control_is_pressed(controls.toggle_base_mode);
-                toggle_dynamite_mode          = control_is_pressed(controls.toggle_dynamite_mode);
-                toggle_obsidian_mode          = control_is_pressed(controls.toggle_obsidian_mode);
-                toggle_wall_mode              = control_is_pressed(controls.toggle_wall_mode);
-                toggle_remove_mode            = control_is_pressed(controls.toggle_remove_mode);
-                add_iron                      = control_is_pressed(controls.add_iron);
-                select_as_place_miner_dwarf   = control_is_down(controls.select_as_place_miner_dwarf);
-                select_as_place_warrior_dwarf = control_is_down(controls.select_as_place_warrior_dwarf);
-                select_as_place_goblin        = control_is_down(controls.select_as_place_goblin);
-                drag_cam_pressed              = control_is_pressed(controls.drag_cam);
-                drag_cam_down                 = control_is_down(controls.drag_cam);
-                move_camera_up                = control_is_down(controls.move_camera_up);
-                move_camera_down              = control_is_down(controls.move_camera_down);
-                move_camera_left              = control_is_down(controls.move_camera_left);
-                move_camera_right             = control_is_down(controls.move_camera_right);
-                panic_pause                   = control_is_pressed(controls.panic_pause);
-                fast_forward                  = control_is_down(controls.fast_forward);
-
-                started_to_draw_path = (
-                    select_is_pressed_once             &&
-                    !select_as_place_miner_dwarf       &&
-                    !select_as_place_warrior_dwarf     &&
-                    !select_as_place_goblin            &&
-                    game_state.control_mode == .NORMAL &&
+                game_state.controls_state_this_frame.started_to_draw_path = (
+                    game_state.controls_state_this_frame.select_is_pressed_once         &&
+                    !game_state.controls_state_this_frame.select_as_place_miner_dwarf   &&
+                    !game_state.controls_state_this_frame.select_as_place_warrior_dwarf &&
+                    !game_state.controls_state_this_frame.select_as_place_goblin        &&
+                    game_state.control_mode == .NORMAL                                  &&
                     !IsKeyDown(KeyboardKey.KEY_LEFT_CONTROL) // debug control to mine blocks
                 );
-                drawing_path = select_is_held_down && (drawing_path_prev || started_to_draw_path_prev);
+
+                game_state.controls_state_this_frame.drawing_path = (
+                    game_state.controls_state_this_frame.select_is_held_down &&
+                    (game_state.controls_state_prev_frame.drawing_path || game_state.controls_state_prev_frame.started_to_draw_path)
+                );
             }
 
             // TODO: should this go here?
             //
             // Update control mode
             {
-                if selection_cleared {
+                if game_state.controls_state_this_frame.selection_cleared {
                     game_state.control_mode = .NORMAL;
                 }
 
-                if toggle_base_mode {
+                if game_state.controls_state_this_frame.toggle_base_mode {
                     game_state.control_mode = ifx game_state.control_mode == .ADD_BASE then .NORMAL else .ADD_BASE;
                 }
 
-                if toggle_dynamite_mode {
+                if game_state.controls_state_this_frame.toggle_dynamite_mode {
                     game_state.control_mode = ifx game_state.control_mode == .ADD_DYNAMITE then .NORMAL else .ADD_DYNAMITE;
                 }
                 
-                if toggle_obsidian_mode {
+                if game_state.controls_state_this_frame.toggle_obsidian_mode {
                     game_state.control_mode = ifx game_state.control_mode == .ADD_OBSIDIAN then .NORMAL else .ADD_OBSIDIAN;
                 }
             
-                if toggle_wall_mode {
+                if game_state.controls_state_this_frame.toggle_wall_mode {
                     game_state.control_mode = ifx game_state.control_mode == .ADD_WALL then .NORMAL else .ADD_WALL;
                 }
 
-                if toggle_remove_mode {
+                if game_state.controls_state_this_frame.toggle_remove_mode {
                     game_state.control_mode = ifx game_state.control_mode == .REMOVE then .NORMAL else .REMOVE;
                 }
             }
@@ -925,19 +885,19 @@ main :: () {
 
                     can_move_camera := metagame.debug_mode || metagame.state == .RUNNING || (metagame.state == .GAME_OVER && metagame.game_over_state == .LOOK_AROUND);
 
-                    if can_move_camera && move_camera_up    camera.target.y -= CAMERA_MOVE_SPEED_BASE;
-                    if can_move_camera && move_camera_down  camera.target.y += CAMERA_MOVE_SPEED_BASE;
-                    if can_move_camera && move_camera_left  camera.target.x -= CAMERA_MOVE_SPEED_BASE;
-                    if can_move_camera && move_camera_right camera.target.x += CAMERA_MOVE_SPEED_BASE;
+                    if can_move_camera && game_state.controls_state_this_frame.move_camera_up    camera.target.y -= CAMERA_MOVE_SPEED_BASE;
+                    if can_move_camera && game_state.controls_state_this_frame.move_camera_down  camera.target.y += CAMERA_MOVE_SPEED_BASE;
+                    if can_move_camera && game_state.controls_state_this_frame.move_camera_left  camera.target.x -= CAMERA_MOVE_SPEED_BASE;
+                    if can_move_camera && game_state.controls_state_this_frame.move_camera_right camera.target.x += CAMERA_MOVE_SPEED_BASE;
 
                     camera.offset = Vector2.{ GetScreenWidth() / 2.0, GetScreenHeight() / 2.0 };
 
                     camera_move_speed := CAMERA_MOVE_SPEED_BASE / 2 * camera.zoom;
-                    if drag_cam_pressed {
+                    if game_state.controls_state_this_frame.drag_cam_pressed {
                         mouse_drag_began_at_pos = mouse_pos_in_world;
                     }
 
-                    if drag_cam_down && can_move_camera {
+                    if game_state.controls_state_this_frame.drag_cam_down && can_move_camera {
                         world_delta := Vector2Subtract(mouse_drag_began_at_pos, mouse_pos_in_world);
                         
                         // Apply that difference to the camera target.
@@ -977,7 +937,7 @@ main :: () {
             if metagame.state == .RUNNING {
                 // Update user action
                 {
-                    if panic_pause {
+                    if game_state.controls_state_this_frame.panic_pause {
                         if !panic_pause_is_cooling_down {
                             game_state.panic_pause_timer_ms = PANIC_PAUSE_COOLDOWN_MS;
                         }
@@ -985,30 +945,30 @@ main :: () {
 
                     if #complete game_state.control_mode == {
                         case .NORMAL;
-                            if select_as_place_miner_dwarf {
-                                if select_is_pressed_once {
+                            if game_state.controls_state_this_frame.select_as_place_miner_dwarf {
+                                if game_state.controls_state_this_frame.select_is_pressed_once {
                                     if metagame.debug_mode {
                                         tile_id := get_tile_id_by_pos(mouse_pos_in_world);
                                         create_dwarf(get_tile_pos_by_id(tile_id), .MINER);
                                     }
                                 }
                             }
-                            else if select_as_place_warrior_dwarf {
-                                if select_is_pressed_once {
+                            else if game_state.controls_state_this_frame.select_as_place_warrior_dwarf {
+                                if game_state.controls_state_this_frame.select_is_pressed_once {
                                     if metagame.debug_mode {
                                         tile_id := get_tile_id_by_pos(mouse_pos_in_world);
                                         create_dwarf(get_tile_pos_by_id(tile_id), .WARRIOR);
                                     }
                                 }
                             }
-                            else if select_as_place_goblin {
-                                if select_is_pressed_once {
+                            else if game_state.controls_state_this_frame.select_as_place_goblin {
+                                if game_state.controls_state_this_frame.select_is_pressed_once {
                                     tile_id := get_tile_id_by_pos(mouse_pos_in_world);
                                     create_goblin(get_tile_pos_by_id(tile_id));
                                 }
                             }
                             else {
-                                if started_to_draw_path {
+                                if game_state.controls_state_this_frame.started_to_draw_path {
                                     // PERF: would massively benefit from chunking
                                     for dwarf: dwarves {
                                         if CheckCollisionPointRec(mouse_pos_in_world, get_world_rect_from_pos(dwarf.pos)) {
@@ -1036,7 +996,7 @@ main :: () {
                                     mouse_pos_when_path_creation_started = mouse_pos_in_world;
                                 }
 
-                                if drawing_path {
+                                if game_state.controls_state_this_frame.drawing_path {
                                     // Draw out the path that is currently being traced, if it is more than 1 tile long.
                                     potential_path_being_traced := get_path(mouse_pos_when_path_creation_started, mouse_pos_in_world);
 
@@ -1074,7 +1034,7 @@ main :: () {
                                     }
                                 }
                                 // If we were drawing a path, but just let go, then create the path as a real thing.
-                                else if drawing_path_prev && path_being_traced.start_tile_id > 0 {
+                                else if game_state.controls_state_prev_frame.drawing_path && path_being_traced.start_tile_id > 0 {
                                     array_add(*paths, path_being_traced);
 
                                     // PERF: Could probably just do this with id math or something
@@ -1103,7 +1063,7 @@ main :: () {
                             }
                         case .ADD_BASE;
                             // TODO: check if placement is valid
-                            if select_is_pressed_once {
+                            if game_state.controls_state_this_frame.select_is_pressed_once {
                                 // Add base.
                                 base_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
                                 create_base(Vector2.{ base_rect.x, base_rect.y }, false, *game_state);
@@ -1112,7 +1072,7 @@ main :: () {
                                 game_state.control_mode = .NORMAL;
                             }
                         case .ADD_DYNAMITE;
-                            if select_is_pressed_once {
+                            if game_state.controls_state_this_frame.select_is_pressed_once {
                                 if metagame.debug_mode || game_state.gold >= GOLD_COST_DYNAMITE {
                                     // Try to add dynamite to the selected tile
                                     tile_id         := get_tile_id_by_pos(mouse_pos_in_world);
@@ -1132,7 +1092,7 @@ main :: () {
                                 }
                             }
                         case .ADD_OBSIDIAN;
-                            if select_is_held_down {
+                            if game_state.controls_state_this_frame.select_is_held_down {
                                 if metagame.debug_mode || game_state.gold >= GOLD_COST_OBSIDIAN {
                                     // Try to turn the selected tile into obsidian
                                     tile_id := get_tile_id_by_pos(mouse_pos_in_world);
@@ -1168,7 +1128,7 @@ main :: () {
                                 }
                             }
                         case .ADD_WALL;
-                            if select_is_held_down {
+                            if game_state.controls_state_this_frame.select_is_held_down {
                                 if metagame.debug_mode || game_state.gold >= GOLD_COST_WALL {
                                     // Try to turn the selected tile into a wall
                                     tile_id := get_tile_id_by_pos(mouse_pos_in_world);
@@ -1184,7 +1144,7 @@ main :: () {
                                 }
                             }
                         case .REMOVE;
-                            if select_is_held_down {
+                            if game_state.controls_state_this_frame.select_is_held_down {
                                 tile_id := get_tile_id_by_pos(mouse_pos_in_world);
 
                                 for path: paths_in_viewport {
@@ -1934,7 +1894,7 @@ main :: () {
                         IRON_VEIN_SIZE_MIN :: 8;
                         IRON_VEIN_SIZE_MAX :: 15;
 
-                        if add_iron {
+                        if game_state.controls_state_this_frame.add_iron {
                             iron_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
                             tile_pos  := Vector2.{ iron_rect.x, iron_rect.y };
                             tile_id   := get_tile_id_by_pos(tile_pos);
@@ -2185,7 +2145,7 @@ main :: () {
 
                 // Draw paths
                 {
-                    if drawing_path && path_being_traced.start_tile_id > 0 draw_path(path_being_traced);
+                    if game_state.controls_state_this_frame.drawing_path && path_being_traced.start_tile_id > 0 draw_path(path_being_traced);
                     for path: paths_in_viewport draw_path(path);
                 }
 
@@ -2272,7 +2232,7 @@ main :: () {
                     DrawFPS(10, read_then_increment(*debug_text_y, INCREMENT_Y));
                     DrawText(tprint("dwarf count: %\0", dwarves.count).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 12, WHITE);
 
-                    debug_struct_runtime :: (thing: Any, name_prefix: string) #expand {
+                    debug_struct_runtime :: (thing: Any, name_prefix: string, render_struct_name_prefix: bool) #expand {
                         if thing.type.type != .STRUCT return;
                         tis := cast(*Type_Info_Struct) thing.type;
 
@@ -2286,7 +2246,9 @@ main :: () {
                             field_any.value_pointer = field_ptr;
 
                             // Format the string dynamically
-                            text := tprint("%.%: %\0", name_prefix, it.name, field_any);
+                            text := ifx render_struct_name_prefix
+                                then tprint("%.%: %\0", name_prefix, it.name, field_any)
+                                else tprint("%: %\0", it.name, field_any);
                             
                             DrawText(text.data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
                         }
@@ -2299,13 +2261,15 @@ main :: () {
                         DrawText(text.data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
                     }
 
-                    debug_with_raylib_draw_text :: (c: Code) #expand {
+                    // TODO: recursive struct drawing?
+                    // TODO: way to label fields as not wanted as debuggable
+                    debug_with_raylib_draw_text :: (c: Code, render_struct_name_prefix := false) #expand {
                         var_name := #run code_to_string(c);
                         var_val  := #insert c;
                         
                         ti := type_info(type_of(var_val));
                         if #complete ti.type == {
-                            case .STRUCT; debug_struct_runtime(var_val, var_name);
+                            case .STRUCT; debug_struct_runtime(var_val, var_name, render_struct_name_prefix);
 
                             case .INTEGER; #through;   
                             case .FLOAT;   #through; 
@@ -2330,41 +2294,13 @@ main :: () {
                     }
 
                     debug_with_raylib_draw_text(#code game_state);
-
-                    // Debug controls
-                    {
-                        debug_with_raylib_draw_text(#code select_is_pressed_once);
-                        debug_with_raylib_draw_text(#code select_is_held_down);
-                        debug_with_raylib_draw_text(#code selection_cleared);
-                        debug_with_raylib_draw_text(#code toggle_base_mode);
-                        debug_with_raylib_draw_text(#code add_iron);
-                        debug_with_raylib_draw_text(#code select_as_place_miner_dwarf);
-                        debug_with_raylib_draw_text(#code toggle_dynamite_mode);
-                        debug_with_raylib_draw_text(#code toggle_obsidian_mode);
-                        debug_with_raylib_draw_text(#code toggle_wall_mode);
-                        debug_with_raylib_draw_text(#code toggle_remove_mode);
-                        debug_with_raylib_draw_text(#code started_to_draw_path);
-                        debug_with_raylib_draw_text(#code drag_cam_pressed);
-                        debug_with_raylib_draw_text(#code drag_cam_down);
-                        debug_with_raylib_draw_text(#code move_camera_up);
-                        debug_with_raylib_draw_text(#code move_camera_down);
-                        debug_with_raylib_draw_text(#code move_camera_left);
-                        debug_with_raylib_draw_text(#code move_camera_right);
-                        debug_with_raylib_draw_text(#code drawing_path);
-                    }
-
-                    // Debug camera
-                    {
-                        // TODO: macro
-                        DrawText(tprint("offset: %\0", camera.offset).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                        DrawText(tprint("target: %\0", camera.target).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                        DrawText(tprint("rotation: %\0", camera.rotation).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                        DrawText(tprint("zoom: %\0", camera.zoom).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                    }
+                    debug_with_raylib_draw_text(#code game_state.controls_state_this_frame);
+                    debug_with_raylib_draw_text(#code camera);
 
                     debug_text_y = 0;
                     for dwarves {
                         if CheckCollisionPointRec(mouse_pos_in_world, Rectangle.{ it.pos.x, it.pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT }) {
+                            // TODO: parametrize debug_with_draw_text positions
                             DrawText(tprint("id: %\0", it.id).data,                                 xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                             DrawText(tprint("pos: %\0", it.pos).data,                               xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                             DrawText(tprint("state: %\0", it.state).data,                           xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
@@ -2444,7 +2380,7 @@ main :: () {
                                 is_hovered = true;
 
                                 // TODO: isn't this really bad to mutate state in the draw part or whatever?
-                                if select_is_pressed_once {
+                                if game_state.controls_state_this_frame.select_is_pressed_once {
                                     has_control_mode := (
                                         control.id == controls.select.id ||                 
                                         control.id == controls.toggle_base_mode.id ||       
@@ -2465,9 +2401,9 @@ main :: () {
                                     }
                                 }
 
-                                if select_is_held_down {
+                                if game_state.controls_state_this_frame.select_is_held_down {
                                     if control.id == controls.fast_forward.id {
-                                        fast_forward = true;
+                                        game_state.controls_state_this_frame.fast_forward = true;
                                     }
                                 }
                             }
