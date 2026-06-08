@@ -1132,9 +1132,19 @@ main :: () {
                                 if metagame.debug_mode || game_state.gold >= GOLD_COST_WALL {
                                     // Try to turn the selected tile into a wall
                                     tile_id := get_tile_id_by_pos(mouse_pos_in_world);
-                                    tile_is_fully_mined := table_contains(*fully_mined_tile_ids_set, tile_id);
+                                    tile_is_fully_mined   := table_contains(*fully_mined_tile_ids_set, tile_id);
+                                    tile_has_base_on_it   := table_contains(*tile_ids_to_bases, tile_id);
+                                    tile_has_dwarf_on_it  := table_contains(*tile_ids_to_dwarfs, tile_id);
+                                    tile_has_goblin_on_it := table_contains(*tile_ids_to_goblins, tile_id);
 
-                                    if tile_is_fully_mined {
+                                    can_place_wall_on_desired_tile := (
+                                        tile_is_fully_mined   &&
+                                        !tile_has_base_on_it  &&
+                                        !tile_has_dwarf_on_it &&
+                                        !tile_has_goblin_on_it
+                                    );
+
+                                    if tile_is_fully_mined && can_place_wall_on_desired_tile { 
                                         // Place down the wall.
                                         set_tile_as_type(tile_id, .WALL, false, *game_state);
 
