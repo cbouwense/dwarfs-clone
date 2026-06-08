@@ -1250,6 +1250,7 @@ main :: () {
                                                 array_copy(*(dwarf.tile_ids_on_path), tile_ids_on_path);
                                                 set_entity_direction_to_face_next_target(dwarf);
 
+                                                is_dwarf_done_deciding = true;
                                                 break;
                                             }
 
@@ -1270,10 +1271,13 @@ main :: () {
                                                 array_copy(*(dwarf.tile_ids_on_path), tile_ids_on_path);
                                                 set_entity_direction_to_face_next_target(dwarf);
 
+                                                is_dwarf_done_deciding = true;
                                                 break;
                                             }
                                         }
+                                    }
 
+                                    if !is_dwarf_done_deciding {
                                         // PERF: is this too expensive to do every frame?
                                         //
                                         // If the dwarf is a warrior, actively seek out goblins
@@ -1328,82 +1332,79 @@ main :: () {
                                         }
                                     }
 
-                                    if !is_dwarf_done_deciding {
-                                        tile_id_next_in_dwarfs_path := dwarf.tile_ids_on_path[0];
+                                    tile_id_next_in_dwarfs_path := dwarf.tile_ids_on_path[0];
 
-                                        // If it's walkable, proceed
-                                        if is_tile_id_walkable_for_entity(tile_id_next_in_dwarfs_path, dwarf.id) {
-                                            dwarf.state = .MOVING;
-                                        }
-                                        // If it's unmined, then they'll have to mine it
-                                        else {
-                                            if is_tile_id_mineable(tile_id_next_in_dwarfs_path) {
-                                                dwarf.state = .MINING;
-                                                dwarf.tile_id_mining = tile_id_next_in_dwarfs_path;
+                                    // If it's walkable, proceed
+                                    if is_tile_id_walkable_for_entity(tile_id_next_in_dwarfs_path, dwarf.id) {
+                                        dwarf.state = .MOVING;
+                                    }
+                                    // If it's unmined, then they'll have to mine it
+                                    else {
+                                        if is_tile_id_mineable(tile_id_next_in_dwarfs_path) {
+                                            dwarf.state = .MINING;
+                                            dwarf.tile_id_mining = tile_id_next_in_dwarfs_path;
 
-                                                // Set up the world state to accomodate the fact that the dwarf is about to mine this tile.
-                                                // Plus, do some sanity checks to make sure that everything looks good.
-                                                {
-                                                    // Add the tile the dwarf is about to mine to the chunk's list of actively mined tiles.
-                                                    _result, chunk := find_or_create_chunk_by_tile_id(tile_id_next_in_dwarfs_path);
-                                                    array_add(*chunk.actively_mined_tile_ids, tile_id_next_in_dwarfs_path);
+                                            // Set up the world state to accomodate the fact that the dwarf is about to mine this tile.
+                                            // Plus, do some sanity checks to make sure that everything looks good.
+                                            {
+                                                // Add the tile the dwarf is about to mine to the chunk's list of actively mined tiles.
+                                                _result, chunk := find_or_create_chunk_by_tile_id(tile_id_next_in_dwarfs_path);
+                                                array_add(*chunk.actively_mined_tile_ids, tile_id_next_in_dwarfs_path);
 
-                                                    // Add the tile the dwarf is about to mine to the global table of actively mined tiles and,
-                                                    // in doing so, set its health.
-                                                    new_health: s32;
-                                                    if      is_tile_id_dirt(tile_id_next_in_dwarfs_path) new_health = xx DIRT_HEALTH;
-                                                    else if is_tile_id_iron(tile_id_next_in_dwarfs_path) new_health = xx IRON_HEALTH;
-                                                    else if is_tile_id_wall(tile_id_next_in_dwarfs_path) new_health = xx WALL_HEALTH;
-                                                    else if (
-                                                        table_contains(*water_still_tile_ids_set,   dwarf.tile_id_mining) ||
-                                                        table_contains(*water_flowing_tile_ids_set, dwarf.tile_id_mining) ||
-                                                        table_contains(*lava_still_tile_ids_set,    dwarf.tile_id_mining) ||
-                                                        table_contains(*lava_flowing_tile_ids_set,  dwarf.tile_id_mining)
-                                                    ) {
-                                                        // If you try to mine liquid, you're fucking banned
-                                                        // kill_dwarf_by_index(dwarf_index);
-                                                        array_add(*dwarf_ids_to_kill_this_frame, dwarf.id);
-                                                        is_dwarf_done_deciding = true;
-                                                    }
-                                                    else {
-                                                        is_fully_mined    := table_contains(*fully_mined_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                                        is_actively_mined := table_contains(*fully_mined_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                                        is_cave           := table_contains(*cave_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                                        is_encased        := table_contains(*encased_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                                        is_iron           := table_contains(*iron_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                                        is_water_still    := table_contains(*water_still_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                                        is_water_flowing  := table_contains(*water_flowing_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                                        is_lava_still     := table_contains(*lava_still_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                                        is_lava_flowing   := table_contains(*lava_flowing_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                                        is_obsidian       := table_contains(*obsidian_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                                        is_wall           := table_contains(*wall_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                                        is_hole           := table_contains(*hole_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                                        print_vars(
-                                                            is_fully_mined,
-                                                            is_cave,
-                                                            is_encased,
-                                                            is_iron,
-                                                            is_water_still,
-                                                            is_water_flowing,
-                                                            is_lava_still,
-                                                            is_lava_flowing,
-                                                            is_obsidian,
-                                                            is_wall,
-                                                            is_hole
-                                                        );
-                                                        assert_soft(false, "Dwarf % tryna mine some weird ass shit (tile id %)", dwarf.id, tile_id_next_in_dwarfs_path);
-                                                    }
-
-                                                    table_set(*actively_mined_tile_ids_to_health_table, tile_id_next_in_dwarfs_path, new_health);
+                                                // Add the tile the dwarf is about to mine to the global table of actively mined tiles and,
+                                                // in doing so, set its health.
+                                                new_health: s32;
+                                                if      is_tile_id_dirt(tile_id_next_in_dwarfs_path) new_health = xx DIRT_HEALTH;
+                                                else if is_tile_id_iron(tile_id_next_in_dwarfs_path) new_health = xx IRON_HEALTH;
+                                                else if is_tile_id_wall(tile_id_next_in_dwarfs_path) new_health = xx WALL_HEALTH;
+                                                else if (
+                                                    table_contains(*water_still_tile_ids_set,   dwarf.tile_id_mining) ||
+                                                    table_contains(*water_flowing_tile_ids_set, dwarf.tile_id_mining) ||
+                                                    table_contains(*lava_still_tile_ids_set,    dwarf.tile_id_mining) ||
+                                                    table_contains(*lava_flowing_tile_ids_set,  dwarf.tile_id_mining)
+                                                ) {
+                                                    // If you try to mine liquid, you're fucking banned
+                                                    array_add(*dwarf_ids_to_kill_this_frame, dwarf.id);
+                                                    is_dwarf_done_deciding = true;
                                                 }
+                                                else {
+                                                    is_fully_mined    := table_contains(*fully_mined_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                                    is_actively_mined := table_contains(*fully_mined_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                                    is_cave           := table_contains(*cave_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                                    is_encased        := table_contains(*encased_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                                    is_iron           := table_contains(*iron_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                                    is_water_still    := table_contains(*water_still_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                                    is_water_flowing  := table_contains(*water_flowing_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                                    is_lava_still     := table_contains(*lava_still_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                                    is_lava_flowing   := table_contains(*lava_flowing_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                                    is_obsidian       := table_contains(*obsidian_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                                    is_wall           := table_contains(*wall_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                                    is_hole           := table_contains(*hole_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                                    print_vars(
+                                                        is_fully_mined,
+                                                        is_cave,
+                                                        is_encased,
+                                                        is_iron,
+                                                        is_water_still,
+                                                        is_water_flowing,
+                                                        is_lava_still,
+                                                        is_lava_flowing,
+                                                        is_obsidian,
+                                                        is_wall,
+                                                        is_hole
+                                                    );
+                                                    assert_soft(false, "Dwarf % tryna mine some weird ass shit (tile id %)", dwarf.id, tile_id_next_in_dwarfs_path);
+                                                }
+
+                                                table_set(*actively_mined_tile_ids_to_health_table, tile_id_next_in_dwarfs_path, new_health);
                                             }
-                                            // If it's unmineable, first of all I'm pretty sure this shouldn't have been on their path,
-                                            // but second of all, they're going to have to figure something else out then because this
-                                            // is a dead end.
-                                            else {
-                                                try_to_set_dwarf_random_new_target(dwarf);
-                                                dwarf_can_remain_undecided = true;
-                                            }
+                                        }
+                                        // If it's unmineable, first of all I'm pretty sure this shouldn't have been on their path,
+                                        // but second of all, they're going to have to figure something else out then because this
+                                        // is a dead end.
+                                        else {
+                                            try_to_set_dwarf_random_new_target(dwarf);
+                                            dwarf_can_remain_undecided = true;
                                         }
                                     }
 
