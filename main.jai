@@ -100,6 +100,7 @@ POINTS_FROM_MINE_DIRT :: 1;
 POINTS_FROM_MINE_IRON :: 50;
 POINTS_FROM_TREASURE  :: 75;
 
+GOLD_COST_BASE      :: 250;
 GOLD_COST_DYNAMITE  :: 50;
 GOLD_COST_OBSIDIAN  :: 75;
 GOLD_COST_PATH_STEP :: 5;
@@ -1064,12 +1065,17 @@ main :: () {
                         case .ADD_BASE;
                             // TODO: check if placement is valid
                             if game_state.controls_state_this_frame.select_is_pressed_once {
-                                // Add base.
-                                base_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
-                                create_base(Vector2.{ base_rect.x, base_rect.y }, false, *game_state);
+                                if metagame.debug_mode || game_state.gold >= GOLD_COST_BASE {
+                                    // Add base.
+                                    base_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
+                                    create_base(Vector2.{ base_rect.x, base_rect.y }, false, *game_state);
 
-                                // Reset control mode.
-                                game_state.control_mode = .NORMAL;
+                                    // Debit the gold cost.
+                                    if !metagame.debug_mode game_state.gold -= GOLD_COST_BASE;
+
+                                    // Reset control mode.
+                                    game_state.control_mode = .NORMAL;
+                                }
                             }
                         case .ADD_DYNAMITE;
                             if game_state.controls_state_this_frame.select_is_pressed_once {
