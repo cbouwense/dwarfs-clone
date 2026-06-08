@@ -64,3 +64,4 @@
 - search feature for tiles, dwarves, etc.
 - hotreloading
 - pos_by_id cache and vice versa?
+- macro or something for requiring all fields to be filled out in struct

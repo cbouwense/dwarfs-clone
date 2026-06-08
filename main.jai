@@ -1635,9 +1635,9 @@ main :: () {
                                         }
                                     }
 
-                                    // If there are any dwarves  or bases within line of sight, move towards the tile they're spotted on.
+                                    // If there are any dwarves within line of sight, move towards the tile they're spotted on.
                                     if !is_goblin_done_deciding {
-                                        detected, _, tile_ids_path := find_line_of_sight_entity(goblin_tile_id, Dwarf, GOBLIN_LINE_OF_SIGHT_TILE_COUNT, true);
+                                        detected, _, tile_ids_path := find_line_of_sight_entity(goblin_tile_id, Dwarf, GOBLIN_LINE_OF_SIGHT_TILE_COUNT);
 
                                         if detected {
                                             set_tile_ids_on_path(goblin, *tile_ids_path);
@@ -1659,7 +1659,7 @@ main :: () {
 
                                     // If there are any bases within line of sight, move towards the tile they're spotted on.
                                     if !is_goblin_done_deciding {
-                                        detected, _, tile_ids_path := find_line_of_sight_entity(goblin_tile_id, Base, GOBLIN_LINE_OF_SIGHT_TILE_COUNT, true);
+                                        detected, _, tile_ids_path := find_line_of_sight_entity(goblin_tile_id, Base, GOBLIN_LINE_OF_SIGHT_TILE_COUNT);
                                         
                                         if detected {
                                             set_tile_ids_on_path(goblin, *tile_ids_path);
@@ -4778,6 +4778,7 @@ detect_entity_within_radius :: ($T: Type, starting_tile_id: s32, max_depth: s32)
     return false, T.{}, empty_path;
 }
 
+// TODO: general version that also returns the Type
 find_cardinal_neighbor_entity :: (tile_id: s32, $T: Type) -> found_entity: bool, entity: *T
 #modify { return uses_entity_with_as(cast(*Type_Info) T, Entity); }
 {
@@ -4793,20 +4794,18 @@ find_cardinal_neighbor_entity :: (tile_id: s32, $T: Type) -> found_entity: bool,
     return false, null;
 }
 
-find_line_of_sight_entity :: (tile_id: s32, $T: Type, line_of_sight_tile_count: int, skip_immediate_neighbors: bool) -> bool, *T, tile_ids_path: [] s32
+find_line_of_sight_entity :: (tile_id: s32, $T: Type, line_of_sight_tile_count: int) -> bool, *T, tile_ids_path: [] s32
 #modify { return uses_entity_with_as(cast(*Type_Info) T, Entity); }
 {
-    tile_ids_path : [..] s32;
-    tile_ids_path.allocator = temp;
-
-    starting_diff := ifx skip_immediate_neighbors then 2 else 1;    
-
     for direction: DIRECTIONS_CARDINAL {
+        tile_ids_path : [..] s32;
+        tile_ids_path.allocator = temp;
+
         direction_index : s64 = cast(s64) direction;
         dx := TILE_DIRECTION_ID_DELTAS[direction_index][0];
         dy := TILE_DIRECTION_ID_DELTAS[direction_index][1];
 
-        for distance_multiplier: starting_diff..line_of_sight_tile_count {
+        for distance_multiplier: 1..line_of_sight_tile_count {
             neighbor_id := tile_id + (distance_multiplier * dx) + (distance_multiplier * dy);
             array_add(*tile_ids_path, xx neighbor_id);
 
@@ -4814,12 +4813,11 @@ find_line_of_sight_entity :: (tile_id: s32, $T: Type, line_of_sight_tile_count: 
 
             neighbor_has_entity, entity := table_find(*tile_ids_to_entity, xx neighbor_id);
             if neighbor_has_entity return true, entity, tile_ids_path;
+
         }
     }
 
-    // I want to have the count of this be zero to avoid any seriously stupid errors.
-    array_reset_keeping_memory(*tile_ids_path);
-    return false, null, tile_ids_path;
+    return false, null, s32.[];
 }
 
 // TODO: probably want to DRY up these detector functions 
@@ -5216,7 +5214,8 @@ reveal_cave_if_necessary :: (tile_id: s32, grant_points: bool, game_state: *Game
     neighbor_is_unrevealed_cave, cave_tile_id := check_is_neighbor_unreavealed_cave(tile_id);
     if neighbor_is_unrevealed_cave {
         // First, decide what kind of cave this will be.
-        cave_type = cast(CaveType) cast(int) random_get_within_range(0, xx enum_count(CaveType));
+        // cave_type = cast(CaveType) cast(int) random_get_within_range(0, xx enum_count(CaveType));
+        cave_type := CaveType.GOBLIN;
 
         // Second, recursively reveal the tiles of the cave.
         set_cave_as_mined(cave_tile_id, cave_type, grant_points, game_state);
