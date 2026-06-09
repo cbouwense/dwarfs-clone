@@ -9,15 +9,18 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 - Dwarves remain idle if you don't give them a path
+- Left click a dwarf to teleport them anywhere by left clicking again somewhere even in walls
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Core
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+- Display cost for things in tooltip
+- Display gold debit/credit particle
 - Paths need to destroy existing path arrows
 - Alerts
 - Time
-- Base placement validity / onion skin
+- Control mode placement validity / onion skin
 - dwarf level ups
 - base canons
 - base spawn diggers control
@@ -33,6 +36,9 @@
 - shaman
 - spider queen
 - aggro emotes
+##  Music
+##  Sound effects
+##  Art
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Performance
@@ -52,5 +58,4 @@
 
 - search feature for tiles, dwarves, etc.
 - hotreloading
-- pos_by_id cache and vice versa?
 - macro or something for requiring all fields to be filled out in struct

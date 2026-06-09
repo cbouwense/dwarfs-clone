@@ -621,6 +621,7 @@ main :: () {
         
         controls.toggle_remove_mode.id   = read_then_increment(*control_id_counter);
         controls.toggle_remove_mode.name = "Remove mode";
+        controls.toggle_remove_mode.control_mode = .REMOVE;
         controls.toggle_remove_mode.tooltip_text = "While active, you can select a created object to destroy it, like dynamite and path arrows.";
         controls.toggle_remove_mode.rebindable_by_user = true; 
         controls.toggle_remove_mode.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_R };
@@ -2378,8 +2379,6 @@ main :: () {
                         HUD_CONTROLS_LABEL_Y       := GetScreenHeight()    - HUD_CONTROLS_PADDING * 2;
                         HUD_CONTROLS_Y             := HUD_CONTROLS_LABEL_Y - HUD_CONTROLS_HEIGHT;
 
-                        
-
                         draw_hud_control :: (control: Control) -> dest_recangle: Rectangle, is_hovered: bool #expand {
                             DrawText(
                                 bind_to_readable_name_cstr(control.binds[0]),
@@ -2409,7 +2408,7 @@ main :: () {
                                         control.id == controls.toggle_remove_mode.id
                                     );
 
-                                    if has_control_mode{
+                                    if has_control_mode {
                                         game_state.control_mode = get_control_mode_from_control(control);
                                     }
 
