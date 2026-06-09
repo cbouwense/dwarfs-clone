@@ -2448,7 +2448,6 @@ main :: () {
                                 GuiTextBox(rect, tprint("%\0", control.tooltip_text).data, xx control.tooltip_text.count, false);
                             }
 
-                            // GuiSetStyle(xx GuiControl.TEXTBOX, xx GuiControlProperty.TEXT_COLOR_NORMAL, );
                             GuiSetStyle(xx GuiControl.DEFAULT, xx GuiDefaultProperty.TEXT_SIZE, 10);
                             GuiSetStyle(xx GuiControl.DEFAULT, xx GuiDefaultProperty.TEXT_ALIGNMENT_VERTICAL, xx GuiTextAlignmentVertical.TEXT_ALIGN_MIDDLE);
                             GuiSetStyle(xx GuiControl.DEFAULT, xx GuiDefaultProperty.TEXT_WRAP_MODE, xx GuiTextWrapMode.TEXT_WRAP_NONE);
