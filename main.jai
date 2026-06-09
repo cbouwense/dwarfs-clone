@@ -970,17 +970,31 @@ main :: () {
                                 }
                             }
                             else {
-                                if game_state.controls_state_this_frame.started_to_draw_path {
-                                    // PERF: would massively benefit from chunking
-                                    for dwarf: dwarves {
-                                        if CheckCollisionPointRec(mouse_pos_in_world, get_world_rect_from_pos(dwarf.pos)) {
-                                            game_state.selected_dwarf_id = dwarf.id;
-                                            break;
+                                // When a dwarf is currently selected from last frame
+                                if game_state.selected_dwarf_id > 0 {
+                                    // If select is let go this frame, deselect the dwarf.
+                                    if game_state.controls_state_prev_frame.select_is_held_down && !game_state.controls_state_this_frame.select_is_held_down {
+                                        found, selected_dwarf_index := table_find(*dwarf_id_to_index, game_state.selected_dwarf_id);
+                                        assert(found);
+
+                                        dwarves[selected_dwarf_index].state = .DECIDING;
+                                        dwarves[selected_dwarf_index].ignore_goblins_for = 2;
+
+                                        game_state.selected_dwarf_id = 0;
+                                    }
+                                } else {
+                                    if game_state.controls_state_this_frame.select_is_pressed_once {
+                                        // PERF: would massively benefit from chunking
+                                        for dwarf: dwarves {
+                                            if CheckCollisionPointRec(mouse_pos_in_world, get_world_rect_from_pos(dwarf.pos)) {
+                                                game_state.selected_dwarf_id = dwarf.id;
+                                                break;
+                                            }
                                         }
                                     }
 
-                                    // If a dwarf was found being clicked
-                                    if game_state.selected_dwarf_id > 0 {
+                                    // If we found a dwarf this frame, pin down selected dwarf.
+                                    if game_state.selected_dwarf_id > 0 && game_state.controls_state_this_frame.select_is_held_down {
                                         found, selected_dwarf_index := table_find(*dwarf_id_to_index, game_state.selected_dwarf_id);
                                         assert(found);
 
@@ -994,7 +1008,9 @@ main :: () {
                                         // Remove its current pathing
                                         array_reset(*(dwarves[selected_dwarf_index].tile_ids_on_path));
                                     }
+                                }
 
+                                if game_state.controls_state_this_frame.started_to_draw_path {
                                     mouse_pos_when_path_creation_started = mouse_pos_in_world;
                                 }
 
@@ -1051,16 +1067,6 @@ main :: () {
                                     tile_id_count_on_path := tile_ids_on_first_leg.count + tile_ids_on_last_leg.count;
 
                                     if !metagame.debug_mode game_state.gold -= tile_id_count_on_path * GOLD_COST_PATH_STEP;
-
-                                    if game_state.selected_dwarf_id > 0 {
-                                        found, selected_dwarf_index := table_find(*dwarf_id_to_index, game_state.selected_dwarf_id);
-                                        assert(found);
-
-                                        dwarves[selected_dwarf_index].state = .DECIDING;
-                                        dwarves[selected_dwarf_index].ignore_goblins_for = 2;
-
-                                        game_state.selected_dwarf_id = 0;
-                                    }
                                 }
                             }
                         case .ADD_BASE;
