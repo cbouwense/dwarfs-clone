@@ -14,7 +14,6 @@
 # Core
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- Display cost for things in tooltip
 - Display gold debit/credit particle
 - Paths need to destroy existing path arrows
 - Alerts

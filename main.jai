@@ -2435,14 +2435,18 @@ main :: () {
                             return dest_rectangle, is_hovered;
                         }
 
-                        draw_control_tooltip_text :: (control: Control, rect: Rectangle) {
+                        draw_control_tooltip_text :: (control: Control, rect: Rectangle, gold_cost := 0) {
                             GuiSetStyle(xx GuiControl.DEFAULT, xx GuiDefaultProperty.TEXT_SIZE, 6);
                             GuiSetStyle(xx GuiControl.TEXTBOX, xx GuiControlProperty.TEXT_COLOR_NORMAL, ColorToInt(WHITE));
                             GuiSetStyle(xx GuiControl.TEXTBOX, xx GuiTextBoxProperty.TEXT_READONLY, 1);
                             GuiSetStyle(xx GuiControl.DEFAULT, xx GuiDefaultProperty.TEXT_WRAP_MODE, xx GuiTextWrapMode.TEXT_WRAP_WORD);
                             GuiSetStyle(xx GuiControl.DEFAULT, xx GuiDefaultProperty.TEXT_ALIGNMENT_VERTICAL, xx GuiTextAlignmentVertical.TEXT_ALIGN_TOP);
 
-                            GuiTextBox(rect, tprint("%\0", control.tooltip_text).data, xx control.tooltip_text.count, false);
+                            if gold_cost > 0 {
+                                GuiTextBox(rect, tprint("%\n\nGold cost: %\0", control.tooltip_text, gold_cost).data, xx control.tooltip_text.count, false);
+                            } else {
+                                GuiTextBox(rect, tprint("%\0", control.tooltip_text).data, xx control.tooltip_text.count, false);
+                            }
 
                             // GuiSetStyle(xx GuiControl.TEXTBOX, xx GuiControlProperty.TEXT_COLOR_NORMAL, );
                             GuiSetStyle(xx GuiControl.DEFAULT, xx GuiDefaultProperty.TEXT_SIZE, 10);
@@ -2451,7 +2455,7 @@ main :: () {
                             GuiSetStyle(xx GuiControl.TEXTBOX, xx GuiTextBoxProperty.TEXT_READONLY, 0);
                         }
 
-                        draw_hud_control_icon :: (control: Control, icon_source_rect: Rectangle) #expand {
+                        draw_hud_control_icon :: (control: Control, icon_source_rect: Rectangle, gold_cost := 0) #expand {
                             dest_rect, is_hovered := draw_hud_control(control);
 
                             DrawTexturePro(tilemap_texture_general, icon_source_rect, dest_rect, Vector2.{0,0}, 0.0, WHITE);
@@ -2460,11 +2464,11 @@ main :: () {
                                 DrawText(tprint("%\0", control.name).data, xx (mouse_pos_in_ui.x), xx (mouse_pos_in_ui.y - HUD_CONTROLS_PADDING), 18, WHITE);
                                 
                                 tooltip_rect := Rectangle.{ dest_rect.x, dest_rect.y - dest_rect.height * 3, dest_rect.width * 6, dest_rect.height * 3 };
-                                draw_control_tooltip_text(control, tooltip_rect);
+                                draw_control_tooltip_text(control, tooltip_rect, gold_cost);
                             }
                         }
 
-                        draw_hud_control_color :: (control: Control, color: Color) #expand {
+                        draw_hud_control_color :: (control: Control, color: Color, gold_cost := 0) #expand {
                             dest_rect, is_hovered := draw_hud_control(control);
 
                             DrawRectangleRec(dest_rect, color);
@@ -2473,17 +2477,17 @@ main :: () {
                                 DrawText(tprint("%\0", control.name).data, xx (mouse_pos_in_ui.x), xx (mouse_pos_in_ui.y - HUD_CONTROLS_PADDING), 18, WHITE);
                                 
                                 tooltip_rect := Rectangle.{ dest_rect.x, dest_rect.y - dest_rect.height * 3, dest_rect.width * 6, dest_rect.height * 3 };
-                                draw_control_tooltip_text(control, tooltip_rect);
+                                draw_control_tooltip_text(control, tooltip_rect, gold_cost);
                             }
                         }
 
-                        draw_hud_control_icon(controls.toggle_remove_mode,    TILEMAP_SOURCE_RECT_REMOVE);
-                        draw_hud_control_icon(controls.toggle_dynamite_mode,  TILEMAP_SOURCE_RECT_DYNAMITE);
-                        draw_hud_control_icon(controls.toggle_base_mode,      TILEMAP_SOURCE_RECT_BASE);
-                        draw_hud_control_color(controls.toggle_wall_mode,     DARKPURPLE);
-                        draw_hud_control_color(controls.toggle_obsidian_mode, DARKGRAY);
-                        draw_hud_control_color(controls.panic_pause,          GRAY);
-                        draw_hud_control_color(controls.fast_forward,         SKYBLUE);
+                        draw_hud_control_icon(controls.toggle_remove_mode, TILEMAP_SOURCE_RECT_REMOVE);
+                        draw_hud_control_icon(controls.toggle_dynamite_mode, TILEMAP_SOURCE_RECT_DYNAMITE, GOLD_COST_DYNAMITE);
+                        draw_hud_control_icon(controls.toggle_base_mode, TILEMAP_SOURCE_RECT_BASE, GOLD_COST_BASE);
+                        draw_hud_control_color(controls.toggle_wall_mode, DARKPURPLE, GOLD_COST_WALL);
+                        draw_hud_control_color(controls.toggle_obsidian_mode, DARKGRAY, GOLD_COST_OBSIDIAN);
+                        draw_hud_control_color(controls.panic_pause, GRAY);
+                        draw_hud_control_color(controls.fast_forward, SKYBLUE);
                     }
                 }
 
