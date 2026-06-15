@@ -63,7 +63,7 @@ GOBLIN_STARTING_HP :: 100;
 GOBLIN_LINE_OF_SIGHT_TILE_COUNT :: 15;
 
 PARTICLE_GOLD_SPEED           :: 15;
-PARTICLE_GOLD_TIME_TO_LIVE_MS :: 3000;
+PARTICLE_GOLD_TIME_TO_LIVE_MS :: 1000;
 PARTICLE_GOLD_SPRITE_SOURCE   :: 9;
 
 LAVA_DAMAGE_PER_HIT :: 20;
@@ -2298,6 +2298,7 @@ main :: () {
                     }
                 }
 
+                // Draw particles
                 DRAW_PARTICLES :: true;
                 #if DRAW_PARTICLES {
                     for particle: particles_in_viewport {
@@ -2310,6 +2311,7 @@ main :: () {
 
                         dest := get_world_rect_from_pos(particle.pos);
                 
+                        DrawText(tprint("%\0", particle.text).data, xx dest.x, xx dest.y, 12, WHITE);
                         DrawTexturePro(tilemap_texture_general, source, dest, Vector2.{0,0}, 0.0, WHITE);
                     }
                 }
