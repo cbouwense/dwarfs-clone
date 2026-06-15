@@ -1092,11 +1092,10 @@ main :: () {
                                     tile_ids_on_last_leg  := get_tile_ids_along_path(middle_pos, end_pos);
                                     tile_id_count_on_path := tile_ids_on_first_leg.count + tile_ids_on_last_leg.count;
 
-                                    if !metagame.debug_mode {
-                                        game_state.gold -= tile_id_count_on_path * GOLD_COST_PATH_STEP;
-                                    }
+                                    gold_cost := tile_id_count_on_path * GOLD_COST_PATH_STEP;
 
-                                    create_gold_particle(-1 * tile_id_count_on_path * GOLD_COST_PATH_STEP, path_being_traced.end_tile_id);
+                                    if !metagame.debug_mode game_state.gold -= gold_cost;
+                                    create_gold_particle(end_pos, -1 * gold_cost);
                                 }
                             }
                         case .ADD_BASE;
@@ -1105,10 +1104,12 @@ main :: () {
                                 if metagame.debug_mode || game_state.gold >= GOLD_COST_BASE {
                                     // Add base.
                                     base_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
-                                    create_base(Vector2.{ base_rect.x, base_rect.y }, false, *game_state);
+                                    base_pos  := Vector2.{ base_rect.x, base_rect.y };
+                                    create_base(base_pos, false, *game_state);
 
                                     // Debit the gold cost.
                                     if !metagame.debug_mode game_state.gold -= GOLD_COST_BASE;
+                                    create_gold_particle(base_pos, -1 * GOLD_COST_BASE);
 
                                     // Reset control mode.
                                     game_state.control_mode = .NORMAL;
@@ -1128,6 +1129,7 @@ main :: () {
 
                                         // Debit the gold cost.
                                         if !metagame.debug_mode game_state.gold -= GOLD_COST_DYNAMITE;
+                                        create_gold_particle(mouse_pos_in_world, -1 * GOLD_COST_DYNAMITE);
 
                                         // Reset control mode.
                                         game_state.control_mode = .NORMAL;
@@ -1167,6 +1169,7 @@ main :: () {
 
                                         // Debit the gold cost.
                                         if !metagame.debug_mode game_state.gold -= GOLD_COST_OBSIDIAN;
+                                        create_gold_particle(mouse_pos_in_world, -1 * GOLD_COST_OBSIDIAN);
                                     }
                                 }
                             }
@@ -1193,6 +1196,7 @@ main :: () {
 
                                         // Debit the gold cost.
                                         if !metagame.debug_mode game_state.gold -= GOLD_COST_WALL;
+                                        create_gold_particle(mouse_pos_in_world, -1 * GOLD_COST_WALL);
                                     }
                                 }
                             }
@@ -1893,6 +1897,7 @@ main :: () {
                                 if dwarf_is_pretty_much_touching_treasure {
                                     // Credit the gold.
                                     game_state.gold += GOLD_FROM_TREASURE;
+                                    create_gold_particle(treasure_pos, GOLD_FROM_TREASURE);
 
                                     // Remove the treasure
                                     array_unordered_remove_by_value(*tiles_with_treasure_ids, it);
@@ -2297,10 +2302,6 @@ main :: () {
                             DrawText(tprint("%\0", tile_id).data, xx hovered_tile_rect.x, xx hovered_tile_rect.y, 12, WHITE);
                         }
                     }
-                }
-
-                poor_mans_measure_text :: (text: string, font_size: int) -> Vector2 {
-                    return Vector2.{ text.count * font_size / 2.0, xx font_size };
                 }
 
                 // Draw particles
@@ -2855,6 +2856,12 @@ main :: () {
 }
 
 // Functions
+
+poor_mans_measure_text :: (text: string, font_size: int) -> Vector2 {
+    if text.count == 0 return Vector2.{ 0, 0 };
+    if text.count == 1 return Vector2.{ font_size * 0.25, xx font_size };
+    return Vector2.{ text.count * font_size * 0.5, xx font_size };
+}
 
 get_previous_tile_id :: (entity: Goblin) -> s32 {
     assert_soft(entity.tile_ids_on_path.count > 0, "Tried getting entity %'s previous tile id, but entity wasn't even going anywhere\n", entity.id);
@@ -3544,13 +3551,12 @@ set_entity_direction_to_face_next_target :: (entity: *$T/interface Moveable) {
     else assert(false);
 }
 
-create_gold_particle :: (amount: int, tile_id: s32) -> Particle {
+create_gold_particle :: (pos: Vector2, amount: int) -> Particle {
     particle_id  := increment_then_read(*particle_id_counter);
-    particle_pos := get_tile_pos_by_id(tile_id);
 
     particle := Particle.{
         id            = particle_id,
-        pos           = particle_pos,
+        pos           = pos,
         vel           = Vector2.{ 0.0, xx -PARTICLE_GOLD_SPEED },
         tint          = ifx amount < 0 then RED else GREEN,
         text          = sprint("%", amount),
@@ -4698,13 +4704,19 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, game_
             table_set(*fully_mined_tile_ids_set, tile_id, tile_column);
 
             if grant_points {
+                tile_pos := get_tile_pos_by_id(tile_id);
+
                 if tile_was_iron {
-                    game_state.gold   += GOLD_FROM_MINE_IRON;
+                    game_state.gold += GOLD_FROM_MINE_IRON;
+                    create_gold_particle(tile_pos, GOLD_FROM_MINE_IRON);
+
                     game_state.points += POINTS_FROM_MINE_IRON;
                 }
 
                 if tile_was_dirt {
-                    game_state.gold   += GOLD_FROM_MINE_DIRT;
+                    game_state.gold += GOLD_FROM_MINE_DIRT;
+                    create_gold_particle(tile_pos, GOLD_FROM_MINE_DIRT);
+
                     game_state.points += POINTS_FROM_MINE_DIRT;
                 }
             }
