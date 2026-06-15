@@ -901,8 +901,8 @@ main :: () {
                 hovered_tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
                 if IsMouseButtonDown(MouseButton.MOUSE_BUTTON_LEFT) && IsKeyDown(KeyboardKey.KEY_LEFT_CONTROL) {
                     tile_id := get_tile_id_by_pos(Vector2.{ hovered_tile_rect.x, hovered_tile_rect.y });
-                    set_tile_as_type(tile_id, .MINED, false, *game_state);
-                    reveal_cave_if_necessary(tile_id, false, *game_state);
+                    set_tile_as_type(tile_id, .MINED, false, false, *game_state);
+                    reveal_cave_if_necessary(tile_id, false, false, *game_state);
                 }
 
                 // Update camera
@@ -1162,7 +1162,7 @@ main :: () {
 
                                     if tile_is_mineable && !tile_is_empty && !tile_is_placed_object && !tile_is_encased {
                                         // Place down the obsidian.
-                                        set_tile_as_type(tile_id, .OBSIDIAN, false, *game_state);
+                                        set_tile_as_type(tile_id, .OBSIDIAN, false, false, *game_state);
 
                                         // Encase any lava or water if we've made a full loop.
                                         handle_encasement(tile_id, *game_state);
@@ -1192,7 +1192,7 @@ main :: () {
 
                                     if tile_is_fully_mined && can_place_wall_on_desired_tile { 
                                         // Place down the wall.
-                                        set_tile_as_type(tile_id, .WALL, false, *game_state);
+                                        set_tile_as_type(tile_id, .WALL, false, false, *game_state);
 
                                         // Debit the gold cost.
                                         if !metagame.debug_mode game_state.gold -= GOLD_COST_WALL;
@@ -1565,7 +1565,7 @@ main :: () {
                                             if new_health <= 0 {
                                                 just_mined_iron := table_contains(*iron_tile_ids_set, dwarf.tile_id_mining);
                                                 
-                                                set_tile_as_type(dwarf.tile_id_mining, .MINED, true, *game_state);
+                                                set_tile_as_type(dwarf.tile_id_mining, .MINED, true, true, *game_state);
 
                                                 if just_mined_iron && dwarf.dwarf_type == .MINER {
                                                     found_next_iron_in_deposit, next_iron_tile_id := detect_iron_tile_id_within_radius(dwarf_tile_id, 3);
@@ -1578,7 +1578,7 @@ main :: () {
 
                                                 // If we just cracked into a cave, we'll need to reveal the cave and do anything
                                                 // that cave type needs (e.g. spawn water, lava, monsters, etc.).
-                                                revealed_cave, cave_type := reveal_cave_if_necessary(dwarf.tile_id_mining, true, *game_state);
+                                                revealed_cave, cave_type := reveal_cave_if_necessary(dwarf.tile_id_mining, true, false, *game_state);
 
                                                 if revealed_cave && cave_type == .TREASURE {
                                                     found, new_treasure_tile_id := detect_treasure_tile_id_within_radius(dwarf.tile_id_mining, 10);
@@ -1869,7 +1869,7 @@ main :: () {
                                     array_add(*tile_ids_to_remove_dynamite_from, it);
 
                                     // Create a hole
-                                    set_tile_as_type(it, .HOLE, false, *game_state);
+                                    set_tile_as_type(it, .HOLE, false, false, *game_state);
                                     handle_encasement(it, *game_state);
 
                                     // TODO: animation I guess
@@ -1988,7 +1988,7 @@ main :: () {
                                 // If all surrounding tiles are liquid, then we can mark this tile as
                                 // still liquid so we don't have to update it going forward.
                                 if are_all_neighbors_liquid(it) {
-                                    set_tile_as_type(it, .WATER_STILL, false, *game_state);
+                                    set_tile_as_type(it, .WATER_STILL, false, false, *game_state);
                                 }
                             }
                         }
@@ -2029,7 +2029,7 @@ main :: () {
                                 // If all surrounding tiles are liquid, then we can mark this tile as
                                 // still liquid so we don't have to update it going forward.
                                 if are_all_neighbors_liquid(it) {
-                                    set_tile_as_type(it, .LAVA_STILL, false, *game_state);
+                                    set_tile_as_type(it, .LAVA_STILL, false, false, *game_state);
                                 }
                             }
                         }
@@ -2229,7 +2229,10 @@ main :: () {
 
                 // Draw paths
                 {
-                    if game_state.controls_state_this_frame.drawing_path && path_being_traced.start_tile_id > 0 draw_path(path_being_traced);
+                    if game_state.controls_state_this_frame.drawing_path && path_being_traced.start_tile_id > 0 {
+                        draw_path(path_being_traced);
+                    }
+
                     for path: paths_in_viewport draw_path(path);
                 }
 
@@ -2337,6 +2340,42 @@ main :: () {
             {
                 screen_width  := GetScreenWidth();
                 screen_height := GetScreenHeight();
+
+                // Draw path being drawn cost
+                if game_state.controls_state_this_frame.drawing_path && path_being_traced.start_tile_id > 0 {
+                    TEXT_SIZE :: 24;
+                    BACKDROP_DIFF :: 2;
+
+                    start_pos  := get_tile_pos_by_id(path_being_traced.start_tile_id);
+                    middle_pos := get_tile_pos_by_id(path_being_traced.middle_tile_id);
+                    end_pos    := get_tile_pos_by_id(path_being_traced.end_tile_id);
+
+                    tile_ids_on_first_leg := get_tile_ids_along_path(start_pos, middle_pos);
+                    tile_ids_on_last_leg  := get_tile_ids_along_path(middle_pos, end_pos);
+                    tile_id_count_on_path := tile_ids_on_first_leg.count + tile_ids_on_last_leg.count;
+                    gold_cost             := tile_id_count_on_path * GOLD_COST_PATH_STEP;
+                    measured_text_size    := poor_mans_measure_text(tprint("%", gold_cost), TEXT_SIZE);
+
+                    text_x := mouse_pos_in_ui.x;
+                    text_y := mouse_pos_in_ui.y - measured_text_size.y;
+
+                    DrawText(tprint("%\0", gold_cost).data, xx (text_x - BACKDROP_DIFF), xx (text_y - BACKDROP_DIFF), TEXT_SIZE + BACKDROP_DIFF, BLACK);
+                    DrawText(tprint("%\0", gold_cost).data, xx text_x, xx text_y, TEXT_SIZE, RED);
+
+                    dest_sprite := Rectangle.{
+                        text_x + measured_text_size.x,
+                        text_y - measured_text_size.y,
+                        TILEMAP_GENERAL_WORLD_WIDTH,
+                        TILEMAP_GENERAL_WORLD_HEIGHT,
+                    };
+                    source := Rectangle.{
+                        xx (PARTICLE_GOLD_SPRITE_SOURCE * TILEMAP_GENERAL_TILE_WIDTH),
+                        0 * TILEMAP_GENERAL_TILE_HEIGHT,
+                        TILEMAP_GENERAL_TILE_WIDTH,
+                        TILEMAP_GENERAL_TILE_HEIGHT,
+                    };
+                    DrawTexturePro(tilemap_texture_general, source, dest_sprite, Vector2.{0,0}, 0.0, WHITE);
+                }
 
                 debug_text_y : s32 = 10;
                 INCREMENT_Y :: 20;
@@ -3071,7 +3110,6 @@ reset_memory :: () {
     array_reset(*hole_tile_ids);
     table_reset(*hole_tile_ids_set);
 
-    // path_being_traced : Path;
     array_reset(*paths);
 
     table_reset(*created_chunks);
@@ -3122,7 +3160,7 @@ initialize_game :: () -> GameState, Metagame, Camera2D {
                 tile_should_be_part_of_cave := cave_noise[noise_index] >= CAVE_PERLIN_NOISE_MAX_THRESHOLD;
 
                 if tile_should_be_part_of_cave {
-                    set_tile_as_type(xx tile_id, .CAVE, false, *game_state);
+                    set_tile_as_type(xx tile_id, .CAVE, false, false, *game_state);
                 }
             }
         }
@@ -3666,8 +3704,8 @@ create_base :: (pos: Vector2, is_home_base: bool, game_state: *GameState) -> Bas
     // Carve out some tiles around the base (including the base tile itself)
     for DIRECTIONS_ALL {
         tile_id := get_neighbor_tile_id_by_direction(base_tile_id, it);
-        set_tile_as_type(tile_id, .MINED, false, game_state);
-        reveal_cave_if_necessary(tile_id, false, game_state);
+        set_tile_as_type(tile_id, .MINED, false, false, game_state);
+        reveal_cave_if_necessary(tile_id, false, false, game_state);
     }
 
     return base;
@@ -4202,7 +4240,7 @@ try_to_encase_tiles :: (starting_tile_id: s32, game_state: *GameState) {
 
         if table_contains(*water_flowing_tile_ids_set, id) {
             found_liquid = true;
-            set_tile_as_type(id, .WATER_STILL, false, game_state);
+            set_tile_as_type(id, .WATER_STILL, false, false, game_state);
         }
 
         if table_contains(*lava_still_tile_ids_set, id) {
@@ -4211,7 +4249,7 @@ try_to_encase_tiles :: (starting_tile_id: s32, game_state: *GameState) {
 
         if table_contains(*lava_flowing_tile_ids_set, id) {
             found_liquid = true;
-            set_tile_as_type(id, .LAVA_STILL, false, game_state);
+            set_tile_as_type(id, .LAVA_STILL, false, false, game_state);
         }
 
         // Mark it as processed and encased
@@ -4328,7 +4366,7 @@ try_to_set_cardinal_neighbors_as_flowing_tile_type :: (tile_id: s32, as_type: Ti
             new_health := current_health - LAVA_DAMAGE_PER_HIT;
 
             if new_health <= 0 {
-                set_tile_as_type(neighbor_id, .MINED, false, game_state);
+                set_tile_as_type(neighbor_id, .MINED, false, false, game_state);
             } else {
                 table_set(*actively_mined_tile_ids_to_health_table, neighbor_id, new_health);
             }
@@ -4342,7 +4380,7 @@ try_to_set_cardinal_neighbors_as_flowing_tile_type :: (tile_id: s32, as_type: Ti
         tile_is_empty := table_contains(*fully_mined_tile_ids_set, neighbor_id);
         if !tile_is_empty continue;
 
-        set_tile_as_type(neighbor_id, as_type, false, game_state);
+        set_tile_as_type(neighbor_id, as_type, false, false, game_state);
     }
 }
 
@@ -4589,7 +4627,7 @@ get_arrow_rotation :: (start_pos: Vector2, end_pos: Vector2) -> float32 {
     else return 0.0;
 }    
 
-set_cave_as_mined :: (tile_id: s32, cave_type: CaveType, grant_points: bool, game_state: *GameState) {
+set_cave_as_mined :: (tile_id: s32, cave_type: CaveType, grant_points: bool, grant_gold: bool, game_state: *GameState) {
     tile_type : TileType;
 
     if #complete cave_type == {
@@ -4624,7 +4662,7 @@ set_cave_as_mined :: (tile_id: s32, cave_type: CaveType, grant_points: bool, gam
             tile_type = .MINED;
     }
 
-    set_tile_as_type(tile_id, tile_type, grant_points, game_state);
+    set_tile_as_type(tile_id, tile_type, grant_points, grant_gold, game_state);
 
     // Recursively go through neighbors and set them as mined as well.
     for DIRECTIONS_CARDINAL {
@@ -4633,11 +4671,11 @@ set_cave_as_mined :: (tile_id: s32, cave_type: CaveType, grant_points: bool, gam
         tile_is_unrevealed_cave := table_contains(*cave_tile_ids_set, neighbor_id);
         if !tile_is_unrevealed_cave continue;
 
-        set_cave_as_mined(neighbor_id, cave_type, grant_points, game_state);
+        set_cave_as_mined(neighbor_id, cave_type, grant_points, grant_gold, game_state);
     }
 }
 
-set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, game_state: *GameState) {
+set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant_gold: bool, game_state: *GameState) {
     _result, chunk := find_or_create_chunk_by_tile_id(tile_id);
 
     tile_was_fully_mined := table_contains(*fully_mined_tile_ids_set, tile_id);
@@ -4703,22 +4741,24 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, game_
             tile_column := cast(s32) random_get_within_range(0, 2);
             table_set(*fully_mined_tile_ids_set, tile_id, tile_column);
 
-            if grant_points {
-                tile_pos := get_tile_pos_by_id(tile_id);
+            tile_pos := get_tile_pos_by_id(tile_id);
 
-                if tile_was_iron {
+            if tile_was_iron {
+                if grant_gold {
                     game_state.gold += GOLD_FROM_MINE_IRON;
                     create_gold_particle(tile_pos, GOLD_FROM_MINE_IRON);
-
-                    game_state.points += POINTS_FROM_MINE_IRON;
                 }
 
-                if tile_was_dirt {
+                if grant_points game_state.points += POINTS_FROM_MINE_IRON;
+            }
+
+            if tile_was_dirt {
+                if grant_gold {
                     game_state.gold += GOLD_FROM_MINE_DIRT;
                     create_gold_particle(tile_pos, GOLD_FROM_MINE_DIRT);
-
-                    game_state.points += POINTS_FROM_MINE_DIRT;
                 }
+
+                if grant_points game_state.points += POINTS_FROM_MINE_DIRT;
             }
         }
         case .ENCASED; {
@@ -5373,7 +5413,7 @@ derive_entities_in_viewport :: (camera: Camera2D) {
     }
 }
 
-reveal_cave_if_necessary :: (tile_id: s32, grant_points: bool, game_state: *GameState) -> revealed_cave: bool, cave_type: CaveType {
+reveal_cave_if_necessary :: (tile_id: s32, grant_points: bool, grant_gold: bool, game_state: *GameState) -> revealed_cave: bool, cave_type: CaveType {
     check_is_neighbor_unreavealed_cave :: (tile_id: s32) -> found_cave_neighbor: bool, cave_neighbor_id: s32 {
         for DIRECTIONS_CARDINAL {
             neighbor_id := get_neighbor_tile_id_by_direction(tile_id, it);
@@ -5393,8 +5433,7 @@ reveal_cave_if_necessary :: (tile_id: s32, grant_points: bool, game_state: *Game
         cave_type = cast(CaveType) cast(int) random_get_within_range(0, xx enum_count(CaveType));
 
         // Second, recursively reveal the tiles of the cave.
-        set_cave_as_mined(cave_tile_id, cave_type, grant_points, game_state);
-
+        set_cave_as_mined(cave_tile_id, cave_type, grant_points, grant_gold, game_state);
     }
 
     return neighbor_is_unrevealed_cave, cave_type;
