@@ -317,6 +317,7 @@ Particle :: struct {
     pos           : Vector2;
     vel           : Vector2;
     text          : string;
+    tint          : Color;
     time_left_ms  : int;
     sprite_source : int;
 }
@@ -2298,21 +2299,35 @@ main :: () {
                     }
                 }
 
+                poor_mans_measure_text :: (text: string, font_size: int) -> Vector2 {
+                    return Vector2.{ text.count * font_size / 2.0, xx font_size };
+                }
+
                 // Draw particles
                 DRAW_PARTICLES :: true;
                 #if DRAW_PARTICLES {
                     for particle: particles_in_viewport {
+                        TEXT_SIZE :: 24;
+                        BACKDROP_DIFF :: 2;
+
+                        dest_text := get_world_rect_from_pos(particle.pos);
+                        DrawText(tprint("%\0", particle.text).data, xx (dest_text.x - BACKDROP_DIFF), xx (dest_text.y - BACKDROP_DIFF), TEXT_SIZE + BACKDROP_DIFF, BLACK);
+                        DrawText(tprint("%\0", particle.text).data, xx dest_text.x, xx dest_text.y, TEXT_SIZE, particle.tint);
+
+                        measured_text_size := poor_mans_measure_text(particle.text, TEXT_SIZE);
+                        dest_sprite := Rectangle.{
+                            dest_text.x + measured_text_size.x,
+                            dest_text.y - measured_text_size.y * 0.25,
+                            dest_text.width,
+                            dest_text.height,
+                        };
                         source := Rectangle.{
                             xx (particle.sprite_source * TILEMAP_GENERAL_TILE_WIDTH),
                             0 * TILEMAP_GENERAL_TILE_HEIGHT,
                             TILEMAP_GENERAL_TILE_WIDTH,
                             TILEMAP_GENERAL_TILE_HEIGHT,
                         };
-
-                        dest := get_world_rect_from_pos(particle.pos);
-                
-                        DrawText(tprint("%\0", particle.text).data, xx dest.x, xx dest.y, 12, WHITE);
-                        DrawTexturePro(tilemap_texture_general, source, dest, Vector2.{0,0}, 0.0, WHITE);
+                        DrawTexturePro(tilemap_texture_general, source, dest_sprite, Vector2.{0,0}, 0.0, WHITE);
                     }
                 }
             }
@@ -3537,6 +3552,7 @@ create_gold_particle :: (amount: int, tile_id: s32) -> Particle {
         id            = particle_id,
         pos           = particle_pos,
         vel           = Vector2.{ 0.0, xx -PARTICLE_GOLD_SPEED },
+        tint          = ifx amount < 0 then RED else GREEN,
         text          = sprint("%", amount),
         time_left_ms  = PARTICLE_GOLD_TIME_TO_LIVE_MS,
         sprite_source = PARTICLE_GOLD_SPRITE_SOURCE,
