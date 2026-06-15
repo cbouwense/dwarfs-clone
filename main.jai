@@ -62,6 +62,10 @@ GOBLIN_SPAWN_ENABLED :: true;
 GOBLIN_STARTING_HP :: 100;
 GOBLIN_LINE_OF_SIGHT_TILE_COUNT :: 15;
 
+PARTICLE_GOLD_SPEED           :: 15;
+PARTICLE_GOLD_TIME_TO_LIVE_MS :: 3000;
+PARTICLE_GOLD_SPRITE_SOURCE   :: 9;
+
 LAVA_DAMAGE_PER_HIT :: 20;
 
 SCALE :: 1;
@@ -158,6 +162,13 @@ TILEMAP_SOURCE_RECT_DYNAMITE :: Rectangle.{
 
 TILEMAP_SOURCE_RECT_REMOVE :: Rectangle.{
     7 * TILEMAP_GENERAL_TILE_WIDTH,
+    0 * TILEMAP_GENERAL_TILE_HEIGHT,
+    TILEMAP_GENERAL_TILE_WIDTH,
+    TILEMAP_GENERAL_TILE_HEIGHT,
+};
+
+TILEMAP_SOURCE_RECT_COIN :: Rectangle.{
+    9 * TILEMAP_GENERAL_TILE_WIDTH,
     0 * TILEMAP_GENERAL_TILE_HEIGHT,
     TILEMAP_GENERAL_TILE_WIDTH,
     TILEMAP_GENERAL_TILE_HEIGHT,
@@ -301,6 +312,15 @@ TileType :: enum u8 {
     HOLE;
 }
 
+Particle :: struct {
+    id            : s32;
+    pos           : Vector2;
+    vel           : Vector2;
+    text          : string;
+    time_left_ms  : int;
+    sprite_source : int;
+}
+
 Entity :: struct {
     id   : s32;
     pos  : Vector2;
@@ -442,8 +462,9 @@ obsidian_tile_ids_in_viewport : [..] s32;
 wall_tile_ids_set         : Table(s32, s32);
 wall_tile_ids_in_viewport : [..] s32;
 
-entity_id_counter  : s32 = 0;
-control_id_counter : s32 = 0;
+entity_id_counter   : s32 = 0;
+control_id_counter  : s32 = 0;
+particle_id_counter : s32 = 0;
 
 bases             : [..] Base;
 base_id_to_index  : Table(s32, s64);
@@ -456,6 +477,10 @@ dwarves_in_viewport : [..] Dwarf;
 goblins             : [..] Goblin;
 goblin_id_to_index  : Table(s32, s64);
 goblins_in_viewport : [..] Goblin;
+
+particles             : [..] Particle;
+particle_id_to_index  : Table(s32, s64);
+particles_in_viewport : [..] Particle;     
 
 tiles_with_dynamite_ids             : [..] s32;
 tiles_with_dynamite_ids_in_viewport : [..] s32;
@@ -1066,7 +1091,11 @@ main :: () {
                                     tile_ids_on_last_leg  := get_tile_ids_along_path(middle_pos, end_pos);
                                     tile_id_count_on_path := tile_ids_on_first_leg.count + tile_ids_on_last_leg.count;
 
-                                    if !metagame.debug_mode game_state.gold -= tile_id_count_on_path * GOLD_COST_PATH_STEP;
+                                    if !metagame.debug_mode {
+                                        game_state.gold -= tile_id_count_on_path * GOLD_COST_PATH_STEP;
+                                    }
+
+                                    create_gold_particle(-1 * tile_id_count_on_path * GOLD_COST_PATH_STEP, path_being_traced.end_tile_id);
                                 }
                             }
                         case .ADD_BASE;
@@ -2009,6 +2038,29 @@ main :: () {
                             kill_any_dynamite_touching_tile_id(it);
                         }
                     }
+
+                    // Update particles
+                    UPDATE_PARTICLES :: true;
+                    #if UPDATE_PARTICLES {
+                        particle_ids_to_kill_this_frame: [..] s32;
+                        particle_ids_to_kill_this_frame.allocator = temp;
+
+                        for *particle: particles {
+                            // Update timer
+                            particle.time_left_ms -= xx (dt_seconds * 1000);
+
+                            // Mark particle for death if it's out of time
+                            if particle.time_left_ms <= 0 {
+                                array_add(*particle_ids_to_kill_this_frame, particle.id);
+                                continue;
+                            }
+
+                            particle.pos.x += particle.vel.x * dt_seconds;
+                            particle.pos.y += particle.vel.y * dt_seconds;
+                        }
+
+                        for particle_ids_to_kill_this_frame kill_particle_by_id(it);
+                    }
                 }
             }
         }
@@ -2243,6 +2295,22 @@ main :: () {
                         if found_tile {
                             DrawText(tprint("%\0", tile_id).data, xx hovered_tile_rect.x, xx hovered_tile_rect.y, 12, WHITE);
                         }
+                    }
+                }
+
+                DRAW_PARTICLES :: true;
+                #if DRAW_PARTICLES {
+                    for particle: particles_in_viewport {
+                        source := Rectangle.{
+                            xx (particle.sprite_source * TILEMAP_GENERAL_TILE_WIDTH),
+                            0 * TILEMAP_GENERAL_TILE_HEIGHT,
+                            TILEMAP_GENERAL_TILE_WIDTH,
+                            TILEMAP_GENERAL_TILE_HEIGHT,
+                        };
+
+                        dest := get_world_rect_from_pos(particle.pos);
+                
+                        DrawTexturePro(tilemap_texture_general, source, dest, Vector2.{0,0}, 0.0, WHITE);
                     }
                 }
             }
@@ -3459,6 +3527,25 @@ set_entity_direction_to_face_next_target :: (entity: *$T/interface Moveable) {
     else assert(false);
 }
 
+create_gold_particle :: (amount: int, tile_id: s32) -> Particle {
+    particle_id  := increment_then_read(*particle_id_counter);
+    particle_pos := get_tile_pos_by_id(tile_id);
+
+    particle := Particle.{
+        id            = particle_id,
+        pos           = particle_pos,
+        vel           = Vector2.{ 0.0, xx -PARTICLE_GOLD_SPEED },
+        text          = sprint("%", amount),
+        time_left_ms  = PARTICLE_GOLD_TIME_TO_LIVE_MS,
+        sprite_source = PARTICLE_GOLD_SPRITE_SOURCE,
+    };
+
+    table_set(*particle_id_to_index, particle_id, particles.count);
+    array_add(*particles, particle);
+
+    return particle;
+}
+
 create_dwarf :: (pos: Vector2, dwarf_type: DwarfType) -> Dwarf {
     dwarf_id    := increment_then_read(*entity_id_counter);
     direction   := cast(Direction) cast(int) random_get_within_range(0, 3);
@@ -3597,6 +3684,24 @@ kill_any_dynamite_touching_tile_id :: (tile_id: s32) {
             array_unordered_remove_by_value(*tiles_with_dynamite_ids, tile_id);
         }
     }
+}
+
+kill_particle_by_index :: (particle_index: s64) {
+    particle_id_being_swapped := particles[particles.count - 1].id;
+    particle_id_being_killed  := particles[particle_index].id;
+
+    if particle_id_being_swapped != particle_id_being_killed {
+        table_set(*particle_id_to_index, particle_id_being_swapped, particle_index);
+    }
+    table_remove(*particle_id_to_index, particle_id_being_killed);
+
+    array_unordered_remove_by_index(*particles, particle_index);
+}
+
+kill_particle_by_id :: (particle_id: s32) {
+    found, particle_index := table_find(*particle_id_to_index, particle_id);
+    assert(found);
+    kill_particle_by_index(particle_index);
 }
 
 // TODO: refactor to entity probably
@@ -4915,6 +5020,7 @@ derive_entities_in_viewport :: (camera: Camera2D) {
     array_reset(*tiles_with_treasure_ids_in_viewport);
     array_reset(*hole_tile_ids_in_viewport);
     array_reset(*paths_in_viewport);
+    array_reset(*particles_in_viewport);
     
     // Calculate chunk dimensions in pixels
     chunk_pixel_width  := cast(float)(CHUNK_SIZE) * TILEMAP_GENERAL_WORLD_WIDTH;
@@ -5220,6 +5326,19 @@ derive_entities_in_viewport :: (camera: Camera2D) {
             ) continue;
 
             array_add(*paths_in_viewport, path);
+        }
+    }
+
+    // Derive viewable particles
+    {
+        for particle: particles {
+            if particle.pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x continue;
+            if particle.pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x continue;
+            
+            if particle.pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y continue;
+            if particle.pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+
+            array_add(*particles_in_viewport, particle);
         }
     }
 }

@@ -15,6 +15,7 @@
 # Core gameplay
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+- Display gold cost while drawing paths
 - probably max 0.0619 zoom
 - Paths need to destroy existing path arrows
 - Alerts
@@ -82,6 +83,7 @@
 # Miscellaneous
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+- jai lsp
 - search feature for tiles, dwarves, etc.
 - hotreloading
 - macro or something for requiring all fields to be filled out in struct
