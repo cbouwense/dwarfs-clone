@@ -1978,9 +1978,7 @@ main :: () {
                         // and can cause self referential problems when looping on the actual state.
                         current_water_flowing_tile_ids := array_view(water_flowing_tile_ids, 0);
                         for current_water_flowing_tile_ids {
-                            game_over_if_touching_home_base(it);
-                            kill_any_dwarves_touching_tile_id(it);
-                            kill_any_dynamite_touching_tile_id(it);
+                            inflict_liquid_consequences(it);
 
                             if should_spread_this_frame {
                                 try_to_set_cardinal_neighbors_as_flowing_tile_type(it, .WATER_FLOWING, *game_state);
@@ -1997,11 +1995,7 @@ main :: () {
                     // Update water still
                     UPDATE_WATER_STILL :: true;
                     #if UPDATE_WATER_STILL {
-                        for water_still_tile_ids {
-                            game_over_if_touching_home_base(it);
-                            kill_any_dwarves_touching_tile_id(it);
-                            kill_any_dynamite_touching_tile_id(it);
-                        }
+                        for water_still_tile_ids inflict_liquid_consequences(it);
                     }
 
                     // Update lava flowing
@@ -2019,9 +2013,7 @@ main :: () {
                         // and can cause self referential problems when looping on the actual state.
                         current_lava_flowing_tile_ids := array_view(lava_flowing_tile_ids, 0);
                         for current_lava_flowing_tile_ids {
-                            game_over_if_touching_home_base(it);
-                            kill_any_dwarves_touching_tile_id(it);
-                            kill_any_dynamite_touching_tile_id(it);
+                            inflict_liquid_consequences(it);
 
                             if should_spread_water_this_frame {
                                 try_to_set_cardinal_neighbors_as_flowing_tile_type(it, .LAVA_FLOWING, *game_state);
@@ -2038,11 +2030,7 @@ main :: () {
                     // Update lava still
                     UPDATE_LAVA_STILL :: true;
                     #if UPDATE_LAVA_STILL {
-                        for lava_still_tile_ids {
-                            game_over_if_touching_home_base(it);
-                            kill_any_dwarves_touching_tile_id(it);
-                            kill_any_dynamite_touching_tile_id(it);
-                        }
+                        for lava_still_tile_ids inflict_liquid_consequences(it);
                     }
 
                     // Update particles
@@ -2896,6 +2884,13 @@ main :: () {
 
 // Functions
 
+inflict_liquid_consequences :: (tile_id: s32) {
+    game_over_if_touching_home_base(tile_id);
+    kill_any_dwarves_touching_tile_id(tile_id);
+    kill_any_goblins_touching_tile_id(tile_id);
+    kill_any_dynamite_touching_tile_id(tile_id);
+}
+
 poor_mans_measure_text :: (text: string, font_size: int) -> Vector2 {
     if text.count == 0 return Vector2.{ 0, 0 };
     if text.count == 1 return Vector2.{ font_size * 0.25, xx font_size };
@@ -3725,6 +3720,7 @@ game_over_if_touching_home_base :: (tile_id: s32) {
     }
 }
 
+// PERF: this functions looks pretty brutal
 kill_any_dwarves_touching_tile_id :: (tile_id: s32) {
     kill_pos  := get_tile_pos_by_id(tile_id);
     kill_rect := Rectangle.{ kill_pos.x, kill_pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
@@ -3736,6 +3732,19 @@ kill_any_dwarves_touching_tile_id :: (tile_id: s32) {
     }
 }
 
+// PERF: this functions looks pretty brutal
+kill_any_goblins_touching_tile_id :: (tile_id: s32) {
+    kill_pos  := get_tile_pos_by_id(tile_id);
+    kill_rect := Rectangle.{ kill_pos.x, kill_pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
+    for goblin, goblin_index: goblins {
+        goblin_rect := Rectangle.{ goblin.pos.x, goblin.pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
+        if CheckCollisionRecs(goblin_rect, kill_rect) {
+            kill_goblin_by_index(goblin_index);
+        }
+    }
+}
+
+// PERF: this functions looks pretty brutal
 kill_any_dynamite_touching_tile_id :: (tile_id: s32) {
     kill_pos  := get_tile_pos_by_id(tile_id);
     kill_rect := Rectangle.{ kill_pos.x, kill_pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
