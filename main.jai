@@ -66,6 +66,10 @@ PARTICLE_GOLD_SPEED           :: 15;
 PARTICLE_GOLD_TIME_TO_LIVE_MS :: 1000;
 PARTICLE_GOLD_SPRITE_SOURCE   :: 9;
 
+PARTICLE_MINER_DEATH_SPEED           :: 15;
+PARTICLE_MINER_DEATH_TIME_TO_LIVE_MS :: 2000;
+PARTICLE_MINER_DEATH_SPRITE_SOURCE   :: 8;
+
 LAVA_DAMAGE_PER_HIT :: 20;
 
 SCALE :: 1;
@@ -3603,6 +3607,25 @@ create_gold_particle :: (pos: Vector2, amount: int) -> Particle {
     return particle;
 }
 
+create_miner_death_particle :: (pos: Vector2) -> Particle {
+    particle_id  := increment_then_read(*particle_id_counter);
+
+    particle := Particle.{
+        id            = particle_id,
+        pos           = pos,
+        vel           = Vector2.{ 0.0, xx -PARTICLE_MINER_DEATH_SPEED },
+        tint          = WHITE,
+        time_left_ms  = PARTICLE_MINER_DEATH_TIME_TO_LIVE_MS,
+        sprite_source = PARTICLE_MINER_DEATH_SPRITE_SOURCE,
+        // text
+    };
+
+    table_set(*particle_id_to_index, particle_id, particles.count);
+    array_add(*particles, particle);
+
+    return particle;
+}
+
 create_dwarf :: (pos: Vector2, dwarf_type: DwarfType) -> Dwarf {
     dwarf_id    := increment_then_read(*entity_id_counter);
     direction   := cast(Direction) cast(int) random_get_within_range(0, 3);
@@ -3777,13 +3800,16 @@ kill_particle_by_id :: (particle_id: s32) {
 
 // TODO: refactor to entity probably
 kill_dwarf_by_index :: (dwarf_index: s64) {
-    dwarf_id_being_swapped := dwarves[dwarves.count - 1].id;
-    dwarf_id_being_killed  := dwarves[dwarf_index].id;
+    dwarf_being_swapped_id := dwarves[dwarves.count - 1].id;
+    dwarf_being_killed_id  := dwarves[dwarf_index].id;
+    dwarf_being_killed_pos := dwarves[dwarf_index].pos;
 
-    if dwarf_id_being_swapped != dwarf_id_being_killed {
-        table_set(*dwarf_id_to_index, dwarf_id_being_swapped, dwarf_index);
+    if dwarf_being_swapped_id != dwarf_being_killed_id {
+        table_set(*dwarf_id_to_index, dwarf_being_swapped_id, dwarf_index);
     }
-    table_remove(*dwarf_id_to_index, dwarf_id_being_killed);
+    table_remove(*dwarf_id_to_index, dwarf_being_killed_id);
+
+    create_miner_death_particle(dwarf_being_killed_pos);
 
     array_unordered_remove_by_index(*dwarves, dwarf_index);
 }
