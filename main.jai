@@ -62,13 +62,20 @@ GOBLIN_SPAWN_ENABLED :: true;
 GOBLIN_STARTING_HP :: 100;
 GOBLIN_LINE_OF_SIGHT_TILE_COUNT :: 15;
 
-PARTICLE_GOLD_SPEED           :: 15;
-PARTICLE_GOLD_TIME_TO_LIVE_MS :: 1000;
-PARTICLE_GOLD_SPRITE_SOURCE   :: 9;
+PARTICLE_GOLD_SPEED             :: 15;
+PARTICLE_GOLD_TIME_TO_LIVE_MS   :: 1000;
+PARTICLE_GOLD_SPRITE_SOURCE_ROW :: 0;
+PARTICLE_GOLD_SPRITE_SOURCE_COL :: 9;
 
-PARTICLE_MINER_DEATH_SPEED           :: 15;
-PARTICLE_MINER_DEATH_TIME_TO_LIVE_MS :: 2000;
-PARTICLE_MINER_DEATH_SPRITE_SOURCE   :: 8;
+PARTICLE_DWARF_DEATH_SPEED             :: 15;
+PARTICLE_DWARF_DEATH_TIME_TO_LIVE_MS   :: 2000;
+PARTICLE_DWARF_DEATH_SPRITE_SOURCE_ROW :: 0;
+PARTICLE_DWARF_DEATH_SPRITE_SOURCE_COL :: 8;
+
+PARTICLE_GOBLIN_DEATH_SPEED             :: 15;
+PARTICLE_GOBLIN_DEATH_TIME_TO_LIVE_MS   :: 2000;
+PARTICLE_GOBLIN_DEATH_SPRITE_SOURCE_ROW :: 1;
+PARTICLE_GOBLIN_DEATH_SPRITE_SOURCE_COL :: 8;
 
 LAVA_DAMAGE_PER_HIT :: 20;
 
@@ -317,13 +324,14 @@ TileType :: enum u8 {
 }
 
 Particle :: struct {
-    id            : s32;
-    pos           : Vector2;
-    vel           : Vector2;
-    text          : string;
-    tint          : Color;
-    time_left_ms  : int;
-    sprite_source : int;
+    id                : s32;
+    pos               : Vector2;
+    vel               : Vector2;
+    text              : string;
+    tint              : Color;
+    time_left_ms      : int;
+    sprite_source_row : int; // 0 indexed
+    sprite_source_col : int; // 0 indexed
 }
 
 Entity :: struct {
@@ -2318,8 +2326,8 @@ main :: () {
                             dest_text.height,
                         };
                         source := Rectangle.{
-                            xx (particle.sprite_source * TILEMAP_GENERAL_TILE_WIDTH),
-                            0 * TILEMAP_GENERAL_TILE_HEIGHT,
+                            xx (particle.sprite_source_col * TILEMAP_GENERAL_TILE_WIDTH),
+                            xx (particle.sprite_source_row * TILEMAP_GENERAL_TILE_HEIGHT),
                             TILEMAP_GENERAL_TILE_WIDTH,
                             TILEMAP_GENERAL_TILE_HEIGHT,
                         };
@@ -2361,8 +2369,8 @@ main :: () {
                         TILEMAP_GENERAL_WORLD_HEIGHT,
                     };
                     source := Rectangle.{
-                        xx (PARTICLE_GOLD_SPRITE_SOURCE * TILEMAP_GENERAL_TILE_WIDTH),
-                        0 * TILEMAP_GENERAL_TILE_HEIGHT,
+                        xx (PARTICLE_GOLD_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH),
+                        xx (PARTICLE_GOLD_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT),
                         TILEMAP_GENERAL_TILE_WIDTH,
                         TILEMAP_GENERAL_TILE_HEIGHT,
                     };
@@ -3592,13 +3600,14 @@ create_gold_particle :: (pos: Vector2, amount: int) -> Particle {
     particle_id  := increment_then_read(*particle_id_counter);
 
     particle := Particle.{
-        id            = particle_id,
-        pos           = pos,
-        vel           = Vector2.{ 0.0, xx -PARTICLE_GOLD_SPEED },
-        tint          = ifx amount < 0 then RED else GREEN,
-        text          = sprint("%", amount),
-        time_left_ms  = PARTICLE_GOLD_TIME_TO_LIVE_MS,
-        sprite_source = PARTICLE_GOLD_SPRITE_SOURCE,
+        id                = particle_id,
+        pos               = pos,
+        vel               = Vector2.{ 0.0, xx -PARTICLE_GOLD_SPEED },
+        tint              = ifx amount < 0 then RED else GREEN,
+        text              = sprint("%", amount),
+        time_left_ms      = PARTICLE_GOLD_TIME_TO_LIVE_MS,
+        sprite_source_row = PARTICLE_GOLD_SPRITE_SOURCE_ROW,
+        sprite_source_col = PARTICLE_GOLD_SPRITE_SOURCE_COL,
     };
 
     table_set(*particle_id_to_index, particle_id, particles.count);
@@ -3607,16 +3616,37 @@ create_gold_particle :: (pos: Vector2, amount: int) -> Particle {
     return particle;
 }
 
-create_miner_death_particle :: (pos: Vector2) -> Particle {
+create_dwarf_death_particle :: (pos: Vector2) -> Particle {
     particle_id  := increment_then_read(*particle_id_counter);
 
     particle := Particle.{
-        id            = particle_id,
-        pos           = pos,
-        vel           = Vector2.{ 0.0, xx -PARTICLE_MINER_DEATH_SPEED },
-        tint          = WHITE,
-        time_left_ms  = PARTICLE_MINER_DEATH_TIME_TO_LIVE_MS,
-        sprite_source = PARTICLE_MINER_DEATH_SPRITE_SOURCE,
+        id                = particle_id,
+        pos               = pos,
+        vel               = Vector2.{ 0.0, xx -PARTICLE_DWARF_DEATH_SPEED },
+        tint              = WHITE,
+        time_left_ms      = PARTICLE_DWARF_DEATH_TIME_TO_LIVE_MS,
+        sprite_source_row = PARTICLE_DWARF_DEATH_SPRITE_SOURCE_ROW,
+        sprite_source_col = PARTICLE_DWARF_DEATH_SPRITE_SOURCE_COL,
+        // text
+    };
+
+    table_set(*particle_id_to_index, particle_id, particles.count);
+    array_add(*particles, particle);
+
+    return particle;
+}
+
+create_goblin_death_particle :: (pos: Vector2) -> Particle {
+    particle_id  := increment_then_read(*particle_id_counter);
+
+    particle := Particle.{
+        id                = particle_id,
+        pos               = pos,
+        vel               = Vector2.{ 0.0, xx -PARTICLE_GOBLIN_DEATH_SPEED },
+        tint              = WHITE,
+        time_left_ms      = PARTICLE_GOBLIN_DEATH_TIME_TO_LIVE_MS,
+        sprite_source_row = PARTICLE_GOBLIN_DEATH_SPRITE_SOURCE_ROW,
+        sprite_source_col = PARTICLE_GOBLIN_DEATH_SPRITE_SOURCE_COL,
         // text
     };
 
@@ -3809,7 +3839,7 @@ kill_dwarf_by_index :: (dwarf_index: s64) {
     }
     table_remove(*dwarf_id_to_index, dwarf_being_killed_id);
 
-    create_miner_death_particle(dwarf_being_killed_pos);
+    create_dwarf_death_particle(dwarf_being_killed_pos);
 
     array_unordered_remove_by_index(*dwarves, dwarf_index);
 }
@@ -3822,13 +3852,16 @@ kill_dwarf_by_id :: (dwarf_id: s32) {
 
 // TODO: refactor to entity probably
 kill_goblin_by_index :: (goblin_index: s64) {
-    goblin_id_being_swapped := goblins[goblins.count - 1].id;
-    goblin_id_being_killed  := goblins[goblin_index].id;
+    goblin_being_swapped_id := goblins[goblins.count - 1].id;
+    goblin_being_killed_id  := goblins[goblin_index].id;
+    goblin_being_killed_pos := goblins[goblin_index].pos;
 
-    if goblin_id_being_swapped != goblin_id_being_killed {
-        table_set(*goblin_id_to_index, goblin_id_being_swapped, goblin_index);
+    if goblin_being_swapped_id != goblin_being_killed_id {
+        table_set(*goblin_id_to_index, goblin_being_swapped_id, goblin_index);
     }
-    table_remove(*goblin_id_to_index, goblin_id_being_killed);
+    table_remove(*goblin_id_to_index, goblin_being_killed_id);
+
+    create_goblin_death_particle(goblin_being_killed_pos);
 
     array_unordered_remove_by_index(*goblins, goblin_index);
 }
