@@ -8,6 +8,8 @@
 # Bugs
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+- Dwarf warrior attacked a goblin diagonally when the goblin was attacking a base
+- Dwarf miners seem to be aggroing when goblins are far enough away that they shouldn't be
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Core gameplay
@@ -32,7 +34,6 @@
 - bases must be placed down on paths
 - shaman
 - spider queen
-- aggro emotes
 - Tutorial
 - Paths should just be two single paths, not bends
 

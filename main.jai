@@ -77,6 +77,10 @@ PARTICLE_GOBLIN_DEATH_TIME_TO_LIVE_MS   :: 2000;
 PARTICLE_GOBLIN_DEATH_SPRITE_SOURCE_ROW :: 1;
 PARTICLE_GOBLIN_DEATH_SPRITE_SOURCE_COL :: 8;
 
+PARTICLE_DWARF_AGGRO_TIME_TO_LIVE_MS   :: 2000;
+PARTICLE_DWARF_AGGRO_SPRITE_SOURCE_ROW :: 1;
+PARTICLE_DWARF_AGGRO_SPRITE_SOURCE_COL :: 9;
+
 LAVA_DAMAGE_PER_HIT :: 20;
 
 SCALE :: 1;
@@ -324,14 +328,16 @@ TileType :: enum u8 {
 }
 
 Particle :: struct {
-    id                : s32;
-    pos               : Vector2;
-    vel               : Vector2;
-    text              : string;
-    tint              : Color;
-    time_left_ms      : int;
-    sprite_source_row : int; // 0 indexed
-    sprite_source_col : int; // 0 indexed
+    id                    : s32;
+    pos                   : Vector2;
+    vel                   : Vector2;
+    text                  : string;
+    tint                  : Color;
+    time_left_ms          : int;
+    sprite_source_row     : int; // 0 indexed
+    sprite_source_col     : int; // 0 indexed
+    entity_id_to_follow   : s32;
+    entity_kind_to_follow : EntityKind;
 }
 
 Entity :: struct {
@@ -1293,6 +1299,7 @@ main :: () {
                                             dwarf.goblin_id_attacking = goblin.id;
                                             dwarf.direction = direction_of_goblin;
                                             dwarf.state = .ATTACKING;
+                                            create_dwarf_aggro_particle(dwarf.pos, dwarf.id);
                                             is_dwarf_done_deciding = true;
                                         }
                                     } else {
@@ -1808,14 +1815,14 @@ main :: () {
                                         entity: *Entity;
                                         is_dwarf := false; // TODO: fix this!!!!!!!!!!!!!!!
 
-                                        set_tile_id_to_index(Dwarf);
-                                        found, entity_index = table_find(*tile_id_to_index, goblin.entity_id_attacking);
+                                        set_entity_id_to_index(Dwarf);
+                                        found, entity_index = table_find(*entity_id_to_index, goblin.entity_id_attacking);
                                         if found {
                                             is_dwarf = true;
                                             entity = *dwarves[entity_index];
                                         } else {
-                                            set_tile_id_to_index(Base);
-                                            found, entity_index = table_find(*tile_id_to_index, goblin.entity_id_attacking);
+                                            set_entity_id_to_index(Base);
+                                            found, entity_index = table_find(*entity_id_to_index, goblin.entity_id_attacking);
                                             if found {
                                                 entity = *bases[entity_index];
                                             }
@@ -2061,8 +2068,18 @@ main :: () {
                                 continue;
                             }
 
-                            particle.pos.x += particle.vel.x * dt_seconds;
-                            particle.pos.y += particle.vel.y * dt_seconds;
+                            // TODO: this logic is a little fishy. I'm assuming that if there is an entity to follow then we wouldn't want
+                            // to also move the particle by its velocity. I guess we'll see ¯\_(ツ)_/¯
+                            if particle.entity_id_to_follow > 0 {
+                                found, entity := get_entity_by_id(particle.entity_kind_to_follow, particle.entity_id_to_follow);
+                                assert_soft(found, "Particle % was trying to reference entity % (kind %) that it's supposed to follow, but didn't find it\n", particle.id, particle.entity_id_to_follow, particle.entity_kind_to_follow);
+
+                                particle.pos.x = entity.pos.x;
+                                particle.pos.y = entity.pos.y - TILEMAP_GENERAL_WORLD_HEIGHT;
+                            } else {
+                                particle.pos.x += particle.vel.x * dt_seconds;
+                                particle.pos.y += particle.vel.y * dt_seconds;
+                            }
                         }
 
                         for particle_ids_to_kill_this_frame kill_particle_by_id(it);
@@ -2989,6 +3006,7 @@ deal_with_nearby_goblins :: (dwarf: *Dwarf) -> DealWithNearbyGoblinResult {
             // If the dwarf is right up against where it's going to attack the goblin already, then start fighting
             if is_tile_id_neighbor_of_tile_id_cardinal(dwarf_tile_id, goblin_tile_id) {
                 dwarf.state = .ATTACKING;
+                create_dwarf_aggro_particle(dwarf.pos, dwarf.id);
             } else if dwarf.dwarf_type == .WARRIOR {
                 array_reset(*dwarf.tile_ids_on_path);
                 array_copy(*dwarf.tile_ids_on_path, tile_ids_to_goblin_target);
@@ -3647,6 +3665,28 @@ create_goblin_death_particle :: (pos: Vector2) -> Particle {
         time_left_ms      = PARTICLE_GOBLIN_DEATH_TIME_TO_LIVE_MS,
         sprite_source_row = PARTICLE_GOBLIN_DEATH_SPRITE_SOURCE_ROW,
         sprite_source_col = PARTICLE_GOBLIN_DEATH_SPRITE_SOURCE_COL,
+        // text
+    };
+
+    table_set(*particle_id_to_index, particle_id, particles.count);
+    array_add(*particles, particle);
+
+    return particle;
+}
+
+create_dwarf_aggro_particle :: (pos: Vector2, dwarf_id: s32) -> Particle {
+    particle_id  := increment_then_read(*particle_id_counter);
+
+    particle := Particle.{
+        id                    = particle_id,
+        pos                   = pos,
+        vel                   = Vector2.{ 0.0, 0.0 },
+        tint                  = WHITE,
+        time_left_ms          = PARTICLE_DWARF_AGGRO_TIME_TO_LIVE_MS,
+        sprite_source_row     = PARTICLE_DWARF_AGGRO_SPRITE_SOURCE_ROW,
+        sprite_source_col     = PARTICLE_DWARF_AGGRO_SPRITE_SOURCE_COL,
+        entity_id_to_follow   = dwarf_id,
+        entity_kind_to_follow = .Dwarf,
         // text
     };
 
@@ -5666,12 +5706,47 @@ set_tile_ids_to_entity :: (T: Type) #expand
     else assert(false); // TODO: what if we didn't need this somehow
 }
 
-set_tile_id_to_index :: ($T: Type) #expand
+set_entity_id_to_index :: ($T: Type) #expand
 #modify { return uses_entity_with_as(cast(*Type_Info) T, Entity); }
 {
-    `tile_id_to_index : Table(s32, s64);
-    #if      T == Dwarf  `tile_id_to_index = dwarf_id_to_index;
-    else #if T == Goblin `tile_id_to_index = goblin_id_to_index;
-    else #if T == Base   `tile_id_to_index = base_id_to_index;
+    `entity_id_to_index : Table(s32, s64);
+    #if      T == Dwarf  `entity_id_to_index = dwarf_id_to_index;
+    else #if T == Goblin `entity_id_to_index = goblin_id_to_index;
+    else #if T == Base   `entity_id_to_index = base_id_to_index;
     else assert(false); // TODO: what if we didn't need this somehow
+}
+
+get_entity_kind_to_type :: (entity_kind: EntityKind) -> Type {
+    if #complete entity_kind == {
+        case .Base;   return Base;
+        case .Dwarf;  return Dwarf;
+        case .Goblin; return Goblin;
+    }
+}
+
+get_entity_by_id :: (entity_kind: EntityKind, id: s32) -> (found: bool, entity: *Entity)
+{
+    entity_id_to_index : Table(s32, s64);
+    if #complete entity_kind == {
+        case .Base;   entity_id_to_index = base_id_to_index;
+        case .Dwarf;  entity_id_to_index = dwarf_id_to_index;
+        case .Goblin; entity_id_to_index = goblin_id_to_index;
+    }
+
+    found, index := table_find(*entity_id_to_index, id);
+
+    if !found return false, null;
+
+    entity := get_entity_by_index(entity_kind, index);
+    
+    return found, entity;
+}
+
+get_entity_by_index :: (entity_kind: EntityKind, index: s64) -> *Entity
+{
+    if #complete entity_kind == {
+        case .Base;   return *(bases[index]);
+        case .Dwarf;  return *(dwarves[index]);
+        case .Goblin; return *(goblins[index]);
+    }
 }
