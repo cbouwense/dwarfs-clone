@@ -81,6 +81,10 @@ PARTICLE_DWARF_AGGRO_TIME_TO_LIVE_MS   :: 2000;
 PARTICLE_DWARF_AGGRO_SPRITE_SOURCE_ROW :: 1;
 PARTICLE_DWARF_AGGRO_SPRITE_SOURCE_COL :: 9;
 
+PARTICLE_DWARF_SELECTED_TIME_TO_LIVE_MS   :: 9999999;
+PARTICLE_DWARF_SELECTED_SPRITE_SOURCE_ROW :: 1;
+PARTICLE_DWARF_SELECTED_SPRITE_SOURCE_COL :: 7;
+
 LAVA_DAMAGE_PER_HIT :: 20;
 
 SCALE :: 1;
@@ -250,16 +254,17 @@ mouse_drag_began_at_pos : Vector2;
 mouse_pos_when_path_creation_started : Vector2;
 
 GameState :: struct {
-    hovered_dwarf_index       : int;
-    selected_dwarf_id         : s32;
-    water_flow_cooldown_ms    : int;
-    lava_flow_cooldown_ms     : int;
-    points                    : int;
-    gold                      : int;
-    control_mode              : ControlMode;
-    panic_pause_timer_ms      : int;
-    controls_state_this_frame : ControlsState;
-    controls_state_prev_frame : ControlsState;
+    hovered_dwarf_index        : int;
+    selected_dwarf_id          : s32;
+    selected_dwarf_particle_id : s32;
+    water_flow_cooldown_ms     : int;
+    lava_flow_cooldown_ms      : int;
+    points                     : int;
+    gold                       : int;
+    control_mode               : ControlMode;
+    panic_pause_timer_ms       : int;
+    controls_state_this_frame  : ControlsState;
+    controls_state_prev_frame  : ControlsState;
 }
 
 Direction :: enum u8 #specified {
@@ -1021,6 +1026,8 @@ main :: () {
                                         found, selected_dwarf_index := table_find(*dwarf_id_to_index, game_state.selected_dwarf_id);
                                         assert(found);
 
+                                        kill_particle_by_id(game_state.selected_dwarf_particle_id);
+
                                         dwarves[selected_dwarf_index].state = .DECIDING;
                                         dwarves[selected_dwarf_index].ignore_goblins_for = 2;
 
@@ -1041,6 +1048,9 @@ main :: () {
                                     if game_state.selected_dwarf_id > 0 && game_state.controls_state_this_frame.select_is_held_down {
                                         found, selected_dwarf_index := table_find(*dwarf_id_to_index, game_state.selected_dwarf_id);
                                         assert(found);
+
+                                        particle := create_dwarf_selected_particle(dwarves[selected_dwarf_index].pos, dwarves[selected_dwarf_index].id);
+                                        game_state.selected_dwarf_particle_id = particle.id;
 
                                         // Teleport dwarf to tile we are hovering over and keep it there
                                         tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
@@ -1296,10 +1306,12 @@ main :: () {
                                     if dwarf.ignore_goblins_for == 0 {
                                         detected, goblin, direction_of_goblin := detect_neighbor_cardinal(dwarf_tile_id, Goblin);
                                         if detected {
+                                            create_dwarf_aggro_particle(dwarf.pos, dwarf.id);
+
                                             dwarf.goblin_id_attacking = goblin.id;
                                             dwarf.direction = direction_of_goblin;
                                             dwarf.state = .ATTACKING;
-                                            create_dwarf_aggro_particle(dwarf.pos, dwarf.id);
+
                                             is_dwarf_done_deciding = true;
                                         }
                                     } else {
@@ -2997,6 +3009,8 @@ deal_with_nearby_goblins :: (dwarf: *Dwarf) -> DealWithNearbyGoblinResult {
     detected, goblin, tile_ids_to_goblin_target := detect_entity_within_radius(Goblin, dwarf_tile_id, 3);
     
     if detected {
+        create_dwarf_aggro_particle(dwarf.pos, dwarf.id);
+
         dwarf.goblin_id_attacking = goblin.id;
 
         assert_soft(tile_ids_to_goblin_target.count > 0, "Dwarf % detected goblin % is right on top of him, or is moving right on top of him\n", dwarf.id, goblin.id);
@@ -3006,7 +3020,6 @@ deal_with_nearby_goblins :: (dwarf: *Dwarf) -> DealWithNearbyGoblinResult {
             // If the dwarf is right up against where it's going to attack the goblin already, then start fighting
             if is_tile_id_neighbor_of_tile_id_cardinal(dwarf_tile_id, goblin_tile_id) {
                 dwarf.state = .ATTACKING;
-                create_dwarf_aggro_particle(dwarf.pos, dwarf.id);
             } else if dwarf.dwarf_type == .WARRIOR {
                 array_reset(*dwarf.tile_ids_on_path);
                 array_copy(*dwarf.tile_ids_on_path, tile_ids_to_goblin_target);
@@ -3152,8 +3165,9 @@ initialize_game :: () -> GameState, Metagame, Camera2D {
 
     // Initialize game
     game_state := GameState.{
-        hovered_dwarf_index    = 0,
-        selected_dwarf_id      = 0,
+        hovered_dwarf_index        = 0,
+        selected_dwarf_id          = 0,
+        selected_dwarf_particle_id = 0,
         water_flow_cooldown_ms = WATER_FLOW_COOLDOWN_MS,
         lava_flow_cooldown_ms  = LAVA_FLOW_COOLDOWN_MS,
         points = 0,
@@ -3692,6 +3706,28 @@ create_dwarf_aggro_particle :: (pos: Vector2, dwarf_id: s32) -> Particle {
         time_left_ms          = PARTICLE_DWARF_AGGRO_TIME_TO_LIVE_MS,
         sprite_source_row     = PARTICLE_DWARF_AGGRO_SPRITE_SOURCE_ROW,
         sprite_source_col     = PARTICLE_DWARF_AGGRO_SPRITE_SOURCE_COL,
+        entity_id_to_follow   = dwarf_id,
+        entity_kind_to_follow = .Dwarf,
+        // text
+    };
+
+    table_set(*particle_id_to_index, particle_id, particles.count);
+    array_add(*particles, particle);
+
+    return particle;
+}
+
+create_dwarf_selected_particle :: (pos: Vector2, dwarf_id: s32) -> Particle {
+    particle_id  := increment_then_read(*particle_id_counter);
+
+    particle := Particle.{
+        id                    = particle_id,
+        pos                   = pos,
+        vel                   = Vector2.{ 0.0, 0.0 },
+        tint                  = WHITE,
+        time_left_ms          = PARTICLE_DWARF_SELECTED_TIME_TO_LIVE_MS, // This really should just be infinite
+        sprite_source_row     = PARTICLE_DWARF_SELECTED_SPRITE_SOURCE_ROW,
+        sprite_source_col     = PARTICLE_DWARF_SELECTED_SPRITE_SOURCE_COL,
         entity_id_to_follow   = dwarf_id,
         entity_kind_to_follow = .Dwarf,
         // text
