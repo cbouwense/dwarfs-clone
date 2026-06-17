@@ -1073,18 +1073,18 @@ main :: () {
                                     potential_path_being_traced := get_path(mouse_pos_when_path_creation_started, mouse_pos_in_world);
 
                                     if !metagame.debug_mode {
+                                        potential_path_cost     := get_path_cost(potential_path_being_traced);
+                                        unaffordable_tile_count := cast(int) ceil((cast(float) (potential_path_cost - game_state.gold)) / cast(float)GOLD_COST_PATH_STEP);
+
+                                        // PERF: duplicating this from the get_path_cost
                                         start_pos  := get_tile_pos_by_id(potential_path_being_traced.start_tile_id);
                                         middle_pos := get_tile_pos_by_id(potential_path_being_traced.middle_tile_id);
                                         end_pos    := get_tile_pos_by_id(potential_path_being_traced.end_tile_id);
 
                                         tile_ids_on_first_leg := get_tile_ids_along_path(start_pos, middle_pos);
                                         tile_ids_on_last_leg  := get_tile_ids_along_path(middle_pos, end_pos);
-                                        tile_id_count_on_path := tile_ids_on_first_leg.count + tile_ids_on_last_leg.count;
-                                        
-                                        potential_path_cost     := tile_id_count_on_path * GOLD_COST_PATH_STEP;
-                                        unaffordable_tile_count := cast(int) ceil((cast(float) (potential_path_cost - game_state.gold)) / cast(float)GOLD_COST_PATH_STEP);
 
-                                        for 0..unaffordable_tile_count - 1 {
+                                        for 0..unaffordable_tile_count {
                                             if tile_ids_on_last_leg.count > 0 {
                                                 array_unordered_remove_by_index(*tile_ids_on_last_leg, tile_ids_on_last_leg.count - 1);
                                             } else if tile_ids_on_first_leg.count > 0 {
@@ -1109,18 +1109,10 @@ main :: () {
                                 else if game_state.controls_state_prev_frame.drawing_path && path_being_traced.start_tile_id > 0 {
                                     array_add(*paths, path_being_traced);
 
-                                    // PERF: Could probably just do this with id math or something
-                                    //
+                                    end_pos := get_tile_pos_by_id(path_being_traced.end_tile_id);
+
                                     // Debit the gold cost.
-                                    start_pos  := get_tile_pos_by_id(path_being_traced.start_tile_id);
-                                    middle_pos := get_tile_pos_by_id(path_being_traced.middle_tile_id);
-                                    end_pos    := get_tile_pos_by_id(path_being_traced.end_tile_id);
-
-                                    tile_ids_on_first_leg := get_tile_ids_along_path(start_pos, middle_pos);
-                                    tile_ids_on_last_leg  := get_tile_ids_along_path(middle_pos, end_pos);
-                                    tile_id_count_on_path := tile_ids_on_first_leg.count + tile_ids_on_last_leg.count;
-
-                                    gold_cost := tile_id_count_on_path * GOLD_COST_PATH_STEP;
+                                    gold_cost := get_path_cost(path_being_traced);
 
                                     if !metagame.debug_mode game_state.gold -= gold_cost;
                                     create_gold_particle(end_pos, -1 * gold_cost);
@@ -2375,14 +2367,15 @@ main :: () {
                     TEXT_SIZE :: 24;
                     BACKDROP_DIFF :: 2;
 
-                    start_pos  := get_tile_pos_by_id(path_being_traced.start_tile_id);
-                    middle_pos := get_tile_pos_by_id(path_being_traced.middle_tile_id);
-                    end_pos    := get_tile_pos_by_id(path_being_traced.end_tile_id);
+                    // start_pos  := get_tile_pos_by_id(path_being_traced.start_tile_id);
+                    // middle_pos := get_tile_pos_by_id(path_being_traced.middle_tile_id);
+                    // end_pos    := get_tile_pos_by_id(path_being_traced.end_tile_id);
 
-                    tile_ids_on_first_leg := get_tile_ids_along_path(start_pos, middle_pos);
-                    tile_ids_on_last_leg  := get_tile_ids_along_path(middle_pos, end_pos);
-                    tile_id_count_on_path := tile_ids_on_first_leg.count + tile_ids_on_last_leg.count;
-                    gold_cost             := tile_id_count_on_path * GOLD_COST_PATH_STEP;
+                    // tile_ids_on_first_leg := get_tile_ids_along_path(start_pos, middle_pos);
+                    // tile_ids_on_last_leg  := get_tile_ids_along_path(middle_pos, end_pos);
+                    // tile_id_count_on_path := tile_ids_on_first_leg.count + tile_ids_on_last_leg.count;
+
+                    gold_cost := get_path_cost(path_being_traced);
                     measured_text_size    := poor_mans_measure_text(tprint("%", gold_cost), TEXT_SIZE);
 
                     text_x := mouse_pos_in_ui.x;
@@ -4713,6 +4706,25 @@ get_path :: (from_pos: Vector2, to_pos: Vector2) -> Path {
         middle_tile_id = middle_tile_id,
         end_tile_id    = end_tile_id,
     };
+}
+
+get_path_cost :: (path: Path) -> int {
+    tile_ids_on_path_set : Table(s32, Any);
+    tile_ids_on_path_set.allocator = temp;
+
+    start_pos  := get_tile_pos_by_id(path.start_tile_id);
+    middle_pos := get_tile_pos_by_id(path.middle_tile_id);
+    end_pos    := get_tile_pos_by_id(path.end_tile_id);
+
+    tile_ids_on_first_leg := get_tile_ids_along_path(start_pos, middle_pos);
+    tile_ids_on_last_leg  := get_tile_ids_along_path(middle_pos, end_pos);
+
+    for tile_ids_on_first_leg table_set(*tile_ids_on_path_set, it, 1738);
+    for tile_ids_on_last_leg  table_set(*tile_ids_on_path_set, it, 1738);
+
+    tile_id_count_on_path := tile_ids_on_path_set.count - 1; // Remove the first tile id from the equation.
+    
+    return tile_id_count_on_path * GOLD_COST_PATH_STEP;
 }
 
 get_tile_ids_along_path :: (from_pos: Vector2, to_pos: Vector2) -> [..] s32 {
