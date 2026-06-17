@@ -3138,6 +3138,13 @@ reset_memory :: () {
     array_reset(*paths);
 
     table_reset(*created_chunks);
+
+    array_reset(*particles);
+    table_reset(*particle_id_to_index);
+
+    entity_id_counter   = 0;
+    control_id_counter  = 0;
+    particle_id_counter = 0;
 }
 
 initialize_game :: () -> GameState, Metagame, Camera2D {
