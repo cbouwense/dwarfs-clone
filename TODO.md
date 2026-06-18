@@ -15,6 +15,7 @@
 # Core gameplay
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+- Particle fade
 - Death poof particles
 - probably max 0.0619 zoom
 - Paths need to destroy existing path arrows

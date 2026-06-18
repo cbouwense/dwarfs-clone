@@ -84,6 +84,11 @@ PARTICLE_DWARF_SELECTED_TIME_TO_LIVE_MS   :: 99999999;
 PARTICLE_DWARF_SELECTED_SPRITE_SOURCE_ROW :: 1;
 PARTICLE_DWARF_SELECTED_SPRITE_SOURCE_COL :: 7;
 
+PARTICLE_DAMAGE_STAR_TIME_TO_LIVE_MS   :: 750;
+PARTICLE_DAMAGE_STAR_SPRITE_SOURCE_ROW :: 1;
+PARTICLE_DAMAGE_STAR_SPRITE_SOURCE_COL :: 6;
+PARTICLE_DAMAGE_STAR_STARTING_SPEED    :: 250;
+
 PARTICLE_DAMAGE_TIME_TO_LIVE_MS :: 1000;
 
 LAVA_DAMAGE_PER_HIT :: 20;
@@ -337,7 +342,7 @@ Particle :: struct {
     id                    : s32;
     pos                   : Vector2;
     vel                   : Vector2;
-    acceleration          : Vector2;
+    damp                  : float;
     text                  : string;
     tint                  : Color;
     time_left_ms          : int;
@@ -1649,29 +1654,49 @@ main :: () {
 
                                         // Make sure the goblin is still alive, it's possible that other dwarves have killed it this frame.
                                         found, goblin_index := table_find(*goblin_id_to_index, dwarf.goblin_id_attacking);
-                                        if (found) {
-                                            goblin := *goblins[goblin_index];
+                                        if found {
+                                            goblin         := *goblins[goblin_index];
+                                            goblin_center  := get_rect_center(get_world_rect_from_pos(goblin.pos));
+                                            goblin_tile_id := get_tile_id_by_pos(goblin_center);
 
-                                            assert_soft(dwarf.goblin_id_attacking == goblin.id, "Dwarf % thinks he's attacking goblin % but really found goblin %", dwarf.id, dwarf.goblin_id_attacking, goblin.id);
+                                            if is_tile_id_neighbor_of_tile_id_cardinal(dwarf_tile_id, goblin_tile_id) {
+                                                assert_soft(dwarf.goblin_id_attacking == goblin.id, "Dwarf % thinks he's attacking goblin % but really found goblin %", dwarf.id, dwarf.goblin_id_attacking, goblin.id);
 
-                                            // Hit check
-                                            rng := random_get_within_range(0, 1);
-                                            swing_connected := rng <= dwarf_get_hit_chance(dwarf);
+                                                // Hit check
+                                                rng := random_get_within_range(0, 1);
+                                                swing_connected := rng <= dwarf_get_hit_chance(dwarf);
 
-                                            if swing_connected {
-                                                damage := dwarf_get_attack_damage(dwarf);
+                                                if swing_connected {
+                                                    damage := dwarf_get_attack_damage(dwarf);
 
-                                                create_damage_particle(goblin.pos, damage);
+                                                    // TODO: probably extract this
+                                                    direction_stars_should_fly: Direction;
+                                                    found_direction := false;
+                                                    for DIRECTIONS_CARDINAL {
+                                                        neighbor_tile_id := get_neighbor_tile_id_by_direction(dwarf_tile_id, it);
+                                                        if neighbor_tile_id == goblin_tile_id {
+                                                            direction_stars_should_fly = it;
+                                                            found_direction = true;
+                                                            break;
+                                                        }
+                                                    }
+                                                    assert_soft(found_direction, "Was trying to figure out what direction the damage start should fly when dwarf % connected an attack on goblin %, but didn't detect the goblin as a cardinal neighbor of the dwarf\n", dwarf.id, goblin.id);
 
-                                                goblin.hp -= damage;
+                                                    create_damage_particles(goblin.pos, damage, direction_stars_should_fly);
 
-                                                if goblin.hp <= 0 {
-                                                    kill_goblin_by_id(goblin.id);
+                                                    goblin.hp -= damage;
 
-                                                    dwarf.state = .DECIDING;
-                                                    dwarf.goblin_id_attacking = 0;
+                                                    if goblin.hp <= 0 {
+                                                        kill_goblin_by_id(goblin.id);
+
+                                                        dwarf.state = .DECIDING;
+                                                        dwarf.goblin_id_attacking = 0;
+                                                    }
                                                 }
-                                            }
+                                            } else {
+                                                dwarf.state = .DECIDING;
+                                                dwarf.goblin_id_attacking = 0;
+                                            }                                            
                                         } else {
                                             dwarf.state = .DECIDING;
                                             dwarf.goblin_id_attacking = 0;
@@ -1838,16 +1863,14 @@ main :: () {
                                             }
                                         }
 
-                                    
-
                                         if (found) {
                                             assert_soft(goblin.entity_id_attacking == entity.id, "Goblin % thinks he's attacking entity % but really found entity %", goblin.id, goblin.entity_id_attacking, entity.id);
 
                                             stop_trying_to_attack := false;
-
                                             // If attacking a dwarf, make sure it's still in reach
                                             if is_dwarf {
-                                                detected, dwarf := find_cardinal_neighbor_entity(goblin_tile_id, Dwarf);
+                                                detected, dwarf, direction := find_cardinal_neighbor_entity(goblin_tile_id, Dwarf);
+
                                                 if !detected {
                                                     goblin.state = .DECIDING;
                                                     goblin.entity_id_attacking = 0;
@@ -1860,7 +1883,23 @@ main :: () {
                                                 swing_connected := rng <= GOBLIN_HIT_CHANCE;
 
                                                 if swing_connected {
-                                                    create_damage_particle(entity.pos, GOBLIN_ATTACK_DAMAGE_PER_SWING);
+                                                    
+                                                    target_entity_center   := get_rect_center(get_world_rect_from_pos(entity.pos));
+                                                    target_entity_tile_id  := get_tile_id_by_pos(target_entity_center);
+
+                                                    direction_stars_should_fly: Direction;
+                                                    found_direction := false;
+                                                    for DIRECTIONS_CARDINAL {
+                                                        neighbor_tile_id := get_neighbor_tile_id_by_direction(goblin_tile_id, it);
+                                                        if neighbor_tile_id == target_entity_tile_id {
+                                                            direction_stars_should_fly = it;
+                                                            found_direction = true;
+                                                            break;
+                                                        }
+                                                    }
+                                                    assert_soft(found_direction, "Was trying to figure out what direction the damage start should fly when goblin % connected an attack on entity %, but didn't detect the entity as a cardinal neighbor of the dwarf\n", goblin.id, entity.id);
+
+                                                    create_damage_particles(entity.pos, GOBLIN_ATTACK_DAMAGE_PER_SWING, direction_stars_should_fly);
 
                                                     entity.hp -= GOBLIN_ATTACK_DAMAGE_PER_SWING;
 
@@ -2094,6 +2133,11 @@ main :: () {
                             } else {
                                 particle.pos.x += particle.vel.x * dt_seconds;
                                 particle.pos.y += particle.vel.y * dt_seconds;
+                                
+                                if particle.damp > 0 {
+                                    particle.vel.x *= particle.damp;
+                                    particle.vel.y *= particle.damp;
+                                }
                             }
                         }
 
@@ -3745,24 +3789,121 @@ create_dwarf_selected_particle :: (pos: Vector2, dwarf_id: s32) -> Particle {
     return particle;
 }
 
-create_damage_particle :: (pos: Vector2, amount: int) -> Particle {
-    particle_id  := increment_then_read(*particle_id_counter);
+create_damage_particles :: (pos: Vector2, amount: int, direction_stars_should_fly: Direction) {
+    // Damage text
+    {
+        particle_id  := increment_then_read(*particle_id_counter);
 
-    particle := Particle.{
-        id                    = particle_id,
-        pos                   = pos,
-        vel                   = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
-        text                  = sprint("%", amount),
-        tint                  = RED,
-        time_left_ms          = PARTICLE_DAMAGE_TIME_TO_LIVE_MS,
-        sprite_source_row     = -1,
-        sprite_source_col     = -1,
-    };
+        particle := Particle.{
+            id                    = particle_id,
+            pos                   = pos,
+            vel                   = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
+            text                  = sprint("%", amount),
+            tint                  = RED,
+            time_left_ms          = PARTICLE_DAMAGE_TIME_TO_LIVE_MS,
+            sprite_source_row     = -1,
+            sprite_source_col     = -1,
+        };
 
-    table_set(*particle_id_to_index, particle_id, particles.count);
-    array_add(*particles, particle);
+        table_set(*particle_id_to_index, particle_id, particles.count);
+        array_add(*particles, particle);
+    }
 
-    return particle;
+    // Damage star 1
+    {
+        particle_id  := increment_then_read(*particle_id_counter);
+
+        secondary_speed_modifier := random_get_within_range(-0.1, 0.1);
+
+        velocity     : Vector2;
+        acceleration : Vector2;
+        if direction_stars_should_fly == {
+            case .NORTH;
+                velocity = Vector2.{
+                    PARTICLE_DAMAGE_STAR_STARTING_SPEED * secondary_speed_modifier,
+                    PARTICLE_DAMAGE_STAR_STARTING_SPEED * -1,
+                };
+            case .SOUTH;
+                velocity = Vector2.{
+                    PARTICLE_DAMAGE_STAR_STARTING_SPEED * secondary_speed_modifier,
+                    PARTICLE_DAMAGE_STAR_STARTING_SPEED * 1,
+                };
+            case .EAST; 
+                velocity = Vector2.{
+                    PARTICLE_DAMAGE_STAR_STARTING_SPEED * 1,
+                    PARTICLE_DAMAGE_STAR_STARTING_SPEED * secondary_speed_modifier,
+                };
+            case .WEST; 
+                velocity = Vector2.{
+                    PARTICLE_DAMAGE_STAR_STARTING_SPEED * -1,
+                    PARTICLE_DAMAGE_STAR_STARTING_SPEED * secondary_speed_modifier,
+                };
+            case;
+                assert_soft(false, "When creating damage star particles, got a weird direction for them to fly. Expected a cardinal direction, but got %\n", direction_stars_should_fly);
+        }
+
+        particle := Particle.{
+            id                = particle_id,
+            pos               = pos,
+            vel               = velocity,
+            damp              = 0.95,
+            tint              = WHITE,
+            time_left_ms      = PARTICLE_DAMAGE_STAR_TIME_TO_LIVE_MS,
+            sprite_source_row = PARTICLE_DAMAGE_STAR_SPRITE_SOURCE_ROW,
+            sprite_source_col = PARTICLE_DAMAGE_STAR_SPRITE_SOURCE_COL,
+        };
+
+        table_set(*particle_id_to_index, particle_id, particles.count);
+        array_add(*particles, particle);
+    }
+
+    // Damage star 2
+    {
+        particle_id  := increment_then_read(*particle_id_counter);
+
+        secondary_speed_modifier := random_get_within_range(-0.2, 0.2);
+
+        velocity     : Vector2;
+        acceleration : Vector2;
+        if direction_stars_should_fly == {
+            case .NORTH;
+                velocity = Vector2.{
+                    PARTICLE_DAMAGE_STAR_STARTING_SPEED * secondary_speed_modifier,
+                    PARTICLE_DAMAGE_STAR_STARTING_SPEED * -1,
+                };
+            case .SOUTH;
+                velocity = Vector2.{
+                    PARTICLE_DAMAGE_STAR_STARTING_SPEED * secondary_speed_modifier,
+                    PARTICLE_DAMAGE_STAR_STARTING_SPEED * 1,
+                };
+            case .EAST; 
+                velocity = Vector2.{
+                    PARTICLE_DAMAGE_STAR_STARTING_SPEED * 1,
+                    PARTICLE_DAMAGE_STAR_STARTING_SPEED * secondary_speed_modifier,
+                };
+            case .WEST; 
+                velocity = Vector2.{
+                    PARTICLE_DAMAGE_STAR_STARTING_SPEED * -1,
+                    PARTICLE_DAMAGE_STAR_STARTING_SPEED * secondary_speed_modifier,
+                };
+            case;
+                assert_soft(false, "When creating damage star particles, got a weird direction for them to fly. Expected a cardinal direction, but got %\n", direction_stars_should_fly);
+        }
+
+        particle := Particle.{
+            id                = particle_id,
+            pos               = pos,
+            vel               = velocity,
+            damp              = 0.95,
+            tint              = WHITE,
+            time_left_ms      = PARTICLE_DAMAGE_STAR_TIME_TO_LIVE_MS,
+            sprite_source_row = PARTICLE_DAMAGE_STAR_SPRITE_SOURCE_ROW,
+            sprite_source_col = PARTICLE_DAMAGE_STAR_SPRITE_SOURCE_COL,
+        };
+
+        table_set(*particle_id_to_index, particle_id, particles.count);
+        array_add(*particles, particle);
+    }
 }
 
 create_dwarf :: (pos: Vector2, dwarf_type: DwarfType) -> Dwarf {
@@ -5177,7 +5318,7 @@ detect_entity_within_radius :: ($T: Type, starting_tile_id: s32, max_depth: s32)
 }
 
 // TODO: general version that also returns the Type
-find_cardinal_neighbor_entity :: (tile_id: s32, $T: Type) -> found_entity: bool, entity: *T
+find_cardinal_neighbor_entity :: (tile_id: s32, $T: Type) -> found_entity: bool, entity: *T, direction: Direction
 #modify { return uses_entity_with_as(cast(*Type_Info) T, Entity); }
 {
     for DIRECTIONS_CARDINAL {
@@ -5186,10 +5327,10 @@ find_cardinal_neighbor_entity :: (tile_id: s32, $T: Type) -> found_entity: bool,
         set_tile_ids_to_entity(T);
 
         neighbor_has_entity, entity := table_find(*tile_ids_to_entity, neighbor_id);
-        if neighbor_has_entity return true, entity;
+        if neighbor_has_entity return true, entity, it;
     }
 
-    return false, null;
+    return false, null, .CENTER;
 }
 
 find_line_of_sight_entity :: (tile_id: s32, $T: Type, line_of_sight_tile_count: int) -> bool, *T, tile_ids_path: [] s32
