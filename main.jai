@@ -62,28 +62,29 @@ GOBLIN_SPAWN_ENABLED :: true;
 GOBLIN_STARTING_HP :: 100;
 GOBLIN_LINE_OF_SIGHT_TILE_COUNT :: 15;
 
-PARTICLE_GOLD_SPEED             :: 15;
+PARTICLE_FLOAT_SPEED :: -15.0;
+
 PARTICLE_GOLD_TIME_TO_LIVE_MS   :: 1000;
 PARTICLE_GOLD_SPRITE_SOURCE_ROW :: 0;
 PARTICLE_GOLD_SPRITE_SOURCE_COL :: 9;
 
-PARTICLE_DWARF_DEATH_SPEED             :: 15;
-PARTICLE_DWARF_DEATH_TIME_TO_LIVE_MS   :: 2000;
+PARTICLE_DWARF_DEATH_TIME_TO_LIVE_MS   :: 1500;
 PARTICLE_DWARF_DEATH_SPRITE_SOURCE_ROW :: 0;
 PARTICLE_DWARF_DEATH_SPRITE_SOURCE_COL :: 8;
 
-PARTICLE_GOBLIN_DEATH_SPEED             :: 15;
-PARTICLE_GOBLIN_DEATH_TIME_TO_LIVE_MS   :: 2000;
+PARTICLE_GOBLIN_DEATH_TIME_TO_LIVE_MS   :: 1500;
 PARTICLE_GOBLIN_DEATH_SPRITE_SOURCE_ROW :: 1;
 PARTICLE_GOBLIN_DEATH_SPRITE_SOURCE_COL :: 8;
 
-PARTICLE_DWARF_AGGRO_TIME_TO_LIVE_MS   :: 2000;
+PARTICLE_DWARF_AGGRO_TIME_TO_LIVE_MS   :: 1000;
 PARTICLE_DWARF_AGGRO_SPRITE_SOURCE_ROW :: 1;
 PARTICLE_DWARF_AGGRO_SPRITE_SOURCE_COL :: 9;
 
-PARTICLE_DWARF_SELECTED_TIME_TO_LIVE_MS   :: 9999999;
+PARTICLE_DWARF_SELECTED_TIME_TO_LIVE_MS   :: 99999999;
 PARTICLE_DWARF_SELECTED_SPRITE_SOURCE_ROW :: 1;
 PARTICLE_DWARF_SELECTED_SPRITE_SOURCE_COL :: 7;
+
+PARTICLE_DAMAGE_TIME_TO_LIVE_MS :: 1000;
 
 LAVA_DAMAGE_PER_HIT :: 20;
 
@@ -336,6 +337,7 @@ Particle :: struct {
     id                    : s32;
     pos                   : Vector2;
     vel                   : Vector2;
+    acceleration          : Vector2;
     text                  : string;
     tint                  : Color;
     time_left_ms          : int;
@@ -1657,7 +1659,11 @@ main :: () {
                                             swing_connected := rng <= dwarf_get_hit_chance(dwarf);
 
                                             if swing_connected {
-                                                goblin.hp -= dwarf_get_attack_damage(dwarf);
+                                                damage := dwarf_get_attack_damage(dwarf);
+
+                                                create_damage_particle(goblin.pos, damage);
+
+                                                goblin.hp -= damage;
 
                                                 if goblin.hp <= 0 {
                                                     kill_goblin_by_id(goblin.id);
@@ -1854,6 +1860,8 @@ main :: () {
                                                 swing_connected := rng <= GOBLIN_HIT_CHANCE;
 
                                                 if swing_connected {
+                                                    create_damage_particle(entity.pos, GOBLIN_ATTACK_DAMAGE_PER_SWING);
+
                                                     entity.hp -= GOBLIN_ATTACK_DAMAGE_PER_SWING;
 
                                                     if entity.hp <= 0 {
@@ -2072,14 +2080,17 @@ main :: () {
                                 continue;
                             }
 
-                            // TODO: this logic is a little fishy. I'm assuming that if there is an entity to follow then we wouldn't want
+                            // TODO: this logic is a little fishy. It assumes that if there is an entity to follow then we wouldn't want
                             // to also move the particle by its velocity. I guess we'll see ¯\_(ツ)_/¯
                             if particle.entity_id_to_follow > 0 {
                                 found, entity := get_entity_by_id(particle.entity_kind_to_follow, particle.entity_id_to_follow);
-                                assert_soft(found, "Particle % was trying to reference entity % (kind %) that it's supposed to follow, but didn't find it\n", particle.id, particle.entity_id_to_follow, particle.entity_kind_to_follow);
-
-                                particle.pos.x = entity.pos.x;
-                                particle.pos.y = entity.pos.y - TILEMAP_GENERAL_WORLD_HEIGHT;
+                                if (found) {
+                                    particle.pos.x = entity.pos.x;
+                                    particle.pos.y = entity.pos.y - TILEMAP_GENERAL_WORLD_HEIGHT;
+                                } else {
+                                    print("WARN: Particle % was trying to reference entity % (kind %) that it's supposed to follow, but didn't find it. Destroying particle.\n", particle.id, particle.entity_id_to_follow, particle.entity_kind_to_follow);
+                                    array_add(*particle_ids_to_kill_this_frame, particle.id);
+                                }
                             } else {
                                 particle.pos.x += particle.vel.x * dt_seconds;
                                 particle.pos.y += particle.vel.y * dt_seconds;
@@ -2339,20 +2350,22 @@ main :: () {
                         DrawText(tprint("%\0", particle.text).data, xx (dest_text.x - BACKDROP_DIFF), xx (dest_text.y - BACKDROP_DIFF), TEXT_SIZE + BACKDROP_DIFF, BLACK);
                         DrawText(tprint("%\0", particle.text).data, xx dest_text.x, xx dest_text.y, TEXT_SIZE, particle.tint);
 
-                        measured_text_size := poor_mans_measure_text(particle.text, TEXT_SIZE);
-                        dest_sprite := Rectangle.{
-                            dest_text.x + measured_text_size.x,
-                            dest_text.y - measured_text_size.y * 0.25,
-                            dest_text.width,
-                            dest_text.height,
-                        };
-                        source := Rectangle.{
-                            xx (particle.sprite_source_col * TILEMAP_GENERAL_TILE_WIDTH),
-                            xx (particle.sprite_source_row * TILEMAP_GENERAL_TILE_HEIGHT),
-                            TILEMAP_GENERAL_TILE_WIDTH,
-                            TILEMAP_GENERAL_TILE_HEIGHT,
-                        };
-                        DrawTexturePro(tilemap_texture_general, source, dest_sprite, Vector2.{0,0}, 0.0, WHITE);
+                        if particle.sprite_source_col > -1 && particle.sprite_source_row > -1 {
+                            measured_text_size := poor_mans_measure_text(particle.text, TEXT_SIZE);
+                            dest_sprite := Rectangle.{
+                                dest_text.x + measured_text_size.x,
+                                dest_text.y - measured_text_size.y * 0.25,
+                                dest_text.width,
+                                dest_text.height,
+                            };
+                            source := Rectangle.{
+                                xx (particle.sprite_source_col * TILEMAP_GENERAL_TILE_WIDTH),
+                                xx (particle.sprite_source_row * TILEMAP_GENERAL_TILE_HEIGHT),
+                                TILEMAP_GENERAL_TILE_WIDTH,
+                                TILEMAP_GENERAL_TILE_HEIGHT,
+                            };
+                            DrawTexturePro(tilemap_texture_general, source, dest_sprite, Vector2.{0,0}, 0.0, WHITE);
+                        }
                     }
                 }
             }
@@ -3634,7 +3647,7 @@ create_gold_particle :: (pos: Vector2, amount: int) -> Particle {
     particle := Particle.{
         id                = particle_id,
         pos               = pos,
-        vel               = Vector2.{ 0.0, xx -PARTICLE_GOLD_SPEED },
+        vel               = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
         tint              = ifx amount < 0 then RED else GREEN,
         text              = sprint("%", amount),
         time_left_ms      = PARTICLE_GOLD_TIME_TO_LIVE_MS,
@@ -3654,7 +3667,7 @@ create_dwarf_death_particle :: (pos: Vector2) -> Particle {
     particle := Particle.{
         id                = particle_id,
         pos               = pos,
-        vel               = Vector2.{ 0.0, xx -PARTICLE_DWARF_DEATH_SPEED },
+        vel               = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
         tint              = WHITE,
         time_left_ms      = PARTICLE_DWARF_DEATH_TIME_TO_LIVE_MS,
         sprite_source_row = PARTICLE_DWARF_DEATH_SPRITE_SOURCE_ROW,
@@ -3674,7 +3687,7 @@ create_goblin_death_particle :: (pos: Vector2) -> Particle {
     particle := Particle.{
         id                = particle_id,
         pos               = pos,
-        vel               = Vector2.{ 0.0, xx -PARTICLE_GOBLIN_DEATH_SPEED },
+        vel               = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
         tint              = WHITE,
         time_left_ms      = PARTICLE_GOBLIN_DEATH_TIME_TO_LIVE_MS,
         sprite_source_row = PARTICLE_GOBLIN_DEATH_SPRITE_SOURCE_ROW,
@@ -3724,6 +3737,26 @@ create_dwarf_selected_particle :: (pos: Vector2, dwarf_id: s32) -> Particle {
         entity_id_to_follow   = dwarf_id,
         entity_kind_to_follow = .Dwarf,
         // text
+    };
+
+    table_set(*particle_id_to_index, particle_id, particles.count);
+    array_add(*particles, particle);
+
+    return particle;
+}
+
+create_damage_particle :: (pos: Vector2, amount: int) -> Particle {
+    particle_id  := increment_then_read(*particle_id_counter);
+
+    particle := Particle.{
+        id                    = particle_id,
+        pos                   = pos,
+        vel                   = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
+        text                  = sprint("%", amount),
+        tint                  = RED,
+        time_left_ms          = PARTICLE_DAMAGE_TIME_TO_LIVE_MS,
+        sprite_source_row     = -1,
+        sprite_source_col     = -1,
     };
 
     table_set(*particle_id_to_index, particle_id, particles.count);
