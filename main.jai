@@ -89,7 +89,7 @@ PARTICLE_DAMAGE_STAR_SPRITE_SOURCE_ROW :: 1;
 PARTICLE_DAMAGE_STAR_SPRITE_SOURCE_COL :: 6;
 PARTICLE_DAMAGE_STAR_STARTING_SPEED    :: 250;
 
-PARTICLE_DAMAGE_TIME_TO_LIVE_MS :: 1000;
+PARTICLE_DAMAGE_TIME_TO_LIVE_MS :: 1500;
 
 LAVA_DAMAGE_PER_HIT :: 20;
 
@@ -345,6 +345,8 @@ Particle :: struct {
     damp                  : float;
     text                  : string;
     tint                  : Color;
+    fade                  : bool;
+    opacity               : float;
     time_left_ms          : int;
     sprite_source_row     : int; // 0 indexed
     sprite_source_col     : int; // 0 indexed
@@ -2119,6 +2121,19 @@ main :: () {
                                 continue;
                             }
 
+                            // PERF: there's probably an intelligent way of doing this.
+                            if particle.fade {
+                                if particle.time_left_ms > 1000 {
+                                    particle.opacity = 1;
+                                } else {
+                                    particle.opacity = particle.time_left_ms * 0.001;
+                                }
+
+                                if particle.opacity < 0 particle.opacity = 0;
+                            } else {
+                                particle.opacity = 1;
+                            }
+
                             // TODO: this logic is a little fishy. It assumes that if there is an entity to follow then we wouldn't want
                             // to also move the particle by its velocity. I guess we'll see ¯\_(ツ)_/¯
                             if particle.entity_id_to_follow > 0 {
@@ -2391,8 +2406,8 @@ main :: () {
                         BACKDROP_DIFF :: 2;
 
                         dest_text := get_world_rect_from_pos(particle.pos);
-                        DrawText(tprint("%\0", particle.text).data, xx (dest_text.x - BACKDROP_DIFF), xx (dest_text.y - BACKDROP_DIFF), TEXT_SIZE + BACKDROP_DIFF, BLACK);
-                        DrawText(tprint("%\0", particle.text).data, xx dest_text.x, xx dest_text.y, TEXT_SIZE, particle.tint);
+                        DrawText(tprint("%\0", particle.text).data, xx (dest_text.x - BACKDROP_DIFF), xx (dest_text.y - BACKDROP_DIFF), TEXT_SIZE + BACKDROP_DIFF, Color.{ BLACK.r, BLACK.g, BLACK.b, xx (particle.opacity * 255) });
+                        DrawText(tprint("%\0", particle.text).data, xx dest_text.x, xx dest_text.y, TEXT_SIZE, Color.{ particle.tint.r, particle.tint.g, particle.tint.b, xx (particle.opacity * 255) });
 
                         if particle.sprite_source_col > -1 && particle.sprite_source_row > -1 {
                             measured_text_size := poor_mans_measure_text(particle.text, TEXT_SIZE);
@@ -2408,7 +2423,7 @@ main :: () {
                                 TILEMAP_GENERAL_TILE_WIDTH,
                                 TILEMAP_GENERAL_TILE_HEIGHT,
                             };
-                            DrawTexturePro(tilemap_texture_general, source, dest_sprite, Vector2.{0,0}, 0.0, WHITE);
+                            DrawTexturePro(tilemap_texture_general, source, dest_sprite, Vector2.{0,0}, 0.0, Color.{ WHITE.r, WHITE.g, WHITE.b, xx (particle.opacity * 255) });
                         }
                     }
                 }
@@ -3694,6 +3709,8 @@ create_gold_particle :: (pos: Vector2, amount: int) -> Particle {
         vel               = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
         tint              = ifx amount < 0 then RED else GREEN,
         text              = sprint("%", amount),
+        fade              = false,
+        opacity           = 1,
         time_left_ms      = PARTICLE_GOLD_TIME_TO_LIVE_MS,
         sprite_source_row = PARTICLE_GOLD_SPRITE_SOURCE_ROW,
         sprite_source_col = PARTICLE_GOLD_SPRITE_SOURCE_COL,
@@ -3713,6 +3730,8 @@ create_dwarf_death_particle :: (pos: Vector2) -> Particle {
         pos               = pos,
         vel               = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
         tint              = WHITE,
+        fade              = true,
+        opacity           = 1,
         time_left_ms      = PARTICLE_DWARF_DEATH_TIME_TO_LIVE_MS,
         sprite_source_row = PARTICLE_DWARF_DEATH_SPRITE_SOURCE_ROW,
         sprite_source_col = PARTICLE_DWARF_DEATH_SPRITE_SOURCE_COL,
@@ -3733,6 +3752,8 @@ create_goblin_death_particle :: (pos: Vector2) -> Particle {
         pos               = pos,
         vel               = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
         tint              = WHITE,
+        fade              = true,
+        opacity           = 1,
         time_left_ms      = PARTICLE_GOBLIN_DEATH_TIME_TO_LIVE_MS,
         sprite_source_row = PARTICLE_GOBLIN_DEATH_SPRITE_SOURCE_ROW,
         sprite_source_col = PARTICLE_GOBLIN_DEATH_SPRITE_SOURCE_COL,
@@ -3753,6 +3774,8 @@ create_dwarf_aggro_particle :: (pos: Vector2, dwarf_id: s32) -> Particle {
         pos                   = pos,
         vel                   = Vector2.{ 0.0, 0.0 },
         tint                  = WHITE,
+        fade                  = false,
+        opacity               = 1,
         time_left_ms          = PARTICLE_DWARF_AGGRO_TIME_TO_LIVE_MS,
         sprite_source_row     = PARTICLE_DWARF_AGGRO_SPRITE_SOURCE_ROW,
         sprite_source_col     = PARTICLE_DWARF_AGGRO_SPRITE_SOURCE_COL,
@@ -3775,6 +3798,8 @@ create_dwarf_selected_particle :: (pos: Vector2, dwarf_id: s32) -> Particle {
         pos                   = pos,
         vel                   = Vector2.{ 0.0, 0.0 },
         tint                  = WHITE,
+        fade                  = false,
+        opacity               = 1,
         time_left_ms          = PARTICLE_DWARF_SELECTED_TIME_TO_LIVE_MS, // This really should just be infinite
         sprite_source_row     = PARTICLE_DWARF_SELECTED_SPRITE_SOURCE_ROW,
         sprite_source_col     = PARTICLE_DWARF_SELECTED_SPRITE_SOURCE_COL,
@@ -3800,6 +3825,8 @@ create_damage_particles :: (pos: Vector2, amount: int, direction_stars_should_fl
             vel                   = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
             text                  = sprint("%", amount),
             tint                  = RED,
+            fade                  = true,
+            opacity               = 1,
             time_left_ms          = PARTICLE_DAMAGE_TIME_TO_LIVE_MS,
             sprite_source_row     = -1,
             sprite_source_col     = -1,
@@ -3848,6 +3875,8 @@ create_damage_particles :: (pos: Vector2, amount: int, direction_stars_should_fl
             vel               = velocity,
             damp              = 0.95,
             tint              = WHITE,
+            fade              = true,
+            opacity           = 1,
             time_left_ms      = PARTICLE_DAMAGE_STAR_TIME_TO_LIVE_MS,
             sprite_source_row = PARTICLE_DAMAGE_STAR_SPRITE_SOURCE_ROW,
             sprite_source_col = PARTICLE_DAMAGE_STAR_SPRITE_SOURCE_COL,
@@ -3896,6 +3925,8 @@ create_damage_particles :: (pos: Vector2, amount: int, direction_stars_should_fl
             vel               = velocity,
             damp              = 0.95,
             tint              = WHITE,
+            fade              = true,
+            opacity           = 1,
             time_left_ms      = PARTICLE_DAMAGE_STAR_TIME_TO_LIVE_MS,
             sprite_source_row = PARTICLE_DAMAGE_STAR_SPRITE_SOURCE_ROW,
             sprite_source_col = PARTICLE_DAMAGE_STAR_SPRITE_SOURCE_COL,
