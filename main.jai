@@ -1694,6 +1694,8 @@ main :: () {
                                                         dwarf.state = .DECIDING;
                                                         dwarf.goblin_id_attacking = 0;
                                                     }
+                                                } else {
+                                                    create_miss_particles(goblin.pos);
                                                 }
                                             } else {
                                                 dwarf.state = .DECIDING;
@@ -1912,6 +1914,8 @@ main :: () {
                                                         goblin.state = .DECIDING;
                                                         goblin.entity_id_attacking = 0;
                                                     }
+                                                } else {
+                                                    create_miss_particles(entity.pos);
                                                 }
                                             }
                                         } else {
@@ -2402,7 +2406,7 @@ main :: () {
                 DRAW_PARTICLES :: true;
                 #if DRAW_PARTICLES {
                     for particle: particles_in_viewport {
-                        TEXT_SIZE :: 24;
+                        TEXT_SIZE     :: 20;
                         BACKDROP_DIFF :: 2;
 
                         dest_text := get_world_rect_from_pos(particle.pos);
@@ -3935,6 +3939,26 @@ create_damage_particles :: (pos: Vector2, amount: int, direction_stars_should_fl
         table_set(*particle_id_to_index, particle_id, particles.count);
         array_add(*particles, particle);
     }
+}
+
+create_miss_particles :: (pos: Vector2) {
+    particle_id  := increment_then_read(*particle_id_counter);
+
+    particle := Particle.{
+        id                    = particle_id,
+        pos                   = pos,
+        vel                   = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
+        text                  = "Miss",
+        tint                  = RED,
+        fade                  = true,
+        opacity               = 1,
+        time_left_ms          = PARTICLE_DAMAGE_TIME_TO_LIVE_MS,
+        sprite_source_row     = -1,
+        sprite_source_col     = -1,
+    };
+
+    table_set(*particle_id_to_index, particle_id, particles.count);
+    array_add(*particles, particle);
 }
 
 create_dwarf :: (pos: Vector2, dwarf_type: DwarfType) -> Dwarf {
