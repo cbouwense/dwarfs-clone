@@ -2366,6 +2366,23 @@ main :: () {
                         dest := get_world_rect_from_pos(dwarf.pos);
 
                         DrawTexturePro(tilemap_texture_general, source, dest, Vector2.{0,0}, 0.0, WHITE);
+
+                        dest_pos := Vector2.{ dest.x, dest.y };
+                        radius := TILEMAP_GENERAL_WORLD_WIDTH * 0.5;
+                        center := Vector2.{ dest_pos.x + radius, dest_pos.y + radius };
+
+                        dwarf_center  := get_rect_center(get_world_rect_from_pos(dwarf.pos));
+                        dwarf_tile_id := get_tile_id_by_pos(dwarf_center);
+
+                        dwarf_is_getting_dangerously_close_to_water := table_contains(*water_warning_tile_ids_set, dwarf_tile_id);
+                        if dwarf_is_getting_dangerously_close_to_water {
+                            DrawRing(center, radius, radius + 3.0, 0, 360, 0, ORANGE);
+                        }
+                         
+                        dwarf_is_getting_dangerously_close_to_lava := table_contains(*lava_warning_tile_ids_set, dwarf_tile_id);
+                        if dwarf_is_getting_dangerously_close_to_lava {
+                            DrawRing(center, radius, radius + 3.0, 0, 360, 0, ORANGE);
+                        }
                     }
                 }
 
