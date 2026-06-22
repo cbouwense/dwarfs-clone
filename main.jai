@@ -489,6 +489,14 @@ lava_flowing_tile_ids             : [..] s32;
 lava_flowing_tile_ids_set         : Table(s32, Any);
 lava_flowing_tile_ids_in_viewport : [..] s32;
 
+water_warning_tile_ids             : [..] s32;
+water_warning_tile_ids_set         : Table(s32, Any);
+water_warning_tile_ids_in_viewport : [..] s32;
+
+lava_warning_tile_ids              : [..] s32;
+lava_warning_tile_ids_set          : Table(s32, Any);
+lava_warning_tile_ids_in_viewport  : [..] s32;
+
 obsidian_tile_ids_set         : Table(s32, Any);
 obsidian_tile_ids_in_viewport : [..] s32;
 
@@ -2302,6 +2310,18 @@ main :: () {
                     }
 
                     if !metagame.debug_mode {
+                        for water_warning_tile_ids_in_viewport {
+                            pos := get_tile_pos_by_id(it);
+                            real_pos := Vector2.{ pos.x + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 };
+                            DrawCircleV(real_pos, 3.0, BLUE);
+                        }
+
+                        for lava_warning_tile_ids_in_viewport {
+                            pos := get_tile_pos_by_id(it);
+                            real_pos := Vector2.{ pos.x + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 };
+                            DrawCircleV(real_pos, 3.0, RED);
+                        }
+
                         for encased_tile_ids_in_viewport {
                             DrawRectangleV(
                                 get_tile_pos_by_id(it),
@@ -3240,7 +3260,7 @@ initialize_game :: () -> GameState, Metagame, Camera2D {
         water_flow_cooldown_ms = WATER_FLOW_COOLDOWN_MS,
         lava_flow_cooldown_ms  = LAVA_FLOW_COOLDOWN_MS,
         points = 0,
-        gold   = 0,
+        gold   = 250,
         control_mode = .NORMAL,
     };
 
@@ -5071,14 +5091,17 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
     _result, chunk := find_or_create_chunk_by_tile_id(tile_id);
 
     tile_was_fully_mined := table_contains(*fully_mined_tile_ids_set, tile_id);
-    tile_was_iron := table_contains(*iron_tile_ids_set, tile_id);
-    tile_was_dirt := !tile_was_iron && !table_contains(*fully_mined_tile_ids_set, tile_id);
+    tile_was_iron  := table_contains(*iron_tile_ids_set, tile_id);
+    tile_was_dirt  := !tile_was_iron && !table_contains(*fully_mined_tile_ids_set, tile_id);
+    tile_was_water_flowing := table_contains(*water_flowing_tile_ids_set, tile_id);
+    tile_was_lava_flowing  := table_contains(*lava_flowing_tile_ids_set, tile_id);
 
     // Remove the tile from all of the tile trackers. We will even remove it from lists that it should
     // stick around in. We put it into the one it should be right below this.
     {
-        // If the tile was a resource, then keep track of the gain and also remove the resource
-        // from the map
+        // TODO: why do I even check whether it was iron or not?
+        //
+        // If the tile was a resource remove the resource from the map
         if tile_was_iron {
             array_unordered_remove_by_value(*chunk.iron_tile_ids, tile_id);
             table_remove(*iron_tile_ids_set, tile_id);
@@ -5166,6 +5189,33 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
             array_add(*water_flowing_tile_ids, tile_id);
             array_add(*chunk.water_flowing_tile_ids, tile_id);
             table_set(*water_flowing_tile_ids_set, tile_id, 1738);
+
+            for direction: DIRECTIONS_COMPASS {
+                direction_index : s64 = cast(s64) direction;
+
+                dx := TILE_DIRECTION_ID_DELTAS[direction_index][0];
+                dy := TILE_DIRECTION_ID_DELTAS[direction_index][1];
+
+                neighbor_id_1 := tile_id + dx + dy;
+                neighbor_id_2 := tile_id + (2 * dx) + (2 * dy);
+
+                table_set(*water_warning_tile_ids_set, neighbor_id_1, 1738);
+                table_set(*water_warning_tile_ids_set, neighbor_id_2, 1738);
+                array_add(*water_warning_tile_ids, neighbor_id_1);
+                array_add(*water_warning_tile_ids, neighbor_id_2);
+            }
+
+            for direction: DIRECTIONS_CARDINAL {
+                direction_index : s64 = cast(s64) direction;
+
+                dx := TILE_DIRECTION_ID_DELTAS[direction_index][0];
+                dy := TILE_DIRECTION_ID_DELTAS[direction_index][1];
+
+                neighbor_id := tile_id + (3 * dx) + (3 * dy);
+
+                table_set(*water_warning_tile_ids_set, neighbor_id, 1738);
+                array_add(*water_warning_tile_ids, neighbor_id);
+            }
         }
         case .LAVA_STILL; {
             array_add(*lava_still_tile_ids, tile_id);
@@ -5176,6 +5226,33 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
             array_add(*lava_flowing_tile_ids, tile_id);
             array_add(*chunk.lava_flowing_tile_ids, tile_id);
             table_set(*lava_flowing_tile_ids_set, tile_id, 1738);
+
+            for direction: DIRECTIONS_COMPASS {
+                direction_index : s64 = cast(s64) direction;
+
+                dx := TILE_DIRECTION_ID_DELTAS[direction_index][0];
+                dy := TILE_DIRECTION_ID_DELTAS[direction_index][1];
+
+                neighbor_id_1 := tile_id + dx + dy;
+                neighbor_id_2 := tile_id + (2 * dx) + (2 * dy);
+
+                table_set(*lava_warning_tile_ids_set, neighbor_id_1, 1738);
+                table_set(*lava_warning_tile_ids_set, neighbor_id_2, 1738);
+                array_add(*lava_warning_tile_ids, neighbor_id_1);
+                array_add(*lava_warning_tile_ids, neighbor_id_2);
+            }
+
+            for direction: DIRECTIONS_CARDINAL {
+                direction_index : s64 = cast(s64) direction;
+
+                dx := TILE_DIRECTION_ID_DELTAS[direction_index][0];
+                dy := TILE_DIRECTION_ID_DELTAS[direction_index][1];
+
+                neighbor_id := tile_id + (3 * dx) + (3 * dy);
+
+                table_set(*lava_warning_tile_ids_set, neighbor_id, 1738);
+                array_add(*lava_warning_tile_ids, neighbor_id);
+            }
         }
         case .OBSIDIAN; {
             array_add(*chunk.obsidian_tile_ids, tile_id);
@@ -5475,6 +5552,8 @@ derive_entities_in_viewport :: (camera: Camera2D) {
     array_reset(*water_flowing_tile_ids_in_viewport);
     array_reset(*lava_still_tile_ids_in_viewport);
     array_reset(*lava_flowing_tile_ids_in_viewport);
+    array_reset(*water_warning_tile_ids_in_viewport);
+    array_reset(*lava_warning_tile_ids_in_viewport);
     array_reset(*bases_in_viewport);
     array_reset(*dwarves_in_viewport);
     array_reset(*goblins_in_viewport);
@@ -5754,6 +5833,30 @@ derive_entities_in_viewport :: (camera: Camera2D) {
 
             array_add(*tiles_with_treasure_ids_in_viewport, treasure_tile_id);
         }
+    }
+
+    // Derive viewable water warning tiles
+    for water_warning_tile_ids {
+        pos := get_tile_pos_by_id(it);
+
+        if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+        if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+        if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+        if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+
+        array_add(*water_warning_tile_ids_in_viewport, it);
+    }
+
+    // Derive viewable lava still tiles
+    for lava_warning_tile_ids {
+        pos := get_tile_pos_by_id(it);
+
+        if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+        if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+        if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+        if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+
+        array_add(*lava_warning_tile_ids_in_viewport, it);
     }
 
     // Derive viewable paths
