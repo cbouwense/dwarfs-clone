@@ -546,6 +546,9 @@ created_chunks: Table(u64, *Chunk);
 
 #insert #run generate_kind_enum_from_base_struct(Entity);
 
+SCREEN_WIDTH  :: 1600;
+SCREEN_HEIGHT :: 900;
+
 main :: () {
     // Set temp allocator for various things.
     {
@@ -574,7 +577,7 @@ main :: () {
 
     random_seed(123456789);
 
-    InitWindow(1600, 900, "Dwarfs?! Clone");
+    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Dwarfs?! Clone");
     defer CloseWindow();
 
     // TODO
@@ -2398,6 +2401,84 @@ main :: () {
                     }
                 }
 
+                // Draw warnings offscreen
+                {
+                    window_start := GetScreenToWorld2D(Vector2.{ 0, 0 }, camera);
+                    window_end   := GetScreenToWorld2D(Vector2.{ cast(float) GetScreenWidth(), cast(float) GetScreenHeight()}, camera);
+
+                    for dwarf: dwarves {
+                        dwarf_center  := get_rect_center(get_world_rect_from_pos(dwarf.pos));
+
+                        // If the dwarf is on screen, then there's nothing to do.
+                        if (
+                            dwarf_center.x + TILEMAP_GENERAL_WORLD_WIDTH  * 0.5 > window_start.x &&
+                            dwarf_center.x - TILEMAP_GENERAL_WORLD_WIDTH  * 0.5 < window_end.x
+                        ) {
+                            continue;
+                        }
+
+                        if (
+                            dwarf_center.y - TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 < window_end.y &&
+                            dwarf_center.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 > window_start.y
+                        ) {
+                            continue;
+                         }
+
+                        // Returns the screen-space coordinate to draw the warning indicator
+                        get_indicator_pos :: (warning_pos_in_screen_space: Vector2, padding: float) -> (is_event_offscreen: bool, indicator_pos: Vector2) {
+                            SCREEN_CENTER :: Vector2.{ SCREEN_WIDTH * 0.5, SCREEN_HEIGHT * 0.5 };
+                            
+                            // Direction vector from center to target
+                            dx := warning_pos_in_screen_space.x - SCREEN_CENTER.x;
+                            dy := warning_pos_in_screen_space.y - SCREEN_CENTER.y;
+                            
+                            // If the target is exactly at the center, return center to avoid division by zero
+                            if dx == 0.0 && dy == 0.0 return false, Vector2.{};
+                            
+                            // Calculate the bounded area (half-extents minus the sprite padding)
+                            bound_x := SCREEN_CENTER.x - padding;
+                            bound_y := SCREEN_CENTER.y - padding;
+                            
+                            // Calculate scale factors to hit the X and Y edges
+                            // Use an arbitrarily large number if dx or dy is 0 to simulate infinity
+                            scale_x := ifx dx != 0.0 then bound_x / abs(dx) else 1000000.0;
+                            scale_y := ifx dy != 0.0 then bound_y / abs(dy) else 1000000.0;
+                            
+                            // The intersection is determined by whichever axis is hit first
+                            scale := ifx scale_x < scale_y then scale_x else scale_y;
+                            
+                            // If scale > 1.0, the target is already ON screen (inside the padded area)
+                            if scale > 1.0 return false, Vector2.{};
+                            
+                            return true, Vector2.{ SCREEN_CENTER.x + (dx * scale), SCREEN_CENTER.y + (dy * scale)};
+                        }
+
+                        dwarf_tile_id := get_tile_id_by_pos(dwarf_center);
+
+                        dwarf_is_getting_dangerously_close_to_water := table_contains(*water_warning_tile_ids_set, dwarf_tile_id);
+                        if dwarf_is_getting_dangerously_close_to_water {
+                            dwarf_center_in_screen_space := GetWorldToScreen2D(dwarf_center, camera);
+                            is_offscreen, indicator_pos := get_indicator_pos(dwarf_center_in_screen_space, 20.0);
+                            assert(is_offscreen);
+                            print_vars(indicator_pos);
+                            radius :: TILEMAP_GENERAL_WORLD_WIDTH * 0.5;
+                            
+                            DrawRing(indicator_pos, radius, radius + 3.0, 0, 360, 0, ORANGE);
+                        }
+                         
+                        dwarf_is_getting_dangerously_close_to_lava := table_contains(*lava_warning_tile_ids_set, dwarf_tile_id);
+                        if dwarf_is_getting_dangerously_close_to_lava {
+                            dwarf_center_in_screen_space := GetWorldToScreen2D(dwarf_center, camera);
+                            is_offscreen, indicator_pos := get_indicator_pos(dwarf_center_in_screen_space, 20.0);
+                            assert(is_offscreen);
+                            print_vars(indicator_pos);
+                            radius :: TILEMAP_GENERAL_WORLD_WIDTH * 0.5;
+                            
+                            DrawRing(indicator_pos, radius, radius + 3.0, 0, 360, 0, ORANGE);
+                        }
+                    }
+                }
+
                 // Draw dynamite
                 DRAW_DYNAMITE :: true;
                 #if DRAW_DYNAMITE {
@@ -3233,6 +3314,12 @@ reset_memory :: () {
     array_reset(*lava_flowing_tile_ids);
     table_reset(*lava_flowing_tile_ids_set);
 
+    array_reset(*water_warning_tile_ids);
+    table_reset(*water_warning_tile_ids_set);
+
+    array_reset(*lava_warning_tile_ids);
+    table_reset(*lava_warning_tile_ids_set);
+
     table_reset(*obsidian_tile_ids_set);
 
     table_reset(*wall_tile_ids_set);
@@ -3387,7 +3474,7 @@ initialize_game :: () -> GameState, Metagame, Camera2D {
             WORLD_ROWS * TILEMAP_GENERAL_WORLD_HEIGHT / 2,
         };
     }
-    camera.offset   = Vector2.{ 800, 450 };
+    camera.offset   = Vector2.{ SCREEN_WIDTH * 0.5, SCREEN_HEIGHT * 0.5 };
     camera.rotation = 0.0;
     camera.zoom     = 1.0;
 
