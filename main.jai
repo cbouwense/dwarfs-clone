@@ -447,6 +447,22 @@ Chunk :: struct {
     // dynamite : [..] Dynamite;
 }
 
+NOTIFICATION_RADIUS :: TILEMAP_GENERAL_WORLD_WIDTH;
+ALERT_TIME_TO_LIVE_MS :: 5000;
+
+AlertType :: enum {
+    WATER;
+    LAVA;
+    GOBLINS;
+}
+
+Alert :: struct {
+    pos          : Vector2;
+    seen         : bool; // Whether the user has seen it on-screen yet
+    alert_type   : AlertType;
+    time_left_ms : int;
+}
+
 data_folder: string;
 
 // Tile ID's will go row-wise, starting at 1 (zero means invalid or whatever)
@@ -493,9 +509,17 @@ water_warning_tile_ids             : [..] s32;
 water_warning_tile_ids_set         : Table(s32, Any);
 water_warning_tile_ids_in_viewport : [..] s32;
 
+water_alert_tile_ids             : [..] s32;
+water_alert_tile_ids_set         : Table(s32, Any);
+water_alert_tile_ids_in_viewport : [..] s32;
+
 lava_warning_tile_ids              : [..] s32;
 lava_warning_tile_ids_set          : Table(s32, Any);
 lava_warning_tile_ids_in_viewport  : [..] s32;
+
+lava_alert_tile_ids             : [..] s32;
+lava_alert_tile_ids_set         : Table(s32, Any);
+lava_alert_tile_ids_in_viewport : [..] s32;
 
 obsidian_tile_ids_set         : Table(s32, Any);
 obsidian_tile_ids_in_viewport : [..] s32;
@@ -542,6 +566,9 @@ tile_ids_to_dwarfs  : Table(s32, *Dwarf);
 tile_ids_to_goblins : Table(s32, *Goblin);
 tile_ids_to_bases   : Table(s32, *Base);
 
+alerts             : [..] Alert;
+alerts_in_viewport : [..] Alert;
+
 created_chunks: Table(u64, *Chunk);
 
 #insert #run generate_kind_enum_from_base_struct(Entity);
@@ -569,6 +596,7 @@ main :: () {
         tiles_with_treasure_ids_in_viewport.allocator = temp;
         hole_tile_ids_in_viewport.allocator           = temp;
         paths_in_viewport.allocator                   = temp;
+        alerts_in_viewport.allocator                   = temp;
         bases_in_viewport.allocator                   = temp;
         tile_ids_to_dwarfs.allocator                  = temp;
         tile_ids_to_goblins.allocator                 = temp;
@@ -745,6 +773,9 @@ main :: () {
         mouse_pos_in_ui    := GetMousePosition();
         mouse_pos_in_world := GetScreenToWorld2D(mouse_pos_in_ui, camera);
         mouse_wheel_move   := GetMouseWheelMove();
+
+        window_start := GetScreenToWorld2D(Vector2.{ 0, 0 }, camera);
+        window_end   := GetScreenToWorld2D(Vector2.{ cast(float) GetScreenWidth(), cast(float) GetScreenHeight()}, camera);
 
         // TODO: save this in game_state or something
         dwarf_miner_count   := 0;
@@ -2174,6 +2205,37 @@ main :: () {
                         for particle_ids_to_kill_this_frame kill_particle_by_id(it);
                     }
                 }
+
+                // Update alerts
+                {
+                    alert_indices_to_remove_this_frame : [..] s64;
+                    alert_indices_to_remove_this_frame.allocator = temp;
+
+                    print_vars(alerts);
+
+                    for *alert, i: alerts {
+                        if alert.seen {
+                            if alert.time_left_ms > 0 {
+                                alert.time_left_ms -= xx (dt_seconds * 1000);
+                            } else {
+                                array_add(*alert_indices_to_remove_this_frame, i);
+                            }
+                        } else {
+                            if (
+                                alert.pos.x + TILEMAP_GENERAL_WORLD_WIDTH  * 0.5 > window_start.x &&
+                                alert.pos.x - TILEMAP_GENERAL_WORLD_WIDTH  * 0.5 < window_end.x   &&
+                                alert.pos.y - TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 < window_end.y   &&
+                                alert.pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 > window_start.y
+                            ) {
+                                alert.seen = true;
+                            }
+                        }
+                    }
+
+                    for alert_indices_to_remove_this_frame {
+                        array_unordered_remove_by_index(*alerts, it);
+                    }
+                }
             }
         }
 
@@ -2312,19 +2374,37 @@ main :: () {
                         );
                     }
 
-                    if !metagame.debug_mode {
+                    if metagame.debug_mode {
                         for water_warning_tile_ids_in_viewport {
                             pos := get_tile_pos_by_id(it);
                             real_pos := Vector2.{ pos.x + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 };
-                            DrawCircleV(real_pos, 3.0, BLUE);
+                            DrawCircleV(real_pos, 4.0, WHITE);
+                            DrawCircleV(real_pos, 3.0, ORANGE);
                         }
 
                         for lava_warning_tile_ids_in_viewport {
                             pos := get_tile_pos_by_id(it);
                             real_pos := Vector2.{ pos.x + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 };
+                            DrawCircleV(real_pos, 4.0, WHITE);
+                            DrawCircleV(real_pos, 3.0, ORANGE);
+                        }
+
+                        for water_alert_tile_ids_in_viewport {
+                            pos := get_tile_pos_by_id(it);
+                            real_pos := Vector2.{ pos.x + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 };
+                            DrawCircleV(real_pos, 4.0, WHITE);
                             DrawCircleV(real_pos, 3.0, RED);
                         }
 
+                        for lava_alert_tile_ids_in_viewport {
+                            pos := get_tile_pos_by_id(it);
+                            real_pos := Vector2.{ pos.x + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 };
+                            DrawCircleV(real_pos, 4.0, WHITE);
+                            DrawCircleV(real_pos, 3.0, RED);
+                        }
+                    }
+
+                    if !metagame.debug_mode {
                         for encased_tile_ids_in_viewport {
                             DrawRectangleV(
                                 get_tile_pos_by_id(it),
@@ -2370,21 +2450,24 @@ main :: () {
 
                         DrawTexturePro(tilemap_texture_general, source, dest, Vector2.{0,0}, 0.0, WHITE);
 
-                        dest_pos := Vector2.{ dest.x, dest.y };
-                        radius := TILEMAP_GENERAL_WORLD_WIDTH * 0.5;
-                        center := Vector2.{ dest_pos.x + radius, dest_pos.y + radius };
+                        // Draw warnings on-screen
+                        {
+                            dest_pos := Vector2.{ dest.x, dest.y };
+                            radius := TILEMAP_GENERAL_WORLD_WIDTH * 0.5;
+                            center := Vector2.{ dest_pos.x + radius, dest_pos.y + radius };
 
-                        dwarf_center  := get_rect_center(get_world_rect_from_pos(dwarf.pos));
-                        dwarf_tile_id := get_tile_id_by_pos(dwarf_center);
+                            dwarf_center  := get_rect_center(get_world_rect_from_pos(dwarf.pos));
+                            dwarf_tile_id := get_tile_id_by_pos(dwarf_center);
 
-                        dwarf_is_getting_dangerously_close_to_water := table_contains(*water_warning_tile_ids_set, dwarf_tile_id);
-                        if dwarf_is_getting_dangerously_close_to_water {
-                            DrawRing(center, radius, radius + 3.0, 0, 360, 0, ORANGE);
-                        }
-                         
-                        dwarf_is_getting_dangerously_close_to_lava := table_contains(*lava_warning_tile_ids_set, dwarf_tile_id);
-                        if dwarf_is_getting_dangerously_close_to_lava {
-                            DrawRing(center, radius, radius + 3.0, 0, 360, 0, ORANGE);
+                            dwarf_is_getting_dangerously_close_to_water := table_contains(*water_warning_tile_ids_set, dwarf_tile_id);
+                            if dwarf_is_getting_dangerously_close_to_water {
+                                DrawRing(center, radius, radius + 3.0, 0, 360, 0, ORANGE);
+                            }
+                            
+                            dwarf_is_getting_dangerously_close_to_lava := table_contains(*lava_warning_tile_ids_set, dwarf_tile_id);
+                            if dwarf_is_getting_dangerously_close_to_lava {
+                                DrawRing(center, radius, radius + 3.0, 0, 360, 0, ORANGE);
+                            }
                         }
                     }
                 }
@@ -2471,6 +2554,20 @@ main :: () {
                         }
                     }
                 }
+
+                // Draw alerts
+                {
+                    for alert: alerts {
+                        radius := TILEMAP_GENERAL_WORLD_WIDTH * 0.5;
+                        center := Vector2.{ alert.pos.x + radius, alert.pos.y + radius };
+
+                        if alert.seen {
+                            DrawRing(center, radius, radius + 3.0, 0, 360, 0, RED);
+                        } else {
+                            draw_offscreen_notification(center, camera, false);
+                        }
+                    }
+                }
             }
 
             // Draw UI
@@ -2478,11 +2575,8 @@ main :: () {
                 screen_width  := GetScreenWidth();
                 screen_height := GetScreenHeight();
 
-                // Draw warnings offscreen
+                // Draw warnings off-screen
                 {
-                    window_start := GetScreenToWorld2D(Vector2.{ 0, 0 }, camera);
-                    window_end   := GetScreenToWorld2D(Vector2.{ cast(float) GetScreenWidth(), cast(float) GetScreenHeight()}, camera);
-
                     for dwarf: dwarves {
                         dwarf_center  := get_rect_center(get_world_rect_from_pos(dwarf.pos));
 
@@ -2494,69 +2588,6 @@ main :: () {
                             dwarf_center.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 > window_start.y
                         ) {
                             continue;
-                        }
-
-                        // Returns the screen-space coordinate to draw the warning indicator
-                        get_indicator_pos :: (warning_pos_in_screen_space: Vector2, padding: float) -> (is_event_offscreen: bool, indicator_pos: Vector2) {
-                            SCREEN_CENTER :: Vector2.{ SCREEN_WIDTH * 0.5, SCREEN_HEIGHT * 0.5 };
-                            
-                            // Direction vector from center to target
-                            dx := warning_pos_in_screen_space.x - SCREEN_CENTER.x;
-                            dy := warning_pos_in_screen_space.y - SCREEN_CENTER.y;
-                            
-                            // If the target is exactly at the center, return center to avoid division by zero
-                            if dx == 0.0 && dy == 0.0 return false, Vector2.{};
-                            
-                            // Calculate the bounded area (half-extents minus the sprite padding)
-                            bound_x := SCREEN_CENTER.x - padding;
-                            bound_y := SCREEN_CENTER.y - padding;
-                            
-                            // Calculate scale factors to hit the X and Y edges
-                            // Use an arbitrarily large number if dx or dy is 0 to simulate infinity
-                            scale_x := ifx dx != 0.0 then bound_x / abs(dx) else 1000000.0;
-                            scale_y := ifx dy != 0.0 then bound_y / abs(dy) else 1000000.0;
-                            
-                            // The intersection is determined by whichever axis is hit first
-                            scale := ifx scale_x < scale_y then scale_x else scale_y;
-                            
-                            // If scale > 1.0, the target is already ON screen (inside the padded area)
-                            if scale > 1.0 return false, Vector2.{};
-                            
-                            return true, Vector2.{ SCREEN_CENTER.x + (dx * scale), SCREEN_CENTER.y + (dy * scale)};
-                        }
-
-
-                        draw_warning_rings_if_necessary :: (dwarf_center: Vector2, tile_ids_set: *Table, camera: Camera2D) {
-                            radius :: TILEMAP_GENERAL_WORLD_WIDTH;
-                            
-                            dwarf_tile_id := get_tile_id_by_pos(dwarf_center);
-                            dwarf_is_getting_dangerously_close_to_water := table_contains(tile_ids_set, dwarf_tile_id);
-                            
-                            if dwarf_is_getting_dangerously_close_to_water {
-                                dwarf_center_in_screen_space := GetWorldToScreen2D(dwarf_center, camera);
-                                is_offscreen, indicator_pos := get_indicator_pos(dwarf_center_in_screen_space, radius);
-                                assert(is_offscreen);
-                                
-                                // Draw main warning bubble
-                                DrawCircleV(indicator_pos, radius, ORANGE);
-
-                                get_pulse_parameters :: (t: int) -> (radius: float, alpha: u8) {
-                                    d : int   = t % 31;
-                                    r : float = xx (radius + d);
-                                    a : u8    = xx (255 - 8.5 * d);
-
-                                    return r, a;
-                                }
-
-                                r1, a1 := get_pulse_parameters(xx (GetTime() * 100) + 0);
-                                r2, a2 := get_pulse_parameters(xx (GetTime() * 100) + 20);
-                                r3, a3 := get_pulse_parameters(xx (GetTime() * 100) + 40);
-
-                                // Draw pulses
-                                DrawRing(indicator_pos, r1, r1 + 2.0, 0, 360, 0, Color.{ ORANGE.r, ORANGE.g, ORANGE.b, a1 });
-                                DrawRing(indicator_pos, r2, r2 + 2.0, 0, 360, 0, Color.{ ORANGE.r, ORANGE.g, ORANGE.b, a2 });
-                                DrawRing(indicator_pos, r3, r3 + 2.0, 0, 360, 0, Color.{ ORANGE.r, ORANGE.g, ORANGE.b, a3 });
-                            }
                         }
 
                         draw_warning_rings_if_necessary(dwarf_center, *water_warning_tile_ids_set, camera);
@@ -3120,6 +3151,72 @@ main :: () {
 
 // Functions
 
+// Returns the screen-space coordinate to draw the warning indicator
+get_indicator_pos :: (warning_pos_in_screen_space: Vector2, padding: float) -> (is_event_offscreen: bool, indicator_pos: Vector2) {
+    SCREEN_CENTER :: Vector2.{ SCREEN_WIDTH * 0.5, SCREEN_HEIGHT * 0.5 };
+    
+    // Direction vector from center to target
+    dx := warning_pos_in_screen_space.x - SCREEN_CENTER.x;
+    dy := warning_pos_in_screen_space.y - SCREEN_CENTER.y;
+    
+    // If the target is exactly at the center, return center to avoid division by zero
+    if dx == 0.0 && dy == 0.0 return false, Vector2.{};
+    
+    // Calculate the bounded area (half-extents minus the sprite padding)
+    bound_x := SCREEN_CENTER.x - padding;
+    bound_y := SCREEN_CENTER.y - padding;
+    
+    // Calculate scale factors to hit the X and Y edges
+    // Use an arbitrarily large number if dx or dy is 0 to simulate infinity
+    scale_x := ifx dx != 0.0 then bound_x / abs(dx) else 1000000.0;
+    scale_y := ifx dy != 0.0 then bound_y / abs(dy) else 1000000.0;
+    
+    // The intersection is determined by whichever axis is hit first
+    scale := ifx scale_x < scale_y then scale_x else scale_y;
+    
+    // If scale > 1.0, the target is already ON screen (inside the padded area)
+    if scale > 1.0 return false, Vector2.{};
+    
+    return true, Vector2.{ SCREEN_CENTER.x + (dx * scale), SCREEN_CENTER.y + (dy * scale)};
+}
+
+draw_warning_rings_if_necessary :: (dwarf_center: Vector2, tile_ids_set: *Table, camera: Camera2D) {
+    dwarf_tile_id := get_tile_id_by_pos(dwarf_center);
+    dwarf_is_getting_dangerously_close_to_water := table_contains(tile_ids_set, dwarf_tile_id);
+    
+    if dwarf_is_getting_dangerously_close_to_water {
+        draw_offscreen_notification(dwarf_center, camera, true);
+    }
+}
+
+draw_offscreen_notification :: (center_pos: Vector2, camera: Camera2D, is_warning: bool) {
+    center_pos_in_screen_space := GetWorldToScreen2D(center_pos, camera);
+    is_offscreen, indicator_pos := get_indicator_pos(center_pos_in_screen_space, NOTIFICATION_RADIUS);
+    assert(is_offscreen);
+    
+    color := ifx is_warning then ORANGE else RED;
+
+    // Draw main warning bubble
+    DrawCircleV(indicator_pos, NOTIFICATION_RADIUS, color);
+
+    get_pulse_parameters :: (t: int) -> (radius: float, alpha: u8) {
+        d : int   = t % 31;
+        r : float = xx (NOTIFICATION_RADIUS + d);
+        a : u8    = xx (255 - 8.5 * d);
+
+        return r, a;
+    }
+
+    r1, a1 := get_pulse_parameters(xx (GetTime() * 100) + 0);
+    r2, a2 := get_pulse_parameters(xx (GetTime() * 100) + 20);
+    r3, a3 := get_pulse_parameters(xx (GetTime() * 100) + 40);
+
+    // Draw pulses
+    DrawRing(indicator_pos, r1, r1 + 2.0, 0, 360, 0, Color.{ color.r, color.g, color.b, a1 });
+    DrawRing(indicator_pos, r2, r2 + 2.0, 0, 360, 0, Color.{ color.r, color.g, color.b, a2 });
+    DrawRing(indicator_pos, r3, r3 + 2.0, 0, 360, 0, Color.{ color.r, color.g, color.b, a3 });
+}
+
 inflict_liquid_consequences :: (tile_id: s32) {
     game_over_if_touching_home_base(tile_id);
     kill_any_dwarves_touching_tile_id(tile_id);
@@ -3325,8 +3422,14 @@ reset_memory :: () {
     array_reset(*water_warning_tile_ids);
     table_reset(*water_warning_tile_ids_set);
 
+    array_reset(*water_alert_tile_ids);
+    table_reset(*water_alert_tile_ids_set);
+
     array_reset(*lava_warning_tile_ids);
     table_reset(*lava_warning_tile_ids_set);
+
+    array_reset(*lava_alert_tile_ids);
+    table_reset(*lava_alert_tile_ids_set);
 
     table_reset(*obsidian_tile_ids_set);
 
@@ -5203,10 +5306,10 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
     _result, chunk := find_or_create_chunk_by_tile_id(tile_id);
 
     tile_was_fully_mined := table_contains(*fully_mined_tile_ids_set, tile_id);
-    tile_was_iron  := table_contains(*iron_tile_ids_set, tile_id);
-    tile_was_dirt  := !tile_was_iron && !table_contains(*fully_mined_tile_ids_set, tile_id);
-    tile_was_water_flowing := table_contains(*water_flowing_tile_ids_set, tile_id);
-    tile_was_lava_flowing  := table_contains(*lava_flowing_tile_ids_set, tile_id);
+    tile_was_iron        := table_contains(*iron_tile_ids_set, tile_id);
+    tile_was_dirt        := !tile_was_iron && !table_contains(*fully_mined_tile_ids_set, tile_id);
+    tile_was_alert_water := table_contains(*water_alert_tile_ids_set, tile_id);
+    tile_was_alert_lava  := table_contains(*lava_alert_tile_ids_set, tile_id);
 
     // Remove the tile from all of the tile trackers. We will even remove it from lists that it should
     // stick around in. We put it into the one it should be right below this.
@@ -5287,6 +5390,32 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
 
                 if grant_points game_state.points += POINTS_FROM_MINE_DIRT;
             }
+
+            if tile_was_alert_water {
+                pos := get_tile_pos_by_id(tile_id);
+
+                alert := Alert.{
+                    pos          = pos,
+                    seen         = false,
+                    alert_type   = .WATER,
+                    time_left_ms = ALERT_TIME_TO_LIVE_MS,
+                };
+
+                array_add(*alerts, alert);
+            }
+
+            if tile_was_alert_lava {
+                pos := get_tile_pos_by_id(tile_id);
+                
+                alert := Alert.{
+                    pos          = pos,
+                    seen         = false,
+                    alert_type   = .LAVA,
+                    time_left_ms = ALERT_TIME_TO_LIVE_MS,
+                };
+
+                array_add(*alerts, alert);
+            }
         }
         case .ENCASED; {
             array_add(*chunk.encased_tile_ids, tile_id);
@@ -5308,13 +5437,15 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
                 dx := TILE_DIRECTION_ID_DELTAS[direction_index][0];
                 dy := TILE_DIRECTION_ID_DELTAS[direction_index][1];
 
-                neighbor_id_1 := tile_id + dx + dy;
-                neighbor_id_2 := tile_id + (2 * dx) + (2 * dy);
+                neighbor_id_alert := tile_id + dx + dy;
 
-                table_set(*water_warning_tile_ids_set, neighbor_id_1, 1738);
-                table_set(*water_warning_tile_ids_set, neighbor_id_2, 1738);
-                array_add(*water_warning_tile_ids, neighbor_id_1);
-                array_add(*water_warning_tile_ids, neighbor_id_2);
+                table_set(*water_alert_tile_ids_set, neighbor_id_alert, 1738);
+                array_add(*water_alert_tile_ids, neighbor_id_alert);
+
+                neighbor_id_warning := tile_id + (2 * dx) + (2 * dy);
+
+                table_set(*water_warning_tile_ids_set, neighbor_id_warning, 1738);
+                array_add(*water_warning_tile_ids, neighbor_id_warning);
             }
 
             for direction: DIRECTIONS_CARDINAL {
@@ -5323,10 +5454,10 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
                 dx := TILE_DIRECTION_ID_DELTAS[direction_index][0];
                 dy := TILE_DIRECTION_ID_DELTAS[direction_index][1];
 
-                neighbor_id := tile_id + (3 * dx) + (3 * dy);
+                neighbor_id_warning := tile_id + (3 * dx) + (3 * dy);
 
-                table_set(*water_warning_tile_ids_set, neighbor_id, 1738);
-                array_add(*water_warning_tile_ids, neighbor_id);
+                table_set(*water_warning_tile_ids_set, neighbor_id_warning, 1738);
+                array_add(*water_warning_tile_ids, neighbor_id_warning);
             }
         }
         case .LAVA_STILL; {
@@ -5345,13 +5476,15 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
                 dx := TILE_DIRECTION_ID_DELTAS[direction_index][0];
                 dy := TILE_DIRECTION_ID_DELTAS[direction_index][1];
 
-                neighbor_id_1 := tile_id + dx + dy;
-                neighbor_id_2 := tile_id + (2 * dx) + (2 * dy);
+                neighbor_id_alert := tile_id + dx + dy;
 
-                table_set(*lava_warning_tile_ids_set, neighbor_id_1, 1738);
-                table_set(*lava_warning_tile_ids_set, neighbor_id_2, 1738);
-                array_add(*lava_warning_tile_ids, neighbor_id_1);
-                array_add(*lava_warning_tile_ids, neighbor_id_2);
+                table_set(*lava_alert_tile_ids_set, neighbor_id_alert, 1738);
+                array_add(*lava_alert_tile_ids, neighbor_id_alert);
+
+                neighbor_id_warning := tile_id + (2 * dx) + (2 * dy);
+
+                table_set(*lava_warning_tile_ids_set, neighbor_id_warning, 1738);
+                array_add(*lava_warning_tile_ids, neighbor_id_warning);
             }
 
             for direction: DIRECTIONS_CARDINAL {
@@ -5666,6 +5799,9 @@ derive_entities_in_viewport :: (camera: Camera2D) {
     array_reset(*lava_flowing_tile_ids_in_viewport);
     array_reset(*water_warning_tile_ids_in_viewport);
     array_reset(*lava_warning_tile_ids_in_viewport);
+    array_reset(*water_alert_tile_ids_in_viewport);
+    array_reset(*lava_alert_tile_ids_in_viewport);
+    array_reset(*alerts_in_viewport);
     array_reset(*bases_in_viewport);
     array_reset(*dwarves_in_viewport);
     array_reset(*goblins_in_viewport);
@@ -5959,7 +6095,7 @@ derive_entities_in_viewport :: (camera: Camera2D) {
         array_add(*water_warning_tile_ids_in_viewport, it);
     }
 
-    // Derive viewable lava still tiles
+    // Derive viewable lava warning tiles
     for lava_warning_tile_ids {
         pos := get_tile_pos_by_id(it);
 
@@ -5969,6 +6105,40 @@ derive_entities_in_viewport :: (camera: Camera2D) {
         if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
         array_add(*lava_warning_tile_ids_in_viewport, it);
+    }
+
+    // Derive viewable water alert tiles
+    for water_alert_tile_ids {
+        pos := get_tile_pos_by_id(it);
+
+        if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+        if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+        if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+        if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+
+        array_add(*water_alert_tile_ids_in_viewport, it);
+    }
+
+    // Derive viewable lava alert tiles
+    for lava_alert_tile_ids {
+        pos := get_tile_pos_by_id(it);
+
+        if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+        if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+        if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+        if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+
+        array_add(*lava_alert_tile_ids_in_viewport, it);
+    }
+
+    // Derive alerts in viewport
+    for alerts {
+        if it.pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+        if it.pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+        if it.pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+        if it.pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
+
+        array_add(*alerts_in_viewport, it);
     }
 
     // Derive viewable paths
