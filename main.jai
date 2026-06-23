@@ -2525,28 +2525,42 @@ main :: () {
                             return true, Vector2.{ SCREEN_CENTER.x + (dx * scale), SCREEN_CENTER.y + (dy * scale)};
                         }
 
-                        dwarf_tile_id := get_tile_id_by_pos(dwarf_center);
-                        dwarf_center_in_screen_space := GetWorldToScreen2D(dwarf_center, camera);
-                        radius :: TILEMAP_GENERAL_WORLD_WIDTH * 0.5;
 
-                        dwarf_is_getting_dangerously_close_to_water := table_contains(*water_warning_tile_ids_set, dwarf_tile_id);
-                        if dwarf_is_getting_dangerously_close_to_water {
-                            dwarf_center_in_screen_space := GetWorldToScreen2D(dwarf_center, camera);
-                            is_offscreen, indicator_pos := get_indicator_pos(dwarf_center_in_screen_space, 20.0);
-                            assert(is_offscreen);
-                            print_vars(indicator_pos);
+                        draw_warning_rings_if_necessary :: (dwarf_center: Vector2, tile_ids_set: *Table, camera: Camera2D) {
+                            radius :: TILEMAP_GENERAL_WORLD_WIDTH;
                             
-                            DrawRing(indicator_pos, radius, radius + 3.0, 0, 360, 0, ORANGE);
-                        }
-                         
-                        dwarf_is_getting_dangerously_close_to_lava := table_contains(*lava_warning_tile_ids_set, dwarf_tile_id);
-                        if dwarf_is_getting_dangerously_close_to_lava {
-                            is_offscreen, indicator_pos := get_indicator_pos(dwarf_center_in_screen_space, 20.0);
-                            assert(is_offscreen);
-                            print_vars(indicator_pos);
+                            dwarf_tile_id := get_tile_id_by_pos(dwarf_center);
+                            dwarf_is_getting_dangerously_close_to_water := table_contains(tile_ids_set, dwarf_tile_id);
                             
-                            DrawRing(indicator_pos, radius, radius + 3.0, 0, 360, 0, ORANGE);
+                            if dwarf_is_getting_dangerously_close_to_water {
+                                dwarf_center_in_screen_space := GetWorldToScreen2D(dwarf_center, camera);
+                                is_offscreen, indicator_pos := get_indicator_pos(dwarf_center_in_screen_space, radius);
+                                assert(is_offscreen);
+                                
+                                // Draw main warning bubble
+                                DrawCircleV(indicator_pos, radius, ORANGE);
+
+                                get_pulse_parameters :: (t: int) -> (radius: float, alpha: u8) {
+                                    d : int   = t % 31;
+                                    r : float = xx (radius + d);
+                                    a : u8    = xx (255 - 8.5 * d);
+
+                                    return r, a;
+                                }
+
+                                r1, a1 := get_pulse_parameters(xx (GetTime() * 100) + 0);
+                                r2, a2 := get_pulse_parameters(xx (GetTime() * 100) + 20);
+                                r3, a3 := get_pulse_parameters(xx (GetTime() * 100) + 40);
+
+                                // Draw pulses
+                                DrawRing(indicator_pos, r1, r1 + 2.0, 0, 360, 0, Color.{ ORANGE.r, ORANGE.g, ORANGE.b, a1 });
+                                DrawRing(indicator_pos, r2, r2 + 2.0, 0, 360, 0, Color.{ ORANGE.r, ORANGE.g, ORANGE.b, a2 });
+                                DrawRing(indicator_pos, r3, r3 + 2.0, 0, 360, 0, Color.{ ORANGE.r, ORANGE.g, ORANGE.b, a3 });
+                            }
                         }
+
+                        draw_warning_rings_if_necessary(dwarf_center, *water_warning_tile_ids_set, camera);
+                        draw_warning_rings_if_necessary(dwarf_center, *lava_warning_tile_ids_set, camera);
                     }
                 }
 
