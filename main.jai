@@ -139,6 +139,7 @@ PANIC_PAUSE_DURATION_MS :: 7500;
 PANIC_PAUSE_COOLDOWN_MS :: 30000;
 
 ALERT_BANNER_TEXT_MS :: 3000;
+HOME_BASE_UNDER_ATTACK_COOLDOWN_MS :: 10000;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Metagame state
@@ -275,6 +276,8 @@ GameState :: struct {
     controls_state_prev_frame  : ControlsState;
     alert_banner_text          : string;
     alert_banner_text_ms       : int;
+    alert_banner_text_color    : Color;
+    home_base_under_attack_cooldown_ms : int;
 }
 
 Direction :: enum u8 #specified {
@@ -458,11 +461,14 @@ AlertType :: enum {
     WATER;
     LAVA;
     GOBLINS;
+    TREASURE;
+    BASE_UNDER_ATTACK;
 }
 
 Alert :: struct {
     pos          : Vector2;
     seen         : bool; // Whether the user has seen it onscreen yet
+    color        : Color;
     alert_type   : AlertType;
     time_left_ms : int;
 }
@@ -1035,6 +1041,10 @@ main :: () {
                 {
                     if game_state.panic_pause_timer_ms > 0 {
                         game_state.panic_pause_timer_ms -= xx (dt_seconds * 1000);
+                    }
+
+                    if game_state.home_base_under_attack_cooldown_ms > 0 {
+                        game_state.home_base_under_attack_cooldown_ms -= xx (dt_seconds * 1000);
                     }
                 }
             }
@@ -1760,7 +1770,7 @@ main :: () {
                     }
 
                     // Update goblins
-                    #if true {
+                    {
                         for *goblin: goblins {
                             goblin_center   := get_rect_center(get_world_rect_from_pos(goblin.pos));
                             goblin_tile_id  := get_tile_id_by_pos(goblin_center);
@@ -1910,6 +1920,12 @@ main :: () {
                                             found, entity_index = table_find(*entity_id_to_index, goblin.entity_id_attacking);
                                             if found {
                                                 entity = *bases[entity_index];
+
+                                                // If this goblin is attacking the home base
+                                                if entity_index == 0 && game_state.home_base_under_attack_cooldown_ms <= 0 {
+                                                    create_alert(.BASE_UNDER_ATTACK, entity.pos, *game_state);
+                                                    game_state.home_base_under_attack_cooldown_ms = HOME_BASE_UNDER_ATTACK_COOLDOWN_MS;
+                                                }
                                             }
                                         }
 
@@ -2576,7 +2592,7 @@ main :: () {
                             center.y - TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 < window_end.y   &&
                             center.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 > window_start.y
                         ) {
-                            DrawRing(center, radius, radius + 3.0, 0, 360, 0, RED);
+                            DrawRing(center, radius, radius + 3.0, 0, 360, 0, alert.color);
                         }
                     }
                 }
@@ -2622,7 +2638,7 @@ main :: () {
                             continue;
                         }
 
-                        draw_offscreen_notification(center, camera, false);
+                        draw_offscreen_notification(center, camera, false, alert.color);
                     }
                 }
                 
@@ -2634,7 +2650,7 @@ main :: () {
                     draw_outlined_text(
                         to_c_string(game_state.alert_banner_text),
                         xx (GetScreenWidth() * 0.5 - MeasureText(to_c_string(game_state.alert_banner_text),
-                        FONT_SIZE) * 0.5), 20, FONT_SIZE, RED, 3, WHITE);
+                        FONT_SIZE) * 0.5), 20, FONT_SIZE, game_state.alert_banner_text_color, 3, WHITE);
                 }
 
                 // Draw path being drawn cost
@@ -3193,16 +3209,32 @@ main :: () {
 // Functions
 
 create_alert :: (alert_type: AlertType, pos: Vector2, game_state: *GameState) -> Alert {
+    color: Color;
+
     if #complete alert_type == {
-        case .WATER;   game_state.alert_banner_text = "Water has been released!";
-        case .LAVA;    game_state.alert_banner_text = "Lava has been released!";
-        case .GOBLINS; game_state.alert_banner_text = "A dwarf opened a goblin cave!";
+        case .WATER;    
+            game_state.alert_banner_text = "Water has been released!";
+            color = RED;
+        case .LAVA;     
+            game_state.alert_banner_text = "Lava has been released!";
+            color = RED;
+        case .GOBLINS;  
+            game_state.alert_banner_text = "A dwarf revealed a goblin cave!";
+            color = RED;
+        case .TREASURE; 
+            game_state.alert_banner_text = "A dwarf revealed a treasure cave!";
+            color = GREEN;
+        case .BASE_UNDER_ATTACK;
+            game_state.alert_banner_text = "Your base is under attack!";
+            color = RED;
     }
-    game_state.alert_banner_text_ms = ALERT_BANNER_TEXT_MS;
+    game_state.alert_banner_text_ms    = ALERT_BANNER_TEXT_MS;
+    game_state.alert_banner_text_color = color;
         
     alert := Alert.{
         pos          = pos,
         seen         = false,
+        color        = color,
         alert_type   = alert_type,
         time_left_ms = ALERT_TIME_TO_LIVE_MS,
     };
@@ -3246,16 +3278,14 @@ draw_warning_rings_if_necessary :: (dwarf_center: Vector2, tile_ids_set: *Table,
     dwarf_is_getting_dangerously_close_to_water := table_contains(tile_ids_set, dwarf_tile_id);
     
     if dwarf_is_getting_dangerously_close_to_water {
-        draw_offscreen_notification(dwarf_center, camera, true);
+        draw_offscreen_notification(dwarf_center, camera, true, ORANGE);
     }
 }
 
-draw_offscreen_notification :: (center_pos: Vector2, camera: Camera2D, is_warning: bool) {
+draw_offscreen_notification :: (center_pos: Vector2, camera: Camera2D, is_warning: bool, color: Color) {
     center_pos_in_screen_space := GetWorldToScreen2D(center_pos, camera);
     is_offscreen, indicator_pos := get_indicator_pos(center_pos_in_screen_space, NOTIFICATION_RADIUS);
     assert(is_offscreen);
-    
-    color := ifx is_warning then ORANGE else RED;
 
     // Draw main warning bubble
     DrawCircleV(indicator_pos, NOTIFICATION_RADIUS, color);
@@ -5348,10 +5378,6 @@ set_cave_as_mined :: (tile_id: s32, cave_type: CaveType, grant_points: bool, gra
                 rng := random_get_within_range(0, 1);
                 is_goblin := rng <= 0.25;
                 if is_goblin create_goblin(get_tile_pos_by_id(tile_id));
-
-                if game_state.alert_banner_text_ms <= 0 {
-                    create_alert(.GOBLINS, get_tile_pos_by_id(tile_id), game_state);
-                }
             }
 
         case .SHAMAN;
@@ -6282,6 +6308,10 @@ reveal_cave_if_necessary :: (tile_id: s32, grant_points: bool, grant_gold: bool,
     if neighbor_is_unrevealed_cave {
         // First, decide what kind of cave this will be.
         cave_type = cast(CaveType) cast(int) random_get_within_range(0, xx enum_count(CaveType));
+
+        // Second, spawn any alerts you might need
+        if cave_type == .GOBLIN   create_alert(.GOBLINS, get_tile_pos_by_id(tile_id), game_state);
+        if cave_type == .TREASURE create_alert(.TREASURE, get_tile_pos_by_id(tile_id), game_state);
 
         // Second, recursively reveal the tiles of the cave.
         set_cave_as_mined(cave_tile_id, cave_type, grant_points, grant_gold, game_state);
