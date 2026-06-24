@@ -458,7 +458,7 @@ AlertType :: enum {
 
 Alert :: struct {
     pos          : Vector2;
-    seen         : bool; // Whether the user has seen it on-screen yet
+    seen         : bool; // Whether the user has seen it onscreen yet
     alert_type   : AlertType;
     time_left_ms : int;
 }
@@ -2450,7 +2450,7 @@ main :: () {
 
                         DrawTexturePro(tilemap_texture_general, source, dest, Vector2.{0,0}, 0.0, WHITE);
 
-                        // Draw warnings on-screen
+                        // Draw warnings onscreen
                         {
                             dest_pos := Vector2.{ dest.x, dest.y };
                             radius := TILEMAP_GENERAL_WORLD_WIDTH * 0.5;
@@ -2555,16 +2555,19 @@ main :: () {
                     }
                 }
 
-                // Draw alerts
+                // Draw alerts onscreen
                 {
                     for alert: alerts {
                         radius := TILEMAP_GENERAL_WORLD_WIDTH * 0.5;
                         center := Vector2.{ alert.pos.x + radius, alert.pos.y + radius };
 
-                        if alert.seen {
+                        if (
+                            center.x + TILEMAP_GENERAL_WORLD_WIDTH  * 0.5 > window_start.x &&
+                            center.x - TILEMAP_GENERAL_WORLD_WIDTH  * 0.5 < window_end.x   &&
+                            center.y - TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 < window_end.y   &&
+                            center.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 > window_start.y
+                        ) {
                             DrawRing(center, radius, radius + 3.0, 0, 360, 0, RED);
-                        } else {
-                            draw_offscreen_notification(center, camera, false);
                         }
                     }
                 }
@@ -2575,7 +2578,7 @@ main :: () {
                 screen_width  := GetScreenWidth();
                 screen_height := GetScreenHeight();
 
-                // Draw warnings off-screen
+                // Draw warnings offscreen
                 {
                     for dwarf: dwarves {
                         dwarf_center  := get_rect_center(get_world_rect_from_pos(dwarf.pos));
@@ -2592,6 +2595,25 @@ main :: () {
 
                         draw_warning_rings_if_necessary(dwarf_center, *water_warning_tile_ids_set, camera);
                         draw_warning_rings_if_necessary(dwarf_center, *lava_warning_tile_ids_set, camera);
+                    }
+                }
+
+                // Draw alerts offscreen
+                {
+                    for alert: alerts {
+                        radius := TILEMAP_GENERAL_WORLD_WIDTH * 0.5;
+                        center := Vector2.{ alert.pos.x + radius, alert.pos.y + radius };
+
+                        if (
+                            center.x + TILEMAP_GENERAL_WORLD_WIDTH  * 0.5 > window_start.x &&
+                            center.x - TILEMAP_GENERAL_WORLD_WIDTH  * 0.5 < window_end.x   &&
+                            center.y - TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 < window_end.y   &&
+                            center.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 > window_start.y
+                        ) {
+                            continue;
+                        }
+
+                        draw_offscreen_notification(center, camera, false);
                     }
                 }
 
