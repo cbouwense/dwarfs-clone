@@ -3375,6 +3375,10 @@ dwarf_starting_hp_by_type :: (dwarf_type: DwarfType) -> s32 {
     }
 }
 
+is_cardinal_direction :: (direction: Direction) -> bool {
+    return direction == .NORTH || direction == .SOUTH || direction == .EAST || direction == .WEST;
+}
+
 opposite_cardinal_direction :: (direction: Direction) -> Direction {
     if direction == .NORTH return .SOUTH;
     if direction == .SOUTH return .NORTH;
@@ -5311,6 +5315,9 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
     tile_was_alert_water := table_contains(*water_alert_tile_ids_set, tile_id);
     tile_was_alert_lava  := table_contains(*lava_alert_tile_ids_set, tile_id);
 
+    // PERF: removing by value has to iterate to find where the tile is, removing by index feels like it'd be a
+    // lot faster, especially considering we do this function a shit ton.
+    //
     // Remove the tile from all of the tile trackers. We will even remove it from lists that it should
     // stick around in. We put it into the one it should be right below this.
     {
@@ -5391,7 +5398,9 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
                 if grant_points game_state.points += POINTS_FROM_MINE_DIRT;
             }
 
-            if tile_was_alert_water {
+            // TODO: It would be better if we had a parameter that explicitly was called mined_manually tbh.
+            // Check whether this grants gold or not because that indicates whether or not it was mined manually.
+            if grant_gold && tile_was_alert_water {
                 pos := get_tile_pos_by_id(tile_id);
 
                 alert := Alert.{
@@ -5404,7 +5413,9 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
                 array_add(*alerts, alert);
             }
 
-            if tile_was_alert_lava {
+            // TODO: It would be better if we had a parameter that explicitly was called mined_manually tbh.
+            // Check whether this grants gold or not because that indicates whether or not it was mined manually.
+            if grant_gold && tile_was_alert_lava {
                 pos := get_tile_pos_by_id(tile_id);
                 
                 alert := Alert.{
@@ -5437,10 +5448,15 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
                 dx := TILE_DIRECTION_ID_DELTAS[direction_index][0];
                 dy := TILE_DIRECTION_ID_DELTAS[direction_index][1];
 
-                neighbor_id_alert := tile_id + dx + dy;
+                neighbor_id_1 := tile_id + dx + dy;
 
-                table_set(*water_alert_tile_ids_set, neighbor_id_alert, 1738);
-                array_add(*water_alert_tile_ids, neighbor_id_alert);
+                if is_cardinal_direction(direction) {
+                    table_set(*water_alert_tile_ids_set, neighbor_id_1, 1738);
+                    array_add(*water_alert_tile_ids, neighbor_id_1);
+                } else {
+                    table_set(*water_warning_tile_ids_set, neighbor_id_1, 1738);
+                    array_add(*water_warning_tile_ids, neighbor_id_1);
+                }
 
                 neighbor_id_warning := tile_id + (2 * dx) + (2 * dy);
 
@@ -5476,10 +5492,15 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
                 dx := TILE_DIRECTION_ID_DELTAS[direction_index][0];
                 dy := TILE_DIRECTION_ID_DELTAS[direction_index][1];
 
-                neighbor_id_alert := tile_id + dx + dy;
-
-                table_set(*lava_alert_tile_ids_set, neighbor_id_alert, 1738);
-                array_add(*lava_alert_tile_ids, neighbor_id_alert);
+                neighbor_id_1 := tile_id + dx + dy;
+                
+                if is_cardinal_direction(direction) {
+                    table_set(*lava_alert_tile_ids_set, neighbor_id_1, 1738);
+                    array_add(*lava_alert_tile_ids, neighbor_id_1);
+                } else {
+                    table_set(*lava_warning_tile_ids_set, neighbor_id_1, 1738);
+                    array_add(*lava_warning_tile_ids, neighbor_id_1);
+                }
 
                 neighbor_id_warning := tile_id + (2 * dx) + (2 * dy);
 
