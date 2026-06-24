@@ -2,7 +2,7 @@
 # In progress
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- Goblins attacking base alert
+- bases must be placed down on paths
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Bugs
@@ -16,28 +16,28 @@
 # Core gameplay
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- Warning circles should also probably be drawn in screen space
+- Instead of control modes, make users hold down controls
+- Paths need to destroy existing path arrows
 - Death poof particles
 - probably max 0.0619 zoom
-- Paths need to destroy existing path arrows
-- Time
+- Time limit
 - Control mode placement validity / onion skin
 - dwarf level ups
 - base canons
 - base spawn diggers control
 - base spawn warriors control
+- fullscreen and resizability
 - options menu
     - apply changes
     - restore defaults
     - persist preferences
 - main menu
-- fullscreen and resizability
-- bases must be placed down on paths
 - shaman
 - spider queen
 - Tutorial
 - Paths should just be two single paths, not bends
 - Warnings should not come up if dwarf cannot actually access the liquid (obsidian)
+- Warning circles should also probably be drawn in screen space
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Tutorial

@@ -1187,17 +1187,25 @@ main :: () {
                             // TODO: check if placement is valid
                             if game_state.controls_state_this_frame.select_is_pressed_once {
                                 if metagame.debug_mode || game_state.gold >= GOLD_COST_BASE {
-                                    // Add base.
-                                    base_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
-                                    base_pos  := Vector2.{ base_rect.x, base_rect.y };
-                                    create_base(base_pos, false, *game_state);
+                                    tile_id         := get_tile_id_by_pos(mouse_pos_in_world);
+                                    tile_is_mined   := table_contains(*fully_mined_tile_ids_set, tile_id);
+                                    tile_is_encased := table_contains(*encased_tile_ids_set, tile_id);
 
-                                    // Debit the gold cost.
-                                    if !metagame.debug_mode game_state.gold -= GOLD_COST_BASE;
-                                    create_gold_particle(base_pos, -1 * GOLD_COST_BASE);
+                                    if metagame.debug_mode || (tile_is_mined && !tile_is_encased) {
+                                        // Add base.
+                                        base_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
+                                        base_pos  := Vector2.{ base_rect.x, base_rect.y };
+                                        base_tile_id := get_tile_id_by_pos(base_pos);
 
-                                    // Reset control mode.
-                                    game_state.control_mode = .NORMAL;
+                                        create_base(base_pos, false, *game_state);
+
+                                        // Debit the gold cost.
+                                        if !metagame.debug_mode game_state.gold -= GOLD_COST_BASE;
+                                        create_gold_particle(base_pos, -1 * GOLD_COST_BASE);
+
+                                        // Reset control mode.
+                                        game_state.control_mode = .NORMAL;
+                                    }
                                 }
                             }
                         case .ADD_DYNAMITE;
