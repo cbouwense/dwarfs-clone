@@ -12,6 +12,14 @@ vector2_to_string_temp :: (v: Vector2) -> string {
     return key;
 }
 
+draw_outlined_text :: (text: *u8, posX: s32, posY: s32, fontSize: s32, color: Color, outlineSize: s32, outlineColor: Color) {
+    DrawText(text, posX - outlineSize, posY - outlineSize, fontSize, outlineColor);
+    DrawText(text, posX + outlineSize, posY - outlineSize, fontSize, outlineColor);
+    DrawText(text, posX - outlineSize, posY + outlineSize, fontSize, outlineColor);
+    DrawText(text, posX + outlineSize, posY + outlineSize, fontSize, outlineColor);
+    DrawText(text, posX, posY, fontSize, color);
+}
+
 // debug_struct_runtime :: (thing: Any, name_prefix: string) #expand {
 //     if thing.type.type != .STRUCT return;
 //     tis := cast(*Type_Info_Struct) thing.type;

@@ -138,6 +138,8 @@ GOLD_COST_WALL      :: 50;
 PANIC_PAUSE_DURATION_MS :: 7500;
 PANIC_PAUSE_COOLDOWN_MS :: 30000;
 
+ALERT_BANNER_TEXT_MS :: 3000;
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Metagame state
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -271,6 +273,8 @@ GameState :: struct {
     panic_pause_timer_ms       : int;
     controls_state_this_frame  : ControlsState;
     controls_state_prev_frame  : ControlsState;
+    alert_banner_text          : string;
+    alert_banner_text_ms       : int;
 }
 
 Direction :: enum u8 #specified {
@@ -1724,7 +1728,7 @@ main :: () {
                                                             break;
                                                         }
                                                     }
-                                                    assert_soft(found_direction, "Was trying to figure out what direction the damage start should fly when dwarf % connected an attack on goblin %, but didn't detect the goblin as a cardinal neighbor of the dwarf\n", dwarf.id, goblin.id);
+                                                    assert_soft(found_direction, "Was trying to figure out what direction the damage star should fly when dwarf % connected an attack on goblin %, but didn't detect the goblin as a cardinal neighbor of the dwarf\n", dwarf.id, goblin.id);
 
                                                     create_damage_particles(goblin.pos, damage, direction_stars_should_fly);
 
@@ -1943,7 +1947,7 @@ main :: () {
                                                             break;
                                                         }
                                                     }
-                                                    assert_soft(found_direction, "Was trying to figure out what direction the damage start should fly when goblin % connected an attack on entity %, but didn't detect the entity as a cardinal neighbor of the dwarf\n", goblin.id, entity.id);
+                                                    assert_soft(found_direction, "Was trying to figure out what direction the damage star should fly when goblin % connected an attack on entity %, but didn't detect the entity as a cardinal neighbor of the dwarf\n", goblin.id, entity.id);
 
                                                     create_damage_particles(entity.pos, GOBLIN_ATTACK_DAMAGE_PER_SWING, direction_stars_should_fly);
 
@@ -2235,6 +2239,14 @@ main :: () {
                     for alert_indices_to_remove_this_frame {
                         array_unordered_remove_by_index(*alerts, it);
                     }
+                }
+
+                // Update alert banner text
+                if game_state.alert_banner_text_ms > 0 {
+                    game_state.alert_banner_text_ms -=  xx (dt_seconds * 1000);
+                } else {
+                    game_state.alert_banner_text_ms =  0;
+                    game_state.alert_banner_text = "";
                 }
             }
         }
@@ -2530,11 +2542,8 @@ main :: () {
                 #if DRAW_PARTICLES {
                     for particle: particles_in_viewport {
                         TEXT_SIZE     :: 20;
-                        BACKDROP_DIFF :: 2;
-
                         dest_text := get_world_rect_from_pos(particle.pos);
-                        DrawText(tprint("%\0", particle.text).data, xx (dest_text.x - BACKDROP_DIFF), xx (dest_text.y - BACKDROP_DIFF), TEXT_SIZE + BACKDROP_DIFF, Color.{ BLACK.r, BLACK.g, BLACK.b, xx (particle.opacity * 255) });
-                        DrawText(tprint("%\0", particle.text).data, xx dest_text.x, xx dest_text.y, TEXT_SIZE, Color.{ particle.tint.r, particle.tint.g, particle.tint.b, xx (particle.opacity * 255) });
+                        draw_outlined_text(tprint("%\0", particle.text).data, xx dest_text.x, xx dest_text.y, TEXT_SIZE, Color.{ particle.tint.r, particle.tint.g, particle.tint.b, xx (particle.opacity * 255) }, 1, BLACK);
 
                         if particle.sprite_source_col > -1 && particle.sprite_source_row > -1 {
                             measured_text_size := poor_mans_measure_text(particle.text, TEXT_SIZE);
@@ -2616,6 +2625,17 @@ main :: () {
                         draw_offscreen_notification(center, camera, false);
                     }
                 }
+                
+                // Draw alert banner text
+                if game_state.alert_banner_text_ms > 0 {
+                    assert(game_state.alert_banner_text.count > 0, "Tried drawing alert banner text but found no string to draw.");
+
+                    FONT_SIZE :: 56;
+                    draw_outlined_text(
+                        to_c_string(game_state.alert_banner_text),
+                        xx (GetScreenWidth() * 0.5 - MeasureText(to_c_string(game_state.alert_banner_text),
+                        FONT_SIZE) * 0.5), 20, FONT_SIZE, RED, 3, WHITE);
+                }
 
                 // Draw path being drawn cost
                 if game_state.controls_state_this_frame.drawing_path && path_being_traced.start_tile_id > 0 {
@@ -2636,8 +2656,7 @@ main :: () {
                     text_x := mouse_pos_in_ui.x;
                     text_y := mouse_pos_in_ui.y - measured_text_size.y;
 
-                    DrawText(tprint("%\0", gold_cost).data, xx (text_x - BACKDROP_DIFF), xx (text_y - BACKDROP_DIFF), TEXT_SIZE + BACKDROP_DIFF, BLACK);
-                    DrawText(tprint("%\0", gold_cost).data, xx text_x, xx text_y, TEXT_SIZE, RED);
+                    draw_outlined_text(tprint("%\0", gold_cost).data, xx text_x, xx text_y, TEXT_SIZE, RED, 1, WHITE);
 
                     dest_sprite := Rectangle.{
                         text_x + measured_text_size.x,
@@ -3503,6 +3522,8 @@ initialize_game :: () -> GameState, Metagame, Camera2D {
         points = 0,
         gold   = 250,
         control_mode = .NORMAL,
+        alert_banner_text = "",
+        alert_banner_text_ms = 0,
     };
 
     metagame := Metagame.{
@@ -5432,6 +5453,11 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
                     time_left_ms = ALERT_TIME_TO_LIVE_MS,
                 };
 
+                // TODO: Play alert sound
+                
+                game_state.alert_banner_text = "Water has been released!";
+                game_state.alert_banner_text_ms = ALERT_BANNER_TEXT_MS;
+
                 array_add(*alerts, alert);
             }
 
@@ -5446,6 +5472,11 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
                     alert_type   = .LAVA,
                     time_left_ms = ALERT_TIME_TO_LIVE_MS,
                 };
+
+                // TODO: Play alert sound
+                
+                game_state.alert_banner_text = "Lava has been released!";
+                game_state.alert_banner_text_ms = ALERT_BANNER_TEXT_MS;
 
                 array_add(*alerts, alert);
             }
