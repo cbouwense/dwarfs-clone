@@ -3192,6 +3192,26 @@ main :: () {
 
 // Functions
 
+create_alert :: (alert_type: AlertType, pos: Vector2, game_state: *GameState) -> Alert {
+    if #complete alert_type == {
+        case .WATER;   game_state.alert_banner_text = "Water has been released!";
+        case .LAVA;    game_state.alert_banner_text = "Lava has been released!";
+        case .GOBLINS; game_state.alert_banner_text = "A dwarf opened a goblin cave!";
+    }
+    game_state.alert_banner_text_ms = ALERT_BANNER_TEXT_MS;
+        
+    alert := Alert.{
+        pos          = pos,
+        seen         = false,
+        alert_type   = alert_type,
+        time_left_ms = ALERT_TIME_TO_LIVE_MS,
+    };
+
+    array_add(*alerts, alert);
+
+    return alert;
+}
+
 // Returns the screen-space coordinate to draw the warning indicator
 get_indicator_pos :: (warning_pos_in_screen_space: Vector2, padding: float) -> (is_event_offscreen: bool, indicator_pos: Vector2) {
     SCREEN_CENTER :: Vector2.{ SCREEN_WIDTH * 0.5, SCREEN_HEIGHT * 0.5 };
@@ -5328,6 +5348,10 @@ set_cave_as_mined :: (tile_id: s32, cave_type: CaveType, grant_points: bool, gra
                 rng := random_get_within_range(0, 1);
                 is_goblin := rng <= 0.25;
                 if is_goblin create_goblin(get_tile_pos_by_id(tile_id));
+
+                if game_state.alert_banner_text_ms <= 0 {
+                    create_alert(.GOBLINS, get_tile_pos_by_id(tile_id), game_state);
+                }
             }
 
         case .SHAMAN;
@@ -5446,19 +5470,7 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
             if grant_gold && tile_was_alert_water {
                 pos := get_tile_pos_by_id(tile_id);
 
-                alert := Alert.{
-                    pos          = pos,
-                    seen         = false,
-                    alert_type   = .WATER,
-                    time_left_ms = ALERT_TIME_TO_LIVE_MS,
-                };
-
-                // TODO: Play alert sound
-                
-                game_state.alert_banner_text = "Water has been released!";
-                game_state.alert_banner_text_ms = ALERT_BANNER_TEXT_MS;
-
-                array_add(*alerts, alert);
+                create_alert(.WATER, pos, game_state);
             }
 
             // TODO: It would be better if we had a parameter that explicitly was called mined_manually tbh.
@@ -5466,19 +5478,7 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
             if grant_gold && tile_was_alert_lava {
                 pos := get_tile_pos_by_id(tile_id);
                 
-                alert := Alert.{
-                    pos          = pos,
-                    seen         = false,
-                    alert_type   = .LAVA,
-                    time_left_ms = ALERT_TIME_TO_LIVE_MS,
-                };
-
-                // TODO: Play alert sound
-                
-                game_state.alert_banner_text = "Lava has been released!";
-                game_state.alert_banner_text_ms = ALERT_BANNER_TEXT_MS;
-
-                array_add(*alerts, alert);
+                create_alert(.LAVA, pos, game_state);
             }
         }
         case .ENCASED; {
