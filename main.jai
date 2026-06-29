@@ -1151,10 +1151,10 @@ main :: () {
 
                                 if game_state.controls_state_this_frame.drawing_path {
                                     // Draw out the path that is currently being traced, if it is more than 1 tile long.
-                                    potential_path_being_traced := get_path(mouse_pos_when_path_creation_started, mouse_pos_in_world);
+                                    potential_path_being_traced_1, potential_path_being_traced_2 := get_paths(mouse_pos_when_path_creation_started, mouse_pos_in_world);
 
                                     if !metagame.debug_mode {
-                                        potential_path_cost     := get_path_cost(potential_path_being_traced);
+                                        potential_path_cost     := get_path_cost(potential_path_being_traced_1) + get_path_cost(potential_path_being_traced_2);
                                         unaffordable_tile_count := cast(int) ceil((cast(float) (potential_path_cost - game_state.gold)) / cast(float)GOLD_COST_PATH_STEP);
 
                                         // PERF: duplicating this from the get_path_cost
@@ -1165,10 +1165,12 @@ main :: () {
                                         tile_ids_on_first_leg := get_tile_ids_from_pos_to_pos(start_pos, middle_pos);
                                         tile_ids_on_last_leg  := get_tile_ids_from_pos_to_pos(middle_pos, end_pos);
 
+                                        // WAS DOING: refactoring this into two paths
+
                                         for 0..unaffordable_tile_count {
-                                            if tile_ids_on_last_leg.count > 0 {
-                                                array_unordered_remove_by_index(*tile_ids_on_last_leg, tile_ids_on_last_leg.count - 1);
-                                            } else if tile_ids_on_first_leg.count > 0 {
+                                            if potential_path_being_traced_2.tile_count > 0 {
+                                                array_unordered_remove_by_index(*tile_ids_on_last_leg, potential_.count - 1);
+                                            } else if potential_path_being_traced_1.tile_count > 0 {
                                                 array_unordered_remove_by_index(*tile_ids_on_first_leg, tile_ids_on_first_leg.count - 1);
                                             } else {
                                                 break;
@@ -5278,7 +5280,7 @@ draw_path :: (path: Path) {
     );
 }
 
-get_path :: (from_pos: Vector2, to_pos: Vector2) -> (path_1: Path, path_2: Path) {
+get_paths :: (from_pos: Vector2, to_pos: Vector2) -> (path_1: Path, path_2: Path) {
     new_target_tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, to_pos);
     new_target_tile_pos  := Vector2.{ new_target_tile_rect.x, new_target_tile_rect.y };
     new_target_tile_id   := get_tile_id_by_pos(new_target_tile_pos);
@@ -5314,41 +5316,63 @@ get_path :: (from_pos: Vector2, to_pos: Vector2) -> (path_1: Path, path_2: Path)
     path_1 := Path.{
         start_tile_id  = tile_id_mouse_started_on,
         direction      = get_direction_of_vector(tile_pos_mouse_started_on, middle_tile_pos),
-        tile_count     = 
+        tile_count     = get_tile_id_count_from_tile_to_tile_cardinal(tile_id_mouse_started_on, middle_tile_id),
     };
 
     path_2 := Path.{
         middle_tile_id = middle_tile_id,
-        direction      =
-        tile_count     =
+        direction      = get_direction_of_vector(middle_tile_pos, end_tile_pos),
+        tile_count     = get_tile_id_count_from_tile_to_tile_cardinal(middle_tile_id, end_tile_id),
     };
+
+    return path1, path2;
 }
 
 get_path_cost :: (path: Path) -> int {
     return path.tile_count * GOLD_COST_PATH_STEP;
 }
 
-get_tile_ids_from_tile_to_tile_cardinal :: (from_tile_id: s32, to_tile_id: s32) -> (path_1_tile_ids: [..] s32, path_2_tile_ids: [..] s32) {
-    path_1_tile_ids: [..] s32;
-    path_1_tile_ids.allocator = temp;
+get_tile_id_count_from_tile_to_tile_cardinal :: (from_tile_id: s32, to_tile_id: s32) -> [..] s32 {
+    on_same_col, dir_col := are_tile_ids_on_same_world_column(from_tile_id, to_tile_id);
+    on_same_row, dir_row := are_tile_ids_on_same_world_row(from_tile_id, to_tile_id);
+    
+    assert(on_same_col || on_same_row);
 
-    from_pos := get_tile_pos_by_id(from_tile_id);
-    to_pos   := get_tile_pos_by_id(to_tile_id);
+    count := 0;
 
-    dx := to_pos.x - from_pos.x;
-    dy := to_pos.y - from_pos.y;
+    if on_same_col {
+        dy := ifx dir_col == .NORTH then -1 else 1;
 
-    assert(dx == 0 || dy == 0);
+        cursor_tile_id := from_tile_id;
+        while cursor_tile_id != to_tile_id {
+            count += 1;
+            cursor_tile_id += dy;
+        }
+    }
 
-    id_diff := to_tile_id - from_tile_id;
+    if on_same_row {
+        dx := ifx dir_row == .WEST then -1 else 1;
+
+        cursor_tile_id := from_tile_id;
+        while cursor_tile_id != to_tile_id {
+            count += 1;
+            cursor_tile_id += dx;
+        }
+    }
+
+    return count;
 }
 
-are_tile_ids_on_same_world_column :: (tile_id_a: s32, tile_id_b: s32) -> bool {
-    return (tile_id_a - tile_id_b) % WORLD_COLS == 0;
+are_tile_ids_on_same_world_column :: (tile_id_a: s32, tile_id_b: s32) -> (same: bool, direction: Direction) {
+    direction := ifx tile_id_a < tile_id_b then .NORTH else .SOUTH;
+    same := abs(tile_id_a - tile_id_b) % WORLD_COLS == 0;
+    if same return same, direction;
 }
 
-are_tile_ids_on_same_world_column :: (tile_id_a: s32, tile_id_b: s32) -> bool {
-
+are_tile_ids_on_same_world_row :: (tile_id_a: s32, tile_id_b: s32) -> (same: bool, direction: Direction) {
+    direction := ifx tile_id_a < tile_id_b then .WEST else .EAST;
+    same := abs(tile_id_a - tile_id_b) < WORLD_COLS;
+    if same return same, direction;
 }
 
 get_tile_ids_from_pos_to_pos :: (from_pos: Vector2, to_pos: Vector2) -> (path_1_tile_ids: [..] s32, path_2_tile_ids: [..] s32) {
