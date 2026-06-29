@@ -992,8 +992,11 @@ main :: () {
                 // Update camera
                 {
                     CAMERA_ZOOM_MULTIPLIER :: 1.2;
-                    CAMERA_ZOOM_MIN :: 0.01;
-                    CAMERA_ZOOM_MAX :: 13.0;
+                    CAMERA_ZOOM_MIN_DEBUG  :: 0.01;
+                    CAMERA_ZOOM_MIN_NORMAL :: 0.07428;
+                    CAMERA_ZOOM_MAX        :: 13.0;
+
+                    camera_zoom_min := ifx metagame.debug_mode then CAMERA_ZOOM_MIN_DEBUG else CAMERA_ZOOM_MIN_NORMAL;
 
                     can_move_camera := metagame.debug_mode || metagame.state == .RUNNING || (metagame.state == .GAME_OVER && metagame.game_over_state == .LOOK_AROUND);
 
@@ -1025,7 +1028,7 @@ main :: () {
                         // Apply the zoom
                         zoom_factor := pow(CAMERA_ZOOM_MULTIPLIER, mouse_wheel_move);
                         camera.zoom *= zoom_factor;
-                        camera.zoom  = clamp(camera.zoom, CAMERA_ZOOM_MIN, CAMERA_ZOOM_MAX);
+                        camera.zoom  = clamp(camera.zoom, camera_zoom_min, CAMERA_ZOOM_MAX);
 
                         // Grab the world space position of the mouse AFTER the zoom
                         // (Raylib uses the new camera.zoom but the old camera.target here)

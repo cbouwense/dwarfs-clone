@@ -2,7 +2,6 @@
 # In progress
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- bases must be placed down on paths
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Bugs
@@ -19,7 +18,6 @@
 - Instead of control modes, make users hold down controls
 - Paths need to destroy existing path arrows
 - Death poof particles
-- probably max 0.0619 zoom
 - Time limit
 - Control mode placement validity / onion skin
 - dwarf level ups
