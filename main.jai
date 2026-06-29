@@ -268,6 +268,7 @@ GameState :: struct {
     selected_dwarf_particle_id : s32;
     water_flow_cooldown_ms     : int;
     lava_flow_cooldown_ms      : int;
+    time_remaining_ms          : int;
     points                     : int;
     gold                       : int;
     control_mode               : ControlMode;
@@ -1049,6 +1050,16 @@ main :: () {
                     if game_state.home_base_under_attack_cooldown_ms > 0 {
                         game_state.home_base_under_attack_cooldown_ms -= xx (dt_seconds * 1000);
                     }
+                }
+            }
+
+            // Update time remaining for game
+            if metagame.state == .RUNNING {
+                game_state.time_remaining_ms -= xx (dt_seconds_raw * 1000);
+
+                if game_state.time_remaining_ms <= 0 {
+                    game_state.time_remaining_ms = 0;
+                    metagame.state = .GAME_OVER;
                 }
             }
 
@@ -2223,8 +2234,8 @@ main :: () {
                                     array_add(*particle_ids_to_kill_this_frame, particle.id);
                                 }
                             } else {
-                                particle.pos.x += particle.vel.x * dt_seconds;
-                                particle.pos.y += particle.vel.y * dt_seconds;
+                                particle.pos.x += particle.vel.x * dt_seconds_raw;
+                                particle.pos.y += particle.vel.y * dt_seconds_raw;
                                 
                                 if particle.damp > 0 {
                                     particle.vel.x *= particle.damp;
@@ -2241,8 +2252,6 @@ main :: () {
                 {
                     alert_indices_to_remove_this_frame : [..] s64;
                     alert_indices_to_remove_this_frame.allocator = temp;
-
-                    print_vars(alerts);
 
                     for *alert, i: alerts {
                         if alert.seen {
@@ -2807,18 +2816,36 @@ main :: () {
                 #if DRAW_HUD {
                     // Draw information
                     {
+                        HUD_INFO_FONT_SIZE     :: 18;
                         HUD_INFO_PADDING       :: 10;
                         HUD_INFO_SEGMENT_COUNT :: 7;
                         HUD_INFO_SEGMENT_WIDTH := GetScreenWidth() / HUD_INFO_SEGMENT_COUNT;
                         HUD_INFO_INCREMENT_X   := HUD_INFO_SEGMENT_WIDTH;
                         hud_info_x             := HUD_INFO_SEGMENT_WIDTH;
                         
-                        DrawText(tprint("Miner dwarves: %\0",   dwarf_miner_count).data,   xx (read_then_increment(*hud_info_x, HUD_INFO_INCREMENT_X) + HUD_INFO_PADDING), xx (HUD_INFO_PADDING), 18, WHITE);
-                        DrawText(tprint("Warrior dwarves: %\0", dwarf_warrior_count).data, xx (read_then_increment(*hud_info_x, HUD_INFO_INCREMENT_X) + HUD_INFO_PADDING), xx (HUD_INFO_PADDING), 18, WHITE);
-                        DrawText(tprint("Gold: %\0",            game_state.gold).data,     xx (read_then_increment(*hud_info_x, HUD_INFO_INCREMENT_X) + HUD_INFO_PADDING), xx (HUD_INFO_PADDING), 18, WHITE);
-                        DrawText(tprint("Points: %\0",          game_state.points).data,   xx (read_then_increment(*hud_info_x, HUD_INFO_INCREMENT_X) + HUD_INFO_PADDING), xx (HUD_INFO_PADDING), 18, WHITE);
-                        // TODO: time
-                        // DrawText(tprint("Time: %\0",            game_state.time).data,     xx (read_then_increment(*hud_x, INCREMENT_X) + HUD_PADDING), xx (HUD_PADDING), 18, WHITE);
+                        time_remaining_seconds := game_state.time_remaining_ms / 1000;
+                        time_remaining_minutes := time_remaining_seconds / 60;
+
+                        draw_outlined_text(
+                            tprint("Miner dwarves: %\0", dwarf_miner_count).data,
+                            xx (read_then_increment(*hud_info_x, HUD_INFO_INCREMENT_X) + HUD_INFO_PADDING), xx (HUD_INFO_PADDING), HUD_INFO_FONT_SIZE, WHITE, 1, BLACK
+                        );
+                        draw_outlined_text(
+                            tprint("Warrior dwarves: %\0", dwarf_warrior_count).data,
+                            xx (read_then_increment(*hud_info_x, HUD_INFO_INCREMENT_X) + HUD_INFO_PADDING), xx (HUD_INFO_PADDING), HUD_INFO_FONT_SIZE, WHITE, 1, BLACK
+                        );
+                        draw_outlined_text(
+                            tprint("Gold: %\0", game_state.gold).data,
+                            xx (read_then_increment(*hud_info_x, HUD_INFO_INCREMENT_X) + HUD_INFO_PADDING), xx (HUD_INFO_PADDING), HUD_INFO_FONT_SIZE, WHITE, 1, BLACK
+                        );
+                        draw_outlined_text(
+                            tprint("Points: %\0", game_state.points).data,
+                            xx (read_then_increment(*hud_info_x, HUD_INFO_INCREMENT_X) + HUD_INFO_PADDING), xx (HUD_INFO_PADDING), HUD_INFO_FONT_SIZE, WHITE, 1, BLACK
+                        );
+                        draw_outlined_text(
+                            tprint("%min %sec\0", time_remaining_minutes, time_remaining_seconds % 60).data,
+                            xx (read_then_increment(*hud_info_x, HUD_INFO_INCREMENT_X) + HUD_INFO_PADDING), xx (HUD_INFO_PADDING), HUD_INFO_FONT_SIZE, WHITE, 1, BLACK
+                        );
                     }
 
                     // Draw controls
@@ -3573,18 +3600,25 @@ reset_memory :: () {
 initialize_game :: () -> GameState, Metagame, Camera2D {
     reset_memory();
 
+    // TODO: this will come from the main menu selection
+    GAME_TIME_REMAINING_MS    :: 2000; // 15 minutes
+    GAME_STARTING_GOLD_HARD   :: 0;
+    GAME_STARTING_GOLD_MEDIUM :: 150;
+    GAME_STARTING_GOLD_EASY   :: 250;
+
     // Initialize game
     game_state := GameState.{
         hovered_dwarf_index        = 0,
         selected_dwarf_id          = 0,
         selected_dwarf_particle_id = 0,
-        water_flow_cooldown_ms = WATER_FLOW_COOLDOWN_MS,
-        lava_flow_cooldown_ms  = LAVA_FLOW_COOLDOWN_MS,
-        points = 0,
-        gold   = 250,
-        control_mode = .NORMAL,
-        alert_banner_text = "",
-        alert_banner_text_ms = 0,
+        water_flow_cooldown_ms     = WATER_FLOW_COOLDOWN_MS,
+        lava_flow_cooldown_ms      = LAVA_FLOW_COOLDOWN_MS,
+        time_remaining_ms          = GAME_TIME_REMAINING_MS,
+        points                     = 0,
+        gold                       = GAME_STARTING_GOLD_EASY,
+        control_mode               = .NORMAL,
+        alert_banner_text          = "",
+        alert_banner_text_ms       = 0,
     };
 
     metagame := Metagame.{

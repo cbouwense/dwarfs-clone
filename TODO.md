@@ -9,16 +9,14 @@
 
 - Dwarf warrior attacked a goblin diagonally when the goblin was attacking a base.
 - Dwarf warrior unable to path to a goblin when standing behind a miner who is attacking that goblin.
-- Damage star particles go super far while in fast forward mode
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Core gameplay
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- Instead of control modes, make users hold down controls
+- In addition to control modes, make users hold down controls
 - Paths need to destroy existing path arrows
 - Death poof particles
-- Time limit
 - Control mode placement validity / onion skin
 - dwarf level ups
 - base canons
@@ -30,6 +28,7 @@
     - restore defaults
     - persist preferences
 - main menu
+- proper game over menu
 - shaman
 - spider queen
 - Tutorial
