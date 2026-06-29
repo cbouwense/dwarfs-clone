@@ -109,6 +109,8 @@ WORLD_HEIGHT :: WORLD_ROWS * TILEMAP_GENERAL_WORLD_HEIGHT;
 WORLD_COLS_MASK :: WORLD_COLS - 1;
 WORLD_ROWS_MASK :: WORLD_ROWS - 1;
 WORLD_COLS_SHIFT :: #run integer_log2(WORLD_COLS);
+WORLD_COLS_RECIP :: 1 / WORLD_COLS;
+WORLD_ROWS_RECIP :: 1 / WORLD_ROWS;
 TILE_WIDTH_F  :: cast(float32) TILEMAP_GENERAL_WORLD_WIDTH;
 TILE_HEIGHT_F :: cast(float32) TILEMAP_GENERAL_WORLD_HEIGHT;
 
@@ -430,9 +432,9 @@ Goblin :: struct {
 }
 
 Path :: struct {
-    start_tile_id  : s32;
-    middle_tile_id : s32;
-    end_tile_id    : s32;
+    start_tile_id : s32;
+    direction     : Direction;
+    tile_count    : int;
 }
 
 Chunk :: struct {
@@ -1160,8 +1162,8 @@ main :: () {
                                         middle_pos := get_tile_pos_by_id(potential_path_being_traced.middle_tile_id);
                                         end_pos    := get_tile_pos_by_id(potential_path_being_traced.end_tile_id);
 
-                                        tile_ids_on_first_leg := get_tile_ids_along_path(start_pos, middle_pos);
-                                        tile_ids_on_last_leg  := get_tile_ids_along_path(middle_pos, end_pos);
+                                        tile_ids_on_first_leg := get_tile_ids_from_pos_to_pos(start_pos, middle_pos);
+                                        tile_ids_on_last_leg  := get_tile_ids_from_pos_to_pos(middle_pos, end_pos);
 
                                         for 0..unaffordable_tile_count {
                                             if tile_ids_on_last_leg.count > 0 {
@@ -1407,7 +1409,7 @@ main :: () {
                                                 // If the dwarf just stepped on a start arrow, then we want him to go to the path's middle pos.
                                                 start_pos := get_tile_pos_by_id(path.start_tile_id);
                                                 end_pos   := get_tile_pos_by_id(path.middle_tile_id);
-                                                tile_ids_on_path := get_tile_ids_along_path(start_pos, end_pos);
+                                                tile_ids_on_path := get_tile_ids_from_pos_to_pos(start_pos, end_pos);
                                                 // Don't include the tile with the arrow on it, because then we softlock.
                                                 tile_ids_on_path.data  += 1;
                                                 tile_ids_on_path.count -= 1;
@@ -1428,7 +1430,7 @@ main :: () {
                                                 // end pos is necessarily different than the middle pos.
                                                 start_pos := get_tile_pos_by_id(path.middle_tile_id);
                                                 end_pos   := get_tile_pos_by_id(path.end_tile_id);
-                                                tile_ids_on_path := get_tile_ids_along_path(start_pos, end_pos);
+                                                tile_ids_on_path := get_tile_ids_from_pos_to_pos(start_pos, end_pos);
                                                 // Don't include the tile with the arrow on it, because then we softlock.
                                                 tile_ids_on_path.data  += 1;
                                                 tile_ids_on_path.count -= 1;
@@ -1680,7 +1682,7 @@ main :: () {
                                                 if just_mined_iron && dwarf.dwarf_type == .MINER {
                                                     found_next_iron_in_deposit, next_iron_tile_id := detect_iron_tile_id_within_radius(dwarf_tile_id, 3);
                                                     if found_next_iron_in_deposit {
-                                                        tile_ids_to_next_iron_tile := get_tile_ids_along_path(get_tile_pos_by_id(dwarf_tile_id), get_tile_pos_by_id(next_iron_tile_id));
+                                                        tile_ids_to_next_iron_tile := get_tile_ids_from_pos_to_pos(get_tile_pos_by_id(dwarf_tile_id), get_tile_pos_by_id(next_iron_tile_id));
                                                         array_reset(*dwarf.tile_ids_on_path);
                                                         array_copy(*dwarf.tile_ids_on_path, tile_ids_to_next_iron_tile);
                                                     }
@@ -1700,7 +1702,7 @@ main :: () {
                                                         dwarf_tile_pos := get_tile_pos_by_id(dwarf_tile_id);
                                                         dwarf.pos = dwarf_tile_pos;
 
-                                                        tile_ids_to_new_treasure := get_tile_ids_along_path(get_tile_pos_by_id(dwarf.tile_id_mining), get_tile_pos_by_id(new_treasure_tile_id));
+                                                        tile_ids_to_new_treasure := get_tile_ids_from_pos_to_pos(get_tile_pos_by_id(dwarf.tile_id_mining), get_tile_pos_by_id(new_treasure_tile_id));
                                                         array_reset(*dwarf.tile_ids_on_path);
                                                         array_copy(*dwarf.tile_ids_on_path, tile_ids_to_new_treasure);
                                                     }
@@ -2066,7 +2068,7 @@ main :: () {
                                     // Look for more treasure
                                     found, new_treasure_tile_id := detect_treasure_tile_id_within_radius(it, 10);
                                     if found {
-                                        tile_ids_to_new_treasure := get_tile_ids_along_path(get_tile_pos_by_id(it), get_tile_pos_by_id(new_treasure_tile_id));
+                                        tile_ids_to_new_treasure := get_tile_ids_from_pos_to_pos(get_tile_pos_by_id(it), get_tile_pos_by_id(new_treasure_tile_id));
                                         tile_ids_to_new_treasure.count -= 1;
                                         tile_ids_to_new_treasure.data  += 1;
 
@@ -2682,8 +2684,8 @@ main :: () {
                     // middle_pos := get_tile_pos_by_id(path_being_traced.middle_tile_id);
                     // end_pos    := get_tile_pos_by_id(path_being_traced.end_tile_id);
 
-                    // tile_ids_on_first_leg := get_tile_ids_along_path(start_pos, middle_pos);
-                    // tile_ids_on_last_leg  := get_tile_ids_along_path(middle_pos, end_pos);
+                    // tile_ids_on_first_leg := get_tile_ids_from_pos_to_pos(start_pos, middle_pos);
+                    // tile_ids_on_last_leg  := get_tile_ids_from_pos_to_pos(middle_pos, end_pos);
                     // tile_id_count_on_path := tile_ids_on_first_leg.count + tile_ids_on_last_leg.count;
 
                     gold_cost := get_path_cost(path_being_traced);
@@ -3601,7 +3603,7 @@ initialize_game :: () -> GameState, Metagame, Camera2D {
     reset_memory();
 
     // TODO: this will come from the main menu selection
-    GAME_TIME_REMAINING_MS    :: 2000; // 15 minutes
+    GAME_TIME_REMAINING_MS    :: 900_000; // 15 minutes
     GAME_STARTING_GOLD_HARD   :: 0;
     GAME_STARTING_GOLD_MEDIUM :: 150;
     GAME_STARTING_GOLD_EASY   :: 250;
@@ -5232,7 +5234,7 @@ draw_path :: (path: Path) {
         TILEMAP_GENERAL_WORLD_HEIGHT,
     };
 
-    start_arrow_rotation  := get_arrow_rotation(start_pos,  middle_pos);
+    start_arrow_rotation := get_angle_from_north(start_pos,  middle_pos);
 
     DrawTexturePro(tilemap_texture_general, arrow_source, start_arrow_dest, Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH * 0.5, TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 }, start_arrow_rotation,  WHITE);
     
@@ -5253,7 +5255,7 @@ draw_path :: (path: Path) {
             TILEMAP_GENERAL_WORLD_HEIGHT,
         };
 
-        middle_arrow_rotation := get_arrow_rotation(middle_pos, end_pos);
+        middle_arrow_rotation := get_angle_from_north(middle_pos, end_pos);
 
         DrawTexturePro(tilemap_texture_general, arrow_source, middle_arrow_dest, Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH * 0.5, TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 }, middle_arrow_rotation, WHITE);
 
@@ -5276,13 +5278,14 @@ draw_path :: (path: Path) {
     );
 }
 
-get_path :: (from_pos: Vector2, to_pos: Vector2) -> Path {
+get_path :: (from_pos: Vector2, to_pos: Vector2) -> (path_1: Path, path_2: Path) {
     new_target_tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, to_pos);
     new_target_tile_pos  := Vector2.{ new_target_tile_rect.x, new_target_tile_rect.y };
     new_target_tile_id   := get_tile_id_by_pos(new_target_tile_pos);
 
     tile_rect_mouse_started_on := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, from_pos);
-    tile_id_mouse_started_on   := get_tile_id_by_pos(get_rect_pos(tile_rect_mouse_started_on));
+    tile_pos_mouse_started_on  := get_rect_pos(tile_rect_mouse_started_on);
+    tile_id_mouse_started_on   := get_tile_id_by_pos(tile_pos_mouse_started_on);
 
     // We need to separate the dx and dy
     dx := new_target_tile_rect.x - tile_rect_mouse_started_on.x;
@@ -5297,7 +5300,8 @@ get_path :: (from_pos: Vector2, to_pos: Vector2) -> Path {
         TILEMAP_GENERAL_WORLD_WIDTH,
         TILEMAP_GENERAL_WORLD_HEIGHT,
     };
-    middle_tile_id := get_tile_id_by_pos(get_rect_pos(middle_tile_rect));
+    middle_tile_pos := get_rect_pos(middle_tile_rect);
+    middle_tile_id  := get_tile_id_by_pos();
 
     end_tile_rect := Rectangle.{
         middle_tile_rect.x + ifx x_is_larger then 0 else dx,
@@ -5307,35 +5311,52 @@ get_path :: (from_pos: Vector2, to_pos: Vector2) -> Path {
     };
     end_tile_id := get_tile_id_by_pos(get_rect_pos(end_tile_rect));
 
-    return Path.{
+    path_1 := Path.{
         start_tile_id  = tile_id_mouse_started_on,
+        direction      = get_direction_of_vector(tile_pos_mouse_started_on, middle_tile_pos),
+        tile_count     = 
+    };
+
+    path_2 := Path.{
         middle_tile_id = middle_tile_id,
-        end_tile_id    = end_tile_id,
+        direction      =
+        tile_count     =
     };
 }
 
 get_path_cost :: (path: Path) -> int {
-    tile_ids_on_path_set : Table(s32, Any);
-    tile_ids_on_path_set.allocator = temp;
-
-    start_pos  := get_tile_pos_by_id(path.start_tile_id);
-    middle_pos := get_tile_pos_by_id(path.middle_tile_id);
-    end_pos    := get_tile_pos_by_id(path.end_tile_id);
-
-    tile_ids_on_first_leg := get_tile_ids_along_path(start_pos, middle_pos);
-    tile_ids_on_last_leg  := get_tile_ids_along_path(middle_pos, end_pos);
-
-    for tile_ids_on_first_leg table_set(*tile_ids_on_path_set, it, 1738);
-    for tile_ids_on_last_leg  table_set(*tile_ids_on_path_set, it, 1738);
-
-    tile_id_count_on_path := tile_ids_on_path_set.count - 1; // Remove the first tile id from the equation.
-    
-    return tile_id_count_on_path * GOLD_COST_PATH_STEP;
+    return path.tile_count * GOLD_COST_PATH_STEP;
 }
 
-get_tile_ids_along_path :: (from_pos: Vector2, to_pos: Vector2) -> [..] s32 {
-    path_ids: [..] s32;
-    path_ids.allocator = temp;
+get_tile_ids_from_tile_to_tile_cardinal :: (from_tile_id: s32, to_tile_id: s32) -> (path_1_tile_ids: [..] s32, path_2_tile_ids: [..] s32) {
+    path_1_tile_ids: [..] s32;
+    path_1_tile_ids.allocator = temp;
+
+    from_pos := get_tile_pos_by_id(from_tile_id);
+    to_pos   := get_tile_pos_by_id(to_tile_id);
+
+    dx := to_pos.x - from_pos.x;
+    dy := to_pos.y - from_pos.y;
+
+    assert(dx == 0 || dy == 0);
+
+    id_diff := to_tile_id - from_tile_id;
+}
+
+are_tile_ids_on_same_world_column :: (tile_id_a: s32, tile_id_b: s32) -> bool {
+    return (tile_id_a - tile_id_b) % WORLD_COLS == 0;
+}
+
+are_tile_ids_on_same_world_column :: (tile_id_a: s32, tile_id_b: s32) -> bool {
+
+}
+
+get_tile_ids_from_pos_to_pos :: (from_pos: Vector2, to_pos: Vector2) -> (path_1_tile_ids: [..] s32, path_2_tile_ids: [..] s32) {
+    path_1_tile_ids: [..] s32;
+    path_1_tile_ids.allocator = temp;
+
+    path_2_tile_ids: [..] s32;
+    path_2_tile_ids.allocator = temp;
 
     target_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, to_pos);
     from_rect   := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, from_pos);
@@ -5348,7 +5369,9 @@ get_tile_ids_along_path :: (from_pos: Vector2, to_pos: Vector2) -> [..] s32 {
     step_y := ifx dy > 0 then TILEMAP_GENERAL_WORLD_HEIGHT else -TILEMAP_GENERAL_WORLD_HEIGHT;
 
     // Calculate the number of discrete tile steps required 
-    // (+ 0.5 prevents float truncation issues if your tile widths aren't perfect integers)
+    // (+ 0.5 prevents float truncation issues if tile widths aren't perfect integers)
+    //
+    // TODO: do we really need that 0.5 shit?
     steps_x := cast(int)(abs(dx) / TILEMAP_GENERAL_WORLD_WIDTH + 0.5);
     steps_y := cast(int)(abs(dy) / TILEMAP_GENERAL_WORLD_HEIGHT + 0.5);
 
@@ -5358,37 +5381,45 @@ get_tile_ids_along_path :: (from_pos: Vector2, to_pos: Vector2) -> [..] s32 {
     current_pos := Vector2.{from_rect.x, from_rect.y};
 
     // 1. Add the starting tile
-    array_add(*path_ids, get_tile_id_by_pos(current_pos));
+    array_add(*path_1_tile_ids, get_tile_id_by_pos(current_pos));
 
     // 2. Traverse the grid, maintaining L-shaped path
     if x_is_larger {
         // Move along X axis first
         for 1..steps_x {
             current_pos.x += step_x;
-            array_add(*path_ids, get_tile_id_by_pos(current_pos));
+            array_add(*path_1_tile_ids, get_tile_id_by_pos(current_pos));
         }
         // Then move along Y axis
         for 1..steps_y {
             current_pos.y += step_y;
-            array_add(*path_ids, get_tile_id_by_pos(current_pos));
+            array_add(*path_2_tile_ids, get_tile_id_by_pos(current_pos));
         }
     } else {
         // Move along Y axis first
         for 1..steps_y {
             current_pos.y += step_y;
-            array_add(*path_ids, get_tile_id_by_pos(current_pos));
+            array_add(*path_1_tile_ids, get_tile_id_by_pos(current_pos));
         }
         // Then move along X axis
         for 1..steps_x {
             current_pos.x += step_x;
-            array_add(*path_ids, get_tile_id_by_pos(current_pos));
+            array_add(*path_2_tile_ids, get_tile_id_by_pos(current_pos));
         }
     }
 
-    return path_ids;
+    return path_1_tile_ids, path_2_tile_ids;
 }
 
-get_arrow_rotation :: (start_pos: Vector2, end_pos: Vector2) -> float32 {
+get_direction_of_vector :: (start_pos: Vector2, end_pos: Vector2) -> Direction {
+    if      start_pos.x == end_pos.x && start_pos.y > end_pos.y  return .NORTH;
+    else if start_pos.x == end_pos.x && start_pos.y < end_pos.y  return .SOUTH;
+    else if start_pos.x < end_pos.x  && start_pos.y == end_pos.y return .EAST;
+    else if start_pos.x > end_pos.x  && start_pos.y == end_pos.y return .WEST;
+    else return .NORTH;
+}
+
+get_angle_from_north :: (start_pos: Vector2, end_pos: Vector2) -> float32 {
     if      start_pos.x == end_pos.x && start_pos.y > end_pos.y  return 0.0;   // north
     else if start_pos.x == end_pos.x && start_pos.y < end_pos.y  return 180.0; // south
     else if start_pos.x < end_pos.x  && start_pos.y == end_pos.y return 90.0;  // east

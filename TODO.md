@@ -2,6 +2,7 @@
 # In progress
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+- Paths should just be two single paths, not bends
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Bugs
@@ -14,7 +15,8 @@
 # Core gameplay
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- In addition to control modes, make users hold down controls
+- Dwarves move faster after touching arrows
+- In addition to control modes, allows users to hold down controls
 - Paths need to destroy existing path arrows
 - Death poof particles
 - Control mode placement validity / onion skin
@@ -22,6 +24,7 @@
 - base canons
 - base spawn diggers control
 - base spawn warriors control
+- base building time
 - fullscreen and resizability
 - options menu
     - apply changes
@@ -32,7 +35,6 @@
 - shaman
 - spider queen
 - Tutorial
-- Paths should just be two single paths, not bends
 - Warnings should not come up if dwarf cannot actually access the liquid (obsidian)
 - Warning circles should also probably be drawn in screen space
 
