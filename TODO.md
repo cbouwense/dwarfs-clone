@@ -2,7 +2,7 @@
 # In progress
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-
+- Paths need to destroy existing path arrows
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Bugs
@@ -17,7 +17,6 @@
 
 - Dwarves move faster after touching arrows
 - In addition to control modes, allows users to hold down controls
-- Paths need to destroy existing path arrows
 - Death poof particles
 - Control mode placement validity / onion skin
 - dwarf level ups

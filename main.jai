@@ -1184,14 +1184,47 @@ main :: () {
                                 }
                                 // If we were drawing a path, but just let go, then create the path as a real thing.
                                 else if game_state.controls_state_prev_frame.drawing_path {
+                                    // Destroy any arrows these paths might be overlapping
+                                    {
+                                        if path_being_traced_1.start_tile_id > 0 {
+                                            path_1_tile_ids := get_tile_ids_on_path(path_being_traced_1);
+                                            for path_1_tile_id: path_1_tile_ids {
+                                                // The last tile id of a path does not destroy path arrows
+                                                if it_index == path_1_tile_ids.count continue;
+
+                                                for path: paths {
+                                                    if path_1_tile_id == path.start_tile_id {
+                                                        array_unordered_remove_by_index(*paths, xx it_index);
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        if path_being_traced_2.start_tile_id > 0 {
+                                            path_2_tile_ids := get_tile_ids_on_path(path_being_traced_2);
+                                            for path_2_tile_id: path_2_tile_ids {
+                                                // The last tile id of a path does not destroy path arrows
+                                                if it_index == path_2_tile_ids.count continue;
+
+                                                for path: paths {
+                                                    if path_2_tile_id == path.start_tile_id {
+                                                        array_unordered_remove_by_index(*paths, xx it_index);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    
                                     if path_being_traced_1.start_tile_id > 0 array_add(*paths, path_being_traced_1);
                                     if path_being_traced_2.start_tile_id > 0 array_add(*paths, path_being_traced_2);
 
                                     // Debit the gold cost.
-                                    gold_cost := get_path_cost(path_being_traced_1) + get_path_cost(path_being_traced_2);
+                                    {
+                                        gold_cost := get_path_cost(path_being_traced_1) + get_path_cost(path_being_traced_2);
 
-                                    if !metagame.debug_mode game_state.gold -= gold_cost;
-                                    create_gold_particle(mouse_pos_in_world, -1 * gold_cost);
+                                        if !metagame.debug_mode game_state.gold -= gold_cost;
+                                        if gold_cost > 0 create_gold_particle(mouse_pos_in_world, -1 * gold_cost);
+                                    }
                                 }
                             }
                         case .ADD_BASE;
