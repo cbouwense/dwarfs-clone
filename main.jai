@@ -109,8 +109,8 @@ WORLD_HEIGHT :: WORLD_ROWS * TILEMAP_GENERAL_WORLD_HEIGHT;
 WORLD_COLS_MASK :: WORLD_COLS - 1;
 WORLD_ROWS_MASK :: WORLD_ROWS - 1;
 WORLD_COLS_SHIFT :: #run integer_log2(WORLD_COLS);
-WORLD_COLS_RECIP :: 1 / WORLD_COLS;
-WORLD_ROWS_RECIP :: 1 / WORLD_ROWS;
+WORLD_COLS_RECIP :: 1.0 / WORLD_COLS;
+WORLD_ROWS_RECIP :: 1.0 / WORLD_ROWS;
 TILE_WIDTH_F  :: cast(float32) TILEMAP_GENERAL_WORLD_WIDTH;
 TILE_HEIGHT_F :: cast(float32) TILEMAP_GENERAL_WORLD_HEIGHT;
 
@@ -5234,6 +5234,8 @@ get_paths :: (from_pos: Vector2, to_pos: Vector2) -> (path_1: Path, path_2: Path
     end_tile_pos := get_rect_pos(end_tile_rect);
     end_tile_id  := get_tile_id_by_pos(end_tile_pos);
 
+    print_vars(x_is_larger, middle_tile_id, end_tile_id);
+
     path_1 := Path.{
         start_tile_id = tile_id_mouse_started_on,
         direction     = get_direction_of_vector(tile_pos_mouse_started_on, middle_tile_pos),
@@ -5290,7 +5292,9 @@ get_tile_id_count_from_tile_to_tile_cardinal :: (from_tile_id: s32, to_tile_id: 
     assert(on_same_col || on_same_row);
 
     if on_same_col {
-        return cast(int) (abs(from_tile_id - to_tile_id) * WORLD_COLS_RECIP);
+        foo := abs(from_tile_id - to_tile_id) * WORLD_COLS_RECIP;
+        print_vars(from_tile_id, to_tile_id, WORLD_COLS_RECIP, foo, cast(int) foo);
+        return cast(int) foo;
     }
 
     if on_same_row {
