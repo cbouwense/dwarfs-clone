@@ -2,7 +2,7 @@
 # In progress
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- Paths need to destroy existing path arrows
+- Dwarves move faster after touching arrows
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Bugs
@@ -15,7 +15,6 @@
 # Core gameplay
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- Dwarves move faster after touching arrows
 - In addition to control modes, allows users to hold down controls
 - Death poof particles
 - Control mode placement validity / onion skin
@@ -33,7 +32,6 @@
 - proper game over menu
 - shaman
 - spider queen
-- Tutorial
 - Warnings should not come up if dwarf cannot actually access the liquid (obsidian)
 - Warning circles should be drawn in screen space
 

@@ -33,7 +33,7 @@ IRON_HEALTH :: 200;
 WALL_HEALTH :: 200;
 
 DWARF_MOVE_SPEED :: 33;
-// TODO: DWARF_MOVE_SPEED_TARGETING :: DWARF_MOVE_SPEED * 2;
+DWARF_MOVE_SPEED_FAST :: DWARF_MOVE_SPEED * 2;
 
 DWARF_MINER_START_COUNT :: 1;
 DWARF_MINER_DIG_COOLDOWN_MS    :: 1000;
@@ -411,6 +411,7 @@ Dwarf :: struct {
     attack_cooldown_ms  : s32;
     dwarf_type          : DwarfType;
     ignore_goblins_for  : int;
+    is_moving_quickly   : bool;
 }
 
 GoblinState :: enum {
@@ -1214,7 +1215,7 @@ main :: () {
                                             }
                                         }
                                     }
-                                    
+
                                     if path_being_traced_1.start_tile_id > 0 array_add(*paths, path_being_traced_1);
                                     if path_being_traced_2.start_tile_id > 0 array_add(*paths, path_being_traced_2);
 
@@ -1437,7 +1438,9 @@ main :: () {
                                                 // TODO: extract this
                                                 array_reset(*(dwarf.tile_ids_on_path));
                                                 array_copy(*(dwarf.tile_ids_on_path), tile_ids_on_path);
-                                                // dwarf.direction = path.direction;
+                                                set_entity_direction_to_face_next_target(dwarf);
+
+                                                dwarf.is_moving_quickly = true;
 
                                                 is_dwarf_done_deciding = true;
                                                 break;
@@ -1489,6 +1492,8 @@ main :: () {
 
                                         // If the dwarf has no targets, give him a new one
                                         if dwarf.tile_ids_on_path.count == 0 {
+                                            dwarf.is_moving_quickly = false;
+
                                             result := try_to_set_dwarf_random_new_target(dwarf);
 
                                             // If there are no directions for this dwarf to go this frame,
@@ -1574,6 +1579,7 @@ main :: () {
                                             else {
                                                 try_to_set_dwarf_random_new_target(dwarf);
                                                 dwarf_can_remain_undecided = true;
+                                                dwarf.is_moving_quickly    = false;
                                             }
                                         }
                                     }
@@ -1629,7 +1635,8 @@ main :: () {
                                     distance_squared := (dx * dx) + (dy * dy);
 
                                     // Calculate the squared step size
-                                    step_size := DWARF_MOVE_SPEED * dt_seconds;
+                                    speed := ifx dwarf.is_moving_quickly then DWARF_MOVE_SPEED_FAST else DWARF_MOVE_SPEED;
+                                    step_size := speed * dt_seconds;
                                     step_size_squared := step_size * step_size;
 
                                     dwarf_pretty_much_reached_target := distance_squared <= step_size_squared;
@@ -1644,7 +1651,7 @@ main :: () {
                                         // Figure out what to do next
                                         dwarf.state = .DECIDING;
                                     } else {
-                                        move_one_step_towards_its_next_target_cardinal(dwarf, DWARF_MOVE_SPEED, dt_seconds);
+                                        move_one_step_towards_its_next_target_cardinal(dwarf, speed, dt_seconds);
 
                                         // Remain in the .MOVING state, since we didn't reach the target yet
                                     }
@@ -3434,11 +3441,13 @@ deal_with_nearby_goblins :: (dwarf: *Dwarf) -> DealWithNearbyGoblinResult {
             // If the dwarf is right up against where it's going to attack the goblin already, then start fighting
             if is_tile_id_neighbor_of_tile_id_cardinal(dwarf_tile_id, goblin_tile_id) {
                 dwarf.state = .ATTACKING;
+                dwarf.is_moving_quickly = false;
             } else if dwarf.dwarf_type == .WARRIOR {
                 array_reset(*dwarf.tile_ids_on_path);
                 array_copy(*dwarf.tile_ids_on_path, tile_ids_to_goblin_target);
 
                 dwarf.state = .MOVING;
+                dwarf.is_moving_quickly = true;
             }
         }
     }
