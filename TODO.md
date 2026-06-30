@@ -2,7 +2,7 @@
 # In progress
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- Dwarves move faster after touching arrows
+
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Bugs
@@ -23,7 +23,6 @@
 - base spawn diggers control
 - base spawn warriors control
 - base building time
-- fullscreen and resizability
 - options menu
     - apply changes
     - restore defaults
@@ -34,6 +33,7 @@
 - spider queen
 - Warnings should not come up if dwarf cannot actually access the liquid (obsidian)
 - Warning circles should be drawn in screen space
+- Resolution
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Tutorial
@@ -92,7 +92,6 @@
 # Miscellaneous
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- jai lsp
 - search feature for tiles, dwarves, etc.
 - hotreloading
 - macro or something for requiring all fields to be filled out in struct

@@ -589,8 +589,9 @@ created_chunks: Table(u64, *Chunk);
 
 #insert #run generate_kind_enum_from_base_struct(Entity);
 
-SCREEN_WIDTH  :: 1600;
-SCREEN_HEIGHT :: 900;
+// TODO: remember screen dimension preferences
+INITIAL_SCREEN_WIDTH  :: 1600;
+INITIAL_SCREEN_HEIGHT :: 900;
 
 main :: () {
     // Set temp allocator for various things.
@@ -621,11 +622,13 @@ main :: () {
 
     random_seed(123456789);
 
-    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Dwarfs?! Clone");
+    // SetConfigFlags(.FLAG_WINDOW_RESIZABLE | .FLAG_FULLSCREEN_MODE);
+    SetConfigFlags(.FLAG_WINDOW_RESIZABLE);
+
+    InitWindow(INITIAL_SCREEN_WIDTH, INITIAL_SCREEN_HEIGHT, "Dwarfs?! Clone");
     defer CloseWindow();
 
-    // TODO
-    // HideCursor(); // We render a custom one from a texture.
+    // HideCursor(); // TODO: render a custom one from a texture.
     SetTargetFPS(144);
     SetExitKey(.KEY_NULL);
 
@@ -3284,18 +3287,18 @@ create_alert :: (alert_type: AlertType, pos: Vector2, game_state: *GameState) ->
 
 // Returns the screen-space coordinate to draw the warning indicator
 get_indicator_pos :: (warning_pos_in_screen_space: Vector2, padding: float) -> (is_event_offscreen: bool, indicator_pos: Vector2) {
-    SCREEN_CENTER :: Vector2.{ SCREEN_WIDTH * 0.5, SCREEN_HEIGHT * 0.5 };
+    screen_center := Vector2.{ GetScreenWidth() * 0.5, GetScreenHeight() * 0.5 };
     
     // Direction vector from center to target
-    dx := warning_pos_in_screen_space.x - SCREEN_CENTER.x;
-    dy := warning_pos_in_screen_space.y - SCREEN_CENTER.y;
+    dx := warning_pos_in_screen_space.x - screen_center.x;
+    dy := warning_pos_in_screen_space.y - screen_center.y;
     
     // If the target is exactly at the center, return center to avoid division by zero
     if dx == 0.0 && dy == 0.0 return false, Vector2.{};
     
     // Calculate the bounded area (half-extents minus the sprite padding)
-    bound_x := SCREEN_CENTER.x - padding;
-    bound_y := SCREEN_CENTER.y - padding;
+    bound_x := screen_center.x - padding;
+    bound_y := screen_center.y - padding;
     
     // Calculate scale factors to hit the X and Y edges
     // Use an arbitrarily large number if dx or dy is 0 to simulate infinity
@@ -3308,7 +3311,7 @@ get_indicator_pos :: (warning_pos_in_screen_space: Vector2, padding: float) -> (
     // If scale > 1.0, the target is already ON screen (inside the padded area)
     if scale > 1.0 return false, Vector2.{};
     
-    return true, Vector2.{ SCREEN_CENTER.x + (dx * scale), SCREEN_CENTER.y + (dy * scale)};
+    return true, Vector2.{ screen_center.x + (dx * scale), screen_center.y + (dy * scale)};
 }
 
 draw_warning_rings_if_necessary :: (dwarf_center: Vector2, tile_ids_set: *Table, camera: Camera2D) {
@@ -3729,7 +3732,7 @@ initialize_game :: () -> GameState, Metagame, Camera2D {
             WORLD_ROWS * TILEMAP_GENERAL_WORLD_HEIGHT / 2,
         };
     }
-    camera.offset   = Vector2.{ SCREEN_WIDTH * 0.5, SCREEN_HEIGHT * 0.5 };
+    camera.offset   = Vector2.{ GetScreenWidth() * 0.5, GetScreenHeight() * 0.5 };
     camera.rotation = 0.0;
     camera.zoom     = 1.0;
 
