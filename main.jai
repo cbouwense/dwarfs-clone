@@ -571,7 +571,9 @@ hole_tile_ids             : [..] s32;
 hole_tile_ids_set         : Table(s32, s32);
 hole_tile_ids_in_viewport : [..] s32;
 
-path_being_traced : Path;
+path_being_traced_1 : Path;
+path_being_traced_2 : Path;
+
 paths             : [..] Path;
 paths_in_viewport : [..] Path;
 
@@ -1154,51 +1156,42 @@ main :: () {
                                     potential_path_being_traced_1, potential_path_being_traced_2 := get_paths(mouse_pos_when_path_creation_started, mouse_pos_in_world);
 
                                     if !metagame.debug_mode {
-                                        potential_path_cost     := get_path_cost(potential_path_being_traced_1) + get_path_cost(potential_path_being_traced_2);
+                                        potential_path_cost := get_path_cost(potential_path_being_traced_1) + get_path_cost(potential_path_being_traced_2);
+
                                         unaffordable_tile_count := cast(int) ceil((cast(float) (potential_path_cost - game_state.gold)) / cast(float)GOLD_COST_PATH_STEP);
-
-                                        // PERF: duplicating this from the get_path_cost
-                                        start_pos  := get_tile_pos_by_id(potential_path_being_traced.start_tile_id);
-                                        middle_pos := get_tile_pos_by_id(potential_path_being_traced.middle_tile_id);
-                                        end_pos    := get_tile_pos_by_id(potential_path_being_traced.end_tile_id);
-
-                                        tile_ids_on_first_leg := get_tile_ids_from_pos_to_pos(start_pos, middle_pos);
-                                        tile_ids_on_last_leg  := get_tile_ids_from_pos_to_pos(middle_pos, end_pos);
-
-                                        // WAS DOING: refactoring this into two paths
 
                                         for 0..unaffordable_tile_count {
                                             if potential_path_being_traced_2.tile_count > 0 {
-                                                array_unordered_remove_by_index(*tile_ids_on_last_leg, potential_.count - 1);
+                                                potential_path_being_traced_2.tile_count -= 1;
                                             } else if potential_path_being_traced_1.tile_count > 0 {
-                                                array_unordered_remove_by_index(*tile_ids_on_first_leg, tile_ids_on_first_leg.count - 1);
+                                                potential_path_being_traced_1.tile_count -= 1;
                                             } else {
                                                 break;
                                             }
                                         }
-
-                                        potential_path_being_traced.start_tile_id  = ifx tile_ids_on_first_leg.count > 0 then tile_ids_on_first_leg[0] else 0;
-                                        potential_path_being_traced.middle_tile_id = ifx tile_ids_on_first_leg.count > 0 then tile_ids_on_first_leg[tile_ids_on_first_leg.count - 1] else 0;
-                                        potential_path_being_traced.end_tile_id    = ifx tile_ids_on_last_leg.count  > 0 then tile_ids_on_last_leg[tile_ids_on_last_leg.count - 1] else potential_path_being_traced.middle_tile_id;
                                     }
 
-                                    if potential_path_being_traced.start_tile_id != potential_path_being_traced.end_tile_id {
-                                        path_being_traced = potential_path_being_traced;
+                                    if potential_path_being_traced_1.tile_count > 0 {
+                                        path_being_traced_1 = potential_path_being_traced_1;
                                     } else {
-                                        path_being_traced.start_tile_id = 0;
+                                        path_being_traced_1 = Path.{};
+                                    }
+                                    if potential_path_being_traced_2.tile_count > 0 {
+                                        path_being_traced_2 = potential_path_being_traced_2;
+                                    } else {
+                                        path_being_traced_2 = Path.{};
                                     }
                                 }
                                 // If we were drawing a path, but just let go, then create the path as a real thing.
-                                else if game_state.controls_state_prev_frame.drawing_path && path_being_traced.start_tile_id > 0 {
-                                    array_add(*paths, path_being_traced);
-
-                                    end_pos := get_tile_pos_by_id(path_being_traced.end_tile_id);
+                                else if game_state.controls_state_prev_frame.drawing_path {
+                                    if path_being_traced_1.start_tile_id > 0 array_add(*paths, path_being_traced_1);
+                                    if path_being_traced_2.start_tile_id > 0 array_add(*paths, path_being_traced_2);
 
                                     // Debit the gold cost.
-                                    gold_cost := get_path_cost(path_being_traced);
+                                    gold_cost := get_path_cost(path_being_traced_1) + get_path_cost(path_being_traced_2);
 
                                     if !metagame.debug_mode game_state.gold -= gold_cost;
-                                    create_gold_particle(end_pos, -1 * gold_cost);
+                                    create_gold_particle(mouse_pos_in_world, -1 * gold_cost);
                                 }
                             }
                         case .ADD_BASE;
@@ -1319,11 +1312,6 @@ main :: () {
                                     if tile_id == path.start_tile_id {
                                         array_unordered_remove_by_index(*paths, it_index);
                                     }
-
-                                    path_has_middle_arrow, tile_id_with_middle_arrow := find_tile_id_with_middle_arrow_on_path(path);
-                                    if path_has_middle_arrow && tile_id == tile_id_with_middle_arrow {
-                                        array_unordered_remove_by_index(*paths, it_index);
-                                    }
                                 }
                             }
                     }
@@ -1406,41 +1394,17 @@ main :: () {
                                     // Check if the dwarf is on a path arrow. If he is, then his new mission is to follow it.
                                     if !is_dwarf_done_deciding {
                                         for path: paths {
-                                            tile_id_with_start_arrow := get_tile_id_with_start_arrow_on_path(path);
-                                            if dwarf_tile_id == tile_id_with_start_arrow {
-                                                // If the dwarf just stepped on a start arrow, then we want him to go to the path's middle pos.
-                                                start_pos := get_tile_pos_by_id(path.start_tile_id);
-                                                end_pos   := get_tile_pos_by_id(path.middle_tile_id);
-                                                tile_ids_on_path := get_tile_ids_from_pos_to_pos(start_pos, end_pos);
-                                                // Don't include the tile with the arrow on it, because then we softlock.
+                                            if dwarf_tile_id == path.start_tile_id {
+                                                tile_ids_on_path := get_tile_ids_on_path(path);
+
+                                                // Don't include the start tile, because then we softlock.
                                                 tile_ids_on_path.data  += 1;
                                                 tile_ids_on_path.count -= 1;
 
                                                 // TODO: extract this
                                                 array_reset(*(dwarf.tile_ids_on_path));
                                                 array_copy(*(dwarf.tile_ids_on_path), tile_ids_on_path);
-                                                set_entity_direction_to_face_next_target(dwarf);
-
-                                                is_dwarf_done_deciding = true;
-                                                break;
-                                            }
-
-                                            path_has_middle_arrow, tile_id_with_middle_arrow := find_tile_id_with_middle_arrow_on_path(path);
-                                            if path_has_middle_arrow && dwarf_tile_id == tile_id_with_middle_arrow {
-                                                // If the dwarf just stepped on a middle arrow, then we want him to go to the path's end pos.
-                                                // Note that if there is a middle arrow, then that means there is a bend in the path and the
-                                                // end pos is necessarily different than the middle pos.
-                                                start_pos := get_tile_pos_by_id(path.middle_tile_id);
-                                                end_pos   := get_tile_pos_by_id(path.end_tile_id);
-                                                tile_ids_on_path := get_tile_ids_from_pos_to_pos(start_pos, end_pos);
-                                                // Don't include the tile with the arrow on it, because then we softlock.
-                                                tile_ids_on_path.data  += 1;
-                                                tile_ids_on_path.count -= 1;
-
-                                                // TODO: extract this
-                                                array_reset(*(dwarf.tile_ids_on_path));
-                                                array_copy(*(dwarf.tile_ids_on_path), tile_ids_on_path);
-                                                set_entity_direction_to_face_next_target(dwarf);
+                                                dwarf.direction = path.direction;
 
                                                 is_dwarf_done_deciding = true;
                                                 break;
@@ -2479,8 +2443,9 @@ main :: () {
 
                 // Draw paths
                 {
-                    if game_state.controls_state_this_frame.drawing_path && path_being_traced.start_tile_id > 0 {
-                        draw_path(path_being_traced);
+                    if game_state.controls_state_this_frame.drawing_path {
+                        if path_being_traced_1.start_tile_id > 0 draw_path(path_being_traced_1);
+                        if path_being_traced_2.start_tile_id > 0 draw_path(path_being_traced_2);
                     }
 
                     for path: paths_in_viewport draw_path(path);
@@ -2678,20 +2643,11 @@ main :: () {
                 }
 
                 // Draw path being drawn cost
-                if game_state.controls_state_this_frame.drawing_path && path_being_traced.start_tile_id > 0 {
+                if game_state.controls_state_this_frame.drawing_path {
                     TEXT_SIZE :: 24;
-                    BACKDROP_DIFF :: 2;
 
-                    // start_pos  := get_tile_pos_by_id(path_being_traced.start_tile_id);
-                    // middle_pos := get_tile_pos_by_id(path_being_traced.middle_tile_id);
-                    // end_pos    := get_tile_pos_by_id(path_being_traced.end_tile_id);
-
-                    // tile_ids_on_first_leg := get_tile_ids_from_pos_to_pos(start_pos, middle_pos);
-                    // tile_ids_on_last_leg  := get_tile_ids_from_pos_to_pos(middle_pos, end_pos);
-                    // tile_id_count_on_path := tile_ids_on_first_leg.count + tile_ids_on_last_leg.count;
-
-                    gold_cost := get_path_cost(path_being_traced);
-                    measured_text_size    := poor_mans_measure_text(tprint("%", gold_cost), TEXT_SIZE);
+                    gold_cost := get_path_cost(path_being_traced_1) + get_path_cost(path_being_traced_2);
+                    measured_text_size := poor_mans_measure_text(tprint("%", gold_cost), TEXT_SIZE);
 
                     text_x := mouse_pos_in_ui.x;
                     text_y := mouse_pos_in_ui.y - measured_text_size.y;
@@ -5204,25 +5160,11 @@ get_world_rect_from_pos :: (pos: Vector2) -> Rectangle {
     };
 }
 
-get_tile_id_with_start_arrow_on_path :: (path: Path) -> s32{
-    return path.start_tile_id;
-}
-
-find_tile_id_with_middle_arrow_on_path :: (path: Path) -> path_has_middle_arrow: bool, tile_id: s32 {
-    is_path_straight := path.middle_tile_id == path.end_tile_id;
-    if is_path_straight {
-        return false, -1;
-    } else {
-        return true, path.middle_tile_id;
-    }
-}
-
 draw_path :: (path: Path) {
-    start_pos  := get_tile_pos_by_id(path.start_tile_id);
-    middle_pos := get_tile_pos_by_id(path.middle_tile_id);
-    end_pos    := get_tile_pos_by_id(path.end_tile_id);
+    start_pos := get_tile_pos_by_id(path.start_tile_id);
+    end_pos   := get_tile_pos_by_id(get_path_end_tile_id(path));
 
-    arrow_source := Rectangle.{
+    ARROW_SOURCE :: Rectangle.{
         2 * TILEMAP_GENERAL_TILE_WIDTH,
         0 * TILEMAP_GENERAL_TILE_HEIGHT,
         TILEMAP_GENERAL_TILE_WIDTH,
@@ -5236,38 +5178,16 @@ draw_path :: (path: Path) {
         TILEMAP_GENERAL_WORLD_HEIGHT,
     };
 
-    start_arrow_rotation := get_angle_from_north(start_pos,  middle_pos);
+    start_arrow_rotation := get_angle_from_north(start_pos, end_pos);
 
-    DrawTexturePro(tilemap_texture_general, arrow_source, start_arrow_dest, Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH * 0.5, TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 }, start_arrow_rotation,  WHITE);
+    DrawTexturePro(tilemap_texture_general, ARROW_SOURCE, start_arrow_dest, Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH * 0.5, TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 }, start_arrow_rotation,  WHITE);
     
     DrawLineEx(
-        Vector2.{ start_pos.x  + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, start_pos.y  + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 },
-        Vector2.{ middle_pos.x + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, middle_pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 },
+        Vector2.{ start_pos.x + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, start_pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 },
+        Vector2.{ end_pos.x + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, end_pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 },
         2.0,
         GREEN
     );
-
-    is_path_straight := Vector2Equals(middle_pos, end_pos);
-
-    if !is_path_straight {
-        middle_arrow_dest := Rectangle.{
-            middle_pos.x + TILEMAP_GENERAL_WORLD_WIDTH  * 0.5,
-            middle_pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5,
-            TILEMAP_GENERAL_WORLD_WIDTH,
-            TILEMAP_GENERAL_WORLD_HEIGHT,
-        };
-
-        middle_arrow_rotation := get_angle_from_north(middle_pos, end_pos);
-
-        DrawTexturePro(tilemap_texture_general, arrow_source, middle_arrow_dest, Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH * 0.5, TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 }, middle_arrow_rotation, WHITE);
-
-        DrawLineEx(
-            Vector2.{ middle_pos.x + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, middle_pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 },
-            Vector2.{ end_pos.x    + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, end_pos.y    + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 },
-            2.0,
-            GREEN
-        );
-    }
 
     END_SIDE_LENGTH :: 6.5;
     DrawRectangleV(
@@ -5303,7 +5223,7 @@ get_paths :: (from_pos: Vector2, to_pos: Vector2) -> (path_1: Path, path_2: Path
         TILEMAP_GENERAL_WORLD_HEIGHT,
     };
     middle_tile_pos := get_rect_pos(middle_tile_rect);
-    middle_tile_id  := get_tile_id_by_pos();
+    middle_tile_id  := get_tile_id_by_pos(middle_tile_pos);
 
     end_tile_rect := Rectangle.{
         middle_tile_rect.x + ifx x_is_larger then 0 else dx,
@@ -5311,28 +5231,59 @@ get_paths :: (from_pos: Vector2, to_pos: Vector2) -> (path_1: Path, path_2: Path
         TILEMAP_GENERAL_WORLD_WIDTH,
         TILEMAP_GENERAL_WORLD_HEIGHT,
     };
-    end_tile_id := get_tile_id_by_pos(get_rect_pos(end_tile_rect));
+    end_tile_pos := get_rect_pos(end_tile_rect);
+    end_tile_id  := get_tile_id_by_pos(end_tile_pos);
 
     path_1 := Path.{
-        start_tile_id  = tile_id_mouse_started_on,
-        direction      = get_direction_of_vector(tile_pos_mouse_started_on, middle_tile_pos),
-        tile_count     = get_tile_id_count_from_tile_to_tile_cardinal(tile_id_mouse_started_on, middle_tile_id),
+        start_tile_id = tile_id_mouse_started_on,
+        direction     = get_direction_of_vector(tile_pos_mouse_started_on, middle_tile_pos),
+        tile_count    = get_tile_id_count_from_tile_to_tile_cardinal(tile_id_mouse_started_on, middle_tile_id),
     };
 
     path_2 := Path.{
-        middle_tile_id = middle_tile_id,
-        direction      = get_direction_of_vector(middle_tile_pos, end_tile_pos),
-        tile_count     = get_tile_id_count_from_tile_to_tile_cardinal(middle_tile_id, end_tile_id),
+        start_tile_id = middle_tile_id,
+        direction     = get_direction_of_vector(middle_tile_pos, end_tile_pos),
+        tile_count    = get_tile_id_count_from_tile_to_tile_cardinal(middle_tile_id, end_tile_id),
     };
 
-    return path1, path2;
+    print_vars(path_1, path_2);
+
+    return path_1, path_2;
 }
 
 get_path_cost :: (path: Path) -> int {
     return path.tile_count * GOLD_COST_PATH_STEP;
 }
 
-get_tile_id_count_from_tile_to_tile_cardinal :: (from_tile_id: s32, to_tile_id: s32) -> [..] s32 {
+get_path_end_tile_id :: (path: Path) -> s32 {
+    direction_index : s64 = cast(s64) path.direction;
+
+    dx := TILE_DIRECTION_ID_DELTAS[direction_index][0];
+    dy := TILE_DIRECTION_ID_DELTAS[direction_index][1];
+
+    return path.start_tile_id + xx (path.tile_count * dx) + xx (path.tile_count * dy);
+}
+
+get_tile_ids_on_path :: (path: Path) -> [..] s32 {
+    tile_ids: [..] s32;
+    tile_ids.allocator = temp;
+
+    cursor: s32;
+    for 0..path.tile_count-1 {
+        direction_index : s64 = cast(s64) path.direction;
+
+        dx := TILE_DIRECTION_ID_DELTAS[direction_index][0];
+        dy := TILE_DIRECTION_ID_DELTAS[direction_index][1];
+
+        tile_id := path.start_tile_id + xx (it * dx) + xx (it * dy);
+
+        array_add(*tile_ids, tile_id);
+    }
+
+    return tile_ids;
+}
+
+get_tile_id_count_from_tile_to_tile_cardinal :: (from_tile_id: s32, to_tile_id: s32) -> int {
     on_same_col, dir_col := are_tile_ids_on_same_world_column(from_tile_id, to_tile_id);
     on_same_row, dir_row := are_tile_ids_on_same_world_row(from_tile_id, to_tile_id);
     
@@ -5346,7 +5297,7 @@ get_tile_id_count_from_tile_to_tile_cardinal :: (from_tile_id: s32, to_tile_id: 
         cursor_tile_id := from_tile_id;
         while cursor_tile_id != to_tile_id {
             count += 1;
-            cursor_tile_id += dy;
+            cursor_tile_id += xx dy;
         }
     }
 
@@ -5356,7 +5307,7 @@ get_tile_id_count_from_tile_to_tile_cardinal :: (from_tile_id: s32, to_tile_id: 
         cursor_tile_id := from_tile_id;
         while cursor_tile_id != to_tile_id {
             count += 1;
-            cursor_tile_id += dx;
+            cursor_tile_id += xx dx;
         }
     }
 
@@ -5364,15 +5315,15 @@ get_tile_id_count_from_tile_to_tile_cardinal :: (from_tile_id: s32, to_tile_id: 
 }
 
 are_tile_ids_on_same_world_column :: (tile_id_a: s32, tile_id_b: s32) -> (same: bool, direction: Direction) {
-    direction := ifx tile_id_a < tile_id_b then .NORTH else .SOUTH;
+    direction : Direction = ifx tile_id_a < tile_id_b then .NORTH else .SOUTH;
     same := abs(tile_id_a - tile_id_b) % WORLD_COLS == 0;
-    if same return same, direction;
+    return same, direction;
 }
 
 are_tile_ids_on_same_world_row :: (tile_id_a: s32, tile_id_b: s32) -> (same: bool, direction: Direction) {
-    direction := ifx tile_id_a < tile_id_b then .WEST else .EAST;
+    direction : Direction = ifx tile_id_a < tile_id_b then .WEST else .EAST;
     same := abs(tile_id_a - tile_id_b) < WORLD_COLS;
-    if same return same, direction;
+    return same, direction;
 }
 
 get_tile_ids_from_pos_to_pos :: (from_pos: Vector2, to_pos: Vector2) -> (path_1_tile_ids: [..] s32, path_2_tile_ids: [..] s32) {
@@ -6345,30 +6296,25 @@ derive_entities_in_viewport :: (camera: Camera2D) {
     {
         for path: paths {
             start_tile_pos  := get_tile_pos_by_id(path.start_tile_id);
-            middle_tile_pos := get_tile_pos_by_id(path.middle_tile_id);
-            end_tile_pos    := get_tile_pos_by_id(path.end_tile_id);
+            end_tile_pos    := get_tile_pos_by_id(get_path_end_tile_id(path));
 
             if (
                 start_tile_pos.x  + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x &&
-                middle_tile_pos.x + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x &&
                 end_tile_pos.x    + TILEMAP_GENERAL_WORLD_WIDTH < window_start.x
             ) continue;
 
             if (
                 start_tile_pos.x  - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x &&
-                middle_tile_pos.x - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x &&
                 end_tile_pos.x    - TILEMAP_GENERAL_WORLD_WIDTH > window_end.x
             ) continue;
 
             if (
                 start_tile_pos.y  - TILEMAP_GENERAL_WORLD_WIDTH > window_end.y &&
-                middle_tile_pos.y - TILEMAP_GENERAL_WORLD_WIDTH > window_end.y &&
                 end_tile_pos.y    - TILEMAP_GENERAL_WORLD_WIDTH > window_end.y
             ) continue;
                 
             if (
                 start_tile_pos.y  + TILEMAP_GENERAL_WORLD_WIDTH < window_start.y &&
-                middle_tile_pos.y + TILEMAP_GENERAL_WORLD_WIDTH < window_start.y &&
                 end_tile_pos.y    + TILEMAP_GENERAL_WORLD_WIDTH < window_start.y
             ) continue;
 
