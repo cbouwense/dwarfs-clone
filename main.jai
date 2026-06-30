@@ -5289,29 +5289,16 @@ get_tile_id_count_from_tile_to_tile_cardinal :: (from_tile_id: s32, to_tile_id: 
     
     assert(on_same_col || on_same_row);
 
-    count := 0;
-
     if on_same_col {
-        dy := ifx dir_col == .NORTH then -1 else 1;
-
-        cursor_tile_id := from_tile_id;
-        while cursor_tile_id != to_tile_id {
-            count += 1;
-            cursor_tile_id += xx dy;
-        }
+        return cast(int) (abs(from_tile_id - to_tile_id) * WORLD_COLS_RECIP);
     }
 
     if on_same_row {
-        dx := ifx dir_row == .WEST then -1 else 1;
-
-        cursor_tile_id := from_tile_id;
-        while cursor_tile_id != to_tile_id {
-            count += 1;
-            cursor_tile_id += xx dx;
-        }
+        return cast(int) abs(from_tile_id - to_tile_id);
     }
 
-    return count;
+    assert(false);
+    return -1;
 }
 
 are_tile_ids_on_same_world_column :: (tile_id_a: s32, tile_id_b: s32) -> (same: bool, direction: Direction) {
