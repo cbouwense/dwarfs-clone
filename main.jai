@@ -1404,7 +1404,7 @@ main :: () {
                                                 // TODO: extract this
                                                 array_reset(*(dwarf.tile_ids_on_path));
                                                 array_copy(*(dwarf.tile_ids_on_path), tile_ids_on_path);
-                                                dwarf.direction = path.direction;
+                                                // dwarf.direction = path.direction;
 
                                                 is_dwarf_done_deciding = true;
                                                 break;
@@ -5271,7 +5271,7 @@ get_tile_ids_on_path :: (path: Path) -> [..] s32 {
     tile_ids.allocator = temp;
 
     cursor: s32;
-    for 0..path.tile_count-1 {
+    for 0..path.tile_count {
         direction_index : s64 = cast(s64) path.direction;
 
         dx := TILE_DIRECTION_ID_DELTAS[direction_index][0];
