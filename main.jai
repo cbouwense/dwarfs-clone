@@ -92,6 +92,8 @@ PARTICLE_DAMAGE_STAR_STARTING_SPEED    :: 250;
 PARTICLE_DAMAGE_TIME_TO_LIVE_MS :: 1500;
 
 LAVA_DAMAGE_PER_HIT :: 20;
+LAVA_SPRITE_SOURCE_ROW :: 1;
+LAVA_SPRITE_SOURCE_COL :: 5;
 
 SCALE :: 1;
 
@@ -177,6 +179,21 @@ metagame : Metagame;
 // Textures
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+Sprite :: struct {
+    texture     : Texture;
+    active      : bool;
+    first_frame : s32; // Starts from 0
+    color       : Color;
+}
+
+AnimatedSprite :: struct {
+    #as using sprite  : Sprite;
+    frame_count       : s32;
+    frame_duration_ms : s32;
+    timer_ms          : s32;
+    loops             : bool;
+}
+
 TILEMAP_SOURCE_RECT_BASE := Rectangle.{
     0, 0,
     TILEMAP_GENERAL_TILE_WIDTH,
@@ -205,24 +222,29 @@ TILEMAP_SOURCE_RECT_COIN :: Rectangle.{
 };
 
 tilemap_texture_general : Texture;
+lava_flowing_texture    : Texture;
 dirt_texture            : Texture;
 
 init_textures :: () {
     tilemap_texture_general = LoadTexture("data/tilemap-general.png");
-    dirt_texture = LoadTexture("data/dirt.png");
+    lava_flowing_texture    = LoadTexture("data/lava-flowing.png");
+    dirt_texture            = LoadTexture("data/dirt.png");
+
     // The plan is just to just render a big-ass quad and tile the dirt over it.
-    // At this point I'm not even sure why I'm insisting on doing it like this,
-    // I guess because I feel like it should be possible to zoom way the fuck
-    // out, but, yeah idk this might be stupid.
     SetTextureWrap(dirt_texture, .TEXTURE_WRAP_REPEAT);
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////
-// Sprites
-////////////////////////////////////////////////////////////////////////////////////////////////////
-
 init_sprites :: () {
+    LAVA_FLOWING_FRAME_COUNT :: 8;
 
+    lava_flowing_animated_sprite = AnimatedSprite.{
+        texture           = lava_flowing_texture,
+        first_frame       = 0,
+        frame_count       = LAVA_FLOWING_FRAME_COUNT,
+        frame_duration_ms = LAVA_FLOW_COOLDOWN_MS / LAVA_FLOWING_FRAME_COUNT,
+        color             = WHITE,
+        loops             = false, // ?
+    };
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2413,8 +2435,19 @@ main :: () {
                         DrawRectangleV(
                             get_tile_pos_by_id(it),
                             Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
-                            RED, // TODO: texture
+                            RED,
                         );
+                        source := Rectangle.{
+                            LAVA_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
+                            LAVA_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
+                            TILEMAP_GENERAL_TILE_WIDTH,
+                            TILEMAP_GENERAL_TILE_HEIGHT,
+                        };
+
+                        pos  := get_tile_pos_by_id(it);
+                        dest := get_world_rect_from_pos(pos);
+
+                        DrawTexturePro(tilemap_texture_general, source, dest, Vector2.{0,0}, 0.0, WHITE);
                     }
 
                     for lava_flowing_tile_ids_in_viewport {
