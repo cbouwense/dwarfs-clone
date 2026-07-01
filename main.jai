@@ -179,21 +179,6 @@ metagame : Metagame;
 // Textures
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-Sprite :: struct {
-    texture     : Texture;
-    active      : bool;
-    first_frame : s32; // Starts from 0
-    color       : Color;
-}
-
-AnimatedSprite :: struct {
-    #as using sprite  : Sprite;
-    frame_count       : s32;
-    frame_duration_ms : s32;
-    timer_ms          : s32;
-    loops             : bool;
-}
-
 TILEMAP_SOURCE_RECT_BASE := Rectangle.{
     0, 0,
     TILEMAP_GENERAL_TILE_WIDTH,
@@ -225,6 +210,8 @@ tilemap_texture_general : Texture;
 lava_flowing_texture    : Texture;
 dirt_texture            : Texture;
 
+lava_flowing_animated_sprite : AnimatedSprite;
+
 init_textures :: () {
     tilemap_texture_general = LoadTexture("data/tilemap-general.png");
     lava_flowing_texture    = LoadTexture("data/lava-flowing.png");
@@ -239,10 +226,11 @@ init_sprites :: () {
 
     lava_flowing_animated_sprite = AnimatedSprite.{
         texture           = lava_flowing_texture,
+        active            = true,
+        color             = WHITE,
         first_frame       = 0,
         frame_count       = LAVA_FLOWING_FRAME_COUNT,
         frame_duration_ms = LAVA_FLOW_COOLDOWN_MS / LAVA_FLOWING_FRAME_COUNT,
-        color             = WHITE,
         loops             = false, // ?
     };
 }
@@ -1377,6 +1365,20 @@ main :: () {
                 }
 
                 if !panic_pause_is_active {
+                    // Update animated sprite timers
+                    {
+                        if lava_flowing_animated_sprite.active {
+                            lava_flowing_animated_sprite.timer_ms += xx (dt_seconds * 1000);
+
+                            if !lava_flowing_animated_sprite.loops && lava_flowing_animated_sprite.timer_ms > sprite_animation_get_total_duration_ms(lava_flowing_animated_sprite) {
+                                lava_flowing_animated_sprite.timer_ms = 0;
+                                lava_flowing_animated_sprite.active   = false;
+                            }
+                        } else {
+                            lava_flowing_animated_sprite.timer_ms = 0;
+                        }
+                    }
+
                     // Update dwarves
                     {
                         dwarf_ids_to_kill_this_frame : [..] s32;
@@ -2451,11 +2453,20 @@ main :: () {
                     }
 
                     for lava_flowing_tile_ids_in_viewport {
-                        DrawRectangleV(
+                        sprite_draw(
+                            lava_flowing_animated_sprite,
                             get_tile_pos_by_id(it),
-                            Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
-                            ORANGE, // TODO: texture
+                            TILEMAP_GENERAL_WORLD_WIDTH,
+                            TILEMAP_GENERAL_WORLD_HEIGHT,
+                            TILEMAP_GENERAL_TILE_WIDTH,
+                            TILEMAP_GENERAL_TILE_HEIGHT,
                         );
+                        
+                        // DrawRectangleV(
+                        //     ,
+                        //     Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
+                        //     ORANGE,
+                        // );
                     }
 
                     for hole_tile_ids_in_viewport {
@@ -5312,8 +5323,6 @@ get_paths :: (from_pos: Vector2, to_pos: Vector2) -> (path_1: Path, path_2: Path
     end_tile_pos := get_rect_pos(end_tile_rect);
     end_tile_id  := get_tile_id_by_pos(end_tile_pos);
 
-    print_vars(x_is_larger, middle_tile_id, end_tile_id);
-
     path_1 := Path.{
         start_tile_id = tile_id_mouse_started_on,
         direction     = get_direction_of_vector(tile_pos_mouse_started_on, middle_tile_pos),
@@ -5325,8 +5334,6 @@ get_paths :: (from_pos: Vector2, to_pos: Vector2) -> (path_1: Path, path_2: Path
         direction     = get_direction_of_vector(middle_tile_pos, end_tile_pos),
         tile_count    = get_tile_id_count_from_tile_to_tile_cardinal(middle_tile_id, end_tile_id),
     };
-
-    print_vars(path_1, path_2);
 
     return path_1, path_2;
 }
