@@ -231,7 +231,7 @@ init_sprites :: () {
         first_frame       = 0,
         frame_count       = LAVA_FLOWING_FRAME_COUNT,
         frame_duration_ms = LAVA_FLOW_COOLDOWN_MS / LAVA_FLOWING_FRAME_COUNT,
-        loops             = false, // ?
+        loops             = true, // ?
     };
 }
 
@@ -2193,29 +2193,26 @@ main :: () {
                         for water_still_tile_ids inflict_liquid_consequences(it);
                     }
 
+                    should_spread_lava_this_frame := game_state.lava_flow_cooldown_ms <= 0;
+                    if should_spread_lava_this_frame {
+                        game_state.lava_flow_cooldown_ms = LAVA_FLOW_COOLDOWN_MS;
+                    } else {
+                        game_state.lava_flow_cooldown_ms -= xx (dt_seconds * 1000);
+                    }
+
                     // Update lava flowing
                     UPDATE_LAVA_FLOWING :: true;
                     #if UPDATE_LAVA_FLOWING {
-                        should_spread_water_this_frame := game_state.lava_flow_cooldown_ms <= 0;
-
-                        if should_spread_water_this_frame {
-                            game_state.lava_flow_cooldown_ms = LAVA_FLOW_COOLDOWN_MS;
-                        } else {
-                            game_state.lava_flow_cooldown_ms -= xx (dt_seconds * 1000);
-                        }
-
                         // Take an array view of the actual state because we mutate the state during the loop
                         // and can cause self referential problems when looping on the actual state.
                         current_lava_flowing_tile_ids := array_view(lava_flowing_tile_ids, 0);
                         for current_lava_flowing_tile_ids {
                             inflict_liquid_consequences(it);
 
-                            if should_spread_water_this_frame {
+                            if should_spread_lava_this_frame {
                                 try_to_set_cardinal_neighbors_as_flowing_tile_type(it, .LAVA_FLOWING, *game_state);
 
-                                // If all surrounding tiles are liquid, then we can mark this tile as
-                                // still liquid so we don't have to update it going forward.
-                                if are_all_neighbors_liquid(it) {
+                                if are_all_neighbors_unable_to_be_spread_to(it) {
                                     set_tile_as_type(it, .LAVA_STILL, false, false, *game_state);
                                 }
                             }
@@ -2225,7 +2222,20 @@ main :: () {
                     // Update lava still
                     UPDATE_LAVA_STILL :: true;
                     #if UPDATE_LAVA_STILL {
-                        for lava_still_tile_ids inflict_liquid_consequences(it);
+                        // Take an array view of the actual state because we mutate the state during the loop
+                        // and can cause self referential problems when looping on the actual state.
+                        current_lava_still_tile_ids := array_view(lava_still_tile_ids, 0);
+                        for current_lava_still_tile_ids {
+                            inflict_liquid_consequences(it);
+
+                            if should_spread_lava_this_frame {
+                                try_to_set_cardinal_neighbors_as_flowing_tile_type(it, .LAVA_FLOWING, *game_state);
+
+                                if are_all_neighbors_unable_to_be_spread_to(it) {
+                                    set_tile_as_type(it, .LAVA_STILL, false, false, *game_state);
+                                }
+                            }
+                        }
                     }
 
                     // Update particles
@@ -3370,7 +3380,8 @@ draw_warning_rings_if_necessary :: (dwarf_center: Vector2, tile_ids_set: *Table,
 draw_offscreen_notification :: (center_pos: Vector2, camera: Camera2D, is_warning: bool, color: Color) {
     center_pos_in_screen_space := GetWorldToScreen2D(center_pos, camera);
     is_offscreen, indicator_pos := get_indicator_pos(center_pos_in_screen_space, NOTIFICATION_RADIUS);
-    assert(is_offscreen);
+    // assert(is_offscreen);
+    if !is_offscreen then return;
 
     // Draw main warning bubble
     DrawCircleV(indicator_pos, NOTIFICATION_RADIUS, color);
@@ -5070,6 +5081,26 @@ try_to_encase_tiles :: (starting_tile_id: s32, game_state: *GameState) {
             table_set(*encased_tile_ids_set, it, 1738);
         }
     }
+}
+
+are_all_neighbors_unable_to_be_spread_to :: (tile_id: s32) -> bool {
+    north_tile_id := tile_id - WORLD_ROWS;
+    south_tile_id := tile_id + WORLD_ROWS;
+    east_tile_id  := tile_id + 1;
+    west_tile_id  := tile_id - 1;
+
+    // "Walkable" means "mined and not liquid". "Mineable" means dirt, iron, or wall.
+    is_neighbor_north_spreadable := is_tile_id_fully_mined(north_tile_id);
+    is_neighbor_south_spreadable := is_tile_id_fully_mined(south_tile_id);
+    is_neighbor_east_spreadable  := is_tile_id_fully_mined(east_tile_id);
+    is_neighbor_west_spreadable  := is_tile_id_fully_mined(west_tile_id);
+
+    return (
+        !is_neighbor_north_spreadable &&
+        !is_neighbor_south_spreadable &&
+        !is_neighbor_east_spreadable &&
+        !is_neighbor_west_spreadable
+    );
 }
 
 are_all_neighbors_liquid :: (tile_id: s32) -> bool {
