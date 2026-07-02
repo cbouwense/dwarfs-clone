@@ -2443,12 +2443,8 @@ main :: () {
                         );
                     }
 
+                    // Draw lava still
                     for lava_still_tile_ids_in_viewport {
-                        DrawRectangleV(
-                            get_tile_pos_by_id(it),
-                            Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
-                            RED,
-                        );
                         source := Rectangle.{
                             LAVA_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
                             LAVA_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
@@ -2462,7 +2458,27 @@ main :: () {
                         DrawTexturePro(tilemap_texture_general, source, dest, Vector2.{0,0}, 0.0, WHITE);
                     }
 
+                    // Draw lava flowing
                     for lava_flowing_tile_ids_in_viewport {
+                        // First, draw a fully mined tile underneath
+                        {
+                            tile_column := it % 3;
+                            // LOD
+                            if camera.zoom < 0.3 tile_column = 3;
+
+                            source := Rectangle.{
+                                xx (tile_column * TILEMAP_GENERAL_TILE_WIDTH),
+                                1 * TILEMAP_GENERAL_TILE_HEIGHT,
+                                TILEMAP_GENERAL_TILE_WIDTH,
+                                TILEMAP_GENERAL_TILE_HEIGHT,
+                            };
+
+                            pos  := get_tile_pos_by_id(it);
+                            dest := get_world_rect_from_pos(pos);
+
+                            DrawTexturePro(tilemap_texture_general, source, dest, Vector2.{0,0}, 0.0, WHITE);
+                        }
+
                         sprite_draw(
                             lava_flowing_animated_sprite,
                             get_tile_pos_by_id(it),
