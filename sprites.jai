@@ -40,3 +40,16 @@ sprite_draw :: (sprite: $T/Sprite, pos: Vector2, sprite_width: int, sprite_heigh
 
     DrawTexturePro(sprite.texture, source_rect, dest_rect, Vector2.{ 0, 0 }, 0.0, sprite.color);
 }
+
+sprite_update :: (sprite: *AnimatedSprite, dt_seconds: float) {
+    if sprite.active {
+        sprite.timer_ms += xx (dt_seconds * 1000);
+
+        if !sprite.loops && sprite.timer_ms > sprite_animation_get_total_duration_ms(sprite) {
+            sprite.timer_ms = 0;
+            sprite.active   = false;
+        }
+    } else {
+        sprite.timer_ms = 0;
+    }
+}

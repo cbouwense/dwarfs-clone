@@ -94,6 +94,7 @@ PARTICLE_DAMAGE_TIME_TO_LIVE_MS :: 1500;
 LAVA_DAMAGE_PER_HIT :: 20;
 LAVA_SPRITE_SOURCE_ROW :: 1;
 LAVA_SPRITE_SOURCE_COL :: 5;
+LAVA_FLOWING_FRAME_COUNT :: 8;
 
 SCALE :: 1;
 
@@ -210,8 +211,6 @@ tilemap_texture_general : Texture;
 lava_flowing_texture    : Texture;
 dirt_texture            : Texture;
 
-lava_flowing_animated_sprite : AnimatedSprite;
-
 init_textures :: () {
     tilemap_texture_general = LoadTexture("data/tilemap-general.png");
     lava_flowing_texture    = LoadTexture("data/lava-flowing.png");
@@ -222,17 +221,7 @@ init_textures :: () {
 }
 
 init_sprites :: () {
-    LAVA_FLOWING_FRAME_COUNT :: 8;
 
-    lava_flowing_animated_sprite = AnimatedSprite.{
-        texture           = lava_flowing_texture,
-        active            = true,
-        color             = WHITE,
-        first_frame       = 0,
-        frame_count       = LAVA_FLOWING_FRAME_COUNT,
-        frame_duration_ms = LAVA_FLOW_COOLDOWN_MS / LAVA_FLOWING_FRAME_COUNT,
-        loops             = true, // ?
-    };
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -526,7 +515,7 @@ lava_still_tile_ids_set         : Table(s32, Any);
 lava_still_tile_ids_in_viewport : [..] s32;
 
 lava_flowing_tile_ids             : [..] s32;
-lava_flowing_tile_ids_set         : Table(s32, Any);
+lava_flowing_tile_ids_to_sprite   : Table(s32, AnimatedSprite);
 lava_flowing_tile_ids_in_viewport : [..] s32;
 
 water_warning_tile_ids             : [..] s32;
@@ -1302,7 +1291,7 @@ main :: () {
                                     tile_is_water_still     := table_contains(*water_still_tile_ids_set, tile_id);
                                     tile_is_water_flowing   := table_contains(*water_flowing_tile_ids_set, tile_id);
                                     tile_is_lava_still      := table_contains(*lava_still_tile_ids_set, tile_id);
-                                    tile_is_lava_flowing    := table_contains(*lava_flowing_tile_ids_set, tile_id);
+                                    tile_is_lava_flowing    := table_contains(*lava_flowing_tile_ids_to_sprite, tile_id);
                                     tile_is_empty           := tile_is_unrevealed_cave || tile_is_water_still || tile_is_water_flowing || tile_is_lava_still || tile_is_lava_flowing;
 
                                     tile_is_obsidian        := table_contains(*obsidian_tile_ids_set, tile_id);
@@ -1365,20 +1354,6 @@ main :: () {
                 }
 
                 if !panic_pause_is_active {
-                    // Update animated sprite timers
-                    {
-                        if lava_flowing_animated_sprite.active {
-                            lava_flowing_animated_sprite.timer_ms += xx (dt_seconds * 1000);
-
-                            if !lava_flowing_animated_sprite.loops && lava_flowing_animated_sprite.timer_ms > sprite_animation_get_total_duration_ms(lava_flowing_animated_sprite) {
-                                lava_flowing_animated_sprite.timer_ms = 0;
-                                lava_flowing_animated_sprite.active   = false;
-                            }
-                        } else {
-                            lava_flowing_animated_sprite.timer_ms = 0;
-                        }
-                    }
-
                     // Update dwarves
                     {
                         dwarf_ids_to_kill_this_frame : [..] s32;
@@ -1562,7 +1537,7 @@ main :: () {
                                                         table_contains(*water_still_tile_ids_set,   dwarf.tile_id_mining) ||
                                                         table_contains(*water_flowing_tile_ids_set, dwarf.tile_id_mining) ||
                                                         table_contains(*lava_still_tile_ids_set,    dwarf.tile_id_mining) ||
-                                                        table_contains(*lava_flowing_tile_ids_set,  dwarf.tile_id_mining)
+                                                        table_contains(*lava_flowing_tile_ids_to_sprite,  dwarf.tile_id_mining)
                                                     ) {
                                                         // If you try to mine liquid, you're fucking banned
                                                         array_add(*dwarf_ids_to_kill_this_frame, dwarf.id);
@@ -1577,7 +1552,7 @@ main :: () {
                                                         is_water_still    := table_contains(*water_still_tile_ids_set, tile_id_next_in_dwarfs_path);
                                                         is_water_flowing  := table_contains(*water_flowing_tile_ids_set, tile_id_next_in_dwarfs_path);
                                                         is_lava_still     := table_contains(*lava_still_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                                        is_lava_flowing   := table_contains(*lava_flowing_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                                        is_lava_flowing   := table_contains(*lava_flowing_tile_ids_to_sprite, tile_id_next_in_dwarfs_path);
                                                         is_obsidian       := table_contains(*obsidian_tile_ids_set, tile_id_next_in_dwarfs_path);
                                                         is_wall           := table_contains(*wall_tile_ids_set, tile_id_next_in_dwarfs_path);
                                                         is_hole           := table_contains(*hole_tile_ids_set, tile_id_next_in_dwarfs_path);
@@ -1631,7 +1606,7 @@ main :: () {
                                         is_water_still    := table_contains(*water_still_tile_ids_set, target_tile_id);
                                         is_water_flowing  := table_contains(*water_flowing_tile_ids_set, target_tile_id);
                                         is_lava_still     := table_contains(*lava_still_tile_ids_set, target_tile_id);
-                                        is_lava_flowing   := table_contains(*lava_flowing_tile_ids_set, target_tile_id);
+                                        is_lava_flowing   := table_contains(*lava_flowing_tile_ids_to_sprite, target_tile_id);
                                         is_obsidian       := table_contains(*obsidian_tile_ids_set, target_tile_id);
                                         is_wall           := table_contains(*wall_tile_ids_set, target_tile_id);
                                         is_hole           := table_contains(*hole_tile_ids_set, target_tile_id);
@@ -1691,7 +1666,7 @@ main :: () {
                                         table_contains(*water_still_tile_ids_set,   dwarf.tile_id_mining) ||
                                         table_contains(*water_flowing_tile_ids_set, dwarf.tile_id_mining) ||
                                         table_contains(*lava_still_tile_ids_set,    dwarf.tile_id_mining) ||
-                                        table_contains(*lava_flowing_tile_ids_set,  dwarf.tile_id_mining)
+                                        table_contains(*lava_flowing_tile_ids_to_sprite,  dwarf.tile_id_mining)
                                     ) {
                                         kill_dwarf_by_index(dwarf_index);
                                     }
@@ -2209,6 +2184,10 @@ main :: () {
                         for current_lava_flowing_tile_ids {
                             inflict_liquid_consequences(it);
 
+                            sprite := table_find_pointer(*lava_flowing_tile_ids_to_sprite, it);
+                            assert(sprite != null);
+                            sprite_update(sprite, dt_seconds);
+
                             if should_spread_lava_this_frame {
                                 try_to_set_cardinal_neighbors_as_flowing_tile_type(it, .LAVA_FLOWING, *game_state);
 
@@ -2479,20 +2458,17 @@ main :: () {
                             DrawTexturePro(tilemap_texture_general, source, dest, Vector2.{0,0}, 0.0, WHITE);
                         }
 
+                        found, sprite := table_find(*lava_flowing_tile_ids_to_sprite, it);
+                        assert(found);
+
                         sprite_draw(
-                            lava_flowing_animated_sprite,
+                            sprite,
                             get_tile_pos_by_id(it),
                             TILEMAP_GENERAL_WORLD_WIDTH,
                             TILEMAP_GENERAL_WORLD_HEIGHT,
                             TILEMAP_GENERAL_TILE_WIDTH,
                             TILEMAP_GENERAL_TILE_HEIGHT,
                         );
-                        
-                        // DrawRectangleV(
-                        //     ,
-                        //     Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
-                        //     ORANGE,
-                        // );
                     }
 
                     for hole_tile_ids_in_viewport {
@@ -3626,7 +3602,7 @@ reset_memory :: () {
     table_reset(*lava_still_tile_ids_set);
 
     array_reset(*lava_flowing_tile_ids);
-    table_reset(*lava_flowing_tile_ids_set);
+    table_reset(*lava_flowing_tile_ids_to_sprite);
 
     array_reset(*water_warning_tile_ids);
     table_reset(*water_warning_tile_ids_set);
@@ -4714,7 +4690,7 @@ is_tile_id_lava_still :: (tile_id: s32) -> bool {
 }
 
 is_tile_id_lava_flowing :: (tile_id: s32) -> bool {
-    return table_contains(*lava_flowing_tile_ids_set, tile_id);
+    return table_contains(*lava_flowing_tile_ids_to_sprite, tile_id);
 }
 
 is_tile_id_obsidian :: (tile_id: s32) -> bool {
@@ -5073,7 +5049,7 @@ try_to_encase_tiles :: (starting_tile_id: s32, game_state: *GameState) {
             found_liquid = true;
         }
 
-        if table_contains(*lava_flowing_tile_ids_set, id) {
+        if table_contains(*lava_flowing_tile_ids_to_sprite, id) {
             found_liquid = true;
             set_tile_as_type(id, .LAVA_STILL, false, false, game_state);
         }
@@ -5140,10 +5116,10 @@ are_all_neighbors_liquid :: (tile_id: s32) -> bool {
     is_neighbor_east_lava_still  := table_contains(*lava_still_tile_ids_set, east_tile_id);
     is_neighbor_west_lava_still  := table_contains(*lava_still_tile_ids_set, west_tile_id);
 
-    is_neighbor_north_lava_flowing := table_contains(*lava_flowing_tile_ids_set, north_tile_id);
-    is_neighbor_south_lava_flowing := table_contains(*lava_flowing_tile_ids_set, south_tile_id);
-    is_neighbor_east_lava_flowing  := table_contains(*lava_flowing_tile_ids_set, east_tile_id);
-    is_neighbor_west_lava_flowing  := table_contains(*lava_flowing_tile_ids_set, west_tile_id);
+    is_neighbor_north_lava_flowing := table_contains(*lava_flowing_tile_ids_to_sprite, north_tile_id);
+    is_neighbor_south_lava_flowing := table_contains(*lava_flowing_tile_ids_to_sprite, south_tile_id);
+    is_neighbor_east_lava_flowing  := table_contains(*lava_flowing_tile_ids_to_sprite, east_tile_id);
+    is_neighbor_west_lava_flowing  := table_contains(*lava_flowing_tile_ids_to_sprite, west_tile_id);
 
     is_neighbor_north_liquid := (
         is_neighbor_north_water_still   ||
@@ -5192,7 +5168,7 @@ try_to_set_cardinal_neighbors_as_flowing_tile_type :: (tile_id: s32, as_type: Ti
         tile_is_flowing_water := table_contains(*water_flowing_tile_ids_set, neighbor_id);
         if tile_is_flowing_water continue;
 
-        tile_is_flowing_lava := table_contains(*lava_flowing_tile_ids_set, neighbor_id);
+        tile_is_flowing_lava := table_contains(*lava_flowing_tile_ids_to_sprite, neighbor_id);
 
         tile_is_iron := table_contains(*iron_tile_ids_set, neighbor_id);
         if tile_is_iron continue;
@@ -5628,7 +5604,7 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
 
         array_unordered_remove_by_value(*lava_flowing_tile_ids, tile_id);
         array_unordered_remove_by_value(*chunk.lava_flowing_tile_ids, tile_id);
-        table_remove(*lava_flowing_tile_ids_set, tile_id);
+        table_remove(*lava_flowing_tile_ids_to_sprite, tile_id);
 
         array_unordered_remove_by_value(*hole_tile_ids, tile_id);
         array_unordered_remove_by_value(*chunk.hole_tile_ids, tile_id);
@@ -5735,9 +5711,20 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
             table_set(*lava_still_tile_ids_set, tile_id, 1738);
         }
         case .LAVA_FLOWING; {
+            lava_flowing_animated_sprite := AnimatedSprite.{
+                texture           = lava_flowing_texture,
+                active            = true,
+                color             = WHITE,
+                first_frame       = 0,
+                frame_count       = LAVA_FLOWING_FRAME_COUNT,
+                frame_duration_ms = LAVA_FLOW_COOLDOWN_MS / LAVA_FLOWING_FRAME_COUNT,
+                timer_ms          = 0,
+                loops             = true, // ?
+            };
+
             array_add(*lava_flowing_tile_ids, tile_id);
             array_add(*chunk.lava_flowing_tile_ids, tile_id);
-            table_set(*lava_flowing_tile_ids_set, tile_id, 1738);
+            table_set(*lava_flowing_tile_ids_to_sprite, tile_id, lava_flowing_animated_sprite);
 
             for direction: DIRECTIONS_COMPASS {
                 direction_index : s64 = cast(s64) direction;
