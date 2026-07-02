@@ -3,6 +3,7 @@ Sprite :: struct {
     active      : bool;
     first_frame : int; // Starts from 0
     color       : Color;
+    rotation    : float;
 }
 
 AnimatedSprite :: struct {
@@ -36,9 +37,9 @@ sprite_draw :: (sprite: $T/Sprite, pos: Vector2, sprite_width: int, sprite_heigh
 
     frame        := sprite_animation_get_current_frame(sprite);
     source_rect  := Rectangle.{xx (frame * texture_map_tile_width), 0.0, xx texture_map_tile_width, xx texture_map_tile_height};
-    dest_rect    := Rectangle.{ pos.x, pos.y, xx sprite_width, xx sprite_height }; 
+    dest_rect    := Rectangle.{ pos.x + sprite_width * 0.5, pos.y + sprite_height * 0.5, xx sprite_width, xx sprite_height }; 
 
-    DrawTexturePro(sprite.texture, source_rect, dest_rect, Vector2.{ 0, 0 }, 0.0, sprite.color);
+    DrawTexturePro(sprite.texture, source_rect, dest_rect, Vector2.{ xx sprite_width * 0.5, xx sprite_height * 0.5 }, sprite.rotation, sprite.color);
 }
 
 sprite_update :: (sprite: *AnimatedSprite, dt_seconds: float) {

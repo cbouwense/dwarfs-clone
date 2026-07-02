@@ -2458,8 +2458,41 @@ main :: () {
                             DrawTexturePro(tilemap_texture_general, source, dest, Vector2.{0,0}, 0.0, WHITE);
                         }
 
-                        found, sprite := table_find(*lava_flowing_tile_ids_to_sprite, it);
-                        assert(found);
+                        sprite := table_find_pointer(*lava_flowing_tile_ids_to_sprite, it);
+                        assert(sprite != null);
+
+                        determine_rotation_of_lava_flowing_sprite :: (tile_id: s32) -> float {
+                            north_tile_id := tile_id - WORLD_ROWS;
+                            south_tile_id := tile_id + WORLD_ROWS;
+                            east_tile_id  := tile_id + 1;
+                            west_tile_id  := tile_id - 1;
+
+                            is_neighbor_north_lava_still := table_contains(*lava_still_tile_ids_set, north_tile_id);
+                            is_neighbor_south_lava_still := table_contains(*lava_still_tile_ids_set, south_tile_id);
+                            is_neighbor_east_lava_still  := table_contains(*lava_still_tile_ids_set, east_tile_id);
+                            is_neighbor_west_lava_still  := table_contains(*lava_still_tile_ids_set, west_tile_id);
+
+                            if (
+                                is_neighbor_north_lava_still  &&
+                                !is_neighbor_south_lava_still &&
+                                !is_neighbor_east_lava_still  &&
+                                !is_neighbor_west_lava_still
+                            ) return 0;
+
+                            if (
+                                !is_neighbor_north_lava_still &&
+                                is_neighbor_south_lava_still  &&
+                                !is_neighbor_east_lava_still  &&
+                                !is_neighbor_west_lava_still
+                            ) return 180; // Flow to the left if the only lava around is to the right
+
+                            if is_neighbor_east_lava_still return 90;
+                            if is_neighbor_west_lava_still return 270;
+
+                            return 0;
+                        }
+
+                        sprite.rotation = determine_rotation_of_lava_flowing_sprite(it); 
 
                         sprite_draw(
                             sprite,
@@ -5152,7 +5185,9 @@ are_all_neighbors_liquid :: (tile_id: s32) -> bool {
     return is_neighbor_north_liquid && is_neighbor_south_liquid && is_neighbor_east_liquid && is_neighbor_west_liquid;
 }
 
-try_to_set_cardinal_neighbors_as_flowing_tile_type :: (tile_id: s32, as_type: TileType, game_state: *GameState) {
+try_to_set_cardinal_neighbors_as_flowing_tile_type :: (tile_id: s32, as_type: TileType, game_state: *GameState) -> (directions_flowed: [4] bool) {
+    directions_flowed := bool.[false, false, false, false];
+
     for DIRECTIONS_CARDINAL {
         neighbor_id := get_neighbor_tile_id_by_direction(tile_id, it);
 
@@ -5203,7 +5238,10 @@ try_to_set_cardinal_neighbors_as_flowing_tile_type :: (tile_id: s32, as_type: Ti
         if !tile_is_empty continue;
 
         set_tile_as_type(neighbor_id, as_type, false, false, game_state);
+        directions_flowed[it_index] = true;
     }
+
+    return directions_flowed;
 }
 
 FindOrCreateChunkReturnStatus :: enum u16 {
