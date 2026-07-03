@@ -2,7 +2,7 @@
 # In progress
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- Still water and lava on cave reveal
+- Warnings should be removed after concealment
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Bugs
@@ -15,6 +15,8 @@
 # Core gameplay
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+- Warnings should not come up if dwarf cannot actually access the liquid (obsidian)
+- Warning circles should be drawn in screen space
 - In addition to control modes, allows users to hold down controls
 - Death poof particles
 - Control mode placement validity / onion skin
@@ -31,8 +33,6 @@
 - proper game over menu
 - shaman
 - spider queen
-- Warnings should not come up if dwarf cannot actually access the liquid (obsidian)
-- Warning circles should be drawn in screen space
 - Screen resolution
 - High score / local persistence
 
@@ -70,6 +70,7 @@
 #  Art
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+- Better lava sprites / animations
 - Dwarf digger spritesheet
 - Dwarf warrior spritesheet
 - Goblin spritesheet

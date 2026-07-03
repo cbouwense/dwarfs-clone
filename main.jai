@@ -4854,7 +4854,7 @@ handle_encasement :: (tile_id: s32, game_state: *GameState) {
     did_encase := check_encasement(tile_id, *encasing_obsidian_tile_ids_set);
 
     // If we did encase a section, find the inside portion that is encased.
-    // Start by casting a ray north, the first tile *needs* to be non-obsidian. If we don't,
+    // Start by casting a ray north, the first tile *needs* to be non-obsidian. If it isn't,
     // cast in the next cardinal direction. Once we find a cardinal direction that starts
     // with non-obsidian, go until out of bounds. Tally up the amount of times we intersect
     // *visited* obsidian tiles. If the crossings is odd, then this direction is inside the
@@ -4897,7 +4897,7 @@ handle_encasement :: (tile_id: s32, game_state: *GameState) {
                 multiplier += 1;
             }
 
-            if encasing_hits % 2 == 1 array_add(*directions_of_encasement, cast(Direction) i);
+            if encasing_hits % 2 == 1 then array_add(*directions_of_encasement, cast(Direction) i);
         }
 
         for directions_of_encasement {
@@ -5554,9 +5554,9 @@ set_cave_as_mined :: (tile_id: s32, cave_type: CaveType, grant_points: bool, gra
         case .EMPTY;
             tile_type = .MINED;
         case .WATER;
-            tile_type = .WATER_FLOWING;
+            tile_type = .WATER_STILL;
         case .LAVA;
-            tile_type = .LAVA_FLOWING;
+            tile_type = .LAVA_STILL;
         case .TREASURE;
             tile_type = .MINED;
 
@@ -5711,6 +5711,40 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
             array_add(*water_still_tile_ids, tile_id);
             array_add(*chunk.water_still_tile_ids, tile_id);
             table_set(*water_still_tile_ids_set, tile_id, 1738);
+
+            for direction: DIRECTIONS_COMPASS {
+                direction_index : s64 = cast(s64) direction;
+
+                dx := TILE_DIRECTION_ID_DELTAS[direction_index][0];
+                dy := TILE_DIRECTION_ID_DELTAS[direction_index][1];
+
+                neighbor_id_1 := tile_id + dx + dy;
+
+                if is_cardinal_direction(direction) {
+                    table_set(*water_alert_tile_ids_set, neighbor_id_1, 1738);
+                    array_add(*water_alert_tile_ids, neighbor_id_1);
+                } else {
+                    table_set(*water_warning_tile_ids_set, neighbor_id_1, 1738);
+                    array_add(*water_warning_tile_ids, neighbor_id_1);
+                }
+
+                neighbor_id_warning := tile_id + (2 * dx) + (2 * dy);
+
+                table_set(*water_warning_tile_ids_set, neighbor_id_warning, 1738);
+                array_add(*water_warning_tile_ids, neighbor_id_warning);
+            }
+
+            for direction: DIRECTIONS_CARDINAL {
+                direction_index : s64 = cast(s64) direction;
+
+                dx := TILE_DIRECTION_ID_DELTAS[direction_index][0];
+                dy := TILE_DIRECTION_ID_DELTAS[direction_index][1];
+
+                neighbor_id_warning := tile_id + (3 * dx) + (3 * dy);
+
+                table_set(*water_warning_tile_ids_set, neighbor_id_warning, 1738);
+                array_add(*water_warning_tile_ids, neighbor_id_warning);
+            }
         }
         case .WATER_FLOWING; {
             array_add(*water_flowing_tile_ids, tile_id);
@@ -5755,6 +5789,40 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
             array_add(*lava_still_tile_ids, tile_id);
             array_add(*chunk.lava_still_tile_ids, tile_id);
             table_set(*lava_still_tile_ids_set, tile_id, 1738);
+
+            for direction: DIRECTIONS_COMPASS {
+                direction_index : s64 = cast(s64) direction;
+
+                dx := TILE_DIRECTION_ID_DELTAS[direction_index][0];
+                dy := TILE_DIRECTION_ID_DELTAS[direction_index][1];
+
+                neighbor_id_1 := tile_id + dx + dy;
+                
+                if is_cardinal_direction(direction) {
+                    table_set(*lava_alert_tile_ids_set, neighbor_id_1, 1738);
+                    array_add(*lava_alert_tile_ids, neighbor_id_1);
+                } else {
+                    table_set(*lava_warning_tile_ids_set, neighbor_id_1, 1738);
+                    array_add(*lava_warning_tile_ids, neighbor_id_1);
+                }
+
+                neighbor_id_warning := tile_id + (2 * dx) + (2 * dy);
+
+                table_set(*lava_warning_tile_ids_set, neighbor_id_warning, 1738);
+                array_add(*lava_warning_tile_ids, neighbor_id_warning);
+            }
+
+            for direction: DIRECTIONS_CARDINAL {
+                direction_index : s64 = cast(s64) direction;
+
+                dx := TILE_DIRECTION_ID_DELTAS[direction_index][0];
+                dy := TILE_DIRECTION_ID_DELTAS[direction_index][1];
+
+                neighbor_id := tile_id + (3 * dx) + (3 * dy);
+
+                table_set(*lava_warning_tile_ids_set, neighbor_id, 1738);
+                array_add(*lava_warning_tile_ids, neighbor_id);
+            }
         }
         case .LAVA_FLOWING; {
             lava_flowing_animated_sprite := AnimatedSprite.{
@@ -6523,8 +6591,21 @@ reveal_cave_if_necessary :: (tile_id: s32, grant_points: bool, grant_gold: bool,
             case .SPIDER_QUEEN; create_alert(.SPIDER_QUEEN, get_tile_pos_by_id(tile_id), game_state);
         }
 
-        // Second, recursively reveal the tiles of the cave.
+        // Third, recursively reveal the tiles of the cave.
         set_cave_as_mined(cave_tile_id, cave_type, grant_points, grant_gold, game_state);
+
+        // Lastly, if this cave has liquid in it, we'll need to kick off the flowing by spawning a flowing tile
+        // in place of the tile the dwdarf just mined. Otherwise, the liquid wouldn't start flowing, since we
+        // need to spawn still liquid.
+        if #complete cave_type == {
+            case .EMPTY;        // no op
+            case .TREASURE;     // no op
+            case .GOBLIN;       // no op
+            case .SHAMAN;       // no op
+            case .SPIDER_QUEEN; // no op
+            case .WATER; set_tile_as_type(tile_id, .WATER_FLOWING, false, false, game_state);
+            case .LAVA;  set_tile_as_type(tile_id, .LAVA_FLOWING, false, false, game_state);
+        }
     }
 
     return neighbor_is_unrevealed_cave, cave_type;
