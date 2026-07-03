@@ -5707,24 +5707,19 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
             neighbor_id_1 := tile_id + dx + dy;
             
             if is_cardinal_direction(direction) {
-                table_set(alert_tile_ids_set, neighbor_id_1, 1738);
-                array_add(alert_tile_ids, neighbor_id_1);
+                if !is_tile_id_obsidian(neighbor_id_1) && !is_tile_id_hole(neighbor_id_1) {
+                    table_set(alert_tile_ids_set, neighbor_id_1, 1738);
+                    array_add(alert_tile_ids, neighbor_id_1);
+
+                    neighbor_id_2 := tile_id + (2 * dx) + (2* dy);
+
+                    table_set(warning_tile_ids_set, neighbor_id_2, 1738);
+                    array_add(warning_tile_ids, neighbor_id_2);
+                }
             } else {
                 table_set(warning_tile_ids_set, neighbor_id_1, 1738);
                 array_add(warning_tile_ids, neighbor_id_1);
             }
-        }
-
-        for direction: DIRECTIONS_CARDINAL {
-            direction_index : s64 = cast(s64) direction;
-
-            dx := TILE_DIRECTION_ID_DELTAS[direction_index][0];
-            dy := TILE_DIRECTION_ID_DELTAS[direction_index][1];
-
-            neighbor_id := tile_id + (2 * dx) + (2* dy);
-
-            table_set(warning_tile_ids_set, neighbor_id, 1738);
-            array_add(warning_tile_ids, neighbor_id);
         }
     }
 
