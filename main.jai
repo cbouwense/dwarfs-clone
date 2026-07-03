@@ -1306,6 +1306,50 @@ main :: () {
                                         // Place down the obsidian.
                                         set_tile_as_type(tile_id, .OBSIDIAN, false, false, *game_state);
 
+                                        remove_warning_marker_on_tile_id :: (tile_id: s32) {
+                                            table_remove(*water_warning_tile_ids_set, tile_id);
+                                            table_remove(*lava_warning_tile_ids_set, tile_id);
+                                            array_unordered_remove_by_value(*water_warning_tile_ids, tile_id);
+                                            array_unordered_remove_by_value(*lava_warning_tile_ids, tile_id);
+                                        }
+
+                                        remove_alert_marker_on_tile_id :: (tile_id: s32) {
+                                            table_remove(*water_alert_tile_ids_set, tile_id);
+                                            table_remove(*lava_alert_tile_ids_set, tile_id);
+                                            array_unordered_remove_by_value(*water_alert_tile_ids, tile_id);
+                                            array_unordered_remove_by_value(*lava_alert_tile_ids, tile_id);
+                                        }
+
+                                        remove_warning_and_alert_markers_that_are_no_longer_valid :: (tile_id: s32) {
+                                            // The tile that the obsidian / hole was placed on definitely doesn't need to count
+                                            // as a warning or alert anymore;
+                                            remove_warning_marker_on_tile_id(tile_id);
+                                            remove_alert_marker_on_tile_id(tile_id);
+
+                                            // Update warnings in the surrounding area
+                                            for direction_level_1: DIRECTIONS_CARDINAL {
+                                                neighbor_tile_id_level_1 := get_neighbor_tile_id_by_direction(tile_id, direction_level_1);
+
+                                                found_alert_cardinal_neighbor := false;
+
+                                                for direction_level_2: DIRECTIONS_CARDINAL {
+                                                    neighbor_tile_id_level_2 := get_neighbor_tile_id_by_direction(neighbor_tile_id_level_1, direction_level_2);
+
+                                                    is_alert_lava  := table_contains(*lava_alert_tile_ids_set, neighbor_tile_id_level_2);
+                                                    is_alert_water := table_contains(*water_alert_tile_ids_set, neighbor_tile_id_level_2);
+                                                    
+                                                    if is_alert_lava || is_alert_water {
+                                                        found_alert_cardinal_neighbor = true;
+                                                        break;
+                                                    }
+                                                }
+
+                                                if !found_alert_cardinal_neighbor then remove_warning_marker_on_tile_id(neighbor_tile_id_level_1);
+                                            }
+                                        }
+
+                                        remove_warning_and_alert_markers_that_are_no_longer_valid(tile_id);
+
                                         // Encase any lava or water if we've made a full loop.
                                         handle_encasement(tile_id, *game_state);
 
@@ -2211,10 +2255,6 @@ main :: () {
 
                             if should_spread_lava_this_frame {
                                 try_to_set_cardinal_neighbors_as_flowing_tile_type(it, .LAVA_FLOWING, *game_state);
-
-                                if are_all_neighbors_unable_to_be_spread_to(it) {
-                                    set_tile_as_type(it, .LAVA_STILL, false, false, *game_state);
-                                }
                             }
                         }
                     }
@@ -5727,11 +5767,6 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
                     table_set(*water_warning_tile_ids_set, neighbor_id_1, 1738);
                     array_add(*water_warning_tile_ids, neighbor_id_1);
                 }
-
-                neighbor_id_warning := tile_id + (2 * dx) + (2 * dy);
-
-                table_set(*water_warning_tile_ids_set, neighbor_id_warning, 1738);
-                array_add(*water_warning_tile_ids, neighbor_id_warning);
             }
 
             for direction: DIRECTIONS_CARDINAL {
@@ -5740,7 +5775,7 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
                 dx := TILE_DIRECTION_ID_DELTAS[direction_index][0];
                 dy := TILE_DIRECTION_ID_DELTAS[direction_index][1];
 
-                neighbor_id_warning := tile_id + (3 * dx) + (3 * dy);
+                neighbor_id_warning := tile_id + (2 * dx) + (2 * dy);
 
                 table_set(*water_warning_tile_ids_set, neighbor_id_warning, 1738);
                 array_add(*water_warning_tile_ids, neighbor_id_warning);
@@ -5766,11 +5801,6 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
                     table_set(*water_warning_tile_ids_set, neighbor_id_1, 1738);
                     array_add(*water_warning_tile_ids, neighbor_id_1);
                 }
-
-                neighbor_id_warning := tile_id + (2 * dx) + (2 * dy);
-
-                table_set(*water_warning_tile_ids_set, neighbor_id_warning, 1738);
-                array_add(*water_warning_tile_ids, neighbor_id_warning);
             }
 
             for direction: DIRECTIONS_CARDINAL {
@@ -5779,7 +5809,7 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
                 dx := TILE_DIRECTION_ID_DELTAS[direction_index][0];
                 dy := TILE_DIRECTION_ID_DELTAS[direction_index][1];
 
-                neighbor_id_warning := tile_id + (3 * dx) + (3 * dy);
+                neighbor_id_warning := tile_id + (2 * dx) + (2 * dy);
 
                 table_set(*water_warning_tile_ids_set, neighbor_id_warning, 1738);
                 array_add(*water_warning_tile_ids, neighbor_id_warning);
@@ -5805,11 +5835,6 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
                     table_set(*lava_warning_tile_ids_set, neighbor_id_1, 1738);
                     array_add(*lava_warning_tile_ids, neighbor_id_1);
                 }
-
-                neighbor_id_warning := tile_id + (2 * dx) + (2 * dy);
-
-                table_set(*lava_warning_tile_ids_set, neighbor_id_warning, 1738);
-                array_add(*lava_warning_tile_ids, neighbor_id_warning);
             }
 
             for direction: DIRECTIONS_CARDINAL {
@@ -5818,7 +5843,7 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
                 dx := TILE_DIRECTION_ID_DELTAS[direction_index][0];
                 dy := TILE_DIRECTION_ID_DELTAS[direction_index][1];
 
-                neighbor_id := tile_id + (3 * dx) + (3 * dy);
+                neighbor_id := tile_id + (2 * dx) + (2* dy);
 
                 table_set(*lava_warning_tile_ids_set, neighbor_id, 1738);
                 array_add(*lava_warning_tile_ids, neighbor_id);
@@ -5855,11 +5880,6 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
                     table_set(*lava_warning_tile_ids_set, neighbor_id_1, 1738);
                     array_add(*lava_warning_tile_ids, neighbor_id_1);
                 }
-
-                neighbor_id_warning := tile_id + (2 * dx) + (2 * dy);
-
-                table_set(*lava_warning_tile_ids_set, neighbor_id_warning, 1738);
-                array_add(*lava_warning_tile_ids, neighbor_id_warning);
             }
 
             for direction: DIRECTIONS_CARDINAL {
@@ -5868,7 +5888,7 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
                 dx := TILE_DIRECTION_ID_DELTAS[direction_index][0];
                 dy := TILE_DIRECTION_ID_DELTAS[direction_index][1];
 
-                neighbor_id := tile_id + (3 * dx) + (3 * dy);
+                neighbor_id := tile_id + (2 * dx) + (2 * dy);
 
                 table_set(*lava_warning_tile_ids_set, neighbor_id, 1738);
                 array_add(*lava_warning_tile_ids, neighbor_id);
