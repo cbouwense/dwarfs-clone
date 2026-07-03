@@ -5697,6 +5697,37 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
         table_remove(*hole_tile_ids_set, tile_id);
     }
 
+    try_to_add_warning_and_alert_markers :: (tile_id: s32, alert_tile_ids_set: *Table, warning_tile_ids_set: *Table, alert_tile_ids: *[..]s32, warning_tile_ids: *[..]s32) {
+        for direction: DIRECTIONS_COMPASS {
+            direction_index : s64 = cast(s64) direction;
+
+            dx := TILE_DIRECTION_ID_DELTAS[direction_index][0];
+            dy := TILE_DIRECTION_ID_DELTAS[direction_index][1];
+
+            neighbor_id_1 := tile_id + dx + dy;
+            
+            if is_cardinal_direction(direction) {
+                table_set(alert_tile_ids_set, neighbor_id_1, 1738);
+                array_add(alert_tile_ids, neighbor_id_1);
+            } else {
+                table_set(warning_tile_ids_set, neighbor_id_1, 1738);
+                array_add(warning_tile_ids, neighbor_id_1);
+            }
+        }
+
+        for direction: DIRECTIONS_CARDINAL {
+            direction_index : s64 = cast(s64) direction;
+
+            dx := TILE_DIRECTION_ID_DELTAS[direction_index][0];
+            dy := TILE_DIRECTION_ID_DELTAS[direction_index][1];
+
+            neighbor_id := tile_id + (2 * dx) + (2* dy);
+
+            table_set(warning_tile_ids_set, neighbor_id, 1738);
+            array_add(warning_tile_ids, neighbor_id);
+        }
+    }
+
     if #complete as_type == {
         case .CAVE; {
             array_add(*chunk.cave_tile_ids, tile_id);
@@ -5752,102 +5783,21 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
             array_add(*chunk.water_still_tile_ids, tile_id);
             table_set(*water_still_tile_ids_set, tile_id, 1738);
 
-            for direction: DIRECTIONS_COMPASS {
-                direction_index : s64 = cast(s64) direction;
-
-                dx := TILE_DIRECTION_ID_DELTAS[direction_index][0];
-                dy := TILE_DIRECTION_ID_DELTAS[direction_index][1];
-
-                neighbor_id_1 := tile_id + dx + dy;
-
-                if is_cardinal_direction(direction) {
-                    table_set(*water_alert_tile_ids_set, neighbor_id_1, 1738);
-                    array_add(*water_alert_tile_ids, neighbor_id_1);
-                } else {
-                    table_set(*water_warning_tile_ids_set, neighbor_id_1, 1738);
-                    array_add(*water_warning_tile_ids, neighbor_id_1);
-                }
-            }
-
-            for direction: DIRECTIONS_CARDINAL {
-                direction_index : s64 = cast(s64) direction;
-
-                dx := TILE_DIRECTION_ID_DELTAS[direction_index][0];
-                dy := TILE_DIRECTION_ID_DELTAS[direction_index][1];
-
-                neighbor_id_warning := tile_id + (2 * dx) + (2 * dy);
-
-                table_set(*water_warning_tile_ids_set, neighbor_id_warning, 1738);
-                array_add(*water_warning_tile_ids, neighbor_id_warning);
-            }
+            try_to_add_warning_and_alert_markers(tile_id, *water_alert_tile_ids_set, *water_warning_tile_ids_set, *water_alert_tile_ids, *water_warning_tile_ids);
         }
         case .WATER_FLOWING; {
             array_add(*water_flowing_tile_ids, tile_id);
             array_add(*chunk.water_flowing_tile_ids, tile_id);
             table_set(*water_flowing_tile_ids_set, tile_id, 1738);
 
-            for direction: DIRECTIONS_COMPASS {
-                direction_index : s64 = cast(s64) direction;
-
-                dx := TILE_DIRECTION_ID_DELTAS[direction_index][0];
-                dy := TILE_DIRECTION_ID_DELTAS[direction_index][1];
-
-                neighbor_id_1 := tile_id + dx + dy;
-
-                if is_cardinal_direction(direction) {
-                    table_set(*water_alert_tile_ids_set, neighbor_id_1, 1738);
-                    array_add(*water_alert_tile_ids, neighbor_id_1);
-                } else {
-                    table_set(*water_warning_tile_ids_set, neighbor_id_1, 1738);
-                    array_add(*water_warning_tile_ids, neighbor_id_1);
-                }
-            }
-
-            for direction: DIRECTIONS_CARDINAL {
-                direction_index : s64 = cast(s64) direction;
-
-                dx := TILE_DIRECTION_ID_DELTAS[direction_index][0];
-                dy := TILE_DIRECTION_ID_DELTAS[direction_index][1];
-
-                neighbor_id_warning := tile_id + (2 * dx) + (2 * dy);
-
-                table_set(*water_warning_tile_ids_set, neighbor_id_warning, 1738);
-                array_add(*water_warning_tile_ids, neighbor_id_warning);
-            }
+            try_to_add_warning_and_alert_markers(tile_id, *water_alert_tile_ids_set, *water_warning_tile_ids_set, *water_alert_tile_ids, *water_warning_tile_ids);
         }
         case .LAVA_STILL; {
             array_add(*lava_still_tile_ids, tile_id);
             array_add(*chunk.lava_still_tile_ids, tile_id);
             table_set(*lava_still_tile_ids_set, tile_id, 1738);
 
-            for direction: DIRECTIONS_COMPASS {
-                direction_index : s64 = cast(s64) direction;
-
-                dx := TILE_DIRECTION_ID_DELTAS[direction_index][0];
-                dy := TILE_DIRECTION_ID_DELTAS[direction_index][1];
-
-                neighbor_id_1 := tile_id + dx + dy;
-                
-                if is_cardinal_direction(direction) {
-                    table_set(*lava_alert_tile_ids_set, neighbor_id_1, 1738);
-                    array_add(*lava_alert_tile_ids, neighbor_id_1);
-                } else {
-                    table_set(*lava_warning_tile_ids_set, neighbor_id_1, 1738);
-                    array_add(*lava_warning_tile_ids, neighbor_id_1);
-                }
-            }
-
-            for direction: DIRECTIONS_CARDINAL {
-                direction_index : s64 = cast(s64) direction;
-
-                dx := TILE_DIRECTION_ID_DELTAS[direction_index][0];
-                dy := TILE_DIRECTION_ID_DELTAS[direction_index][1];
-
-                neighbor_id := tile_id + (2 * dx) + (2* dy);
-
-                table_set(*lava_warning_tile_ids_set, neighbor_id, 1738);
-                array_add(*lava_warning_tile_ids, neighbor_id);
-            }
+            try_to_add_warning_and_alert_markers(tile_id, *lava_alert_tile_ids_set, *lava_warning_tile_ids_set, *lava_alert_tile_ids, *lava_warning_tile_ids);
         }
         case .LAVA_FLOWING; {
             lava_flowing_animated_sprite := AnimatedSprite.{
@@ -5858,41 +5808,14 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
                 frame_count       = LAVA_FLOWING_FRAME_COUNT,
                 frame_duration_ms = LAVA_FLOW_COOLDOWN_MS / LAVA_FLOWING_FRAME_COUNT,
                 timer_ms          = 0,
-                loops             = true, // ?
+                loops             = true,
             };
 
             array_add(*lava_flowing_tile_ids, tile_id);
             array_add(*chunk.lava_flowing_tile_ids, tile_id);
             table_set(*lava_flowing_tile_ids_to_sprite, tile_id, lava_flowing_animated_sprite);
 
-            for direction: DIRECTIONS_COMPASS {
-                direction_index : s64 = cast(s64) direction;
-
-                dx := TILE_DIRECTION_ID_DELTAS[direction_index][0];
-                dy := TILE_DIRECTION_ID_DELTAS[direction_index][1];
-
-                neighbor_id_1 := tile_id + dx + dy;
-                
-                if is_cardinal_direction(direction) {
-                    table_set(*lava_alert_tile_ids_set, neighbor_id_1, 1738);
-                    array_add(*lava_alert_tile_ids, neighbor_id_1);
-                } else {
-                    table_set(*lava_warning_tile_ids_set, neighbor_id_1, 1738);
-                    array_add(*lava_warning_tile_ids, neighbor_id_1);
-                }
-            }
-
-            for direction: DIRECTIONS_CARDINAL {
-                direction_index : s64 = cast(s64) direction;
-
-                dx := TILE_DIRECTION_ID_DELTAS[direction_index][0];
-                dy := TILE_DIRECTION_ID_DELTAS[direction_index][1];
-
-                neighbor_id := tile_id + (2 * dx) + (2 * dy);
-
-                table_set(*lava_warning_tile_ids_set, neighbor_id, 1738);
-                array_add(*lava_warning_tile_ids, neighbor_id);
-            }
+            try_to_add_warning_and_alert_markers(tile_id, *lava_alert_tile_ids_set, *lava_warning_tile_ids_set, *lava_alert_tile_ids, *lava_warning_tile_ids);
         }
         case .OBSIDIAN; {
             array_add(*chunk.obsidian_tile_ids, tile_id);
