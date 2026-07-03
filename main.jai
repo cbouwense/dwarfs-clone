@@ -466,6 +466,8 @@ AlertType :: enum {
     GOBLINS;
     TREASURE;
     BASE_UNDER_ATTACK;
+    SHAMAN;
+    SPIDER_QUEEN;
 }
 
 Alert :: struct {
@@ -3346,6 +3348,12 @@ create_alert :: (alert_type: AlertType, pos: Vector2, game_state: *GameState) ->
             color = GREEN;
         case .BASE_UNDER_ATTACK;
             game_state.alert_banner_text = "Your base is under attack!";
+            color = RED;
+        case .SHAMAN;
+            game_state.alert_banner_text = "A dwarf has disturbed a shaman!";
+            color = RED;
+        case .SPIDER_QUEEN;
+            game_state.alert_banner_text = "A dwarf has disturbed a spider queen!";
             color = RED;
     }
     game_state.alert_banner_text_ms    = ALERT_BANNER_TEXT_MS;
@@ -6504,8 +6512,16 @@ reveal_cave_if_necessary :: (tile_id: s32, grant_points: bool, grant_gold: bool,
         cave_type = cast(CaveType) cast(int) random_get_within_range(0, xx enum_count(CaveType));
 
         // Second, spawn any alerts you might need
-        if cave_type == .GOBLIN   create_alert(.GOBLINS, get_tile_pos_by_id(tile_id), game_state);
-        if cave_type == .TREASURE create_alert(.TREASURE, get_tile_pos_by_id(tile_id), game_state);
+        alert_type: AlertType;
+        if #complete cave_type == {
+            case .EMPTY;        // no op
+            case .WATER;        create_alert(.WATER, get_tile_pos_by_id(tile_id), game_state);
+            case .LAVA;         create_alert(.LAVA, get_tile_pos_by_id(tile_id), game_state);
+            case .TREASURE;     create_alert(.TREASURE, get_tile_pos_by_id(tile_id), game_state);
+            case .GOBLIN;       create_alert(.GOBLINS, get_tile_pos_by_id(tile_id), game_state);
+            case .SHAMAN;       create_alert(.SHAMAN, get_tile_pos_by_id(tile_id), game_state);
+            case .SPIDER_QUEEN; create_alert(.SPIDER_QUEEN, get_tile_pos_by_id(tile_id), game_state);
+        }
 
         // Second, recursively reveal the tiles of the cave.
         set_cave_as_mined(cave_tile_id, cave_type, grant_points, grant_gold, game_state);
