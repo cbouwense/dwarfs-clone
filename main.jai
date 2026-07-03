@@ -2712,23 +2712,6 @@ main :: () {
                         }
                     }
                 }
-
-                // Draw alerts onscreen
-                {
-                    for alert: alerts {
-                        radius := TILEMAP_GENERAL_WORLD_WIDTH * 0.5;
-                        center := Vector2.{ alert.pos.x + radius, alert.pos.y + radius };
-
-                        if (
-                            center.x + TILEMAP_GENERAL_WORLD_WIDTH  * 0.5 > window_start.x &&
-                            center.x - TILEMAP_GENERAL_WORLD_WIDTH  * 0.5 < window_end.x   &&
-                            center.y - TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 < window_end.y   &&
-                            center.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 > window_start.y
-                        ) {
-                            DrawRing(center, radius, radius + 3.0, 0, 360, 0, alert.color);
-                        }
-                    }
-                }
             }
 
             // Draw UI
@@ -2776,21 +2759,19 @@ main :: () {
                     }
                 }
 
-                // Draw alerts offscreen
-                {
-                    for alert: alerts {
-                        radius := TILEMAP_GENERAL_WORLD_WIDTH * 0.5;
-                        center := Vector2.{ alert.pos.x + radius, alert.pos.y + radius };
+                // Draw alerts
+                for alert: alerts {
+                    radius := 30.0;
+                    center := Vector2.{ alert.pos.x + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, alert.pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 };
 
-                        if (
-                            center.x + TILEMAP_GENERAL_WORLD_WIDTH  * 0.5 > window_start.x &&
-                            center.x - TILEMAP_GENERAL_WORLD_WIDTH  * 0.5 < window_end.x   &&
-                            center.y - TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 < window_end.y   &&
-                            center.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 > window_start.y
-                        ) {
-                            continue;
-                        }
-
+                    if (
+                        center.x + TILEMAP_GENERAL_WORLD_WIDTH  * 0.5 > window_start.x &&
+                        center.x - TILEMAP_GENERAL_WORLD_WIDTH  * 0.5 < window_end.x   &&
+                        center.y - TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 < window_end.y   &&
+                        center.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 > window_start.y
+                    ) {
+                        DrawRing(GetWorldToScreen2D(center, camera), radius, radius + 3.0, 0, 360, 0, alert.color);
+                    } else {
                         draw_offscreen_notification(center, camera, false, alert.color);
                     }
                 }
