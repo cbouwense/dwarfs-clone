@@ -2,7 +2,7 @@
 # In progress
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- Warnings should be removed after concealment
+- Warning circles should be drawn in screen space
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Bugs
@@ -15,8 +15,6 @@
 # Core gameplay
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- Warnings should not come up if dwarf cannot actually access the liquid (obsidian)
-- Warning circles should be drawn in screen space
 - In addition to control modes, allows users to hold down controls
 - Death poof particles
 - Control mode placement validity / onion skin
