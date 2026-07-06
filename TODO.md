@@ -2,7 +2,7 @@
 # In progress
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-
+- main menu
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Bugs
@@ -27,62 +27,64 @@
     - apply changes
     - restore defaults
     - persist preferences
-- main menu
 - proper game over menu
 - shaman
 - spider queen
 - Screen resolution
 - High score / local persistence
 - deteriorating arrows
+- round loading screen
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Tutorial
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- Controls
-- Lava and water
-- Cave trapping
-- Dark caves
-- Fighting minions
-- Outposts
-- Graduation?
+- Tutorial: controls
+- Tutorial: Lava and water
+- Tutorial: Cave trapping
+- Tutorial: Dark caves
+- Tutorial: Fighting minions
+- Tutorial: Outposts
+- Tutorial: Graduation?
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Music
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 - Add Gymnopedie No. 1 for now
-- Maybe reach out to Vindkaldr to see if he would even be interested in licensing his music
+- Reach out to artists to see if they would even be interested in licensing music
+    - Dim
+    - ?
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Sound effects
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- Digging
-- Monsters encountered
-- Water / lava encountered
-- Panic pause pressed
-- Treasure get
-- Dwarf die
+- Sound effect: Digging
+- Sound effect: Monsters encountered
+- Sound effect: Water / lava encountered
+- Sound effect: Panic pause pressed
+- Sound effect: Treasure get
+- Sound effect: Dwarf die
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 #  Art
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- Better lava sprites / animations
-- Dwarf digger spritesheet
-- Dwarf warrior spritesheet
-- Goblin spritesheet
-- Unmined dirt spritesheet
-- Mined dirt spritesheet
-- Iron ore sprite
-- Wall sprite
-- Obsidian sprite
-- Dynamite sprite
-- Hole sprite
-- Home base sprite
-- Outpost base sprites
-- Water sprite sheet
+- Art: Better lava sprites / animations
+- Art: Dwarf digger spritesheet
+- Art: Dwarf warrior spritesheet
+- Art: Goblin spritesheet
+- Art: Unmined dirt spritesheet
+- Art: Mined dirt spritesheet
+- Art: Iron ore sprite
+- Art: Wall sprite
+- Art: Obsidian sprite
+- Art: Dynamite sprite
+- Art: Hole sprite
+- Art: Home base sprite
+- Art: Outpost base sprites
+- Art: Water sprite sheet
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Performance
@@ -94,6 +96,7 @@
 # Miscellaneous
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+- Add metagame and gamestate into the jai context itself
 - search feature for tiles, dwarves, etc.
 - hotreloading
 - macro or something for requiring all fields to be filled out in struct

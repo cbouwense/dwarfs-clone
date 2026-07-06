@@ -150,6 +150,17 @@ HOME_BASE_UNDER_ATTACK_COOLDOWN_MS :: 10000;
 // Metagame state
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+MetagameScreen :: enum {
+    MAIN_MENU;
+    ROUND;
+}
+
+MainMenuScreen :: enum {
+    ROOT;
+    SETTINGS;
+    TUTORIAL;
+}
+
 MetagameState :: enum {
     RUNNING;
     PAUSED;
@@ -168,10 +179,14 @@ GameOverState :: enum {
 
 Metagame :: struct {
     state            : MetagameState;
+    screen           : MetagameScreen;
+    main_menu_screen : MainMenuScreen;
+    initialized      : bool;
     should_quit_game : bool;
     debug_mode       : bool;
     pause_state      : PauseState;
     game_over_state  : GameOverState;
+    controls         : Controls;
 }
 
 metagame : Metagame;
@@ -595,34 +610,6 @@ INITIAL_SCREEN_WIDTH  :: 1600;
 INITIAL_SCREEN_HEIGHT :: 900;
 
 main :: () {
-    // Set temp allocator for various things.
-    {
-        fully_mined_tile_ids_in_viewport.allocator    = temp;
-        actively_mined_tile_ids_in_viewport.allocator = temp;
-        cave_tile_ids_in_viewport.allocator           = temp;
-        encased_tile_ids_in_viewport.allocator        = temp;
-        iron_tile_ids_in_viewport.allocator           = temp;
-        water_still_tile_ids_in_viewport.allocator    = temp;
-        water_flowing_tile_ids_in_viewport.allocator  = temp;
-        lava_still_tile_ids_in_viewport.allocator     = temp;
-        lava_flowing_tile_ids_in_viewport.allocator   = temp;
-        obsidian_tile_ids_in_viewport.allocator       = temp;
-        wall_tile_ids_in_viewport.allocator           = temp;
-        dwarves_in_viewport.allocator                 = temp;
-        goblins_in_viewport.allocator                 = temp;
-        tiles_with_dynamite_ids_in_viewport.allocator = temp;
-        tiles_with_treasure_ids_in_viewport.allocator = temp;
-        hole_tile_ids_in_viewport.allocator           = temp;
-        paths_in_viewport.allocator                   = temp;
-        alerts_in_viewport.allocator                   = temp;
-        bases_in_viewport.allocator                   = temp;
-        tile_ids_to_dwarfs.allocator                  = temp;
-        tile_ids_to_goblins.allocator                 = temp;
-        tile_ids_to_bases.allocator                   = temp;
-    }
-
-    random_seed(123456789);
-
     // SetConfigFlags(.FLAG_WINDOW_RESIZABLE | .FLAG_FULLSCREEN_MODE);
     SetConfigFlags(.FLAG_WINDOW_RESIZABLE);
 
@@ -646,1760 +633,1832 @@ main :: () {
         GuiSetFont(font);
     }
 
-    // TODO: Defaults to fall back on
-    // TODO: Put in a config file, but keep as jai, and then parse and #insert or something?
-    // Initialize controls
-    controls: Controls;
-    {
-        controls.select.binds[0] = Bind.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_LEFT };
-
-        controls.clear_selection.id   = read_then_increment(*control_id_counter);
-        controls.clear_selection.name = "Clear selection";
-        controls.clear_selection.control_mode = .NORMAL;
-        controls.clear_selection.rebindable_by_user = true;
-        controls.clear_selection.binds[0] = Bind.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_RIGHT };
-
-        controls.toggle_base_mode.id   = read_then_increment(*control_id_counter);
-        controls.toggle_base_mode.name = "Build base mode";
-        // TODO: This text needs to change dynamically ("Cost: % (Next will cost %)")
-        controls.toggle_base_mode.tooltip_text = "Bases increase your max amount of warriors, and allow you to spawn additional miners. Must be built on a path. Cost more each time you build one.";
-        controls.toggle_base_mode.control_mode = .ADD_BASE;
-        controls.toggle_base_mode.rebindable_by_user = true;
-        controls.toggle_base_mode.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_B };
-
-        controls.add_iron.id   = read_then_increment(*control_id_counter);
-        controls.add_iron.name = "DEBUG: Add iron deposit";
-        controls.add_iron.rebindable_by_user = false;
-        controls.add_iron.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_I };
-
-        controls.select_as_place_miner_dwarf.id   = read_then_increment(*control_id_counter);
-        controls.select_as_place_miner_dwarf.name = "DEBUG: Add miner dwarf";
-        controls.select_as_place_miner_dwarf.rebindable_by_user = false;
-        controls.select_as_place_miner_dwarf.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_D };
-
-        controls.select_as_place_warrior_dwarf.id   = read_then_increment(*control_id_counter);
-        controls.select_as_place_warrior_dwarf.name = "DEBUG: Add warrior dwarf";
-        controls.select_as_place_warrior_dwarf.rebindable_by_user = false;
-        controls.select_as_place_warrior_dwarf.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_A };
-
-        controls.toggle_dynamite_mode.id   = read_then_increment(*control_id_counter);
-        controls.toggle_dynamite_mode.name = "Place dynamite mode";
-        controls.toggle_dynamite_mode.tooltip_text = "Blows up a dwarf when stepped on, creating a hole. Holes stop water and lava flows permanently.";
-        controls.toggle_dynamite_mode.control_mode = .ADD_DYNAMITE;
-        controls.toggle_dynamite_mode.rebindable_by_user = true;
-        controls.toggle_dynamite_mode.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_E };
-
-        controls.select_as_place_goblin.id   = read_then_increment(*control_id_counter);
-        controls.select_as_place_goblin.name = "DEBUG: Place goblin";
-        controls.select_as_place_goblin.rebindable_by_user = false;
-        controls.select_as_place_goblin.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_T };
-        
-        controls.toggle_obsidian_mode.id   = read_then_increment(*control_id_counter);
-        controls.toggle_obsidian_mode.name = "Obsidian mode";
-        controls.toggle_obsidian_mode.tooltip_text = "Turns soil into solid obsidian, making it impenetrable to almost anything.";
-        controls.toggle_obsidian_mode.control_mode = .ADD_OBSIDIAN;
-        controls.toggle_obsidian_mode.rebindable_by_user = true;
-        controls.toggle_obsidian_mode.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_Q           };
-        controls.toggle_obsidian_mode.binds[1] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT_SHIFT  };
-        controls.toggle_obsidian_mode.binds[2] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT_SHIFT };
-        
-        controls.toggle_wall_mode.id   = read_then_increment(*control_id_counter);
-        controls.toggle_wall_mode.name = "Build wall mode";
-        controls.toggle_wall_mode.tooltip_text = "Place a wall that permanently stops water, slows down lava, and blocks warriors and certain enemies. Miners, some enemies, and lava can destroy walls.";
-        controls.toggle_wall_mode.control_mode = .ADD_WALL;
-        controls.toggle_wall_mode.rebindable_by_user = true;
-        controls.toggle_wall_mode.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_W };
-        
-        controls.drag_cam.id   = read_then_increment(*control_id_counter);
-        controls.drag_cam.name = "Drag camera";
-        controls.drag_cam.rebindable_by_user = true;
-        controls.drag_cam.binds[0] = Bind.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_RIGHT  };
-        controls.drag_cam.binds[1] = Bind.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_MIDDLE };
-        
-        controls.move_camera_up.id   = read_then_increment(*control_id_counter);
-        controls.move_camera_up.name = "Move camera up";
-        controls.move_camera_up.rebindable_by_user = true;
-        controls.move_camera_up.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_UP };
-        
-        controls.move_camera_down.id   = read_then_increment(*control_id_counter);
-        controls.move_camera_down.name = "Move camera down";
-        controls.move_camera_down.rebindable_by_user = true; 
-        controls.move_camera_down.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_DOWN };
-        
-        controls.move_camera_left.id   = read_then_increment(*control_id_counter);
-        controls.move_camera_left.name = "Move camera left";
-        controls.move_camera_left.rebindable_by_user = true; 
-        controls.move_camera_left.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT };
-        
-        controls.move_camera_right.id   = read_then_increment(*control_id_counter);
-        controls.move_camera_right.name = "Move camera right";
-        controls.move_camera_right.rebindable_by_user = true; 
-        controls.move_camera_right.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT };
-        
-        controls.toggle_remove_mode.id   = read_then_increment(*control_id_counter);
-        controls.toggle_remove_mode.name = "Remove mode";
-        controls.toggle_remove_mode.control_mode = .REMOVE;
-        controls.toggle_remove_mode.tooltip_text = "While active, you can select a created object to destroy it, like dynamite and path arrows.";
-        controls.toggle_remove_mode.rebindable_by_user = true; 
-        controls.toggle_remove_mode.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_R };
-
-        controls.panic_pause.id   = read_then_increment(*control_id_counter);
-        controls.panic_pause.name = "Panic pause";
-        controls.panic_pause.tooltip_text = "Forces time to a halt for a short duration, but has a decently-long cooldown.";
-        controls.panic_pause.rebindable_by_user = true;
-        controls.panic_pause.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_SPACE };
-
-        controls.fast_forward.id   = read_then_increment(*control_id_counter);
-        controls.fast_forward.name = "Fast forward";
-        controls.fast_forward.tooltip_text = "Speeds up the action, takes on resources to do, and has no cooldown.";
-        controls.fast_forward.rebindable_by_user = true;
-        controls.fast_forward.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_S };
-    }
-
-    // Keeps track of how many milliseconds remain until the player can panic pause again.
-    // Less than or equal to 0 means "can panic pause right now".
-    panic_pause_is_active := false;
-    panic_pause_is_cooling_down := false;
-
-    DT_MULTIPLIER_FAST_FORWARD :: 5;
-
-    game_state, metagame_local, camera := initialize_game();
-    metagame = metagame_local;
+    game_state : GameState;
+    camera     : Camera2D;
 
     while !metagame.should_quit_game {
-        defer metagame.should_quit_game = metagame.should_quit_game || WindowShouldClose();
+        if #complete metagame.screen == {
+            case .MAIN_MENU;
+                metagame = update_and_draw_main_menu_frame();
+            case .ROUND;
+                if metagame.initialized {
+                    metagame = update_and_draw_round_frame(*game_state, *camera);
+                } else {
+                    game_state, metagame, camera = initialize_round();
+                }
+            // TODO: tutorial, I guess
+        }
+    }
+}
 
-        // PERF: can this be keep_memory?
-        table_reset(*tile_ids_to_dwarfs);
-        table_reset(*tile_ids_to_goblins);
-        table_reset(*tile_ids_to_bases);
-        reset_temporary_storage();
+// Functions
 
-        dt_seconds_raw := GetFrameTime();
-        // Cap delta time to prevent teleporting or weird bullshit
-        dt_seconds : float;
-        if dt_seconds_raw > 0.033 {
-            dt_seconds = 0.033;
-        } else {
-            dt_seconds = dt_seconds_raw;
-            if game_state.controls_state_this_frame.fast_forward {
-                dt_seconds *= DT_MULTIPLIER_FAST_FORWARD;
+update_and_draw_main_menu_frame :: () -> metagame: Metagame {
+    BeginDrawing();
+    defer EndDrawing();
+
+    screen_width  := GetScreenWidth();
+    screen_height := GetScreenHeight();
+
+    if #complete metagame.main_menu_screen == {
+        case .ROOT;
+            // Button shared sizing stuff
+            main_menu_button_width  := screen_width  * 0.15;
+            main_menu_button_height := screen_height * 0.10;
+            main_menu_button_margin :: 20;
+            main_menu_button_gap    :: 10;
+
+            MAIN_MENU_BUTTON_COUNT :: 4;
+
+            get_main_button_rectangle :: (button_gap: int, button_y: float, button_width: float, button_height: float) -> Rectangle {
+                screen_width := GetScreenWidth();
+
+                return Rectangle.{
+                    screen_width * 0.5 - button_width * 0.5,
+                    button_y,
+                    button_width,
+                    button_height
+                };
+            }
+
+            main_menu_button_y := screen_height * 0.5 - (MAIN_MENU_BUTTON_COUNT * 0.5 * main_menu_button_height) - (MAIN_MENU_BUTTON_COUNT * 0.5 - 0.5) * main_menu_button_gap;
+
+            // Start new round button
+            {
+                defer main_menu_button_y += main_menu_button_height + main_menu_button_gap;
+
+                start_new_button := get_main_button_rectangle(main_menu_button_gap, main_menu_button_y, main_menu_button_width, main_menu_button_height);
+
+                clicked := GuiButton(start_new_button, "Start new round");
+
+                if clicked {
+                    metagame.screen      = .ROUND;
+                    metagame.initialized = false;
+                }
+            }
+
+            // Restart button
+            {
+                defer main_menu_button_y += main_menu_button_height + main_menu_button_gap;
+
+                tutorial_button := get_main_button_rectangle(main_menu_button_gap, main_menu_button_y, main_menu_button_width, main_menu_button_height);
+
+                clicked := GuiButton(tutorial_button, "Tutorial (coming soon!)");
+
+                if clicked {
+                    // TODO: implement tutorial
+                }
+            }
+
+            // Settings
+            {
+                defer main_menu_button_y += main_menu_button_height + main_menu_button_gap;
+
+                settings_button := get_main_button_rectangle(main_menu_button_gap, main_menu_button_y, main_menu_button_width, main_menu_button_height);
+
+                clicked := GuiButton(settings_button, "Settings");
+
+                if clicked {
+                    // TODO
+                }
+            }
+
+            // Quit to desktop button
+            {
+                defer main_menu_button_y += main_menu_button_height + main_menu_button_gap;
+
+                quit_button := get_main_button_rectangle(main_menu_button_gap, main_menu_button_y, main_menu_button_width, main_menu_button_height);
+
+                clicked := GuiButton(quit_button, "Quit");
+
+                if clicked metagame.should_quit_game = true;
+            }
+        case .SETTINGS;
+        case .TUTORIAL;
+    }
+
+    return metagame;
+}
+
+update_and_draw_round_frame :: (game_state: *GameState, camera: *Camera2D) -> metagame: Metagame {
+    defer metagame.should_quit_game = metagame.should_quit_game || WindowShouldClose();
+
+    // PERF: can this be keep_memory?
+    table_reset(*tile_ids_to_dwarfs);
+    table_reset(*tile_ids_to_goblins);
+    table_reset(*tile_ids_to_bases);
+    reset_temporary_storage();
+
+    DT_MULTIPLIER_FAST_FORWARD :: 5;
+    dt_seconds_raw := GetFrameTime();
+    // Cap delta time to prevent teleporting or weird bullshit
+    dt_seconds : float;
+    if dt_seconds_raw > 0.033 {
+        dt_seconds = 0.033;
+    } else {
+        dt_seconds = dt_seconds_raw;
+        if game_state.controls_state_this_frame.fast_forward {
+            dt_seconds *= DT_MULTIPLIER_FAST_FORWARD;
+        }
+    }
+
+    panic_pause_is_active := game_state.panic_pause_timer_ms > 0 && game_state.panic_pause_timer_ms >= PANIC_PAUSE_COOLDOWN_MS - PANIC_PAUSE_DURATION_MS;
+    panic_pause_is_cooling_down := game_state.panic_pause_timer_ms > 0;
+
+    mouse_pos_in_ui    := GetMousePosition();
+    mouse_pos_in_world := GetScreenToWorld2D(mouse_pos_in_ui, camera);
+    mouse_wheel_move   := GetMouseWheelMove();
+
+    window_start := GetScreenToWorld2D(Vector2.{ 0, 0 }, camera);
+    window_end   := GetScreenToWorld2D(Vector2.{ cast(float) GetScreenWidth(), cast(float) GetScreenHeight()}, camera);
+
+    // TODO: save this in game_state or something
+    dwarf_miner_count   := 0;
+    dwarf_warrior_count := 0;
+
+    // Populate caches
+    {
+        for *dwarf: dwarves {
+            dwarf_tile_id: s32;
+
+            if #complete dwarf.state == {
+                // If the dwarf is dead center on a tile and not moving, it's on that tile.
+                case .IDLE;      #through;
+                case .DECIDING;  #through;
+                case .ATTACKING; #through;
+                case .MINING;
+                    dwarf_tile_id = get_tile_id_by_pos(dwarf.pos);
+
+                // If the dwarf is moving, then they're "on" the tile that they're moving to.
+                case .MOVING;
+                    assert_soft(dwarf.tile_ids_on_path.count > 0, "Dwarf was in move state but had nowhere to go\n");
+                    dwarf_tile_id = dwarf.tile_ids_on_path[0];
+            }
+
+            assert_soft(dwarf_tile_id > 0, "Expected dwarf_tile_id to have been set, but got %\n", dwarf_tile_id);
+            table_set(*tile_ids_to_dwarfs, dwarf_tile_id, dwarf);
+
+            if      dwarf.dwarf_type == .MINER   dwarf_miner_count += 1;
+            else if dwarf.dwarf_type == .WARRIOR dwarf_warrior_count += 1;
+            else    assert_soft(false, "Dwarf % was neither a miner nor warrior\n", dwarf.id);
+        }
+
+        for *goblin: goblins {
+            if #complete goblin.state == {
+                // If the goblin is dead center on a tile and not moving, it's on that tile.
+                case .IDLE;     #through;
+                case .DECIDING; #through;
+                case .ATTACKING;
+                    goblin_tile_id := get_tile_id_by_pos(goblin.pos);
+
+                    assert_soft(goblin_tile_id > 0, "Expected goblin_tile_id to have been set, but got % \n", goblin_tile_id);
+
+                    table_set(*tile_ids_to_goblins, goblin_tile_id, goblin);
+
+                // If the goblin is moving, then count both the tile they're moving from and to.
+                case .MOVING;
+                    assert_soft(goblin.tile_ids_on_path.count > 0, "Goblin was in move state but had nowhere to go\n");
+
+                    goblin_tile_id_from := get_previous_tile_id(goblin);
+                    goblin_tile_id_to   := goblin.tile_ids_on_path[0];
+
+                    assert_soft(goblin_tile_id_from > 0, "Expected goblin_tile_id_from to have been set, but got % \n", goblin_tile_id_from);
+                    assert_soft(goblin_tile_id_to > 0,   "Expected goblin_tile_id_to to have been set, but got % \n",   goblin_tile_id_to);
+
+                    table_set(*tile_ids_to_goblins, goblin_tile_id_to,   goblin);
+                    table_set(*tile_ids_to_goblins, goblin_tile_id_from, goblin);
             }
         }
 
-        panic_pause_is_active = game_state.panic_pause_timer_ms > 0 && game_state.panic_pause_timer_ms >= PANIC_PAUSE_COOLDOWN_MS - PANIC_PAUSE_DURATION_MS;
-        panic_pause_is_cooling_down = game_state.panic_pause_timer_ms > 0;
+        // PERF: caching this might not even be faster
+        for *base: bases {
+            base_center  := get_rect_center(get_world_rect_from_pos(base.pos));
+            base_tile_id := get_tile_id_by_pos(base_center);
+            table_set(*tile_ids_to_bases, base_tile_id, base);
+        }
+    }
 
-        mouse_pos_in_ui    := GetMousePosition();
-        mouse_pos_in_world := GetScreenToWorld2D(mouse_pos_in_ui, camera);
-        mouse_wheel_move   := GetMouseWheelMove();
+    //
+    // Input
+    //
+    {
+        // TODO: codify metagame controls/
+        //
+        // Metagame controls
+        if IsKeyPressed(.KEY_ESCAPE) {
+            if #complete metagame.state == {
+                case .RUNNING;
+                    metagame.state = .PAUSED;
+                case .PAUSED;
+                    if #complete metagame.pause_state == {
+                        case .MENU;
+                            metagame.state = .RUNNING;
+                        case .OPTIONS;
+                            // TODO: do this somewhat intelligently
+                            //
+                            // Set any binds currently being set to not being set
+                            for *metagame.controls.select.binds                        it.is_being_rebound = false;
+                            for *metagame.controls.clear_selection.binds               it.is_being_rebound = false;
+                            for *metagame.controls.toggle_base_mode.binds              it.is_being_rebound = false;
+                            for *metagame.controls.add_iron.binds                      it.is_being_rebound = false;
+                            for *metagame.controls.select_as_place_miner_dwarf.binds   it.is_being_rebound = false;
+                            for *metagame.controls.select_as_place_warrior_dwarf.binds it.is_being_rebound = false;
+                            for *metagame.controls.toggle_dynamite_mode.binds          it.is_being_rebound = false;
+                            for *metagame.controls.select_as_place_goblin.binds        it.is_being_rebound = false;
+                            for *metagame.controls.toggle_obsidian_mode.binds          it.is_being_rebound = false;
+                            for *metagame.controls.toggle_wall_mode.binds              it.is_being_rebound = false;
+                            for *metagame.controls.drag_as_create_path.binds           it.is_being_rebound = false;
+                            for *metagame.controls.drag_cam.binds                      it.is_being_rebound = false;
+                            for *metagame.controls.move_camera_up.binds                it.is_being_rebound = false;
+                            for *metagame.controls.move_camera_down.binds              it.is_being_rebound = false;
+                            for *metagame.controls.move_camera_left.binds              it.is_being_rebound = false;
+                            for *metagame.controls.move_camera_right.binds             it.is_being_rebound = false;
+                            for *metagame.controls.toggle_remove_mode.binds            it.is_being_rebound = false;
+                            for *metagame.controls.panic_pause.binds                   it.is_being_rebound = false;
+                            for *metagame.controls.fast_forward.binds                  it.is_being_rebound = false;
 
-        window_start := GetScreenToWorld2D(Vector2.{ 0, 0 }, camera);
-        window_end   := GetScreenToWorld2D(Vector2.{ cast(float) GetScreenWidth(), cast(float) GetScreenHeight()}, camera);
-
-        // TODO: save this in game_state or something
-        dwarf_miner_count   := 0;
-        dwarf_warrior_count := 0;
-
-        // Populate caches
-        {
-            for *dwarf: dwarves {
-                dwarf_tile_id: s32;
-
-                if #complete dwarf.state == {
-                    // If the dwarf is dead center on a tile and not moving, it's on that tile.
-                    case .IDLE;      #through;
-                    case .DECIDING;  #through;
-                    case .ATTACKING; #through;
-                    case .MINING;
-                        dwarf_tile_id = get_tile_id_by_pos(dwarf.pos);
-
-                    // If the dwarf is moving, then they're "on" the tile that they're moving to.
-                    case .MOVING;
-                        assert_soft(dwarf.tile_ids_on_path.count > 0, "Dwarf was in move state but had nowhere to go\n");
-                        dwarf_tile_id = dwarf.tile_ids_on_path[0];
-                }
-
-                assert_soft(dwarf_tile_id > 0, "Expected dwarf_tile_id to have been set, but got %\n", dwarf_tile_id);
-                table_set(*tile_ids_to_dwarfs, dwarf_tile_id, dwarf);
-
-                if      dwarf.dwarf_type == .MINER   dwarf_miner_count += 1;
-                else if dwarf.dwarf_type == .WARRIOR dwarf_warrior_count += 1;
-                else    assert_soft(false, "Dwarf % was neither a miner nor warrior\n", dwarf.id);
-            }
-
-            for *goblin: goblins {
-                if #complete goblin.state == {
-                    // If the goblin is dead center on a tile and not moving, it's on that tile.
-                    case .IDLE;     #through;
-                    case .DECIDING; #through;
-                    case .ATTACKING;
-                        goblin_tile_id := get_tile_id_by_pos(goblin.pos);
-
-                        assert_soft(goblin_tile_id > 0, "Expected goblin_tile_id to have been set, but got % \n", goblin_tile_id);
-
-                        table_set(*tile_ids_to_goblins, goblin_tile_id, goblin);
-
-                    // If the goblin is moving, then count both the tile they're moving from and to.
-                    case .MOVING;
-                        assert_soft(goblin.tile_ids_on_path.count > 0, "Goblin was in move state but had nowhere to go\n");
-
-                        goblin_tile_id_from := get_previous_tile_id(goblin);
-                        goblin_tile_id_to   := goblin.tile_ids_on_path[0];
-
-                        assert_soft(goblin_tile_id_from > 0, "Expected goblin_tile_id_from to have been set, but got % \n", goblin_tile_id_from);
-                        assert_soft(goblin_tile_id_to > 0,   "Expected goblin_tile_id_to to have been set, but got % \n",   goblin_tile_id_to);
-
-                        table_set(*tile_ids_to_goblins, goblin_tile_id_to,   goblin);
-                        table_set(*tile_ids_to_goblins, goblin_tile_id_from, goblin);
-                }
-            }
-
-            // PERF: caching this might not even be faster
-            for *base: bases {
-                base_center  := get_rect_center(get_world_rect_from_pos(base.pos));
-                base_tile_id := get_tile_id_by_pos(base_center);
-                table_set(*tile_ids_to_bases, base_tile_id, base);
+                            metagame.pause_state = .MENU;
+                    }
+                case .GAME_OVER;
+                    if #complete metagame.game_over_state == {
+                        case .MENU; // Pressing escape does nothing in the game over menu
+                        case .LOOK_AROUND; metagame.game_over_state = .MENU;
+                    }
             }
         }
 
-        //
-        // Input
-        //
+        if IsKeyPressed(.KEY_G) metagame.debug_mode = !metagame.debug_mode;
+
+        // Update previous controls state
+        game_state.controls_state_prev_frame = game_state.controls_state_this_frame;
+
+        // Update controls this frame
         {
-            // TODO: codify metagame controls/
-            //
-            // Metagame controls
-            if IsKeyPressed(.KEY_ESCAPE) {
-                if #complete metagame.state == {
-                    case .RUNNING;
-                        metagame.state = .PAUSED;
-                    case .PAUSED;
-                        if #complete metagame.pause_state == {
-                            case .MENU;
-                                metagame.state = .RUNNING;
-                            case .OPTIONS;
-                                // TODO: do this somewhat intelligently
-                                //
-                                // Set any binds currently being set to not being set
-                                for *controls.select.binds                        it.is_being_rebound = false;
-                                for *controls.clear_selection.binds               it.is_being_rebound = false;
-                                for *controls.toggle_base_mode.binds              it.is_being_rebound = false;
-                                for *controls.add_iron.binds                      it.is_being_rebound = false;
-                                for *controls.select_as_place_miner_dwarf.binds   it.is_being_rebound = false;
-                                for *controls.select_as_place_warrior_dwarf.binds it.is_being_rebound = false;
-                                for *controls.toggle_dynamite_mode.binds          it.is_being_rebound = false;
-                                for *controls.select_as_place_goblin.binds        it.is_being_rebound = false;
-                                for *controls.toggle_obsidian_mode.binds          it.is_being_rebound = false;
-                                for *controls.toggle_wall_mode.binds              it.is_being_rebound = false;
-                                for *controls.drag_as_create_path.binds           it.is_being_rebound = false;
-                                for *controls.drag_cam.binds                      it.is_being_rebound = false;
-                                for *controls.move_camera_up.binds                it.is_being_rebound = false;
-                                for *controls.move_camera_down.binds              it.is_being_rebound = false;
-                                for *controls.move_camera_left.binds              it.is_being_rebound = false;
-                                for *controls.move_camera_right.binds             it.is_being_rebound = false;
-                                for *controls.toggle_remove_mode.binds            it.is_being_rebound = false;
-                                for *controls.panic_pause.binds                   it.is_being_rebound = false;
-                                for *controls.fast_forward.binds                  it.is_being_rebound = false;
+            game_state.controls_state_this_frame.select_is_pressed_once        = control_is_pressed(metagame.controls.select);
+            game_state.controls_state_this_frame.select_is_held_down           = control_is_down(metagame.controls.select);
+            game_state.controls_state_this_frame.selection_cleared             = control_is_pressed(metagame.controls.clear_selection);
+            game_state.controls_state_this_frame.toggle_base_mode              = control_is_pressed(metagame.controls.toggle_base_mode);
+            game_state.controls_state_this_frame.toggle_dynamite_mode          = control_is_pressed(metagame.controls.toggle_dynamite_mode);
+            game_state.controls_state_this_frame.toggle_obsidian_mode          = control_is_pressed(metagame.controls.toggle_obsidian_mode);
+            game_state.controls_state_this_frame.toggle_wall_mode              = control_is_pressed(metagame.controls.toggle_wall_mode);
+            game_state.controls_state_this_frame.toggle_remove_mode            = control_is_pressed(metagame.controls.toggle_remove_mode);
+            game_state.controls_state_this_frame.add_iron                      = control_is_pressed(metagame.controls.add_iron);
+            game_state.controls_state_this_frame.select_as_place_miner_dwarf   = control_is_down(metagame.controls.select_as_place_miner_dwarf);
+            game_state.controls_state_this_frame.select_as_place_warrior_dwarf = control_is_down(metagame.controls.select_as_place_warrior_dwarf);
+            game_state.controls_state_this_frame.select_as_place_goblin        = control_is_down(metagame.controls.select_as_place_goblin);
+            game_state.controls_state_this_frame.drag_cam_pressed              = control_is_pressed(metagame.controls.drag_cam);
+            game_state.controls_state_this_frame.drag_cam_down                 = control_is_down(metagame.controls.drag_cam);
+            game_state.controls_state_this_frame.move_camera_up                = control_is_down(metagame.controls.move_camera_up);
+            game_state.controls_state_this_frame.move_camera_down              = control_is_down(metagame.controls.move_camera_down);
+            game_state.controls_state_this_frame.move_camera_left              = control_is_down(metagame.controls.move_camera_left);
+            game_state.controls_state_this_frame.move_camera_right             = control_is_down(metagame.controls.move_camera_right);
+            game_state.controls_state_this_frame.panic_pause                   = control_is_pressed(metagame.controls.panic_pause);
+            game_state.controls_state_this_frame.fast_forward                  = control_is_down(metagame.controls.fast_forward);
 
-                                metagame.pause_state = .MENU;
-                        }
-                    case .GAME_OVER;
-                        if #complete metagame.game_over_state == {
-                            case .MENU; // Pressing escape does nothing in the game over menu
-                            case .LOOK_AROUND; metagame.game_over_state = .MENU;
-                        }
-                }
+            game_state.controls_state_this_frame.started_to_draw_path = (
+                game_state.controls_state_this_frame.select_is_pressed_once         &&
+                !game_state.controls_state_this_frame.select_as_place_miner_dwarf   &&
+                !game_state.controls_state_this_frame.select_as_place_warrior_dwarf &&
+                !game_state.controls_state_this_frame.select_as_place_goblin        &&
+                game_state.control_mode == .NORMAL                                  &&
+                !IsKeyDown(KeyboardKey.KEY_LEFT_CONTROL) // debug control to mine blocks
+            );
+
+            game_state.controls_state_this_frame.drawing_path = (
+                game_state.controls_state_this_frame.select_is_held_down &&
+                (game_state.controls_state_prev_frame.drawing_path || game_state.controls_state_prev_frame.started_to_draw_path)
+            );
+        }
+
+        // TODO: should this go here?
+        //
+        // Update control mode
+        {
+            if game_state.controls_state_this_frame.selection_cleared {
+                game_state.control_mode = .NORMAL;
             }
 
-            if IsKeyPressed(.KEY_G) metagame.debug_mode = !metagame.debug_mode;
-
-            // Update previous controls state
-            game_state.controls_state_prev_frame = game_state.controls_state_this_frame;
-
-            // Update controls this frame
-            {
-                game_state.controls_state_this_frame.select_is_pressed_once        = control_is_pressed(controls.select);
-                game_state.controls_state_this_frame.select_is_held_down           = control_is_down(controls.select);
-                game_state.controls_state_this_frame.selection_cleared             = control_is_pressed(controls.clear_selection);
-                game_state.controls_state_this_frame.toggle_base_mode              = control_is_pressed(controls.toggle_base_mode);
-                game_state.controls_state_this_frame.toggle_dynamite_mode          = control_is_pressed(controls.toggle_dynamite_mode);
-                game_state.controls_state_this_frame.toggle_obsidian_mode          = control_is_pressed(controls.toggle_obsidian_mode);
-                game_state.controls_state_this_frame.toggle_wall_mode              = control_is_pressed(controls.toggle_wall_mode);
-                game_state.controls_state_this_frame.toggle_remove_mode            = control_is_pressed(controls.toggle_remove_mode);
-                game_state.controls_state_this_frame.add_iron                      = control_is_pressed(controls.add_iron);
-                game_state.controls_state_this_frame.select_as_place_miner_dwarf   = control_is_down(controls.select_as_place_miner_dwarf);
-                game_state.controls_state_this_frame.select_as_place_warrior_dwarf = control_is_down(controls.select_as_place_warrior_dwarf);
-                game_state.controls_state_this_frame.select_as_place_goblin        = control_is_down(controls.select_as_place_goblin);
-                game_state.controls_state_this_frame.drag_cam_pressed              = control_is_pressed(controls.drag_cam);
-                game_state.controls_state_this_frame.drag_cam_down                 = control_is_down(controls.drag_cam);
-                game_state.controls_state_this_frame.move_camera_up                = control_is_down(controls.move_camera_up);
-                game_state.controls_state_this_frame.move_camera_down              = control_is_down(controls.move_camera_down);
-                game_state.controls_state_this_frame.move_camera_left              = control_is_down(controls.move_camera_left);
-                game_state.controls_state_this_frame.move_camera_right             = control_is_down(controls.move_camera_right);
-                game_state.controls_state_this_frame.panic_pause                   = control_is_pressed(controls.panic_pause);
-                game_state.controls_state_this_frame.fast_forward                  = control_is_down(controls.fast_forward);
-
-                game_state.controls_state_this_frame.started_to_draw_path = (
-                    game_state.controls_state_this_frame.select_is_pressed_once         &&
-                    !game_state.controls_state_this_frame.select_as_place_miner_dwarf   &&
-                    !game_state.controls_state_this_frame.select_as_place_warrior_dwarf &&
-                    !game_state.controls_state_this_frame.select_as_place_goblin        &&
-                    game_state.control_mode == .NORMAL                                  &&
-                    !IsKeyDown(KeyboardKey.KEY_LEFT_CONTROL) // debug control to mine blocks
-                );
-
-                game_state.controls_state_this_frame.drawing_path = (
-                    game_state.controls_state_this_frame.select_is_held_down &&
-                    (game_state.controls_state_prev_frame.drawing_path || game_state.controls_state_prev_frame.started_to_draw_path)
-                );
+            if game_state.controls_state_this_frame.toggle_base_mode {
+                game_state.control_mode = ifx game_state.control_mode == .ADD_BASE then .NORMAL else .ADD_BASE;
             }
 
-            // TODO: should this go here?
-            //
-            // Update control mode
-            {
-                if game_state.controls_state_this_frame.selection_cleared {
-                    game_state.control_mode = .NORMAL;
-                }
-
-                if game_state.controls_state_this_frame.toggle_base_mode {
-                    game_state.control_mode = ifx game_state.control_mode == .ADD_BASE then .NORMAL else .ADD_BASE;
-                }
-
-                if game_state.controls_state_this_frame.toggle_dynamite_mode {
-                    game_state.control_mode = ifx game_state.control_mode == .ADD_DYNAMITE then .NORMAL else .ADD_DYNAMITE;
-                }
-                
-                if game_state.controls_state_this_frame.toggle_obsidian_mode {
-                    game_state.control_mode = ifx game_state.control_mode == .ADD_OBSIDIAN then .NORMAL else .ADD_OBSIDIAN;
-                }
+            if game_state.controls_state_this_frame.toggle_dynamite_mode {
+                game_state.control_mode = ifx game_state.control_mode == .ADD_DYNAMITE then .NORMAL else .ADD_DYNAMITE;
+            }
             
-                if game_state.controls_state_this_frame.toggle_wall_mode {
-                    game_state.control_mode = ifx game_state.control_mode == .ADD_WALL then .NORMAL else .ADD_WALL;
+            if game_state.controls_state_this_frame.toggle_obsidian_mode {
+                game_state.control_mode = ifx game_state.control_mode == .ADD_OBSIDIAN then .NORMAL else .ADD_OBSIDIAN;
+            }
+        
+            if game_state.controls_state_this_frame.toggle_wall_mode {
+                game_state.control_mode = ifx game_state.control_mode == .ADD_WALL then .NORMAL else .ADD_WALL;
+            }
+
+            if game_state.controls_state_this_frame.toggle_remove_mode {
+                game_state.control_mode = ifx game_state.control_mode == .REMOVE then .NORMAL else .REMOVE;
+            }
+        }
+    }
+
+    //
+    // Update
+    //
+    {
+        // Update unpausable things
+        {
+            // Debug break tiles
+            hovered_tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
+            if IsMouseButtonDown(MouseButton.MOUSE_BUTTON_LEFT) && IsKeyDown(KeyboardKey.KEY_LEFT_CONTROL) {
+                tile_id := get_tile_id_by_pos(Vector2.{ hovered_tile_rect.x, hovered_tile_rect.y });
+                set_tile_as_type(tile_id, .MINED, false, false, game_state);
+                reveal_cave_if_necessary(tile_id, false, false, game_state);
+            }
+
+            // Update camera
+            {
+                CAMERA_ZOOM_MULTIPLIER :: 1.2;
+                CAMERA_ZOOM_MIN_DEBUG  :: 0.01;
+                CAMERA_ZOOM_MIN_NORMAL :: 0.07428;
+                CAMERA_ZOOM_MAX        :: 13.0;
+
+                camera_zoom_min := ifx metagame.debug_mode then CAMERA_ZOOM_MIN_DEBUG else CAMERA_ZOOM_MIN_NORMAL;
+
+                can_move_camera := metagame.debug_mode || metagame.state == .RUNNING || (metagame.state == .GAME_OVER && metagame.game_over_state == .LOOK_AROUND);
+
+                if can_move_camera && game_state.controls_state_this_frame.move_camera_up    camera.target.y -= CAMERA_MOVE_SPEED_BASE;
+                if can_move_camera && game_state.controls_state_this_frame.move_camera_down  camera.target.y += CAMERA_MOVE_SPEED_BASE;
+                if can_move_camera && game_state.controls_state_this_frame.move_camera_left  camera.target.x -= CAMERA_MOVE_SPEED_BASE;
+                if can_move_camera && game_state.controls_state_this_frame.move_camera_right camera.target.x += CAMERA_MOVE_SPEED_BASE;
+
+                camera.offset = Vector2.{ GetScreenWidth() / 2.0, GetScreenHeight() / 2.0 };
+
+                camera_move_speed := CAMERA_MOVE_SPEED_BASE / 2 * camera.zoom;
+                if game_state.controls_state_this_frame.drag_cam_pressed {
+                    mouse_drag_began_at_pos = mouse_pos_in_world;
                 }
 
-                if game_state.controls_state_this_frame.toggle_remove_mode {
-                    game_state.control_mode = ifx game_state.control_mode == .REMOVE then .NORMAL else .REMOVE;
+                if game_state.controls_state_this_frame.drag_cam_down && can_move_camera {
+                    world_delta := Vector2Subtract(mouse_drag_began_at_pos, mouse_pos_in_world);
+                    
+                    // Apply that difference to the camera target.
+                    // This effectively "pulls" the world back so the mouse stays where it began.
+                    camera.target = Vector2Add(camera.target, world_delta);
+                }
+
+                // Make sure the camera zooms in towards the mouse pos
+                if mouse_wheel_move != 0 {
+                    // Grab the world space position of the mouse before the zoom
+                    mouse_world_pos_before := GetScreenToWorld2D(GetMousePosition(), camera);
+
+                    // Apply the zoom
+                    zoom_factor := pow(CAMERA_ZOOM_MULTIPLIER, mouse_wheel_move);
+                    camera.zoom *= zoom_factor;
+                    camera.zoom  = clamp(camera.zoom, camera_zoom_min, CAMERA_ZOOM_MAX);
+
+                    // Grab the world space position of the mouse AFTER the zoom
+                    // (Raylib uses the new camera.zoom but the old camera.target here)
+                    mouse_world_pos_after := GetScreenToWorld2D(GetMousePosition(), camera);
+
+                    // Calculate the shift caused by the zoom, and move the target to cancel it out
+                    zoom_delta := Vector2Subtract(mouse_world_pos_before, mouse_world_pos_after);
+                    camera.target = Vector2Add(camera.target, zoom_delta);
+                }
+            }
+
+            // Update timers
+            {
+                if game_state.panic_pause_timer_ms > 0 {
+                    game_state.panic_pause_timer_ms -= xx (dt_seconds * 1000);
+                }
+
+                if game_state.home_base_under_attack_cooldown_ms > 0 {
+                    game_state.home_base_under_attack_cooldown_ms -= xx (dt_seconds * 1000);
                 }
             }
         }
 
-        //
-        // Update
-        //
-        {
-            // Update unpausable things
+        // Update time remaining for game
+        if metagame.state == .RUNNING {
+            game_state.time_remaining_ms -= xx (dt_seconds_raw * 1000);
+
+            if game_state.time_remaining_ms <= 0 {
+                game_state.time_remaining_ms = 0;
+                metagame.state = .GAME_OVER;
+            }
+        }
+
+        // Update pausable things
+        if metagame.state == .RUNNING {
+            // Update user action
             {
-                // Debug break tiles
-                hovered_tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
-                if IsMouseButtonDown(MouseButton.MOUSE_BUTTON_LEFT) && IsKeyDown(KeyboardKey.KEY_LEFT_CONTROL) {
-                    tile_id := get_tile_id_by_pos(Vector2.{ hovered_tile_rect.x, hovered_tile_rect.y });
-                    set_tile_as_type(tile_id, .MINED, false, false, *game_state);
-                    reveal_cave_if_necessary(tile_id, false, false, *game_state);
-                }
-
-                // Update camera
-                {
-                    CAMERA_ZOOM_MULTIPLIER :: 1.2;
-                    CAMERA_ZOOM_MIN_DEBUG  :: 0.01;
-                    CAMERA_ZOOM_MIN_NORMAL :: 0.07428;
-                    CAMERA_ZOOM_MAX        :: 13.0;
-
-                    camera_zoom_min := ifx metagame.debug_mode then CAMERA_ZOOM_MIN_DEBUG else CAMERA_ZOOM_MIN_NORMAL;
-
-                    can_move_camera := metagame.debug_mode || metagame.state == .RUNNING || (metagame.state == .GAME_OVER && metagame.game_over_state == .LOOK_AROUND);
-
-                    if can_move_camera && game_state.controls_state_this_frame.move_camera_up    camera.target.y -= CAMERA_MOVE_SPEED_BASE;
-                    if can_move_camera && game_state.controls_state_this_frame.move_camera_down  camera.target.y += CAMERA_MOVE_SPEED_BASE;
-                    if can_move_camera && game_state.controls_state_this_frame.move_camera_left  camera.target.x -= CAMERA_MOVE_SPEED_BASE;
-                    if can_move_camera && game_state.controls_state_this_frame.move_camera_right camera.target.x += CAMERA_MOVE_SPEED_BASE;
-
-                    camera.offset = Vector2.{ GetScreenWidth() / 2.0, GetScreenHeight() / 2.0 };
-
-                    camera_move_speed := CAMERA_MOVE_SPEED_BASE / 2 * camera.zoom;
-                    if game_state.controls_state_this_frame.drag_cam_pressed {
-                        mouse_drag_began_at_pos = mouse_pos_in_world;
-                    }
-
-                    if game_state.controls_state_this_frame.drag_cam_down && can_move_camera {
-                        world_delta := Vector2Subtract(mouse_drag_began_at_pos, mouse_pos_in_world);
-                        
-                        // Apply that difference to the camera target.
-                        // This effectively "pulls" the world back so the mouse stays where it began.
-                        camera.target = Vector2Add(camera.target, world_delta);
-                    }
-
-                    // Make sure the camera zooms in towards the mouse pos
-                    if mouse_wheel_move != 0 {
-                        // Grab the world space position of the mouse before the zoom
-                        mouse_world_pos_before := GetScreenToWorld2D(GetMousePosition(), camera);
-
-                        // Apply the zoom
-                        zoom_factor := pow(CAMERA_ZOOM_MULTIPLIER, mouse_wheel_move);
-                        camera.zoom *= zoom_factor;
-                        camera.zoom  = clamp(camera.zoom, camera_zoom_min, CAMERA_ZOOM_MAX);
-
-                        // Grab the world space position of the mouse AFTER the zoom
-                        // (Raylib uses the new camera.zoom but the old camera.target here)
-                        mouse_world_pos_after := GetScreenToWorld2D(GetMousePosition(), camera);
-
-                        // Calculate the shift caused by the zoom, and move the target to cancel it out
-                        zoom_delta := Vector2Subtract(mouse_world_pos_before, mouse_world_pos_after);
-                        camera.target = Vector2Add(camera.target, zoom_delta);
+                if game_state.controls_state_this_frame.panic_pause {
+                    if !panic_pause_is_cooling_down {
+                        game_state.panic_pause_timer_ms = PANIC_PAUSE_COOLDOWN_MS;
                     }
                 }
 
-                // Update timers
-                {
-                    if game_state.panic_pause_timer_ms > 0 {
-                        game_state.panic_pause_timer_ms -= xx (dt_seconds * 1000);
-                    }
-
-                    if game_state.home_base_under_attack_cooldown_ms > 0 {
-                        game_state.home_base_under_attack_cooldown_ms -= xx (dt_seconds * 1000);
-                    }
-                }
-            }
-
-            // Update time remaining for game
-            if metagame.state == .RUNNING {
-                game_state.time_remaining_ms -= xx (dt_seconds_raw * 1000);
-
-                if game_state.time_remaining_ms <= 0 {
-                    game_state.time_remaining_ms = 0;
-                    metagame.state = .GAME_OVER;
-                }
-            }
-
-            // Update pausable things
-            if metagame.state == .RUNNING {
-                // Update user action
-                {
-                    if game_state.controls_state_this_frame.panic_pause {
-                        if !panic_pause_is_cooling_down {
-                            game_state.panic_pause_timer_ms = PANIC_PAUSE_COOLDOWN_MS;
-                        }
-                    }
-
-                    if #complete game_state.control_mode == {
-                        case .NORMAL;
-                            if game_state.controls_state_this_frame.select_as_place_miner_dwarf {
-                                if game_state.controls_state_this_frame.select_is_pressed_once {
-                                    if metagame.debug_mode {
-                                        tile_id := get_tile_id_by_pos(mouse_pos_in_world);
-                                        create_dwarf(get_tile_pos_by_id(tile_id), .MINER);
-                                    }
-                                }
-                            }
-                            else if game_state.controls_state_this_frame.select_as_place_warrior_dwarf {
-                                if game_state.controls_state_this_frame.select_is_pressed_once {
-                                    if metagame.debug_mode {
-                                        tile_id := get_tile_id_by_pos(mouse_pos_in_world);
-                                        create_dwarf(get_tile_pos_by_id(tile_id), .WARRIOR);
-                                    }
-                                }
-                            }
-                            else if game_state.controls_state_this_frame.select_as_place_goblin {
-                                if game_state.controls_state_this_frame.select_is_pressed_once {
+                if #complete game_state.control_mode == {
+                    case .NORMAL;
+                        if game_state.controls_state_this_frame.select_as_place_miner_dwarf {
+                            if game_state.controls_state_this_frame.select_is_pressed_once {
+                                if metagame.debug_mode {
                                     tile_id := get_tile_id_by_pos(mouse_pos_in_world);
-                                    create_goblin(get_tile_pos_by_id(tile_id));
+                                    create_dwarf(get_tile_pos_by_id(tile_id), .MINER);
                                 }
                             }
-                            else {
-                                // When a dwarf is currently selected from last frame
-                                if game_state.selected_dwarf_id > 0 {
-                                    // If select is let go this frame, deselect the dwarf.
-                                    if game_state.controls_state_prev_frame.select_is_held_down && !game_state.controls_state_this_frame.select_is_held_down {
-                                        found, selected_dwarf_index := table_find(*dwarf_id_to_index, game_state.selected_dwarf_id);
-                                        assert(found);
+                        }
+                        else if game_state.controls_state_this_frame.select_as_place_warrior_dwarf {
+                            if game_state.controls_state_this_frame.select_is_pressed_once {
+                                if metagame.debug_mode {
+                                    tile_id := get_tile_id_by_pos(mouse_pos_in_world);
+                                    create_dwarf(get_tile_pos_by_id(tile_id), .WARRIOR);
+                                }
+                            }
+                        }
+                        else if game_state.controls_state_this_frame.select_as_place_goblin {
+                            if game_state.controls_state_this_frame.select_is_pressed_once {
+                                tile_id := get_tile_id_by_pos(mouse_pos_in_world);
+                                create_goblin(get_tile_pos_by_id(tile_id));
+                            }
+                        }
+                        else {
+                            // When a dwarf is currently selected from last frame
+                            if game_state.selected_dwarf_id > 0 {
+                                // If select is let go this frame, deselect the dwarf.
+                                if game_state.controls_state_prev_frame.select_is_held_down && !game_state.controls_state_this_frame.select_is_held_down {
+                                    found, selected_dwarf_index := table_find(*dwarf_id_to_index, game_state.selected_dwarf_id);
+                                    assert(found);
 
-                                        kill_particle_by_id(game_state.selected_dwarf_particle_id);
+                                    kill_particle_by_id(game_state.selected_dwarf_particle_id);
 
-                                        dwarves[selected_dwarf_index].state = .DECIDING;
-                                        dwarves[selected_dwarf_index].ignore_goblins_for = 2;
+                                    dwarves[selected_dwarf_index].state = .DECIDING;
+                                    dwarves[selected_dwarf_index].ignore_goblins_for = 2;
 
-                                        game_state.selected_dwarf_id = 0;
+                                    game_state.selected_dwarf_id = 0;
+                                }
+                            } else {
+                                if game_state.controls_state_this_frame.select_is_pressed_once {
+                                    // PERF: would massively benefit from chunking
+                                    for dwarf: dwarves {
+                                        if CheckCollisionPointRec(mouse_pos_in_world, get_world_rect_from_pos(dwarf.pos)) {
+                                            game_state.selected_dwarf_id = dwarf.id;
+                                            break;
+                                        }
                                     }
+                                }
+
+                                // If we found a dwarf this frame, pin down selected dwarf.
+                                if game_state.selected_dwarf_id > 0 && game_state.controls_state_this_frame.select_is_held_down {
+                                    found, selected_dwarf_index := table_find(*dwarf_id_to_index, game_state.selected_dwarf_id);
+                                    assert(found);
+
+                                    particle := create_dwarf_selected_particle(dwarves[selected_dwarf_index].pos, dwarves[selected_dwarf_index].id);
+                                    game_state.selected_dwarf_particle_id = particle.id;
+
+                                    // Teleport dwarf to tile we are hovering over and keep it there
+                                    tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
+                                    dwarves[selected_dwarf_index].pos = get_rect_pos(tile_rect);
+                                    
+                                    // Stop the dwarf from moving so you can think while dragging a path
+                                    dwarves[selected_dwarf_index].state = .IDLE;
+
+                                    // Remove its current pathing
+                                    array_reset(*(dwarves[selected_dwarf_index].tile_ids_on_path));
+                                }
+                            }
+
+                            if game_state.controls_state_this_frame.started_to_draw_path {
+                                mouse_pos_when_path_creation_started = mouse_pos_in_world;
+                            }
+
+                            if game_state.controls_state_this_frame.drawing_path {
+                                // Draw out the path that is currently being traced, if it is more than 1 tile long.
+                                potential_path_being_traced_1, potential_path_being_traced_2 := get_paths(mouse_pos_when_path_creation_started, mouse_pos_in_world);
+
+                                if !metagame.debug_mode {
+                                    potential_path_cost := get_path_cost(potential_path_being_traced_1) + get_path_cost(potential_path_being_traced_2);
+
+                                    unaffordable_tile_count := cast(int) ceil((cast(float) (potential_path_cost - game_state.gold)) / cast(float)GOLD_COST_PATH_STEP);
+
+                                    for 0..unaffordable_tile_count {
+                                        if potential_path_being_traced_2.tile_count > 0 {
+                                            potential_path_being_traced_2.tile_count -= 1;
+                                        } else if potential_path_being_traced_1.tile_count > 0 {
+                                            potential_path_being_traced_1.tile_count -= 1;
+                                        } else {
+                                            break;
+                                        }
+                                    }
+                                }
+
+                                if potential_path_being_traced_1.tile_count > 0 {
+                                    path_being_traced_1 = potential_path_being_traced_1;
                                 } else {
-                                    if game_state.controls_state_this_frame.select_is_pressed_once {
-                                        // PERF: would massively benefit from chunking
-                                        for dwarf: dwarves {
-                                            if CheckCollisionPointRec(mouse_pos_in_world, get_world_rect_from_pos(dwarf.pos)) {
-                                                game_state.selected_dwarf_id = dwarf.id;
-                                                break;
-                                            }
-                                        }
-                                    }
-
-                                    // If we found a dwarf this frame, pin down selected dwarf.
-                                    if game_state.selected_dwarf_id > 0 && game_state.controls_state_this_frame.select_is_held_down {
-                                        found, selected_dwarf_index := table_find(*dwarf_id_to_index, game_state.selected_dwarf_id);
-                                        assert(found);
-
-                                        particle := create_dwarf_selected_particle(dwarves[selected_dwarf_index].pos, dwarves[selected_dwarf_index].id);
-                                        game_state.selected_dwarf_particle_id = particle.id;
-
-                                        // Teleport dwarf to tile we are hovering over and keep it there
-                                        tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
-                                        dwarves[selected_dwarf_index].pos = get_rect_pos(tile_rect);
-                                        
-                                        // Stop the dwarf from moving so you can think while dragging a path
-                                        dwarves[selected_dwarf_index].state = .IDLE;
-
-                                        // Remove its current pathing
-                                        array_reset(*(dwarves[selected_dwarf_index].tile_ids_on_path));
-                                    }
+                                    path_being_traced_1 = Path.{};
                                 }
-
-                                if game_state.controls_state_this_frame.started_to_draw_path {
-                                    mouse_pos_when_path_creation_started = mouse_pos_in_world;
+                                if potential_path_being_traced_2.tile_count > 0 {
+                                    path_being_traced_2 = potential_path_being_traced_2;
+                                } else {
+                                    path_being_traced_2 = Path.{};
                                 }
+                            }
+                            // If we were drawing a path, but just let go, then create the path as a real thing.
+                            else if game_state.controls_state_prev_frame.drawing_path {
+                                // Destroy any arrows these paths might be overlapping
+                                {
+                                    if path_being_traced_1.start_tile_id > 0 {
+                                        path_1_tile_ids := get_tile_ids_on_path(path_being_traced_1);
+                                        for path_1_tile_id: path_1_tile_ids {
+                                            // The last tile id of a path does not destroy path arrows
+                                            if it_index == path_1_tile_ids.count continue;
 
-                                if game_state.controls_state_this_frame.drawing_path {
-                                    // Draw out the path that is currently being traced, if it is more than 1 tile long.
-                                    potential_path_being_traced_1, potential_path_being_traced_2 := get_paths(mouse_pos_when_path_creation_started, mouse_pos_in_world);
-
-                                    if !metagame.debug_mode {
-                                        potential_path_cost := get_path_cost(potential_path_being_traced_1) + get_path_cost(potential_path_being_traced_2);
-
-                                        unaffordable_tile_count := cast(int) ceil((cast(float) (potential_path_cost - game_state.gold)) / cast(float)GOLD_COST_PATH_STEP);
-
-                                        for 0..unaffordable_tile_count {
-                                            if potential_path_being_traced_2.tile_count > 0 {
-                                                potential_path_being_traced_2.tile_count -= 1;
-                                            } else if potential_path_being_traced_1.tile_count > 0 {
-                                                potential_path_being_traced_1.tile_count -= 1;
-                                            } else {
-                                                break;
-                                            }
-                                        }
-                                    }
-
-                                    if potential_path_being_traced_1.tile_count > 0 {
-                                        path_being_traced_1 = potential_path_being_traced_1;
-                                    } else {
-                                        path_being_traced_1 = Path.{};
-                                    }
-                                    if potential_path_being_traced_2.tile_count > 0 {
-                                        path_being_traced_2 = potential_path_being_traced_2;
-                                    } else {
-                                        path_being_traced_2 = Path.{};
-                                    }
-                                }
-                                // If we were drawing a path, but just let go, then create the path as a real thing.
-                                else if game_state.controls_state_prev_frame.drawing_path {
-                                    // Destroy any arrows these paths might be overlapping
-                                    {
-                                        if path_being_traced_1.start_tile_id > 0 {
-                                            path_1_tile_ids := get_tile_ids_on_path(path_being_traced_1);
-                                            for path_1_tile_id: path_1_tile_ids {
-                                                // The last tile id of a path does not destroy path arrows
-                                                if it_index == path_1_tile_ids.count continue;
-
-                                                for path: paths {
-                                                    if path_1_tile_id == path.start_tile_id {
-                                                        array_unordered_remove_by_index(*paths, xx it_index);
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        if path_being_traced_2.start_tile_id > 0 {
-                                            path_2_tile_ids := get_tile_ids_on_path(path_being_traced_2);
-                                            for path_2_tile_id: path_2_tile_ids {
-                                                // The last tile id of a path does not destroy path arrows
-                                                if it_index == path_2_tile_ids.count continue;
-
-                                                for path: paths {
-                                                    if path_2_tile_id == path.start_tile_id {
-                                                        array_unordered_remove_by_index(*paths, xx it_index);
-                                                    }
+                                            for path: paths {
+                                                if path_1_tile_id == path.start_tile_id {
+                                                    array_unordered_remove_by_index(*paths, xx it_index);
                                                 }
                                             }
                                         }
                                     }
 
-                                    if path_being_traced_1.start_tile_id > 0 array_add(*paths, path_being_traced_1);
-                                    if path_being_traced_2.start_tile_id > 0 array_add(*paths, path_being_traced_2);
+                                    if path_being_traced_2.start_tile_id > 0 {
+                                        path_2_tile_ids := get_tile_ids_on_path(path_being_traced_2);
+                                        for path_2_tile_id: path_2_tile_ids {
+                                            // The last tile id of a path does not destroy path arrows
+                                            if it_index == path_2_tile_ids.count continue;
+
+                                            for path: paths {
+                                                if path_2_tile_id == path.start_tile_id {
+                                                    array_unordered_remove_by_index(*paths, xx it_index);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if path_being_traced_1.start_tile_id > 0 array_add(*paths, path_being_traced_1);
+                                if path_being_traced_2.start_tile_id > 0 array_add(*paths, path_being_traced_2);
+
+                                // Debit the gold cost.
+                                {
+                                    gold_cost := get_path_cost(path_being_traced_1) + get_path_cost(path_being_traced_2);
+
+                                    if !metagame.debug_mode game_state.gold -= gold_cost;
+                                    if gold_cost > 0 create_gold_particle(mouse_pos_in_world, -1 * gold_cost);
+                                }
+                            }
+                        }
+                    case .ADD_BASE;
+                        // TODO: check if placement is valid
+                        if game_state.controls_state_this_frame.select_is_pressed_once {
+                            if metagame.debug_mode || game_state.gold >= GOLD_COST_BASE {
+                                tile_id         := get_tile_id_by_pos(mouse_pos_in_world);
+                                tile_is_mined   := table_contains(*fully_mined_tile_ids_set, tile_id);
+                                tile_is_encased := table_contains(*encased_tile_ids_set, tile_id);
+
+                                if metagame.debug_mode || (tile_is_mined && !tile_is_encased) {
+                                    // Add base.
+                                    base_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
+                                    base_pos  := Vector2.{ base_rect.x, base_rect.y };
+                                    base_tile_id := get_tile_id_by_pos(base_pos);
+
+                                    create_base(base_pos, false, game_state);
 
                                     // Debit the gold cost.
-                                    {
-                                        gold_cost := get_path_cost(path_being_traced_1) + get_path_cost(path_being_traced_2);
+                                    if !metagame.debug_mode game_state.gold -= GOLD_COST_BASE;
+                                    create_gold_particle(base_pos, -1 * GOLD_COST_BASE);
 
-                                        if !metagame.debug_mode game_state.gold -= gold_cost;
-                                        if gold_cost > 0 create_gold_particle(mouse_pos_in_world, -1 * gold_cost);
-                                    }
+                                    // Reset control mode.
+                                    game_state.control_mode = .NORMAL;
                                 }
                             }
-                        case .ADD_BASE;
-                            // TODO: check if placement is valid
-                            if game_state.controls_state_this_frame.select_is_pressed_once {
-                                if metagame.debug_mode || game_state.gold >= GOLD_COST_BASE {
-                                    tile_id         := get_tile_id_by_pos(mouse_pos_in_world);
-                                    tile_is_mined   := table_contains(*fully_mined_tile_ids_set, tile_id);
-                                    tile_is_encased := table_contains(*encased_tile_ids_set, tile_id);
+                        }
+                    case .ADD_DYNAMITE;
+                        if game_state.controls_state_this_frame.select_is_pressed_once {
+                            if metagame.debug_mode || game_state.gold >= GOLD_COST_DYNAMITE {
+                                // Try to add dynamite to the selected tile
+                                tile_id         := get_tile_id_by_pos(mouse_pos_in_world);
+                                tile_is_mined   := table_contains(*fully_mined_tile_ids_set, tile_id);
+                                tile_is_encased := table_contains(*encased_tile_ids_set, tile_id);
 
-                                    if metagame.debug_mode || (tile_is_mined && !tile_is_encased) {
-                                        // Add base.
-                                        base_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
-                                        base_pos  := Vector2.{ base_rect.x, base_rect.y };
-                                        base_tile_id := get_tile_id_by_pos(base_pos);
+                                if tile_is_mined && !tile_is_encased {
+                                    // Place down the dynamite.
+                                    array_add(*tiles_with_dynamite_ids, tile_id);
 
-                                        create_base(base_pos, false, *game_state);
+                                    // Debit the gold cost.
+                                    if !metagame.debug_mode game_state.gold -= GOLD_COST_DYNAMITE;
+                                    create_gold_particle(mouse_pos_in_world, -1 * GOLD_COST_DYNAMITE);
 
-                                        // Debit the gold cost.
-                                        if !metagame.debug_mode game_state.gold -= GOLD_COST_BASE;
-                                        create_gold_particle(base_pos, -1 * GOLD_COST_BASE);
-
-                                        // Reset control mode.
-                                        game_state.control_mode = .NORMAL;
-                                    }
+                                    // Reset control mode.
+                                    game_state.control_mode = .NORMAL;
                                 }
                             }
-                        case .ADD_DYNAMITE;
-                            if game_state.controls_state_this_frame.select_is_pressed_once {
-                                if metagame.debug_mode || game_state.gold >= GOLD_COST_DYNAMITE {
-                                    // Try to add dynamite to the selected tile
-                                    tile_id         := get_tile_id_by_pos(mouse_pos_in_world);
-                                    tile_is_mined   := table_contains(*fully_mined_tile_ids_set, tile_id);
-                                    tile_is_encased := table_contains(*encased_tile_ids_set, tile_id);
+                        }
+                    case .ADD_OBSIDIAN;
+                        if game_state.controls_state_this_frame.select_is_held_down {
+                            if metagame.debug_mode || game_state.gold >= GOLD_COST_OBSIDIAN {
+                                // Try to turn the selected tile into obsidian
+                                tile_id := get_tile_id_by_pos(mouse_pos_in_world);
 
-                                    if tile_is_mined && !tile_is_encased {
-                                        // Place down the dynamite.
-                                        array_add(*tiles_with_dynamite_ids, tile_id);
+                                tile_is_iron            := table_contains(*iron_tile_ids_set, tile_id);
+                                tile_is_being_mined     := table_contains(*actively_mined_tile_ids_to_health_table, tile_id);
+                                tile_is_mined           := table_contains(*fully_mined_tile_ids_set, tile_id);
+                                tile_is_mineable        := tile_is_iron || tile_is_being_mined || !tile_is_mined;
 
-                                        // Debit the gold cost.
-                                        if !metagame.debug_mode game_state.gold -= GOLD_COST_DYNAMITE;
-                                        create_gold_particle(mouse_pos_in_world, -1 * GOLD_COST_DYNAMITE);
+                                tile_is_unrevealed_cave := table_contains(*cave_tile_ids_set, tile_id);
+                                tile_is_water_still     := table_contains(*water_still_tile_ids_set, tile_id);
+                                tile_is_water_flowing   := table_contains(*water_flowing_tile_ids_set, tile_id);
+                                tile_is_lava_still      := table_contains(*lava_still_tile_ids_set, tile_id);
+                                tile_is_lava_flowing    := table_contains(*lava_flowing_tile_ids_to_sprite, tile_id);
+                                tile_is_empty           := tile_is_unrevealed_cave || tile_is_water_still || tile_is_water_flowing || tile_is_lava_still || tile_is_lava_flowing;
 
-                                        // Reset control mode.
-                                        game_state.control_mode = .NORMAL;
+                                tile_is_obsidian        := table_contains(*obsidian_tile_ids_set, tile_id);
+                                tile_is_wall            := table_contains(*wall_tile_ids_set, tile_id);
+                                tile_is_placed_object   := tile_is_obsidian || tile_is_wall;
+
+                                tile_is_encased         := table_contains(*encased_tile_ids_set, tile_id);
+
+                                if tile_is_mineable && !tile_is_empty && !tile_is_placed_object && !tile_is_encased {
+                                    // Place down the obsidian.
+                                    set_tile_as_type(tile_id, .OBSIDIAN, false, false, game_state);
+
+                                    remove_warning_marker_on_tile_id :: (tile_id: s32) {
+                                        table_remove(*water_warning_tile_ids_set, tile_id);
+                                        table_remove(*lava_warning_tile_ids_set, tile_id);
+                                        array_unordered_remove_by_value(*water_warning_tile_ids, tile_id);
+                                        array_unordered_remove_by_value(*lava_warning_tile_ids, tile_id);
                                     }
+
+                                    remove_alert_marker_on_tile_id :: (tile_id: s32) {
+                                        table_remove(*water_alert_tile_ids_set, tile_id);
+                                        table_remove(*lava_alert_tile_ids_set, tile_id);
+                                        array_unordered_remove_by_value(*water_alert_tile_ids, tile_id);
+                                        array_unordered_remove_by_value(*lava_alert_tile_ids, tile_id);
+                                    }
+
+                                    remove_warning_and_alert_markers_that_are_no_longer_valid :: (tile_id: s32) {
+                                        // The tile that the obsidian / hole was placed on definitely doesn't need to count
+                                        // as a warning or alert anymore;
+                                        remove_warning_marker_on_tile_id(tile_id);
+                                        remove_alert_marker_on_tile_id(tile_id);
+
+                                        // Update warnings in the surrounding area
+                                        for direction_level_1: DIRECTIONS_CARDINAL {
+                                            neighbor_tile_id_level_1 := get_neighbor_tile_id_by_direction(tile_id, direction_level_1);
+
+                                            found_alert_cardinal_neighbor := false;
+
+                                            for direction_level_2: DIRECTIONS_CARDINAL {
+                                                neighbor_tile_id_level_2 := get_neighbor_tile_id_by_direction(neighbor_tile_id_level_1, direction_level_2);
+
+                                                is_alert_lava  := table_contains(*lava_alert_tile_ids_set, neighbor_tile_id_level_2);
+                                                is_alert_water := table_contains(*water_alert_tile_ids_set, neighbor_tile_id_level_2);
+                                                
+                                                if is_alert_lava || is_alert_water {
+                                                    found_alert_cardinal_neighbor = true;
+                                                    break;
+                                                }
+                                            }
+
+                                            if !found_alert_cardinal_neighbor then remove_warning_marker_on_tile_id(neighbor_tile_id_level_1);
+                                        }
+                                    }
+
+                                    remove_warning_and_alert_markers_that_are_no_longer_valid(tile_id);
+
+                                    // Encase any lava or water if we've made a full loop.
+                                    handle_encasement(tile_id, game_state);
+
+                                    // Debit the gold cost.
+                                    if !metagame.debug_mode game_state.gold -= GOLD_COST_OBSIDIAN;
+                                    create_gold_particle(mouse_pos_in_world, -1 * GOLD_COST_OBSIDIAN);
                                 }
                             }
-                        case .ADD_OBSIDIAN;
-                            if game_state.controls_state_this_frame.select_is_held_down {
-                                if metagame.debug_mode || game_state.gold >= GOLD_COST_OBSIDIAN {
-                                    // Try to turn the selected tile into obsidian
-                                    tile_id := get_tile_id_by_pos(mouse_pos_in_world);
+                        }
+                    case .ADD_WALL;
+                        if game_state.controls_state_this_frame.select_is_held_down {
+                            if metagame.debug_mode || game_state.gold >= GOLD_COST_WALL {
+                                // Try to turn the selected tile into a wall
+                                tile_id := get_tile_id_by_pos(mouse_pos_in_world);
+                                tile_is_fully_mined   := table_contains(*fully_mined_tile_ids_set, tile_id);
+                                tile_has_base_on_it   := table_contains(*tile_ids_to_bases, tile_id);
+                                tile_has_dwarf_on_it  := table_contains(*tile_ids_to_dwarfs, tile_id);
+                                tile_has_goblin_on_it := table_contains(*tile_ids_to_goblins, tile_id);
 
-                                    tile_is_iron            := table_contains(*iron_tile_ids_set, tile_id);
-                                    tile_is_being_mined     := table_contains(*actively_mined_tile_ids_to_health_table, tile_id);
-                                    tile_is_mined           := table_contains(*fully_mined_tile_ids_set, tile_id);
-                                    tile_is_mineable        := tile_is_iron || tile_is_being_mined || !tile_is_mined;
+                                can_place_wall_on_desired_tile := (
+                                    tile_is_fully_mined   &&
+                                    !tile_has_base_on_it  &&
+                                    !tile_has_dwarf_on_it &&
+                                    !tile_has_goblin_on_it
+                                );
 
-                                    tile_is_unrevealed_cave := table_contains(*cave_tile_ids_set, tile_id);
-                                    tile_is_water_still     := table_contains(*water_still_tile_ids_set, tile_id);
-                                    tile_is_water_flowing   := table_contains(*water_flowing_tile_ids_set, tile_id);
-                                    tile_is_lava_still      := table_contains(*lava_still_tile_ids_set, tile_id);
-                                    tile_is_lava_flowing    := table_contains(*lava_flowing_tile_ids_to_sprite, tile_id);
-                                    tile_is_empty           := tile_is_unrevealed_cave || tile_is_water_still || tile_is_water_flowing || tile_is_lava_still || tile_is_lava_flowing;
+                                if tile_is_fully_mined && can_place_wall_on_desired_tile { 
+                                    // Place down the wall.
+                                    set_tile_as_type(tile_id, .WALL, false, false, game_state);
 
-                                    tile_is_obsidian        := table_contains(*obsidian_tile_ids_set, tile_id);
-                                    tile_is_wall            := table_contains(*wall_tile_ids_set, tile_id);
-                                    tile_is_placed_object   := tile_is_obsidian || tile_is_wall;
+                                    // Debit the gold cost.
+                                    if !metagame.debug_mode game_state.gold -= GOLD_COST_WALL;
+                                    create_gold_particle(mouse_pos_in_world, -1 * GOLD_COST_WALL);
+                                }
+                            }
+                        }
+                    case .REMOVE;
+                        if game_state.controls_state_this_frame.select_is_held_down {
+                            tile_id := get_tile_id_by_pos(mouse_pos_in_world);
 
-                                    tile_is_encased         := table_contains(*encased_tile_ids_set, tile_id);
+                            for path: paths_in_viewport {
+                                if tile_id == path.start_tile_id {
+                                    array_unordered_remove_by_index(*paths, it_index);
+                                }
+                            }
+                        }
+                }
+            }
 
-                                    if tile_is_mineable && !tile_is_empty && !tile_is_placed_object && !tile_is_encased {
-                                        // Place down the obsidian.
-                                        set_tile_as_type(tile_id, .OBSIDIAN, false, false, *game_state);
+            if !panic_pause_is_active {
+                // Update dwarves
+                {
+                    dwarf_ids_to_kill_this_frame : [..] s32;
 
-                                        remove_warning_marker_on_tile_id :: (tile_id: s32) {
-                                            table_remove(*water_warning_tile_ids_set, tile_id);
-                                            table_remove(*lava_warning_tile_ids_set, tile_id);
-                                            array_unordered_remove_by_value(*water_warning_tile_ids, tile_id);
-                                            array_unordered_remove_by_value(*lava_warning_tile_ids, tile_id);
+                    for *dwarf, dwarf_index: dwarves {
+                        is_dwarf_done_updating := false;
+
+                        dwarf_center   := get_rect_center(get_world_rect_from_pos(dwarf.pos));
+                        dwarf_tile_id  := get_tile_id_by_pos(dwarf_center);
+                        dwarf_tile_pos := get_tile_pos_by_id(dwarf_tile_id);
+
+                        // First of all, if you're touching liquid, kill urself my man
+                        {
+                            result, chunk := find_or_create_chunk_by_tile_id(dwarf_tile_id);
+                            assert_soft(result == .CHUNK_FOUND, "Expected to find chunk for dwarf %\n", dwarf.id);
+                            for chunk.water_flowing_tile_ids {
+                                kill_pos   := get_tile_pos_by_id(it);
+                                kill_rect  := Rectangle.{ kill_pos.x, kill_pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
+                                dwarf_rect := Rectangle.{ dwarf.pos.x, dwarf.pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
+                                    
+                                if CheckCollisionRecs(dwarf_rect, kill_rect) {
+                                    array_add(*dwarf_ids_to_kill_this_frame, dwarf.id);
+                                    is_dwarf_done_updating = true;
+                                    break;
+                                }
+                            }
+
+                            if is_dwarf_done_updating break; 
+
+                            for chunk.lava_flowing_tile_ids {
+                                kill_pos   := get_tile_pos_by_id(it);
+                                kill_rect  := Rectangle.{ kill_pos.x, kill_pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
+                                dwarf_rect := Rectangle.{ dwarf.pos.x, dwarf.pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
+                                    
+                                if CheckCollisionRecs(dwarf_rect, kill_rect) {
+                                    array_add(*dwarf_ids_to_kill_this_frame, dwarf.id);
+                                    is_dwarf_done_updating = true;
+                                    break;
+                                }
+                            }
+
+                            if is_dwarf_done_updating break;
+                        }
+
+                        if #complete dwarf.state == {
+                            // You've just landed on a tile, now figure out what to do next
+                            case .DECIDING;
+                                is_dwarf_done_deciding := false;
+
+                                // By default, we're going to expect that this dwarf decises what to do this frame
+                                // (i.e. moves out of the deciding state). However, there are some cases where a dwarf
+                                // can remain in the deciding state - like if he is somehow completely unable to move.
+                                dwarf_can_remain_undecided := false;
+
+                                // Regardless of the type of dwarf, if there's a goblin right on your ass, defend yourself unless you're
+                                // under strict orders to stand down.
+                                if dwarf.ignore_goblins_for == 0 {
+                                    detected, goblin, direction_of_goblin := detect_neighbor_cardinal(dwarf_tile_id, Goblin);
+                                    if detected {
+                                        create_dwarf_aggro_particle(dwarf.pos, dwarf.id);
+
+                                        dwarf.goblin_id_attacking = goblin.id;
+                                        dwarf.direction = direction_of_goblin;
+                                        dwarf.state = .ATTACKING;
+
+                                        is_dwarf_done_deciding = true;
+                                    }
+                                } else {
+                                    dwarf.ignore_goblins_for -= 1;
+                                }
+
+                                // TODO: faster walk and mine speed when on a path, I think
+                                //
+                                // Check if the dwarf is on a path arrow. If he is, then his new mission is to follow it.
+                                if !is_dwarf_done_deciding {
+                                    for path: paths {
+                                        if dwarf_tile_id == path.start_tile_id {
+                                            tile_ids_on_path := get_tile_ids_on_path(path);
+
+                                            // Don't include the start tile, because then we softlock.
+                                            tile_ids_on_path.data  += 1;
+                                            tile_ids_on_path.count -= 1;
+
+                                            // TODO: extract this
+                                            array_reset(*(dwarf.tile_ids_on_path));
+                                            array_copy(*(dwarf.tile_ids_on_path), tile_ids_on_path);
+                                            set_entity_direction_to_face_next_target(dwarf);
+
+                                            dwarf.is_moving_quickly = true;
+
+                                            is_dwarf_done_deciding = true;
+                                            break;
+                                        }
+                                    }
+                                }
+
+                                if !is_dwarf_done_deciding {
+                                    // PERF: is this too expensive to do every frame?
+                                    //
+                                    // If the dwarf is a warrior, actively seek out goblins
+                                    if dwarf.dwarf_type == .WARRIOR {
+                                        dwarf_warrior_wander :: (dwarf: *Dwarf) {
+                                            dwarf_center  := get_rect_center(get_world_rect_from_pos(dwarf.pos));
+                                            dwarf_tile_id := get_tile_id_by_pos(dwarf_center);
+
+                                            on_top_of_base, base := table_find(*tile_ids_to_bases, dwarf_tile_id);
+                                            // If we're standing on a base right now, just keep walking in the direction you're currently going.
+                                            if on_top_of_base {
+                                                try_to_set_dwarf_target_to_one_block_in_the_direction_its_facing(dwarf);
+                                            } else {
+                                                base_neighbor_detected, base, base_direction := detect_neighbor_cardinal(dwarf_tile_id, Base);
+
+                                                // If we have a base within a cardinal direction, just keep walking in the direction you're currently going.
+                                                if base_neighbor_detected {
+                                                    try_to_set_dwarf_target_to_one_block_in_the_direction_its_facing(dwarf);
+                                                } else {
+                                                    base_neighbor_detected, base, base_direction := detect_neighbor(dwarf_tile_id, Base);
+
+                                                    // If we have a base within a diagonal direction, turn clockwise and then walk forward.
+                                                    if base_neighbor_detected {
+                                                        dwarf.direction = get_next_direction_to_face_from_base_neighbor_direction(base_direction);
+                                                        result := try_to_set_dwarf_target_to_one_block_in_the_direction_its_facing(dwarf);
+                                                        if result == .NO_DIRECTION_FOUND {
+                                                            dwarf.direction = opposite_cardinal_direction(dwarf.direction);
+                                                            try_to_set_dwarf_target_to_one_block_in_the_direction_its_facing(dwarf);
+                                                        }
+                                                    } else {
+                                                        // TODO: wander somewhat towards the nearest base
+                                                    }
+                                                }
+                                            }
                                         }
 
-                                        remove_alert_marker_on_tile_id :: (tile_id: s32) {
-                                            table_remove(*water_alert_tile_ids_set, tile_id);
-                                            table_remove(*lava_alert_tile_ids_set, tile_id);
-                                            array_unordered_remove_by_value(*water_alert_tile_ids, tile_id);
-                                            array_unordered_remove_by_value(*lava_alert_tile_ids, tile_id);
+                                        dealing_with_goblin := deal_with_nearby_goblins(dwarf);
+
+                                        if dealing_with_goblin == .NEARBY_GOBLIN_NOT_FOUND dwarf_warrior_wander(dwarf);
+                                    }
+
+                                    // If the dwarf has no targets, give him a new one
+                                    if dwarf.tile_ids_on_path.count == 0 {
+                                        dwarf.is_moving_quickly = false;
+
+                                        result := try_to_set_dwarf_random_new_target(dwarf);
+
+                                        // If there are no directions for this dwarf to go this frame,
+                                        // just do nothing and then check again the next frame.
+                                        if result == .NO_DIRECTION_FOUND {
+                                            dwarf_can_remain_undecided = true;
+                                            is_dwarf_done_deciding     = true;
+                                        }
+                                    }
+                                }
+
+                                if dwarf.tile_ids_on_path.count > 0 {
+                                    tile_id_next_in_dwarfs_path := dwarf.tile_ids_on_path[0];
+
+                                    // If it's walkable, proceed
+                                    if is_tile_id_walkable_for_entity(tile_id_next_in_dwarfs_path, dwarf.id) {
+                                        dwarf.state = .MOVING;
+                                    }
+                                    // If it's unmined, then they'll have to mine it
+                                    else {
+                                        if is_tile_id_mineable(tile_id_next_in_dwarfs_path) {
+                                            dwarf.state = .MINING;
+                                            dwarf.tile_id_mining = tile_id_next_in_dwarfs_path;
+
+                                            // Set up the world state to accomodate the fact that the dwarf is about to mine this tile.
+                                            // Plus, do some sanity checks to make sure that everything looks good.
+                                            {
+                                                // Add the tile the dwarf is about to mine to the chunk's list of actively mined tiles.
+                                                _result, chunk := find_or_create_chunk_by_tile_id(tile_id_next_in_dwarfs_path);
+                                                array_add(*chunk.actively_mined_tile_ids, tile_id_next_in_dwarfs_path);
+
+                                                // Add the tile the dwarf is about to mine to the global table of actively mined tiles and,
+                                                // in doing so, set its health.
+                                                new_health: s32;
+                                                if      is_tile_id_dirt(tile_id_next_in_dwarfs_path) new_health = xx DIRT_HEALTH;
+                                                else if is_tile_id_iron(tile_id_next_in_dwarfs_path) new_health = xx IRON_HEALTH;
+                                                else if is_tile_id_wall(tile_id_next_in_dwarfs_path) new_health = xx WALL_HEALTH;
+                                                else if (
+                                                    table_contains(*water_still_tile_ids_set,   dwarf.tile_id_mining) ||
+                                                    table_contains(*water_flowing_tile_ids_set, dwarf.tile_id_mining) ||
+                                                    table_contains(*lava_still_tile_ids_set,    dwarf.tile_id_mining) ||
+                                                    table_contains(*lava_flowing_tile_ids_to_sprite,  dwarf.tile_id_mining)
+                                                ) {
+                                                    // If you try to mine liquid, you're fucking banned
+                                                    array_add(*dwarf_ids_to_kill_this_frame, dwarf.id);
+                                                    is_dwarf_done_deciding = true;
+                                                }
+                                                else {
+                                                    is_fully_mined    := table_contains(*fully_mined_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                                    is_actively_mined := table_contains(*fully_mined_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                                    is_cave           := table_contains(*cave_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                                    is_encased        := table_contains(*encased_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                                    is_iron           := table_contains(*iron_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                                    is_water_still    := table_contains(*water_still_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                                    is_water_flowing  := table_contains(*water_flowing_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                                    is_lava_still     := table_contains(*lava_still_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                                    is_lava_flowing   := table_contains(*lava_flowing_tile_ids_to_sprite, tile_id_next_in_dwarfs_path);
+                                                    is_obsidian       := table_contains(*obsidian_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                                    is_wall           := table_contains(*wall_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                                    is_hole           := table_contains(*hole_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                                    print_vars(
+                                                        is_fully_mined,
+                                                        is_cave,
+                                                        is_encased,
+                                                        is_iron,
+                                                        is_water_still,
+                                                        is_water_flowing,
+                                                        is_lava_still,
+                                                        is_lava_flowing,
+                                                        is_obsidian,
+                                                        is_wall,
+                                                        is_hole
+                                                    );
+                                                    assert_soft(false, "Dwarf % tryna mine some weird ass shit (tile id %)", dwarf.id, tile_id_next_in_dwarfs_path);
+                                                }
+
+                                                table_set(*actively_mined_tile_ids_to_health_table, tile_id_next_in_dwarfs_path, new_health);
+                                            }
+                                        }
+                                        // If it's unmineable, first of all I'm pretty sure this shouldn't have been on their path,
+                                        // but second of all, they're going to have to figure something else out then because this
+                                        // is a dead end.
+                                        else {
+                                            try_to_set_dwarf_random_new_target(dwarf);
+                                            dwarf_can_remain_undecided = true;
+                                            dwarf.is_moving_quickly    = false;
+                                        }
+                                    }
+                                }
+
+                                assert_soft(dwarf.state != .DECIDING || dwarf_can_remain_undecided, "Dwarf % got to end of DECIDING state without making a decision", dwarf.id);
+
+                            case .MOVING;
+                                assert_soft(dwarf.tile_ids_on_path.count > 0, "Dwarf % wanted to move, but has nowhere to go", dwarf.id);
+
+                                target_tile_id  := dwarf.tile_ids_on_path[0];
+                                target_tile_pos := get_tile_pos_by_id(target_tile_id);
+
+                                assert_soft(dwarf.pos.x == target_tile_pos.x || dwarf.pos.y == target_tile_pos.y, "Dwarf % is going at an angle", dwarf.id);
+
+                                // TODO: #if DEBUG
+                                if !is_tile_id_walkable_for_entity(target_tile_id, dwarf.id) {
+                                    is_fully_mined    := table_contains(*fully_mined_tile_ids_set, target_tile_id);
+                                    is_actively_mined := table_contains(*actively_mined_tile_ids_to_health_table, target_tile_id);
+                                    is_cave           := table_contains(*cave_tile_ids_set, target_tile_id);
+                                    is_encased        := table_contains(*encased_tile_ids_set, target_tile_id);
+                                    is_iron           := table_contains(*iron_tile_ids_set, target_tile_id);
+                                    is_water_still    := table_contains(*water_still_tile_ids_set, target_tile_id);
+                                    is_water_flowing  := table_contains(*water_flowing_tile_ids_set, target_tile_id);
+                                    is_lava_still     := table_contains(*lava_still_tile_ids_set, target_tile_id);
+                                    is_lava_flowing   := table_contains(*lava_flowing_tile_ids_to_sprite, target_tile_id);
+                                    is_obsidian       := table_contains(*obsidian_tile_ids_set, target_tile_id);
+                                    is_wall           := table_contains(*wall_tile_ids_set, target_tile_id);
+                                    is_hole           := table_contains(*hole_tile_ids_set, target_tile_id);
+                                    is_dwarf          := table_contains(*tile_ids_to_dwarfs, target_tile_id);
+                                    is_goblin         := table_contains(*tile_ids_to_goblins, target_tile_id);
+                                    print_vars(
+                                        is_fully_mined,
+                                        is_actively_mined,
+                                        is_cave,
+                                        is_encased,
+                                        is_iron,
+                                        is_water_still,
+                                        is_water_flowing,
+                                        is_lava_still,
+                                        is_lava_flowing,
+                                        is_obsidian,
+                                        is_wall,
+                                        is_hole,
+                                        is_dwarf,
+                                        is_goblin
+                                    );
+                                    // assert_soft(false, "Dwarf % is trying to move into the invalid tile %\n", dwarf.id, target_tile_id);
+                                }
+
+                                // Calculate the squared distance (use squared distances so we can avoid a sqrtf).
+                                dx := target_tile_pos.x - dwarf.pos.x;
+                                dy := target_tile_pos.y - dwarf.pos.y;
+                                distance_squared := (dx * dx) + (dy * dy);
+
+                                // Calculate the squared step size
+                                speed := ifx dwarf.is_moving_quickly then DWARF_MOVE_SPEED_FAST else DWARF_MOVE_SPEED;
+                                step_size := speed * dt_seconds;
+                                step_size_squared := step_size * step_size;
+
+                                dwarf_pretty_much_reached_target := distance_squared <= step_size_squared;
+
+                                if dwarf_pretty_much_reached_target {
+                                    // Teleport dwarf to the target tile to remove any floating point weirdness.
+                                    dwarf.pos = target_tile_pos;
+
+                                    // Remove the target from the tile ids on path
+                                    array_ordered_remove_by_index(*(dwarf.tile_ids_on_path), 0);
+
+                                    // Figure out what to do next
+                                    dwarf.state = .DECIDING;
+                                } else {
+                                    move_one_step_towards_its_next_target_cardinal(dwarf, speed, dt_seconds);
+
+                                    // Remain in the .MOVING state, since we didn't reach the target yet
+                                }
+
+                            case .MINING;
+                                assert(dwarf.tile_id_mining > 0, "Dwarf tryna mine but he got no gotdamn tile to mine!!!!!!!");
+
+                                // If you try to mine liquid, you're fucking banned
+                                if (
+                                    table_contains(*water_still_tile_ids_set,   dwarf.tile_id_mining) ||
+                                    table_contains(*water_flowing_tile_ids_set, dwarf.tile_id_mining) ||
+                                    table_contains(*lava_still_tile_ids_set,    dwarf.tile_id_mining) ||
+                                    table_contains(*lava_flowing_tile_ids_to_sprite,  dwarf.tile_id_mining)
+                                ) {
+                                    kill_dwarf_by_index(dwarf_index);
+                                }
+
+                                if dwarf.mining_cooldown_ms > 0 {
+                                    dwarf.mining_cooldown_ms -= xx (dt_seconds * 1000);
+                                } else {
+                                    // TODO: swing animation, I guess
+                                
+                                    // Decrease the tile health by the dwarf mining damage
+                                    found_tile_dwarf_is_mining, current_health := table_find(*actively_mined_tile_ids_to_health_table, dwarf.tile_id_mining);
+                                    
+                                    if found_tile_dwarf_is_mining {
+                                        new_health := current_health - dwarf_get_dig_damage(dwarf);
+
+                                        if new_health <= 0 {
+                                            just_mined_iron := table_contains(*iron_tile_ids_set, dwarf.tile_id_mining);
+                                            
+                                            set_tile_as_type(dwarf.tile_id_mining, .MINED, true, true, game_state);
+
+                                            if just_mined_iron && dwarf.dwarf_type == .MINER {
+                                                found_next_iron_in_deposit, next_iron_tile_id := detect_iron_tile_id_within_radius(dwarf_tile_id, 3);
+                                                if found_next_iron_in_deposit {
+                                                    tile_ids_to_next_iron_tile := get_tile_ids_from_pos_to_pos(get_tile_pos_by_id(dwarf_tile_id), get_tile_pos_by_id(next_iron_tile_id));
+                                                    array_reset(*dwarf.tile_ids_on_path);
+                                                    array_copy(*dwarf.tile_ids_on_path, tile_ids_to_next_iron_tile);
+                                                }
+                                            }
+
+                                            // If we just cracked into a cave, we'll need to reveal the cave and do anything
+                                            // that cave type needs (e.g. spawn water, lava, monsters, etc.).
+                                            revealed_cave, cave_type := reveal_cave_if_necessary(dwarf.tile_id_mining, true, false, game_state);
+
+                                            if revealed_cave && cave_type == .TREASURE {
+                                                found, new_treasure_tile_id := detect_treasure_tile_id_within_radius(dwarf.tile_id_mining, 10);
+                                                if found {
+                                                    // Teleport dwarf to the center of the tile he's standing on before changing his pathing.
+                                                    // Without doing this, the dwarf can end up being misaligned.
+                                                    dwarf_center   := get_rect_center(get_world_rect_from_pos(dwarf.pos));
+                                                    dwarf_tile_id  := get_tile_id_by_pos(dwarf_center);
+                                                    dwarf_tile_pos := get_tile_pos_by_id(dwarf_tile_id);
+                                                    dwarf.pos = dwarf_tile_pos;
+
+                                                    tile_ids_to_new_treasure := get_tile_ids_from_pos_to_pos(get_tile_pos_by_id(dwarf.tile_id_mining), get_tile_pos_by_id(new_treasure_tile_id));
+                                                    array_reset(*dwarf.tile_ids_on_path);
+                                                    array_copy(*dwarf.tile_ids_on_path, tile_ids_to_new_treasure);
+                                                }
+                                            }
+
+                                            dwarf.tile_id_mining = 0;
+                                            dwarf.state = .DECIDING;
+                                        } else {
+                                            // If the tile just needs to take some damage, well, then damage it ya fuckin jallopy
+                                            table_set(*actively_mined_tile_ids_to_health_table, dwarf.tile_id_mining, new_health);
                                         }
 
-                                        remove_warning_and_alert_markers_that_are_no_longer_valid :: (tile_id: s32) {
-                                            // The tile that the obsidian / hole was placed on definitely doesn't need to count
-                                            // as a warning or alert anymore;
-                                            remove_warning_marker_on_tile_id(tile_id);
-                                            remove_alert_marker_on_tile_id(tile_id);
+                                        // Reset cooldown
+                                        dwarf.mining_cooldown_ms = dwarf_get_mining_cooldown(dwarf);
+                                    } else {
+                                        if metagame.debug_mode print("INFO: Dwarf was mining tile % but suddenly it was removed from the table of actively mined tiles.\n", dwarf.tile_id_mining);
+                                        // It's possible for the tile the dwarf is mining to suddenly be changed, like into obsidian.
+                                        // In this case, the dwarf should abandon the idea of mining its current tile.
+                                        array_reset(*(dwarf.tile_ids_on_path));
+                                        dwarf.tile_id_mining = 0;
+                                        dwarf.state = .DECIDING;
+                                    }
+                                }
 
-                                            // Update warnings in the surrounding area
-                                            for direction_level_1: DIRECTIONS_CARDINAL {
-                                                neighbor_tile_id_level_1 := get_neighbor_tile_id_by_direction(tile_id, direction_level_1);
+                            case .ATTACKING;
+                                if dwarf.attack_cooldown_ms > 0 {
+                                    dwarf.attack_cooldown_ms -= xx (dt_seconds * 1000);
+                                } else {
+                                    dwarf.attack_cooldown_ms = dwarf_get_attack_cooldown(dwarf);
+                                    // TODO: swing animation, I guess
 
-                                                found_alert_cardinal_neighbor := false;
+                                    // Make sure the goblin is still alive, it's possible that other dwarves have killed it this frame.
+                                    found, goblin_index := table_find(*goblin_id_to_index, dwarf.goblin_id_attacking);
+                                    if found {
+                                        goblin         := *goblins[goblin_index];
+                                        goblin_center  := get_rect_center(get_world_rect_from_pos(goblin.pos));
+                                        goblin_tile_id := get_tile_id_by_pos(goblin_center);
 
-                                                for direction_level_2: DIRECTIONS_CARDINAL {
-                                                    neighbor_tile_id_level_2 := get_neighbor_tile_id_by_direction(neighbor_tile_id_level_1, direction_level_2);
+                                        if is_tile_id_neighbor_of_tile_id_cardinal(dwarf_tile_id, goblin_tile_id) {
+                                            assert_soft(dwarf.goblin_id_attacking == goblin.id, "Dwarf % thinks he's attacking goblin % but really found goblin %", dwarf.id, dwarf.goblin_id_attacking, goblin.id);
 
-                                                    is_alert_lava  := table_contains(*lava_alert_tile_ids_set, neighbor_tile_id_level_2);
-                                                    is_alert_water := table_contains(*water_alert_tile_ids_set, neighbor_tile_id_level_2);
-                                                    
-                                                    if is_alert_lava || is_alert_water {
-                                                        found_alert_cardinal_neighbor = true;
+                                            // Hit check
+                                            rng := random_get_within_range(0, 1);
+                                            swing_connected := rng <= dwarf_get_hit_chance(dwarf);
+
+                                            if swing_connected {
+                                                damage := dwarf_get_attack_damage(dwarf);
+
+                                                // TODO: probably extract this
+                                                direction_stars_should_fly: Direction;
+                                                found_direction := false;
+                                                for DIRECTIONS_CARDINAL {
+                                                    neighbor_tile_id := get_neighbor_tile_id_by_direction(dwarf_tile_id, it);
+                                                    if neighbor_tile_id == goblin_tile_id {
+                                                        direction_stars_should_fly = it;
+                                                        found_direction = true;
                                                         break;
                                                     }
                                                 }
+                                                assert_soft(found_direction, "Was trying to figure out what direction the damage star should fly when dwarf % connected an attack on goblin %, but didn't detect the goblin as a cardinal neighbor of the dwarf\n", dwarf.id, goblin.id);
 
-                                                if !found_alert_cardinal_neighbor then remove_warning_marker_on_tile_id(neighbor_tile_id_level_1);
-                                            }
-                                        }
+                                                create_damage_particles(goblin.pos, damage, direction_stars_should_fly);
 
-                                        remove_warning_and_alert_markers_that_are_no_longer_valid(tile_id);
+                                                goblin.hp -= damage;
 
-                                        // Encase any lava or water if we've made a full loop.
-                                        handle_encasement(tile_id, *game_state);
+                                                if goblin.hp <= 0 {
+                                                    kill_goblin_by_id(goblin.id);
 
-                                        // Debit the gold cost.
-                                        if !metagame.debug_mode game_state.gold -= GOLD_COST_OBSIDIAN;
-                                        create_gold_particle(mouse_pos_in_world, -1 * GOLD_COST_OBSIDIAN);
-                                    }
-                                }
-                            }
-                        case .ADD_WALL;
-                            if game_state.controls_state_this_frame.select_is_held_down {
-                                if metagame.debug_mode || game_state.gold >= GOLD_COST_WALL {
-                                    // Try to turn the selected tile into a wall
-                                    tile_id := get_tile_id_by_pos(mouse_pos_in_world);
-                                    tile_is_fully_mined   := table_contains(*fully_mined_tile_ids_set, tile_id);
-                                    tile_has_base_on_it   := table_contains(*tile_ids_to_bases, tile_id);
-                                    tile_has_dwarf_on_it  := table_contains(*tile_ids_to_dwarfs, tile_id);
-                                    tile_has_goblin_on_it := table_contains(*tile_ids_to_goblins, tile_id);
-
-                                    can_place_wall_on_desired_tile := (
-                                        tile_is_fully_mined   &&
-                                        !tile_has_base_on_it  &&
-                                        !tile_has_dwarf_on_it &&
-                                        !tile_has_goblin_on_it
-                                    );
-
-                                    if tile_is_fully_mined && can_place_wall_on_desired_tile { 
-                                        // Place down the wall.
-                                        set_tile_as_type(tile_id, .WALL, false, false, *game_state);
-
-                                        // Debit the gold cost.
-                                        if !metagame.debug_mode game_state.gold -= GOLD_COST_WALL;
-                                        create_gold_particle(mouse_pos_in_world, -1 * GOLD_COST_WALL);
-                                    }
-                                }
-                            }
-                        case .REMOVE;
-                            if game_state.controls_state_this_frame.select_is_held_down {
-                                tile_id := get_tile_id_by_pos(mouse_pos_in_world);
-
-                                for path: paths_in_viewport {
-                                    if tile_id == path.start_tile_id {
-                                        array_unordered_remove_by_index(*paths, it_index);
-                                    }
-                                }
-                            }
-                    }
-                }
-
-                if !panic_pause_is_active {
-                    // Update dwarves
-                    {
-                        dwarf_ids_to_kill_this_frame : [..] s32;
-
-                        for *dwarf, dwarf_index: dwarves {
-                            is_dwarf_done_updating := false;
-
-                            dwarf_center   := get_rect_center(get_world_rect_from_pos(dwarf.pos));
-                            dwarf_tile_id  := get_tile_id_by_pos(dwarf_center);
-                            dwarf_tile_pos := get_tile_pos_by_id(dwarf_tile_id);
-
-                            // First of all, if you're touching liquid, kill urself my man
-                            {
-                                result, chunk := find_or_create_chunk_by_tile_id(dwarf_tile_id);
-                                assert_soft(result == .CHUNK_FOUND, "Expected to find chunk for dwarf %\n", dwarf.id);
-                                for chunk.water_flowing_tile_ids {
-                                    kill_pos   := get_tile_pos_by_id(it);
-                                    kill_rect  := Rectangle.{ kill_pos.x, kill_pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
-                                    dwarf_rect := Rectangle.{ dwarf.pos.x, dwarf.pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
-                                        
-                                    if CheckCollisionRecs(dwarf_rect, kill_rect) {
-                                        array_add(*dwarf_ids_to_kill_this_frame, dwarf.id);
-                                        is_dwarf_done_updating = true;
-                                        break;
-                                    }
-                                }
-
-                                if is_dwarf_done_updating break; 
-
-                                for chunk.lava_flowing_tile_ids {
-                                    kill_pos   := get_tile_pos_by_id(it);
-                                    kill_rect  := Rectangle.{ kill_pos.x, kill_pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
-                                    dwarf_rect := Rectangle.{ dwarf.pos.x, dwarf.pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
-                                        
-                                    if CheckCollisionRecs(dwarf_rect, kill_rect) {
-                                        array_add(*dwarf_ids_to_kill_this_frame, dwarf.id);
-                                        is_dwarf_done_updating = true;
-                                        break;
-                                    }
-                                }
-
-                                if is_dwarf_done_updating break;
-                            }
-
-                            if #complete dwarf.state == {
-                                // You've just landed on a tile, now figure out what to do next
-                                case .DECIDING;
-                                    is_dwarf_done_deciding := false;
-
-                                    // By default, we're going to expect that this dwarf decises what to do this frame
-                                    // (i.e. moves out of the deciding state). However, there are some cases where a dwarf
-                                    // can remain in the deciding state - like if he is somehow completely unable to move.
-                                    dwarf_can_remain_undecided := false;
-
-                                    // Regardless of the type of dwarf, if there's a goblin right on your ass, defend yourself unless you're
-                                    // under strict orders to stand down.
-                                    if dwarf.ignore_goblins_for == 0 {
-                                        detected, goblin, direction_of_goblin := detect_neighbor_cardinal(dwarf_tile_id, Goblin);
-                                        if detected {
-                                            create_dwarf_aggro_particle(dwarf.pos, dwarf.id);
-
-                                            dwarf.goblin_id_attacking = goblin.id;
-                                            dwarf.direction = direction_of_goblin;
-                                            dwarf.state = .ATTACKING;
-
-                                            is_dwarf_done_deciding = true;
-                                        }
-                                    } else {
-                                        dwarf.ignore_goblins_for -= 1;
-                                    }
-
-                                    // TODO: faster walk and mine speed when on a path, I think
-                                    //
-                                    // Check if the dwarf is on a path arrow. If he is, then his new mission is to follow it.
-                                    if !is_dwarf_done_deciding {
-                                        for path: paths {
-                                            if dwarf_tile_id == path.start_tile_id {
-                                                tile_ids_on_path := get_tile_ids_on_path(path);
-
-                                                // Don't include the start tile, because then we softlock.
-                                                tile_ids_on_path.data  += 1;
-                                                tile_ids_on_path.count -= 1;
-
-                                                // TODO: extract this
-                                                array_reset(*(dwarf.tile_ids_on_path));
-                                                array_copy(*(dwarf.tile_ids_on_path), tile_ids_on_path);
-                                                set_entity_direction_to_face_next_target(dwarf);
-
-                                                dwarf.is_moving_quickly = true;
-
-                                                is_dwarf_done_deciding = true;
-                                                break;
-                                            }
-                                        }
-                                    }
-
-                                    if !is_dwarf_done_deciding {
-                                        // PERF: is this too expensive to do every frame?
-                                        //
-                                        // If the dwarf is a warrior, actively seek out goblins
-                                        if dwarf.dwarf_type == .WARRIOR {
-                                            dwarf_warrior_wander :: (dwarf: *Dwarf) {
-                                                dwarf_center  := get_rect_center(get_world_rect_from_pos(dwarf.pos));
-                                                dwarf_tile_id := get_tile_id_by_pos(dwarf_center);
-
-                                                on_top_of_base, base := table_find(*tile_ids_to_bases, dwarf_tile_id);
-                                                // If we're standing on a base right now, just keep walking in the direction you're currently going.
-                                                if on_top_of_base {
-                                                    try_to_set_dwarf_target_to_one_block_in_the_direction_its_facing(dwarf);
-                                                } else {
-                                                    base_neighbor_detected, base, base_direction := detect_neighbor_cardinal(dwarf_tile_id, Base);
-
-                                                    // If we have a base within a cardinal direction, just keep walking in the direction you're currently going.
-                                                    if base_neighbor_detected {
-                                                        try_to_set_dwarf_target_to_one_block_in_the_direction_its_facing(dwarf);
-                                                    } else {
-                                                        base_neighbor_detected, base, base_direction := detect_neighbor(dwarf_tile_id, Base);
-
-                                                        // If we have a base within a diagonal direction, turn clockwise and then walk forward.
-                                                        if base_neighbor_detected {
-                                                            dwarf.direction = get_next_direction_to_face_from_base_neighbor_direction(base_direction);
-                                                            result := try_to_set_dwarf_target_to_one_block_in_the_direction_its_facing(dwarf);
-                                                            if result == .NO_DIRECTION_FOUND {
-                                                                dwarf.direction = opposite_cardinal_direction(dwarf.direction);
-                                                                try_to_set_dwarf_target_to_one_block_in_the_direction_its_facing(dwarf);
-                                                            }
-                                                        } else {
-                                                            // TODO: wander somewhat towards the nearest base
-                                                        }
-                                                    }
-                                                }
-                                            }
-
-                                            dealing_with_goblin := deal_with_nearby_goblins(dwarf);
-
-                                            if dealing_with_goblin == .NEARBY_GOBLIN_NOT_FOUND dwarf_warrior_wander(dwarf);
-                                        }
-
-                                        // If the dwarf has no targets, give him a new one
-                                        if dwarf.tile_ids_on_path.count == 0 {
-                                            dwarf.is_moving_quickly = false;
-
-                                            result := try_to_set_dwarf_random_new_target(dwarf);
-
-                                            // If there are no directions for this dwarf to go this frame,
-                                            // just do nothing and then check again the next frame.
-                                            if result == .NO_DIRECTION_FOUND {
-                                                dwarf_can_remain_undecided = true;
-                                                is_dwarf_done_deciding     = true;
-                                            }
-                                        }
-                                    }
-
-                                    if dwarf.tile_ids_on_path.count > 0 {
-                                        tile_id_next_in_dwarfs_path := dwarf.tile_ids_on_path[0];
-
-                                        // If it's walkable, proceed
-                                        if is_tile_id_walkable_for_entity(tile_id_next_in_dwarfs_path, dwarf.id) {
-                                            dwarf.state = .MOVING;
-                                        }
-                                        // If it's unmined, then they'll have to mine it
-                                        else {
-                                            if is_tile_id_mineable(tile_id_next_in_dwarfs_path) {
-                                                dwarf.state = .MINING;
-                                                dwarf.tile_id_mining = tile_id_next_in_dwarfs_path;
-
-                                                // Set up the world state to accomodate the fact that the dwarf is about to mine this tile.
-                                                // Plus, do some sanity checks to make sure that everything looks good.
-                                                {
-                                                    // Add the tile the dwarf is about to mine to the chunk's list of actively mined tiles.
-                                                    _result, chunk := find_or_create_chunk_by_tile_id(tile_id_next_in_dwarfs_path);
-                                                    array_add(*chunk.actively_mined_tile_ids, tile_id_next_in_dwarfs_path);
-
-                                                    // Add the tile the dwarf is about to mine to the global table of actively mined tiles and,
-                                                    // in doing so, set its health.
-                                                    new_health: s32;
-                                                    if      is_tile_id_dirt(tile_id_next_in_dwarfs_path) new_health = xx DIRT_HEALTH;
-                                                    else if is_tile_id_iron(tile_id_next_in_dwarfs_path) new_health = xx IRON_HEALTH;
-                                                    else if is_tile_id_wall(tile_id_next_in_dwarfs_path) new_health = xx WALL_HEALTH;
-                                                    else if (
-                                                        table_contains(*water_still_tile_ids_set,   dwarf.tile_id_mining) ||
-                                                        table_contains(*water_flowing_tile_ids_set, dwarf.tile_id_mining) ||
-                                                        table_contains(*lava_still_tile_ids_set,    dwarf.tile_id_mining) ||
-                                                        table_contains(*lava_flowing_tile_ids_to_sprite,  dwarf.tile_id_mining)
-                                                    ) {
-                                                        // If you try to mine liquid, you're fucking banned
-                                                        array_add(*dwarf_ids_to_kill_this_frame, dwarf.id);
-                                                        is_dwarf_done_deciding = true;
-                                                    }
-                                                    else {
-                                                        is_fully_mined    := table_contains(*fully_mined_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                                        is_actively_mined := table_contains(*fully_mined_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                                        is_cave           := table_contains(*cave_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                                        is_encased        := table_contains(*encased_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                                        is_iron           := table_contains(*iron_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                                        is_water_still    := table_contains(*water_still_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                                        is_water_flowing  := table_contains(*water_flowing_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                                        is_lava_still     := table_contains(*lava_still_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                                        is_lava_flowing   := table_contains(*lava_flowing_tile_ids_to_sprite, tile_id_next_in_dwarfs_path);
-                                                        is_obsidian       := table_contains(*obsidian_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                                        is_wall           := table_contains(*wall_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                                        is_hole           := table_contains(*hole_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                                        print_vars(
-                                                            is_fully_mined,
-                                                            is_cave,
-                                                            is_encased,
-                                                            is_iron,
-                                                            is_water_still,
-                                                            is_water_flowing,
-                                                            is_lava_still,
-                                                            is_lava_flowing,
-                                                            is_obsidian,
-                                                            is_wall,
-                                                            is_hole
-                                                        );
-                                                        assert_soft(false, "Dwarf % tryna mine some weird ass shit (tile id %)", dwarf.id, tile_id_next_in_dwarfs_path);
-                                                    }
-
-                                                    table_set(*actively_mined_tile_ids_to_health_table, tile_id_next_in_dwarfs_path, new_health);
-                                                }
-                                            }
-                                            // If it's unmineable, first of all I'm pretty sure this shouldn't have been on their path,
-                                            // but second of all, they're going to have to figure something else out then because this
-                                            // is a dead end.
-                                            else {
-                                                try_to_set_dwarf_random_new_target(dwarf);
-                                                dwarf_can_remain_undecided = true;
-                                                dwarf.is_moving_quickly    = false;
-                                            }
-                                        }
-                                    }
-
-                                    assert_soft(dwarf.state != .DECIDING || dwarf_can_remain_undecided, "Dwarf % got to end of DECIDING state without making a decision", dwarf.id);
-
-                                case .MOVING;
-                                    assert_soft(dwarf.tile_ids_on_path.count > 0, "Dwarf % wanted to move, but has nowhere to go", dwarf.id);
-
-                                    target_tile_id  := dwarf.tile_ids_on_path[0];
-                                    target_tile_pos := get_tile_pos_by_id(target_tile_id);
-
-                                    assert_soft(dwarf.pos.x == target_tile_pos.x || dwarf.pos.y == target_tile_pos.y, "Dwarf % is going at an angle", dwarf.id);
-
-                                    // TODO: #if DEBUG
-                                    if !is_tile_id_walkable_for_entity(target_tile_id, dwarf.id) {
-                                        is_fully_mined    := table_contains(*fully_mined_tile_ids_set, target_tile_id);
-                                        is_actively_mined := table_contains(*actively_mined_tile_ids_to_health_table, target_tile_id);
-                                        is_cave           := table_contains(*cave_tile_ids_set, target_tile_id);
-                                        is_encased        := table_contains(*encased_tile_ids_set, target_tile_id);
-                                        is_iron           := table_contains(*iron_tile_ids_set, target_tile_id);
-                                        is_water_still    := table_contains(*water_still_tile_ids_set, target_tile_id);
-                                        is_water_flowing  := table_contains(*water_flowing_tile_ids_set, target_tile_id);
-                                        is_lava_still     := table_contains(*lava_still_tile_ids_set, target_tile_id);
-                                        is_lava_flowing   := table_contains(*lava_flowing_tile_ids_to_sprite, target_tile_id);
-                                        is_obsidian       := table_contains(*obsidian_tile_ids_set, target_tile_id);
-                                        is_wall           := table_contains(*wall_tile_ids_set, target_tile_id);
-                                        is_hole           := table_contains(*hole_tile_ids_set, target_tile_id);
-                                        is_dwarf          := table_contains(*tile_ids_to_dwarfs, target_tile_id);
-                                        is_goblin         := table_contains(*tile_ids_to_goblins, target_tile_id);
-                                        print_vars(
-                                            is_fully_mined,
-                                            is_actively_mined,
-                                            is_cave,
-                                            is_encased,
-                                            is_iron,
-                                            is_water_still,
-                                            is_water_flowing,
-                                            is_lava_still,
-                                            is_lava_flowing,
-                                            is_obsidian,
-                                            is_wall,
-                                            is_hole,
-                                            is_dwarf,
-                                            is_goblin
-                                        );
-                                        // assert_soft(false, "Dwarf % is trying to move into the invalid tile %\n", dwarf.id, target_tile_id);
-                                    }
-
-                                    // Calculate the squared distance (use squared distances so we can avoid a sqrtf).
-                                    dx := target_tile_pos.x - dwarf.pos.x;
-                                    dy := target_tile_pos.y - dwarf.pos.y;
-                                    distance_squared := (dx * dx) + (dy * dy);
-
-                                    // Calculate the squared step size
-                                    speed := ifx dwarf.is_moving_quickly then DWARF_MOVE_SPEED_FAST else DWARF_MOVE_SPEED;
-                                    step_size := speed * dt_seconds;
-                                    step_size_squared := step_size * step_size;
-
-                                    dwarf_pretty_much_reached_target := distance_squared <= step_size_squared;
-
-                                    if dwarf_pretty_much_reached_target {
-                                        // Teleport dwarf to the target tile to remove any floating point weirdness.
-                                        dwarf.pos = target_tile_pos;
-
-                                        // Remove the target from the tile ids on path
-                                        array_ordered_remove_by_index(*(dwarf.tile_ids_on_path), 0);
-
-                                        // Figure out what to do next
-                                        dwarf.state = .DECIDING;
-                                    } else {
-                                        move_one_step_towards_its_next_target_cardinal(dwarf, speed, dt_seconds);
-
-                                        // Remain in the .MOVING state, since we didn't reach the target yet
-                                    }
-
-                                case .MINING;
-                                    assert(dwarf.tile_id_mining > 0, "Dwarf tryna mine but he got no gotdamn tile to mine!!!!!!!");
-
-                                    // If you try to mine liquid, you're fucking banned
-                                    if (
-                                        table_contains(*water_still_tile_ids_set,   dwarf.tile_id_mining) ||
-                                        table_contains(*water_flowing_tile_ids_set, dwarf.tile_id_mining) ||
-                                        table_contains(*lava_still_tile_ids_set,    dwarf.tile_id_mining) ||
-                                        table_contains(*lava_flowing_tile_ids_to_sprite,  dwarf.tile_id_mining)
-                                    ) {
-                                        kill_dwarf_by_index(dwarf_index);
-                                    }
-
-                                    if dwarf.mining_cooldown_ms > 0 {
-                                        dwarf.mining_cooldown_ms -= xx (dt_seconds * 1000);
-                                    } else {
-                                        // TODO: swing animation, I guess
-                                    
-                                        // Decrease the tile health by the dwarf mining damage
-                                        found_tile_dwarf_is_mining, current_health := table_find(*actively_mined_tile_ids_to_health_table, dwarf.tile_id_mining);
-                                        
-                                        if found_tile_dwarf_is_mining {
-                                            new_health := current_health - dwarf_get_dig_damage(dwarf);
-
-                                            if new_health <= 0 {
-                                                just_mined_iron := table_contains(*iron_tile_ids_set, dwarf.tile_id_mining);
-                                                
-                                                set_tile_as_type(dwarf.tile_id_mining, .MINED, true, true, *game_state);
-
-                                                if just_mined_iron && dwarf.dwarf_type == .MINER {
-                                                    found_next_iron_in_deposit, next_iron_tile_id := detect_iron_tile_id_within_radius(dwarf_tile_id, 3);
-                                                    if found_next_iron_in_deposit {
-                                                        tile_ids_to_next_iron_tile := get_tile_ids_from_pos_to_pos(get_tile_pos_by_id(dwarf_tile_id), get_tile_pos_by_id(next_iron_tile_id));
-                                                        array_reset(*dwarf.tile_ids_on_path);
-                                                        array_copy(*dwarf.tile_ids_on_path, tile_ids_to_next_iron_tile);
-                                                    }
-                                                }
-
-                                                // If we just cracked into a cave, we'll need to reveal the cave and do anything
-                                                // that cave type needs (e.g. spawn water, lava, monsters, etc.).
-                                                revealed_cave, cave_type := reveal_cave_if_necessary(dwarf.tile_id_mining, true, false, *game_state);
-
-                                                if revealed_cave && cave_type == .TREASURE {
-                                                    found, new_treasure_tile_id := detect_treasure_tile_id_within_radius(dwarf.tile_id_mining, 10);
-                                                    if found {
-                                                        // Teleport dwarf to the center of the tile he's standing on before changing his pathing.
-                                                        // Without doing this, the dwarf can end up being misaligned.
-                                                        dwarf_center   := get_rect_center(get_world_rect_from_pos(dwarf.pos));
-                                                        dwarf_tile_id  := get_tile_id_by_pos(dwarf_center);
-                                                        dwarf_tile_pos := get_tile_pos_by_id(dwarf_tile_id);
-                                                        dwarf.pos = dwarf_tile_pos;
-
-                                                        tile_ids_to_new_treasure := get_tile_ids_from_pos_to_pos(get_tile_pos_by_id(dwarf.tile_id_mining), get_tile_pos_by_id(new_treasure_tile_id));
-                                                        array_reset(*dwarf.tile_ids_on_path);
-                                                        array_copy(*dwarf.tile_ids_on_path, tile_ids_to_new_treasure);
-                                                    }
-                                                }
-
-                                                dwarf.tile_id_mining = 0;
-                                                dwarf.state = .DECIDING;
-                                            } else {
-                                                // If the tile just needs to take some damage, well, then damage it ya fuckin jallopy
-                                                table_set(*actively_mined_tile_ids_to_health_table, dwarf.tile_id_mining, new_health);
-                                            }
-
-                                            // Reset cooldown
-                                            dwarf.mining_cooldown_ms = dwarf_get_mining_cooldown(dwarf);
-                                        } else {
-                                            if metagame.debug_mode print("INFO: Dwarf was mining tile % but suddenly it was removed from the table of actively mined tiles.\n", dwarf.tile_id_mining);
-                                            // It's possible for the tile the dwarf is mining to suddenly be changed, like into obsidian.
-                                            // In this case, the dwarf should abandon the idea of mining its current tile.
-                                            array_reset(*(dwarf.tile_ids_on_path));
-                                            dwarf.tile_id_mining = 0;
-                                            dwarf.state = .DECIDING;
-                                        }
-                                    }
-
-                                case .ATTACKING;
-                                    if dwarf.attack_cooldown_ms > 0 {
-                                        dwarf.attack_cooldown_ms -= xx (dt_seconds * 1000);
-                                    } else {
-                                        dwarf.attack_cooldown_ms = dwarf_get_attack_cooldown(dwarf);
-                                        // TODO: swing animation, I guess
-
-                                        // Make sure the goblin is still alive, it's possible that other dwarves have killed it this frame.
-                                        found, goblin_index := table_find(*goblin_id_to_index, dwarf.goblin_id_attacking);
-                                        if found {
-                                            goblin         := *goblins[goblin_index];
-                                            goblin_center  := get_rect_center(get_world_rect_from_pos(goblin.pos));
-                                            goblin_tile_id := get_tile_id_by_pos(goblin_center);
-
-                                            if is_tile_id_neighbor_of_tile_id_cardinal(dwarf_tile_id, goblin_tile_id) {
-                                                assert_soft(dwarf.goblin_id_attacking == goblin.id, "Dwarf % thinks he's attacking goblin % but really found goblin %", dwarf.id, dwarf.goblin_id_attacking, goblin.id);
-
-                                                // Hit check
-                                                rng := random_get_within_range(0, 1);
-                                                swing_connected := rng <= dwarf_get_hit_chance(dwarf);
-
-                                                if swing_connected {
-                                                    damage := dwarf_get_attack_damage(dwarf);
-
-                                                    // TODO: probably extract this
-                                                    direction_stars_should_fly: Direction;
-                                                    found_direction := false;
-                                                    for DIRECTIONS_CARDINAL {
-                                                        neighbor_tile_id := get_neighbor_tile_id_by_direction(dwarf_tile_id, it);
-                                                        if neighbor_tile_id == goblin_tile_id {
-                                                            direction_stars_should_fly = it;
-                                                            found_direction = true;
-                                                            break;
-                                                        }
-                                                    }
-                                                    assert_soft(found_direction, "Was trying to figure out what direction the damage star should fly when dwarf % connected an attack on goblin %, but didn't detect the goblin as a cardinal neighbor of the dwarf\n", dwarf.id, goblin.id);
-
-                                                    create_damage_particles(goblin.pos, damage, direction_stars_should_fly);
-
-                                                    goblin.hp -= damage;
-
-                                                    if goblin.hp <= 0 {
-                                                        kill_goblin_by_id(goblin.id);
-
-                                                        dwarf.state = .DECIDING;
-                                                        dwarf.goblin_id_attacking = 0;
-                                                    }
-                                                } else {
-                                                    create_miss_particles(goblin.pos);
+                                                    dwarf.state = .DECIDING;
+                                                    dwarf.goblin_id_attacking = 0;
                                                 }
                                             } else {
-                                                dwarf.state = .DECIDING;
-                                                dwarf.goblin_id_attacking = 0;
-                                            }                                            
+                                                create_miss_particles(goblin.pos);
+                                            }
                                         } else {
                                             dwarf.state = .DECIDING;
                                             dwarf.goblin_id_attacking = 0;
-                                        }
+                                        }                                            
+                                    } else {
+                                        dwarf.state = .DECIDING;
+                                        dwarf.goblin_id_attacking = 0;
                                     }
-                                case .IDLE;
-                            }
+                                }
+                            case .IDLE;
                         }
-
-                        for dwarf_ids_to_kill_this_frame kill_dwarf_by_id(it);
                     }
 
-                    // Update goblins
-                    {
-                        for *goblin: goblins {
-                            goblin_center   := get_rect_center(get_world_rect_from_pos(goblin.pos));
-                            goblin_tile_id  := get_tile_id_by_pos(goblin_center);
-                            goblin_tile_pos := get_tile_pos_by_id(goblin_tile_id);
+                    for dwarf_ids_to_kill_this_frame kill_dwarf_by_id(it);
+                }
 
-                            if #complete goblin.state == {
-                                case .DECIDING;
-                                    is_goblin_done_deciding     := false;
-                                    goblin_can_remain_undecided := false;
+                // Update goblins
+                {
+                    for *goblin: goblins {
+                        goblin_center   := get_rect_center(get_world_rect_from_pos(goblin.pos));
+                        goblin_tile_id  := get_tile_id_by_pos(goblin_center);
+                        goblin_tile_pos := get_tile_pos_by_id(goblin_tile_id);
 
-                                    assert_soft(xx Vector2Equals(goblin.pos, goblin_tile_pos), "Goblin % was not precisely on its tile while deciding what to do next.", goblin.id);
+                        if #complete goblin.state == {
+                            case .DECIDING;
+                                is_goblin_done_deciding     := false;
+                                goblin_can_remain_undecided := false;
 
-                                    // If there are any cardinal neighbor dwarves, turn and attack them.
-                                    if !is_goblin_done_deciding {
-                                        detected, dwarf := find_cardinal_neighbor_entity(goblin_tile_id, Dwarf);
+                                assert_soft(xx Vector2Equals(goblin.pos, goblin_tile_pos), "Goblin % was not precisely on its tile while deciding what to do next.", goblin.id);
 
-                                        if detected {
-                                            // TODO: set goblin direction
-                                            goblin.state = .ATTACKING;
-                                            goblin.entity_id_attacking = dwarf.id;
+                                // If there are any cardinal neighbor dwarves, turn and attack them.
+                                if !is_goblin_done_deciding {
+                                    detected, dwarf := find_cardinal_neighbor_entity(goblin_tile_id, Dwarf);
 
-                                            is_goblin_done_deciding = true;
-                                        }
+                                    if detected {
+                                        // TODO: set goblin direction
+                                        goblin.state = .ATTACKING;
+                                        goblin.entity_id_attacking = dwarf.id;
+
+                                        is_goblin_done_deciding = true;
                                     }
+                                }
 
-                                    // If there are any cardinal neighbor bases, turn and fight them.
-                                    if !is_goblin_done_deciding {
-                                        detected, base := find_cardinal_neighbor_entity(goblin_tile_id, Base);
+                                // If there are any cardinal neighbor bases, turn and fight them.
+                                if !is_goblin_done_deciding {
+                                    detected, base := find_cardinal_neighbor_entity(goblin_tile_id, Base);
 
-                                        if detected {
-                                            // TODO: set goblin direction
-                                            goblin.state = .ATTACKING;
-                                            goblin.entity_id_attacking = base.id;
+                                    if detected {
+                                        // TODO: set goblin direction
+                                        goblin.state = .ATTACKING;
+                                        goblin.entity_id_attacking = base.id;
 
-                                            is_goblin_done_deciding = true;
-                                        }
+                                        is_goblin_done_deciding = true;
                                     }
+                                }
 
-                                    // If there are any dwarves within line of sight, move towards the tile they're spotted on.
-                                    if !is_goblin_done_deciding {
-                                        detected, _, tile_ids_path := find_line_of_sight_entity(goblin_tile_id, Dwarf, GOBLIN_LINE_OF_SIGHT_TILE_COUNT);
+                                // If there are any dwarves within line of sight, move towards the tile they're spotted on.
+                                if !is_goblin_done_deciding {
+                                    detected, _, tile_ids_path := find_line_of_sight_entity(goblin_tile_id, Dwarf, GOBLIN_LINE_OF_SIGHT_TILE_COUNT);
 
-                                        if detected {
+                                    if detected {
+                                        set_tile_ids_on_path(goblin, *tile_ids_path);
+                                        is_goblin_done_deciding = true;
+                                    }
+                                }
+
+                                // If there are any dwarves within 3 tiles, move towards them.
+                                if !is_goblin_done_deciding {
+                                    detected, dwarf, tile_ids_path := detect_entity_within_radius(Dwarf, goblin_tile_id, 3);
+
+                                    if detected {
+                                        if goblin_tile_id != get_tile_id_by_pos(dwarf.pos) {
                                             set_tile_ids_on_path(goblin, *tile_ids_path);
-                                            is_goblin_done_deciding = true;
                                         }
+                                        is_goblin_done_deciding = true;
                                     }
+                                }
 
-                                    // If there are any dwarves within 3 tiles, move towards them.
-                                    if !is_goblin_done_deciding {
-                                        detected, dwarf, tile_ids_path := detect_entity_within_radius(Dwarf, goblin_tile_id, 3);
-
-                                        if detected {
-                                            if goblin_tile_id != get_tile_id_by_pos(dwarf.pos) {
-                                                set_tile_ids_on_path(goblin, *tile_ids_path);
-                                            }
-                                            is_goblin_done_deciding = true;
-                                        }
+                                // If there are any bases within line of sight, move towards the tile they're spotted on.
+                                if !is_goblin_done_deciding {
+                                    detected, _, tile_ids_path := find_line_of_sight_entity(goblin_tile_id, Base, GOBLIN_LINE_OF_SIGHT_TILE_COUNT);
+                                    
+                                    if detected {
+                                        set_tile_ids_on_path(goblin, *tile_ids_path);
+                                        is_goblin_done_deciding = true;
                                     }
+                                }
 
-                                    // If there are any bases within line of sight, move towards the tile they're spotted on.
-                                    if !is_goblin_done_deciding {
-                                        detected, _, tile_ids_path := find_line_of_sight_entity(goblin_tile_id, Base, GOBLIN_LINE_OF_SIGHT_TILE_COUNT);
-                                        
-                                        if detected {
+                                // If there are any bases within 10 tiles, move towards them.
+                                if !is_goblin_done_deciding {
+                                    detected, base, tile_ids_path := detect_entity_within_radius(Base, goblin_tile_id, 10);
+
+                                    if detected {
+                                        if goblin_tile_id != get_tile_id_by_pos(base.pos) {
                                             set_tile_ids_on_path(goblin, *tile_ids_path);
-                                            is_goblin_done_deciding = true;
                                         }
+                                        is_goblin_done_deciding = true;
                                     }
+                                }
 
-                                    // If there are any bases within 10 tiles, move towards them.
-                                    if !is_goblin_done_deciding {
-                                        detected, base, tile_ids_path := detect_entity_within_radius(Base, goblin_tile_id, 10);
-
-                                        if detected {
-                                            if goblin_tile_id != get_tile_id_by_pos(base.pos) {
-                                                set_tile_ids_on_path(goblin, *tile_ids_path);
-                                            }
-                                            is_goblin_done_deciding = true;
-                                        }
-                                    }
-
-                                    if goblin.state == .DECIDING {
-                                        if can_entity_make_progress(goblin) {
+                                if goblin.state == .DECIDING {
+                                    if can_entity_make_progress(goblin) {
+                                        goblin.state = .MOVING;
+                                    } else {
+                                        result := try_to_set_goblin_random_new_target(goblin);
+                                        if result == .DIRECTION_FOUND {
                                             goblin.state = .MOVING;
                                         } else {
-                                            result := try_to_set_goblin_random_new_target(goblin);
-                                            if result == .DIRECTION_FOUND {
-                                                goblin.state = .MOVING;
-                                            } else {
-                                                goblin_can_remain_undecided = true;
-                                            }
+                                            goblin_can_remain_undecided = true;
                                         }
                                     }
+                                }
 
-                                    assert_soft(goblin.state != .DECIDING || goblin_can_remain_undecided, "Goblin % got to end of DECIDING state without making a decision\n", goblin.id);
+                                assert_soft(goblin.state != .DECIDING || goblin_can_remain_undecided, "Goblin % got to end of DECIDING state without making a decision\n", goblin.id);
 
-                                case .MOVING;
-                                    assert_soft(goblin.tile_ids_on_path.count > 0, "Goblin % was moving somewhere but has no target\n", goblin.id);
+                            case .MOVING;
+                                assert_soft(goblin.tile_ids_on_path.count > 0, "Goblin % was moving somewhere but has no target\n", goblin.id);
 
-                                    target_tile_id  := goblin.tile_ids_on_path[0];
-                                    target_tile_pos := get_tile_pos_by_id(target_tile_id);
+                                target_tile_id  := goblin.tile_ids_on_path[0];
+                                target_tile_pos := get_tile_pos_by_id(target_tile_id);
 
-                                    // assert_soft(goblin.pos.x == target_tile_pos.x || goblin.pos.y == target_tile_pos.y, "Goblin id % is going at an angle", goblin.id);
+                                // assert_soft(goblin.pos.x == target_tile_pos.x || goblin.pos.y == target_tile_pos.y, "Goblin id % is going at an angle", goblin.id);
 
-                                    tile_id_next_in_goblin_path := goblin.tile_ids_on_path[0];
+                                tile_id_next_in_goblin_path := goblin.tile_ids_on_path[0];
 
-                                    goblin_pretty_much_reached_target := values_are_close(goblin.pos, target_tile_pos, 1);
-                                    if goblin_pretty_much_reached_target {
-                                        // Teleport goblin to the target tile to remove any floating point weirdness.
-                                        goblin.pos = target_tile_pos;
+                                goblin_pretty_much_reached_target := values_are_close(goblin.pos, target_tile_pos, 1);
+                                if goblin_pretty_much_reached_target {
+                                    // Teleport goblin to the target tile to remove any floating point weirdness.
+                                    goblin.pos = target_tile_pos;
 
-                                        // Remove the target from the tile ids on path
-                                        // PERF: These would be a lot faster if we just stored the paths backwards so we didn't
-                                        // need to do an ordered remove here.
-                                        array_ordered_remove_by_index(*goblin.tile_ids_on_path, 0);
+                                    // Remove the target from the tile ids on path
+                                    // PERF: These would be a lot faster if we just stored the paths backwards so we didn't
+                                    // need to do an ordered remove here.
+                                    array_ordered_remove_by_index(*goblin.tile_ids_on_path, 0);
 
-                                        // Figure out what to do next
-                                        goblin.state = .DECIDING;
+                                    // Figure out what to do next
+                                    goblin.state = .DECIDING;
+                                } else {
+                                    move_one_step_towards_its_next_target_cardinal(goblin, GOBLIN_MOVE_SPEED, dt_seconds);
+                                }
+
+                            case .ATTACKING;
+                                assert_soft(goblin.entity_id_attacking > 0, "Goblin % is in attack state but has no target\n", goblin.id);
+
+                                if goblin.attack_cooldown_ms > 0 {
+                                    goblin.attack_cooldown_ms -= xx (dt_seconds * 1000);
+                                } else {
+                                    goblin.attack_cooldown_ms = GOBLIN_ATTACK_COOLDOWN_MS;
+
+                                    // TODO: this blows, fix this!
+                                    //
+                                    // Make sure the entity is still alive, it's possible that other goblins have killed it this frame.
+                                    found: bool;
+                                    entity_index: s64;
+                                    entity: *Entity;
+                                    is_dwarf := false; // TODO: fix this!!!!!!!!!!!!!!!
+
+                                    set_entity_id_to_index(Dwarf);
+                                    found, entity_index = table_find(*entity_id_to_index, goblin.entity_id_attacking);
+                                    if found {
+                                        is_dwarf = true;
+                                        entity = *dwarves[entity_index];
                                     } else {
-                                        move_one_step_towards_its_next_target_cardinal(goblin, GOBLIN_MOVE_SPEED, dt_seconds);
-                                    }
-
-                                case .ATTACKING;
-                                    assert_soft(goblin.entity_id_attacking > 0, "Goblin % is in attack state but has no target\n", goblin.id);
-
-                                    if goblin.attack_cooldown_ms > 0 {
-                                        goblin.attack_cooldown_ms -= xx (dt_seconds * 1000);
-                                    } else {
-                                        goblin.attack_cooldown_ms = GOBLIN_ATTACK_COOLDOWN_MS;
-
-                                        // TODO: this blows, fix this!
-                                        //
-                                        // Make sure the entity is still alive, it's possible that other goblins have killed it this frame.
-                                        found: bool;
-                                        entity_index: s64;
-                                        entity: *Entity;
-                                        is_dwarf := false; // TODO: fix this!!!!!!!!!!!!!!!
-
-                                        set_entity_id_to_index(Dwarf);
+                                        set_entity_id_to_index(Base);
                                         found, entity_index = table_find(*entity_id_to_index, goblin.entity_id_attacking);
                                         if found {
-                                            is_dwarf = true;
-                                            entity = *dwarves[entity_index];
-                                        } else {
-                                            set_entity_id_to_index(Base);
-                                            found, entity_index = table_find(*entity_id_to_index, goblin.entity_id_attacking);
-                                            if found {
-                                                entity = *bases[entity_index];
+                                            entity = *bases[entity_index];
 
-                                                // If this goblin is attacking the home base
-                                                if entity_index == 0 && game_state.home_base_under_attack_cooldown_ms <= 0 {
-                                                    create_alert(.BASE_UNDER_ATTACK, entity.pos, *game_state);
-                                                    game_state.home_base_under_attack_cooldown_ms = HOME_BASE_UNDER_ATTACK_COOLDOWN_MS;
-                                                }
+                                            // If this goblin is attacking the home base
+                                            if entity_index == 0 && game_state.home_base_under_attack_cooldown_ms <= 0 {
+                                                create_alert(.BASE_UNDER_ATTACK, entity.pos, game_state);
+                                                game_state.home_base_under_attack_cooldown_ms = HOME_BASE_UNDER_ATTACK_COOLDOWN_MS;
+                                            }
+                                        }
+                                    }
+
+                                    if (found) {
+                                        assert_soft(goblin.entity_id_attacking == entity.id, "Goblin % thinks he's attacking entity % but really found entity %", goblin.id, goblin.entity_id_attacking, entity.id);
+
+                                        stop_trying_to_attack := false;
+                                        // If attacking a dwarf, make sure it's still in reach
+                                        if is_dwarf {
+                                            detected, dwarf, direction := find_cardinal_neighbor_entity(goblin_tile_id, Dwarf);
+
+                                            if !detected {
+                                                goblin.state = .DECIDING;
+                                                goblin.entity_id_attacking = 0;
+                                                stop_trying_to_attack = true;
                                             }
                                         }
 
-                                        if (found) {
-                                            assert_soft(goblin.entity_id_attacking == entity.id, "Goblin % thinks he's attacking entity % but really found entity %", goblin.id, goblin.entity_id_attacking, entity.id);
+                                        if !stop_trying_to_attack {
+                                            rng := random_get_within_range(0, 1);
+                                            swing_connected := rng <= GOBLIN_HIT_CHANCE;
 
-                                            stop_trying_to_attack := false;
-                                            // If attacking a dwarf, make sure it's still in reach
-                                            if is_dwarf {
-                                                detected, dwarf, direction := find_cardinal_neighbor_entity(goblin_tile_id, Dwarf);
+                                            if swing_connected {
+                                                
+                                                target_entity_center   := get_rect_center(get_world_rect_from_pos(entity.pos));
+                                                target_entity_tile_id  := get_tile_id_by_pos(target_entity_center);
 
-                                                if !detected {
+                                                direction_stars_should_fly: Direction;
+                                                found_direction := false;
+                                                for DIRECTIONS_CARDINAL {
+                                                    neighbor_tile_id := get_neighbor_tile_id_by_direction(goblin_tile_id, it);
+                                                    if neighbor_tile_id == target_entity_tile_id {
+                                                        direction_stars_should_fly = it;
+                                                        found_direction = true;
+                                                        break;
+                                                    }
+                                                }
+                                                assert_soft(found_direction, "Was trying to figure out what direction the damage star should fly when goblin % connected an attack on entity %, but didn't detect the entity as a cardinal neighbor of the dwarf\n", goblin.id, entity.id);
+
+                                                create_damage_particles(entity.pos, GOBLIN_ATTACK_DAMAGE_PER_SWING, direction_stars_should_fly);
+
+                                                entity.hp -= GOBLIN_ATTACK_DAMAGE_PER_SWING;
+
+                                                if entity.hp <= 0 {
+                                                    if is_dwarf kill_dwarf_by_id(entity.id);
+                                                    else        kill_base_by_id(entity.id);
+
                                                     goblin.state = .DECIDING;
                                                     goblin.entity_id_attacking = 0;
-                                                    stop_trying_to_attack = true;
                                                 }
+                                            } else {
+                                                create_miss_particles(entity.pos);
                                             }
-
-                                            if !stop_trying_to_attack {
-                                                rng := random_get_within_range(0, 1);
-                                                swing_connected := rng <= GOBLIN_HIT_CHANCE;
-
-                                                if swing_connected {
-                                                    
-                                                    target_entity_center   := get_rect_center(get_world_rect_from_pos(entity.pos));
-                                                    target_entity_tile_id  := get_tile_id_by_pos(target_entity_center);
-
-                                                    direction_stars_should_fly: Direction;
-                                                    found_direction := false;
-                                                    for DIRECTIONS_CARDINAL {
-                                                        neighbor_tile_id := get_neighbor_tile_id_by_direction(goblin_tile_id, it);
-                                                        if neighbor_tile_id == target_entity_tile_id {
-                                                            direction_stars_should_fly = it;
-                                                            found_direction = true;
-                                                            break;
-                                                        }
-                                                    }
-                                                    assert_soft(found_direction, "Was trying to figure out what direction the damage star should fly when goblin % connected an attack on entity %, but didn't detect the entity as a cardinal neighbor of the dwarf\n", goblin.id, entity.id);
-
-                                                    create_damage_particles(entity.pos, GOBLIN_ATTACK_DAMAGE_PER_SWING, direction_stars_should_fly);
-
-                                                    entity.hp -= GOBLIN_ATTACK_DAMAGE_PER_SWING;
-
-                                                    if entity.hp <= 0 {
-                                                        if is_dwarf kill_dwarf_by_id(entity.id);
-                                                        else        kill_base_by_id(entity.id);
-
-                                                        goblin.state = .DECIDING;
-                                                        goblin.entity_id_attacking = 0;
-                                                    }
-                                                } else {
-                                                    create_miss_particles(entity.pos);
-                                                }
-                                            }
-                                        } else {
-                                            goblin.state = .DECIDING;
-                                            goblin.entity_id_attacking = 0;
                                         }
-
-                                    }
-                                case .IDLE;
-                            }
-                        }
-                    }
-
-                    // Update dynamite
-                    {
-                        tile_ids_to_remove_dynamite_from: [..] s32;
-                        tile_ids_to_remove_dynamite_from.allocator = temp;
-
-                        for tiles_with_dynamite_ids {
-                            // Kill any dwarves you are coming in contact with
-                            for dwarf, dwarf_index: dwarves {
-                                dynamite_pos := get_tile_pos_by_id(it);
-                                if Vector2Equals(dwarf.pos, dynamite_pos) {
-                                    kill_dwarf_by_index(dwarf_index);
-
-                                    // Mark the dynamite as to be destroyed
-                                    array_add(*tile_ids_to_remove_dynamite_from, it);
-
-                                    // Create a hole
-                                    set_tile_as_type(it, .HOLE, false, false, *game_state);
-                                    handle_encasement(it, *game_state);
-
-                                    // TODO: animation I guess
-
-                                    break;
-                                }
-                            }
-                        }
-
-                        for tile_ids_to_remove_dynamite_from {
-                            array_unordered_remove_by_value(*tiles_with_dynamite_ids, it);
-                        }
-                    }
-
-                    // Update treasure
-                    {
-                        tile_ids_to_remove_treasure_from : [..] s32;
-                        tile_ids_to_remove_treasure_from.allocator = temp;
-
-                        // PERF: this double loop looks sus
-                        for tiles_with_treasure_ids {
-                            for *dwarf, dwarf_index: dwarves {
-                                treasure_pos := get_tile_pos_by_id(it);
-                                dwarf_is_pretty_much_touching_treasure := values_are_close(dwarf.pos, treasure_pos, 1);
-                                if dwarf_is_pretty_much_touching_treasure {
-                                    // Credit the gold.
-                                    game_state.gold += GOLD_FROM_TREASURE;
-                                    create_gold_particle(treasure_pos, GOLD_FROM_TREASURE);
-
-                                    // Remove the treasure
-                                    array_unordered_remove_by_value(*tiles_with_treasure_ids, it);
-                                    table_remove(*tiles_with_treasure_ids_set, it);
-
-                                    // Look for more treasure
-                                    found, new_treasure_tile_id := detect_treasure_tile_id_within_radius(it, 10);
-                                    if found {
-                                        tile_ids_to_new_treasure := get_tile_ids_from_pos_to_pos(get_tile_pos_by_id(it), get_tile_pos_by_id(new_treasure_tile_id));
-                                        tile_ids_to_new_treasure.count -= 1;
-                                        tile_ids_to_new_treasure.data  += 1;
-
-                                        // Teleport dwarf to the center of the tile he's standing on before changing his pathing.
-                                        // Without doing this, the dwarf can end up being misaligned.
-                                        dwarf_center   := get_rect_center(get_world_rect_from_pos(dwarf.pos));
-                                        dwarf_tile_id  := get_tile_id_by_pos(dwarf_center);
-                                        dwarf_tile_pos := get_tile_pos_by_id(dwarf_tile_id);
-                                        dwarf.pos = dwarf_tile_pos;
-
-                                        array_reset(*dwarf.tile_ids_on_path);
-                                        array_copy(*dwarf.tile_ids_on_path, tile_ids_to_new_treasure);
-                                        set_entity_direction_to_face_next_target(dwarf);
-                                        dwarf.state = .DECIDING;
+                                    } else {
+                                        goblin.state = .DECIDING;
+                                        goblin.entity_id_attacking = 0;
                                     }
 
-                                    break;
                                 }
+                            case .IDLE;
+                        }
+                    }
+                }
+
+                // Update dynamite
+                {
+                    tile_ids_to_remove_dynamite_from: [..] s32;
+                    tile_ids_to_remove_dynamite_from.allocator = temp;
+
+                    for tiles_with_dynamite_ids {
+                        // Kill any dwarves you are coming in contact with
+                        for dwarf, dwarf_index: dwarves {
+                            dynamite_pos := get_tile_pos_by_id(it);
+                            if Vector2Equals(dwarf.pos, dynamite_pos) {
+                                kill_dwarf_by_index(dwarf_index);
+
+                                // Mark the dynamite as to be destroyed
+                                array_add(*tile_ids_to_remove_dynamite_from, it);
+
+                                // Create a hole
+                                set_tile_as_type(it, .HOLE, false, false, game_state);
+                                handle_encasement(it, game_state);
+
+                                // TODO: animation I guess
+
+                                break;
                             }
                         }
-
-                        for tile_ids_to_remove_treasure_from {
-                            array_unordered_remove_by_value(*tiles_with_treasure_ids, it);
-                            table_remove(*tiles_with_treasure_ids_set, it);
-                        }
                     }
 
-                    // Update bases
-                    {
-                        #if DWARF_MINER_SPAWN_ENABLED {
-                            for *base: bases {
-                                if base.spawn_dwarf_cooldown_ms <= 0 {
-                                    create_dwarf(Vector2.{ base.pos.x, base.pos.y }, .MINER);
+                    for tile_ids_to_remove_dynamite_from {
+                        array_unordered_remove_by_value(*tiles_with_dynamite_ids, it);
+                    }
+                }
 
-                                    base.spawn_dwarf_cooldown_ms = DWARF_MINER_SPAWN_MS;
-                                } else {
-                                    base.spawn_dwarf_cooldown_ms -= xx (dt_seconds * 1000);
+                // Update treasure
+                {
+                    tile_ids_to_remove_treasure_from : [..] s32;
+                    tile_ids_to_remove_treasure_from.allocator = temp;
+
+                    // PERF: this double loop looks sus
+                    for tiles_with_treasure_ids {
+                        for *dwarf, dwarf_index: dwarves {
+                            treasure_pos := get_tile_pos_by_id(it);
+                            dwarf_is_pretty_much_touching_treasure := values_are_close(dwarf.pos, treasure_pos, 1);
+                            if dwarf_is_pretty_much_touching_treasure {
+                                // Credit the gold.
+                                game_state.gold += GOLD_FROM_TREASURE;
+                                create_gold_particle(treasure_pos, GOLD_FROM_TREASURE);
+
+                                // Remove the treasure
+                                array_unordered_remove_by_value(*tiles_with_treasure_ids, it);
+                                table_remove(*tiles_with_treasure_ids_set, it);
+
+                                // Look for more treasure
+                                found, new_treasure_tile_id := detect_treasure_tile_id_within_radius(it, 10);
+                                if found {
+                                    tile_ids_to_new_treasure := get_tile_ids_from_pos_to_pos(get_tile_pos_by_id(it), get_tile_pos_by_id(new_treasure_tile_id));
+                                    tile_ids_to_new_treasure.count -= 1;
+                                    tile_ids_to_new_treasure.data  += 1;
+
+                                    // Teleport dwarf to the center of the tile he's standing on before changing his pathing.
+                                    // Without doing this, the dwarf can end up being misaligned.
+                                    dwarf_center   := get_rect_center(get_world_rect_from_pos(dwarf.pos));
+                                    dwarf_tile_id  := get_tile_id_by_pos(dwarf_center);
+                                    dwarf_tile_pos := get_tile_pos_by_id(dwarf_tile_id);
+                                    dwarf.pos = dwarf_tile_pos;
+
+                                    array_reset(*dwarf.tile_ids_on_path);
+                                    array_copy(*dwarf.tile_ids_on_path, tile_ids_to_new_treasure);
+                                    set_entity_direction_to_face_next_target(dwarf);
+                                    dwarf.state = .DECIDING;
                                 }
+
+                                break;
                             }
                         }
                     }
 
-                    // Update iron
-                    UPDATE_IRON :: true;
-                    #if UPDATE_IRON {
-                        IRON_VEIN_SIZE_MIN :: 8;
-                        IRON_VEIN_SIZE_MAX :: 15;
+                    for tile_ids_to_remove_treasure_from {
+                        array_unordered_remove_by_value(*tiles_with_treasure_ids, it);
+                        table_remove(*tiles_with_treasure_ids_set, it);
+                    }
+                }
 
-                        if game_state.controls_state_this_frame.add_iron {
-                            iron_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
-                            tile_pos  := Vector2.{ iron_rect.x, iron_rect.y };
-                            tile_id   := get_tile_id_by_pos(tile_pos);
-                            spawn_iron(xx tile_id, IRON_VEIN_SIZE_MIN, IRON_VEIN_SIZE_MAX, WORLD_COLS, WORLD_ROWS, *created_chunks, *iron_tile_ids_set);
+                // Update bases
+                {
+                    #if DWARF_MINER_SPAWN_ENABLED {
+                        for *base: bases {
+                            if base.spawn_dwarf_cooldown_ms <= 0 {
+                                create_dwarf(Vector2.{ base.pos.x, base.pos.y }, .MINER);
+
+                                base.spawn_dwarf_cooldown_ms = DWARF_MINER_SPAWN_MS;
+                            } else {
+                                base.spawn_dwarf_cooldown_ms -= xx (dt_seconds * 1000);
+                            }
                         }
                     }
+                }
 
-                    // Update water flowing
-                    UPDATE_WATER_FLOWING :: true;
-                    #if UPDATE_WATER_FLOWING {
-                        should_spread_this_frame := game_state.water_flow_cooldown_ms <= 0;
+                // Update iron
+                UPDATE_IRON :: true;
+                #if UPDATE_IRON {
+                    IRON_VEIN_SIZE_MIN :: 8;
+                    IRON_VEIN_SIZE_MAX :: 15;
+
+                    if game_state.controls_state_this_frame.add_iron {
+                        iron_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
+                        tile_pos  := Vector2.{ iron_rect.x, iron_rect.y };
+                        tile_id   := get_tile_id_by_pos(tile_pos);
+                        spawn_iron(xx tile_id, IRON_VEIN_SIZE_MIN, IRON_VEIN_SIZE_MAX, WORLD_COLS, WORLD_ROWS, *created_chunks, *iron_tile_ids_set);
+                    }
+                }
+
+                // Update water flowing
+                UPDATE_WATER_FLOWING :: true;
+                #if UPDATE_WATER_FLOWING {
+                    should_spread_this_frame := game_state.water_flow_cooldown_ms <= 0;
+
+                    if should_spread_this_frame {
+                        game_state.water_flow_cooldown_ms = WATER_FLOW_COOLDOWN_MS;
+                    } else {
+                        game_state.water_flow_cooldown_ms -= xx (dt_seconds * 1000);
+                    }
+
+                    // Take an array view of the actual state because we mutate the state during the loop
+                    // and can cause self referential problems when looping on the actual state.
+                    current_water_flowing_tile_ids := array_view(water_flowing_tile_ids, 0);
+                    for current_water_flowing_tile_ids {
+                        inflict_liquid_consequences(it);
 
                         if should_spread_this_frame {
-                            game_state.water_flow_cooldown_ms = WATER_FLOW_COOLDOWN_MS;
-                        } else {
-                            game_state.water_flow_cooldown_ms -= xx (dt_seconds * 1000);
-                        }
+                            try_to_set_cardinal_neighbors_as_flowing_tile_type(it, .WATER_FLOWING, game_state);
 
-                        // Take an array view of the actual state because we mutate the state during the loop
-                        // and can cause self referential problems when looping on the actual state.
-                        current_water_flowing_tile_ids := array_view(water_flowing_tile_ids, 0);
-                        for current_water_flowing_tile_ids {
-                            inflict_liquid_consequences(it);
-
-                            if should_spread_this_frame {
-                                try_to_set_cardinal_neighbors_as_flowing_tile_type(it, .WATER_FLOWING, *game_state);
-
-                                // If all surrounding tiles are liquid, then we can mark this tile as
-                                // still liquid so we don't have to update it going forward.
-                                if are_all_neighbors_liquid(it) {
-                                    set_tile_as_type(it, .WATER_STILL, false, false, *game_state);
-                                }
+                            // If all surrounding tiles are liquid, then we can mark this tile as
+                            // still liquid so we don't have to update it going forward.
+                            if are_all_neighbors_liquid(it) {
+                                set_tile_as_type(it, .WATER_STILL, false, false, game_state);
                             }
                         }
-                    }
-
-                    // Update water still
-                    UPDATE_WATER_STILL :: true;
-                    #if UPDATE_WATER_STILL {
-                        for water_still_tile_ids inflict_liquid_consequences(it);
-                    }
-
-                    should_spread_lava_this_frame := game_state.lava_flow_cooldown_ms <= 0;
-                    if should_spread_lava_this_frame {
-                        game_state.lava_flow_cooldown_ms = LAVA_FLOW_COOLDOWN_MS;
-                    } else {
-                        game_state.lava_flow_cooldown_ms -= xx (dt_seconds * 1000);
-                    }
-
-                    // Update lava flowing
-                    UPDATE_LAVA_FLOWING :: true;
-                    #if UPDATE_LAVA_FLOWING {
-                        // Take an array view of the actual state because we mutate the state during the loop
-                        // and can cause self referential problems when looping on the actual state.
-                        current_lava_flowing_tile_ids := array_view(lava_flowing_tile_ids, 0);
-                        for current_lava_flowing_tile_ids {
-                            inflict_liquid_consequences(it);
-
-                            sprite := table_find_pointer(*lava_flowing_tile_ids_to_sprite, it);
-                            assert(sprite != null);
-                            sprite_update(sprite, dt_seconds);
-
-                            if should_spread_lava_this_frame {
-                                try_to_set_cardinal_neighbors_as_flowing_tile_type(it, .LAVA_FLOWING, *game_state);
-
-                                if are_all_neighbors_unable_to_be_spread_to(it) {
-                                    set_tile_as_type(it, .LAVA_STILL, false, false, *game_state);
-                                }
-                            }
-                        }
-                    }
-
-                    // Update lava still
-                    UPDATE_LAVA_STILL :: true;
-                    #if UPDATE_LAVA_STILL {
-                        // Take an array view of the actual state because we mutate the state during the loop
-                        // and can cause self referential problems when looping on the actual state.
-                        current_lava_still_tile_ids := array_view(lava_still_tile_ids, 0);
-                        for current_lava_still_tile_ids {
-                            inflict_liquid_consequences(it);
-
-                            if should_spread_lava_this_frame {
-                                try_to_set_cardinal_neighbors_as_flowing_tile_type(it, .LAVA_FLOWING, *game_state);
-                            }
-                        }
-                    }
-
-                    // Update particles
-                    UPDATE_PARTICLES :: true;
-                    #if UPDATE_PARTICLES {
-                        particle_ids_to_kill_this_frame: [..] s32;
-                        particle_ids_to_kill_this_frame.allocator = temp;
-
-                        for *particle: particles {
-                            // Update timer
-                            particle.time_left_ms -= xx (dt_seconds * 1000);
-
-                            // Mark particle for death if it's out of time
-                            if particle.time_left_ms <= 0 {
-                                array_add(*particle_ids_to_kill_this_frame, particle.id);
-                                continue;
-                            }
-
-                            // PERF: there's probably an intelligent way of doing this.
-                            if particle.fade {
-                                if particle.time_left_ms > 1000 {
-                                    particle.opacity = 1;
-                                } else {
-                                    particle.opacity = particle.time_left_ms * 0.001;
-                                }
-
-                                if particle.opacity < 0 particle.opacity = 0;
-                            } else {
-                                particle.opacity = 1;
-                            }
-
-                            // TODO: this logic is a little fishy. It assumes that if there is an entity to follow then we wouldn't want
-                            // to also move the particle by its velocity. I guess we'll see ¯\_(ツ)_/¯
-                            if particle.entity_id_to_follow > 0 {
-                                found, entity := get_entity_by_id(particle.entity_kind_to_follow, particle.entity_id_to_follow);
-                                if (found) {
-                                    particle.pos.x = entity.pos.x;
-                                    particle.pos.y = entity.pos.y - TILEMAP_GENERAL_WORLD_HEIGHT;
-                                } else {
-                                    print("WARN: Particle % was trying to reference entity % (kind %) that it's supposed to follow, but didn't find it. Destroying particle.\n", particle.id, particle.entity_id_to_follow, particle.entity_kind_to_follow);
-                                    array_add(*particle_ids_to_kill_this_frame, particle.id);
-                                }
-                            } else {
-                                particle.pos.x += particle.vel.x * dt_seconds_raw;
-                                particle.pos.y += particle.vel.y * dt_seconds_raw;
-                                
-                                if particle.damp > 0 {
-                                    particle.vel.x *= particle.damp;
-                                    particle.vel.y *= particle.damp;
-                                }
-                            }
-                        }
-
-                        for particle_ids_to_kill_this_frame kill_particle_by_id(it);
                     }
                 }
 
-                // Update alerts
-                {
-                    alert_indices_to_remove_this_frame : [..] s64;
-                    alert_indices_to_remove_this_frame.allocator = temp;
-
-                    for *alert, i: alerts {
-                        if alert.seen {
-                            if alert.time_left_ms > 0 {
-                                alert.time_left_ms -= xx (dt_seconds * 1000);
-                            } else {
-                                array_add(*alert_indices_to_remove_this_frame, i);
-                            }
-                        } else {
-                            if (
-                                alert.pos.x + TILEMAP_GENERAL_WORLD_WIDTH  * 0.5 > window_start.x &&
-                                alert.pos.x - TILEMAP_GENERAL_WORLD_WIDTH  * 0.5 < window_end.x   &&
-                                alert.pos.y - TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 < window_end.y   &&
-                                alert.pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 > window_start.y
-                            ) {
-                                alert.seen = true;
-                            }
-                        }
-                    }
-
-                    for alert_indices_to_remove_this_frame {
-                        array_unordered_remove_by_index(*alerts, it);
-                    }
+                // Update water still
+                UPDATE_WATER_STILL :: true;
+                #if UPDATE_WATER_STILL {
+                    for water_still_tile_ids inflict_liquid_consequences(it);
                 }
 
-                // Update alert banner text
-                if game_state.alert_banner_text_ms > 0 {
-                    game_state.alert_banner_text_ms -=  xx (dt_seconds * 1000);
+                should_spread_lava_this_frame := game_state.lava_flow_cooldown_ms <= 0;
+                if should_spread_lava_this_frame {
+                    game_state.lava_flow_cooldown_ms = LAVA_FLOW_COOLDOWN_MS;
                 } else {
-                    game_state.alert_banner_text_ms =  0;
-                    game_state.alert_banner_text = "";
+                    game_state.lava_flow_cooldown_ms -= xx (dt_seconds * 1000);
+                }
+
+                // Update lava flowing
+                UPDATE_LAVA_FLOWING :: true;
+                #if UPDATE_LAVA_FLOWING {
+                    // Take an array view of the actual state because we mutate the state during the loop
+                    // and can cause self referential problems when looping on the actual state.
+                    current_lava_flowing_tile_ids := array_view(lava_flowing_tile_ids, 0);
+                    for current_lava_flowing_tile_ids {
+                        inflict_liquid_consequences(it);
+
+                        sprite := table_find_pointer(*lava_flowing_tile_ids_to_sprite, it);
+                        assert(sprite != null);
+                        sprite_update(sprite, dt_seconds);
+
+                        if should_spread_lava_this_frame {
+                            try_to_set_cardinal_neighbors_as_flowing_tile_type(it, .LAVA_FLOWING, game_state);
+
+                            if are_all_neighbors_unable_to_be_spread_to(it) {
+                                set_tile_as_type(it, .LAVA_STILL, false, false, game_state);
+                            }
+                        }
+                    }
+                }
+
+                // Update lava still
+                UPDATE_LAVA_STILL :: true;
+                #if UPDATE_LAVA_STILL {
+                    // Take an array view of the actual state because we mutate the state during the loop
+                    // and can cause self referential problems when looping on the actual state.
+                    current_lava_still_tile_ids := array_view(lava_still_tile_ids, 0);
+                    for current_lava_still_tile_ids {
+                        inflict_liquid_consequences(it);
+
+                        if should_spread_lava_this_frame {
+                            try_to_set_cardinal_neighbors_as_flowing_tile_type(it, .LAVA_FLOWING, game_state);
+                        }
+                    }
+                }
+
+                // Update particles
+                UPDATE_PARTICLES :: true;
+                #if UPDATE_PARTICLES {
+                    particle_ids_to_kill_this_frame: [..] s32;
+                    particle_ids_to_kill_this_frame.allocator = temp;
+
+                    for *particle: particles {
+                        // Update timer
+                        particle.time_left_ms -= xx (dt_seconds * 1000);
+
+                        // Mark particle for death if it's out of time
+                        if particle.time_left_ms <= 0 {
+                            array_add(*particle_ids_to_kill_this_frame, particle.id);
+                            continue;
+                        }
+
+                        // PERF: there's probably an intelligent way of doing this.
+                        if particle.fade {
+                            if particle.time_left_ms > 1000 {
+                                particle.opacity = 1;
+                            } else {
+                                particle.opacity = particle.time_left_ms * 0.001;
+                            }
+
+                            if particle.opacity < 0 particle.opacity = 0;
+                        } else {
+                            particle.opacity = 1;
+                        }
+
+                        // TODO: this logic is a little fishy. It assumes that if there is an entity to follow then we wouldn't want
+                        // to also move the particle by its velocity. I guess we'll see ¯\_(ツ)_/¯
+                        if particle.entity_id_to_follow > 0 {
+                            found, entity := get_entity_by_id(particle.entity_kind_to_follow, particle.entity_id_to_follow);
+                            if (found) {
+                                particle.pos.x = entity.pos.x;
+                                particle.pos.y = entity.pos.y - TILEMAP_GENERAL_WORLD_HEIGHT;
+                            } else {
+                                print("WARN: Particle % was trying to reference entity % (kind %) that it's supposed to follow, but didn't find it. Destroying particle.\n", particle.id, particle.entity_id_to_follow, particle.entity_kind_to_follow);
+                                array_add(*particle_ids_to_kill_this_frame, particle.id);
+                            }
+                        } else {
+                            particle.pos.x += particle.vel.x * dt_seconds_raw;
+                            particle.pos.y += particle.vel.y * dt_seconds_raw;
+                            
+                            if particle.damp > 0 {
+                                particle.vel.x *= particle.damp;
+                                particle.vel.y *= particle.damp;
+                            }
+                        }
+                    }
+
+                    for particle_ids_to_kill_this_frame kill_particle_by_id(it);
                 }
             }
-        }
 
-        //
-        // Draw
-        //
-        {
-            derive_entities_in_viewport(camera);
-
-            BeginDrawing();
-            defer EndDrawing();
-
-            ClearBackground(BEIGE);
-
-            // Draw world
+            // Update alerts
             {
-                BeginMode2D(camera);
-                defer EndMode2D();
+                alert_indices_to_remove_this_frame : [..] s64;
+                alert_indices_to_remove_this_frame.allocator = temp;
 
-                // First, draw base layer of dirt which is just one giant quad
-                {
-                    // This accomplishes the tiling effect when we sample the source
-                    // with such a big triangle.
-                    source := Rectangle.{ 
-                        0, 
-                        0, 
-                        xx (TILEMAP_GENERAL_WORLD_WIDTH  * WORLD_COLS), // Repeat 10,000 times horizontally
-                        xx (TILEMAP_GENERAL_WORLD_HEIGHT * WORLD_ROWS), // Repeat 10,000 times vertically
-                    };
-
-                    dest := Rectangle.{ 
-                        0, 
-                        0, 
-                        xx (TILEMAP_GENERAL_WORLD_WIDTH  * WORLD_COLS),
-                        xx (TILEMAP_GENERAL_WORLD_HEIGHT * WORLD_ROWS),
-                    };
-                    
-                    DrawTexturePro(dirt_texture, source, dest, Vector2.{0,0}, 0.0, WHITE);
+                for *alert, i: alerts {
+                    if alert.seen {
+                        if alert.time_left_ms > 0 {
+                            alert.time_left_ms -= xx (dt_seconds * 1000);
+                        } else {
+                            array_add(*alert_indices_to_remove_this_frame, i);
+                        }
+                    } else {
+                        if (
+                            alert.pos.x + TILEMAP_GENERAL_WORLD_WIDTH  * 0.5 > window_start.x &&
+                            alert.pos.x - TILEMAP_GENERAL_WORLD_WIDTH  * 0.5 < window_end.x   &&
+                            alert.pos.y - TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 < window_end.y   &&
+                            alert.pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 > window_start.y
+                        ) {
+                            alert.seen = true;
+                        }
+                    }
                 }
 
-                // Then draw any uncovered tiles over the base layer
-                // Draw tiles
-                DRAW_TILES :: true;
-                #if DRAW_TILES {
-                    for fully_mined_tile_ids_in_viewport {
-                        found, tile_column := table_find(*fully_mined_tile_ids_set, it);
-                        if !found {
-                            metagame.state == .PAUSED;
-                            print("tile % had no associated tilemap column", it);
-                        }
+                for alert_indices_to_remove_this_frame {
+                    array_unordered_remove_by_index(*alerts, it);
+                }
+            }
+
+            // Update alert banner text
+            if game_state.alert_banner_text_ms > 0 {
+                game_state.alert_banner_text_ms -=  xx (dt_seconds * 1000);
+            } else {
+                game_state.alert_banner_text_ms =  0;
+                game_state.alert_banner_text = "";
+            }
+        }
+    }
+
+    //
+    // Draw
+    //
+    {
+        derive_entities_in_viewport(camera);
+
+        BeginDrawing();
+        defer EndDrawing();
+
+        ClearBackground(BEIGE);
+
+        // Draw world
+        {
+            BeginMode2D(camera);
+            defer EndMode2D();
+
+            // First, draw base layer of dirt which is just one giant quad
+            {
+                // This accomplishes the tiling effect when we sample the source
+                // with such a big triangle.
+                source := Rectangle.{ 
+                    0, 
+                    0, 
+                    xx (TILEMAP_GENERAL_WORLD_WIDTH  * WORLD_COLS), // Repeat 10,000 times horizontally
+                    xx (TILEMAP_GENERAL_WORLD_HEIGHT * WORLD_ROWS), // Repeat 10,000 times vertically
+                };
+
+                dest := Rectangle.{ 
+                    0, 
+                    0, 
+                    xx (TILEMAP_GENERAL_WORLD_WIDTH  * WORLD_COLS),
+                    xx (TILEMAP_GENERAL_WORLD_HEIGHT * WORLD_ROWS),
+                };
+                
+                DrawTexturePro(dirt_texture, source, dest, Vector2.{0,0}, 0.0, WHITE);
+            }
+
+            // Then draw any uncovered tiles over the base layer
+            // Draw tiles
+            DRAW_TILES :: true;
+            #if DRAW_TILES {
+                for fully_mined_tile_ids_in_viewport {
+                    found, tile_column := table_find(*fully_mined_tile_ids_set, it);
+                    if !found {
+                        metagame.state == .PAUSED;
+                        print("tile % had no associated tilemap column", it);
+                    }
+                    // LOD
+                    if camera.zoom < 0.3 tile_column = 3;
+
+                    source := Rectangle.{
+                        xx (tile_column * TILEMAP_GENERAL_TILE_WIDTH),
+                        1 * TILEMAP_GENERAL_TILE_HEIGHT,
+                        TILEMAP_GENERAL_TILE_WIDTH,
+                        TILEMAP_GENERAL_TILE_HEIGHT,
+                    };
+
+                    pos  := get_tile_pos_by_id(it);
+                    dest := get_world_rect_from_pos(pos);
+
+                    DrawTexturePro(tilemap_texture_general, source, dest, Vector2.{0,0}, 0.0, WHITE);
+                }
+
+                for cave_tile_ids_in_viewport {
+                    DrawRectangleV(
+                        get_tile_pos_by_id(it),
+                        Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
+                        BLACK, // TODO: texture
+                    );
+                }
+
+                for iron_tile_ids_in_viewport {
+                    DrawRectangleV(
+                        get_tile_pos_by_id(it),
+                        Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
+                        LIGHTGRAY, // TODO: texture
+                    );
+                }
+
+                for obsidian_tile_ids_in_viewport {
+                    DrawRectangleV(
+                        get_tile_pos_by_id(it),
+                        Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
+                        DARKGRAY, // TODO: texture
+                    );
+                }
+
+                for wall_tile_ids_in_viewport {
+                    DrawRectangleV(
+                        get_tile_pos_by_id(it),
+                        Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
+                        DARKPURPLE, // TODO: texture
+                    );
+                }
+
+                for water_still_tile_ids_in_viewport {
+                    DrawRectangleV(
+                        get_tile_pos_by_id(it),
+                        Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
+                        BLUE, // TODO: texture
+                    );
+                }
+
+                for water_flowing_tile_ids_in_viewport {
+                    DrawRectangleV(
+                        get_tile_pos_by_id(it),
+                        Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
+                        SKYBLUE, // TODO: texture
+                    );
+                }
+
+                // Draw lava still
+                for lava_still_tile_ids_in_viewport {
+                    source := Rectangle.{
+                        LAVA_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
+                        LAVA_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
+                        TILEMAP_GENERAL_TILE_WIDTH,
+                        TILEMAP_GENERAL_TILE_HEIGHT,
+                    };
+
+                    pos  := get_tile_pos_by_id(it);
+                    dest := get_world_rect_from_pos(pos);
+
+                    DrawTexturePro(tilemap_texture_general, source, dest, Vector2.{0,0}, 0.0, WHITE);
+                }
+
+                // Draw lava flowing
+                for lava_flowing_tile_ids_in_viewport {
+                    // First, draw a fully mined tile underneath
+                    {
+                        tile_column := it % 3;
                         // LOD
                         if camera.zoom < 0.3 tile_column = 3;
 
@@ -2416,940 +2475,853 @@ main :: () {
                         DrawTexturePro(tilemap_texture_general, source, dest, Vector2.{0,0}, 0.0, WHITE);
                     }
 
-                    for cave_tile_ids_in_viewport {
-                        DrawRectangleV(
-                            get_tile_pos_by_id(it),
-                            Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
-                            BLACK, // TODO: texture
-                        );
+                    sprite := table_find_pointer(*lava_flowing_tile_ids_to_sprite, it);
+                    assert(sprite != null);
+
+                    determine_rotation_of_lava_flowing_sprite :: (tile_id: s32) -> float {
+                        north_tile_id := tile_id - WORLD_ROWS;
+                        south_tile_id := tile_id + WORLD_ROWS;
+                        east_tile_id  := tile_id + 1;
+                        west_tile_id  := tile_id - 1;
+
+                        is_neighbor_north_lava_still := table_contains(*lava_still_tile_ids_set, north_tile_id);
+                        is_neighbor_south_lava_still := table_contains(*lava_still_tile_ids_set, south_tile_id);
+                        is_neighbor_east_lava_still  := table_contains(*lava_still_tile_ids_set, east_tile_id);
+                        is_neighbor_west_lava_still  := table_contains(*lava_still_tile_ids_set, west_tile_id);
+
+                        if (
+                            is_neighbor_north_lava_still  &&
+                            !is_neighbor_south_lava_still &&
+                            !is_neighbor_east_lava_still  &&
+                            !is_neighbor_west_lava_still
+                        ) return 0;
+
+                        if (
+                            !is_neighbor_north_lava_still &&
+                            is_neighbor_south_lava_still  &&
+                            !is_neighbor_east_lava_still  &&
+                            !is_neighbor_west_lava_still
+                        ) return 180; // Flow to the left if the only lava around is to the right
+
+                        if is_neighbor_east_lava_still return 90;
+                        if is_neighbor_west_lava_still return 270;
+
+                        return 0;
                     }
 
-                    for iron_tile_ids_in_viewport {
-                        DrawRectangleV(
-                            get_tile_pos_by_id(it),
-                            Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
-                            LIGHTGRAY, // TODO: texture
-                        );
+                    sprite.rotation = determine_rotation_of_lava_flowing_sprite(it); 
+
+                    sprite_draw(
+                        sprite,
+                        get_tile_pos_by_id(it),
+                        TILEMAP_GENERAL_WORLD_WIDTH,
+                        TILEMAP_GENERAL_WORLD_HEIGHT,
+                        TILEMAP_GENERAL_TILE_WIDTH,
+                        TILEMAP_GENERAL_TILE_HEIGHT,
+                    );
+                }
+
+                for hole_tile_ids_in_viewport {
+                    DrawRectangleV(
+                        get_tile_pos_by_id(it),
+                        Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
+                        DARKGRAY, // TODO: texture
+                    );
+                }
+
+                if metagame.debug_mode {
+                    for water_warning_tile_ids_in_viewport {
+                        pos := get_tile_pos_by_id(it);
+                        real_pos := Vector2.{ pos.x + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 };
+                        DrawCircleV(real_pos, 4.0, WHITE);
+                        DrawCircleV(real_pos, 3.0, ORANGE);
                     }
 
-                    for obsidian_tile_ids_in_viewport {
-                        DrawRectangleV(
-                            get_tile_pos_by_id(it),
-                            Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
-                            DARKGRAY, // TODO: texture
-                        );
+                    for lava_warning_tile_ids_in_viewport {
+                        pos := get_tile_pos_by_id(it);
+                        real_pos := Vector2.{ pos.x + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 };
+                        DrawCircleV(real_pos, 4.0, WHITE);
+                        DrawCircleV(real_pos, 3.0, ORANGE);
                     }
 
-                    for wall_tile_ids_in_viewport {
-                        DrawRectangleV(
-                            get_tile_pos_by_id(it),
-                            Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
-                            DARKPURPLE, // TODO: texture
-                        );
+                    for water_alert_tile_ids_in_viewport {
+                        pos := get_tile_pos_by_id(it);
+                        real_pos := Vector2.{ pos.x + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 };
+                        DrawCircleV(real_pos, 4.0, WHITE);
+                        DrawCircleV(real_pos, 3.0, RED);
                     }
 
-                    for water_still_tile_ids_in_viewport {
-                        DrawRectangleV(
-                            get_tile_pos_by_id(it),
-                            Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
-                            BLUE, // TODO: texture
-                        );
-                    }
-
-                    for water_flowing_tile_ids_in_viewport {
-                        DrawRectangleV(
-                            get_tile_pos_by_id(it),
-                            Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
-                            SKYBLUE, // TODO: texture
-                        );
-                    }
-
-                    // Draw lava still
-                    for lava_still_tile_ids_in_viewport {
-                        source := Rectangle.{
-                            LAVA_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
-                            LAVA_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
-                            TILEMAP_GENERAL_TILE_WIDTH,
-                            TILEMAP_GENERAL_TILE_HEIGHT,
-                        };
-
-                        pos  := get_tile_pos_by_id(it);
-                        dest := get_world_rect_from_pos(pos);
-
-                        DrawTexturePro(tilemap_texture_general, source, dest, Vector2.{0,0}, 0.0, WHITE);
-                    }
-
-                    // Draw lava flowing
-                    for lava_flowing_tile_ids_in_viewport {
-                        // First, draw a fully mined tile underneath
-                        {
-                            tile_column := it % 3;
-                            // LOD
-                            if camera.zoom < 0.3 tile_column = 3;
-
-                            source := Rectangle.{
-                                xx (tile_column * TILEMAP_GENERAL_TILE_WIDTH),
-                                1 * TILEMAP_GENERAL_TILE_HEIGHT,
-                                TILEMAP_GENERAL_TILE_WIDTH,
-                                TILEMAP_GENERAL_TILE_HEIGHT,
-                            };
-
-                            pos  := get_tile_pos_by_id(it);
-                            dest := get_world_rect_from_pos(pos);
-
-                            DrawTexturePro(tilemap_texture_general, source, dest, Vector2.{0,0}, 0.0, WHITE);
-                        }
-
-                        sprite := table_find_pointer(*lava_flowing_tile_ids_to_sprite, it);
-                        assert(sprite != null);
-
-                        determine_rotation_of_lava_flowing_sprite :: (tile_id: s32) -> float {
-                            north_tile_id := tile_id - WORLD_ROWS;
-                            south_tile_id := tile_id + WORLD_ROWS;
-                            east_tile_id  := tile_id + 1;
-                            west_tile_id  := tile_id - 1;
-
-                            is_neighbor_north_lava_still := table_contains(*lava_still_tile_ids_set, north_tile_id);
-                            is_neighbor_south_lava_still := table_contains(*lava_still_tile_ids_set, south_tile_id);
-                            is_neighbor_east_lava_still  := table_contains(*lava_still_tile_ids_set, east_tile_id);
-                            is_neighbor_west_lava_still  := table_contains(*lava_still_tile_ids_set, west_tile_id);
-
-                            if (
-                                is_neighbor_north_lava_still  &&
-                                !is_neighbor_south_lava_still &&
-                                !is_neighbor_east_lava_still  &&
-                                !is_neighbor_west_lava_still
-                            ) return 0;
-
-                            if (
-                                !is_neighbor_north_lava_still &&
-                                is_neighbor_south_lava_still  &&
-                                !is_neighbor_east_lava_still  &&
-                                !is_neighbor_west_lava_still
-                            ) return 180; // Flow to the left if the only lava around is to the right
-
-                            if is_neighbor_east_lava_still return 90;
-                            if is_neighbor_west_lava_still return 270;
-
-                            return 0;
-                        }
-
-                        sprite.rotation = determine_rotation_of_lava_flowing_sprite(it); 
-
-                        sprite_draw(
-                            sprite,
-                            get_tile_pos_by_id(it),
-                            TILEMAP_GENERAL_WORLD_WIDTH,
-                            TILEMAP_GENERAL_WORLD_HEIGHT,
-                            TILEMAP_GENERAL_TILE_WIDTH,
-                            TILEMAP_GENERAL_TILE_HEIGHT,
-                        );
-                    }
-
-                    for hole_tile_ids_in_viewport {
-                        DrawRectangleV(
-                            get_tile_pos_by_id(it),
-                            Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
-                            DARKGRAY, // TODO: texture
-                        );
-                    }
-
-                    if metagame.debug_mode {
-                        for water_warning_tile_ids_in_viewport {
-                            pos := get_tile_pos_by_id(it);
-                            real_pos := Vector2.{ pos.x + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 };
-                            DrawCircleV(real_pos, 4.0, WHITE);
-                            DrawCircleV(real_pos, 3.0, ORANGE);
-                        }
-
-                        for lava_warning_tile_ids_in_viewport {
-                            pos := get_tile_pos_by_id(it);
-                            real_pos := Vector2.{ pos.x + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 };
-                            DrawCircleV(real_pos, 4.0, WHITE);
-                            DrawCircleV(real_pos, 3.0, ORANGE);
-                        }
-
-                        for water_alert_tile_ids_in_viewport {
-                            pos := get_tile_pos_by_id(it);
-                            real_pos := Vector2.{ pos.x + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 };
-                            DrawCircleV(real_pos, 4.0, WHITE);
-                            DrawCircleV(real_pos, 3.0, RED);
-                        }
-
-                        for lava_alert_tile_ids_in_viewport {
-                            pos := get_tile_pos_by_id(it);
-                            real_pos := Vector2.{ pos.x + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 };
-                            DrawCircleV(real_pos, 4.0, WHITE);
-                            DrawCircleV(real_pos, 3.0, RED);
-                        }
-                    }
-
-                    if !metagame.debug_mode {
-                        for encased_tile_ids_in_viewport {
-                            DrawRectangleV(
-                                get_tile_pos_by_id(it),
-                                Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
-                                TRANSPARENT_WHITE
-                            );
-                        }
+                    for lava_alert_tile_ids_in_viewport {
+                        pos := get_tile_pos_by_id(it);
+                        real_pos := Vector2.{ pos.x + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 };
+                        DrawCircleV(real_pos, 4.0, WHITE);
+                        DrawCircleV(real_pos, 3.0, RED);
                     }
                 }
 
-                // Draw bases
-                DRAW_BASES :: true;
-                #if DRAW_BASES {
-                    for base: bases_in_viewport {
-                        dest := get_world_rect_from_pos(base.pos);
-
-                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_BASE, dest, Vector2.{0,0}, 0.0, WHITE);
-                    }
-                }
-
-                // Draw paths
-                {
-                    if game_state.controls_state_this_frame.drawing_path {
-                        if path_being_traced_1.start_tile_id > 0 draw_path(path_being_traced_1);
-                        if path_being_traced_2.start_tile_id > 0 draw_path(path_being_traced_2);
-                    }
-
-                    for path: paths_in_viewport draw_path(path);
-                }
-
-                // Draw dwarves
-                {
-                    for dwarf: dwarves_in_viewport {
-                        index : float = ifx dwarf.dwarf_type == .MINER then 1.0 else 6.0;
-
-                        source := Rectangle.{
-                            index * TILEMAP_GENERAL_TILE_WIDTH,
-                            0 * TILEMAP_GENERAL_TILE_HEIGHT,
-                            TILEMAP_GENERAL_TILE_WIDTH,
-                            TILEMAP_GENERAL_TILE_HEIGHT,
-                        };
-
-                        dest := get_world_rect_from_pos(dwarf.pos);
-
-                        DrawTexturePro(tilemap_texture_general, source, dest, Vector2.{0,0}, 0.0, WHITE);
-                    }
-                }
-
-                // Draw goblins
-                {
-                    for goblin: goblins_in_viewport {
-                        dest := get_world_rect_from_pos(goblin.pos);
+                if !metagame.debug_mode {
+                    for encased_tile_ids_in_viewport {
                         DrawRectangleV(
-                            Vector2.{ dest.x, dest.y },
+                            get_tile_pos_by_id(it),
                             Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
-                            LIME, // TODO: texture
+                            TRANSPARENT_WHITE
                         );
-                    }
-                }
-
-                // Draw dynamite
-                DRAW_DYNAMITE :: true;
-                #if DRAW_DYNAMITE {
-                    for tiles_with_dynamite_ids_in_viewport {
-                        pos  := get_tile_pos_by_id(it);
-                        dest := get_world_rect_from_pos(pos);
-
-                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_DYNAMITE, dest, Vector2.{0,0}, 0.0, WHITE);
-                    }
-                }
-
-                // Draw treasure
-                DRAW_TREASURE :: true;
-                #if DRAW_TREASURE {
-                    for tiles_with_treasure_ids_in_viewport {
-                        source := Rectangle.{
-                            5 * TILEMAP_GENERAL_TILE_WIDTH,
-                            0 * TILEMAP_GENERAL_TILE_HEIGHT,
-                            TILEMAP_GENERAL_TILE_WIDTH,
-                            TILEMAP_GENERAL_TILE_HEIGHT,
-                        };
-
-                        pos  := get_tile_pos_by_id(it);
-                        dest := get_world_rect_from_pos(pos);
-
-                        DrawTexturePro(tilemap_texture_general, source, dest, Vector2.{0,0}, 0.0, WHITE);
-                    }
-                }
-
-                // Draw hovered tile
-                {
-                    hovered_tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
-                    DrawRectangleRec(hovered_tile_rect, TRANSPARENT_WHITE);
-                    if metagame.debug_mode {
-                        found_tile, tile_id := find_tile_id_by_pos(get_rect_pos(hovered_tile_rect));
-                        if found_tile {
-                            DrawText(tprint("%\0", tile_id).data, xx hovered_tile_rect.x, xx hovered_tile_rect.y, 12, WHITE);
-                        }
-                    }
-                }
-
-                // Draw particles
-                DRAW_PARTICLES :: true;
-                #if DRAW_PARTICLES {
-                    for particle: particles_in_viewport {
-                        TEXT_SIZE     :: 20;
-                        dest_text := get_world_rect_from_pos(particle.pos);
-                        draw_outlined_text(tprint("%\0", particle.text).data, xx dest_text.x, xx dest_text.y, TEXT_SIZE, Color.{ particle.tint.r, particle.tint.g, particle.tint.b, xx (particle.opacity * 255) }, 1, BLACK);
-
-                        if particle.sprite_source_col > -1 && particle.sprite_source_row > -1 {
-                            measured_text_size := poor_mans_measure_text(particle.text, TEXT_SIZE);
-                            dest_sprite := Rectangle.{
-                                dest_text.x + measured_text_size.x,
-                                dest_text.y - measured_text_size.y * 0.25,
-                                dest_text.width,
-                                dest_text.height,
-                            };
-                            source := Rectangle.{
-                                xx (particle.sprite_source_col * TILEMAP_GENERAL_TILE_WIDTH),
-                                xx (particle.sprite_source_row * TILEMAP_GENERAL_TILE_HEIGHT),
-                                TILEMAP_GENERAL_TILE_WIDTH,
-                                TILEMAP_GENERAL_TILE_HEIGHT,
-                            };
-                            DrawTexturePro(tilemap_texture_general, source, dest_sprite, Vector2.{0,0}, 0.0, Color.{ WHITE.r, WHITE.g, WHITE.b, xx (particle.opacity * 255) });
-                        }
                     }
                 }
             }
 
-            // Draw UI
+            // Draw bases
+            DRAW_BASES :: true;
+            #if DRAW_BASES {
+                for base: bases_in_viewport {
+                    dest := get_world_rect_from_pos(base.pos);
+
+                    DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_BASE, dest, Vector2.{0,0}, 0.0, WHITE);
+                }
+            }
+
+            // Draw paths
             {
-                screen_width  := GetScreenWidth();
-                screen_height := GetScreenHeight();
-
-                // Draw warnings onscreen
-                for dwarf: dwarves {
-                    dest     := get_world_rect_from_pos(dwarf.pos);
-                    dest_pos := Vector2.{ dest.x, dest.y };
-                    radius   := 30.0;
-                    center   := GetWorldToScreen2D(Vector2.{ dest_pos.x + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, dest_pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 }, camera);
-
-                    dwarf_center  := get_rect_center(get_world_rect_from_pos(dwarf.pos));
-                    dwarf_tile_id := get_tile_id_by_pos(dwarf_center);
-
-                    // Draw warnings onscreen
-                    {
-                        dwarf_is_getting_dangerously_close_to_water := table_contains(*water_warning_tile_ids_set, dwarf_tile_id);
-                        if dwarf_is_getting_dangerously_close_to_water {
-                            DrawRing(center, radius, radius + 3.0, 0, 360, 0, ORANGE);
-                        }
-                        
-                        dwarf_is_getting_dangerously_close_to_lava := table_contains(*lava_warning_tile_ids_set, dwarf_tile_id);
-                        if dwarf_is_getting_dangerously_close_to_lava {
-                            DrawRing(center, radius, radius + 3.0, 0, 360, 0, ORANGE);
-                        }
-                    }
-
-                    // Draw warnings offscreen
-                    {
-                        // If the dwarf is on screen, then there's nothing to do.
-                        if (
-                            dwarf_center.x + TILEMAP_GENERAL_WORLD_WIDTH  * 0.5 > window_start.x &&
-                            dwarf_center.x - TILEMAP_GENERAL_WORLD_WIDTH  * 0.5 < window_end.x   &&
-                            dwarf_center.y - TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 < window_end.y   &&
-                            dwarf_center.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 > window_start.y
-                        ) {
-                            continue;
-                        }
-
-                        draw_warning_rings_if_necessary(dwarf_center, *water_warning_tile_ids_set, camera);
-                        draw_warning_rings_if_necessary(dwarf_center, *lava_warning_tile_ids_set, camera);
-                    }
-                }
-
-                // Draw alerts
-                for alert: alerts {
-                    radius := 30.0;
-                    center := Vector2.{ alert.pos.x + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, alert.pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 };
-
-                    if (
-                        center.x + TILEMAP_GENERAL_WORLD_WIDTH  * 0.5 > window_start.x &&
-                        center.x - TILEMAP_GENERAL_WORLD_WIDTH  * 0.5 < window_end.x   &&
-                        center.y - TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 < window_end.y   &&
-                        center.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 > window_start.y
-                    ) {
-                        DrawRing(GetWorldToScreen2D(center, camera), radius, radius + 3.0, 0, 360, 0, alert.color);
-                    } else {
-                        draw_offscreen_notification(center, camera, false, alert.color);
-                    }
-                }
-                
-                // Draw alert banner text
-                if game_state.alert_banner_text_ms > 0 {
-                    assert(game_state.alert_banner_text.count > 0, "Tried drawing alert banner text but found no string to draw.");
-
-                    FONT_SIZE :: 56;
-                    draw_outlined_text(
-                        to_c_string(game_state.alert_banner_text),
-                        xx (GetScreenWidth() * 0.5 - MeasureText(to_c_string(game_state.alert_banner_text),
-                        FONT_SIZE) * 0.5), 20, FONT_SIZE, game_state.alert_banner_text_color, 3, WHITE);
-                }
-
-                // Draw path being drawn cost
                 if game_state.controls_state_this_frame.drawing_path {
-                    TEXT_SIZE :: 24;
+                    if path_being_traced_1.start_tile_id > 0 draw_path(path_being_traced_1);
+                    if path_being_traced_2.start_tile_id > 0 draw_path(path_being_traced_2);
+                }
 
-                    gold_cost := get_path_cost(path_being_traced_1) + get_path_cost(path_being_traced_2);
-                    measured_text_size := poor_mans_measure_text(tprint("%", gold_cost), TEXT_SIZE);
+                for path: paths_in_viewport draw_path(path);
+            }
 
-                    text_x := mouse_pos_in_ui.x;
-                    text_y := mouse_pos_in_ui.y - measured_text_size.y;
+            // Draw dwarves
+            {
+                for dwarf: dwarves_in_viewport {
+                    index : float = ifx dwarf.dwarf_type == .MINER then 1.0 else 6.0;
 
-                    draw_outlined_text(tprint("%\0", gold_cost).data, xx text_x, xx text_y, TEXT_SIZE, RED, 1, WHITE);
-
-                    dest_sprite := Rectangle.{
-                        text_x + measured_text_size.x,
-                        text_y - measured_text_size.y,
-                        TILEMAP_GENERAL_WORLD_WIDTH,
-                        TILEMAP_GENERAL_WORLD_HEIGHT,
-                    };
                     source := Rectangle.{
-                        xx (PARTICLE_GOLD_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH),
-                        xx (PARTICLE_GOLD_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT),
+                        index * TILEMAP_GENERAL_TILE_WIDTH,
+                        0 * TILEMAP_GENERAL_TILE_HEIGHT,
                         TILEMAP_GENERAL_TILE_WIDTH,
                         TILEMAP_GENERAL_TILE_HEIGHT,
                     };
-                    DrawTexturePro(tilemap_texture_general, source, dest_sprite, Vector2.{0,0}, 0.0, WHITE);
-                }
 
-                debug_text_y : s32 = 10;
-                INCREMENT_Y :: 20;
+                    dest := get_world_rect_from_pos(dwarf.pos);
+
+                    DrawTexturePro(tilemap_texture_general, source, dest, Vector2.{0,0}, 0.0, WHITE);
+                }
+            }
+
+            // Draw goblins
+            {
+                for goblin: goblins_in_viewport {
+                    dest := get_world_rect_from_pos(goblin.pos);
+                    DrawRectangleV(
+                        Vector2.{ dest.x, dest.y },
+                        Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
+                        LIME, // TODO: texture
+                    );
+                }
+            }
+
+            // Draw dynamite
+            DRAW_DYNAMITE :: true;
+            #if DRAW_DYNAMITE {
+                for tiles_with_dynamite_ids_in_viewport {
+                    pos  := get_tile_pos_by_id(it);
+                    dest := get_world_rect_from_pos(pos);
+
+                    DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_DYNAMITE, dest, Vector2.{0,0}, 0.0, WHITE);
+                }
+            }
+
+            // Draw treasure
+            DRAW_TREASURE :: true;
+            #if DRAW_TREASURE {
+                for tiles_with_treasure_ids_in_viewport {
+                    source := Rectangle.{
+                        5 * TILEMAP_GENERAL_TILE_WIDTH,
+                        0 * TILEMAP_GENERAL_TILE_HEIGHT,
+                        TILEMAP_GENERAL_TILE_WIDTH,
+                        TILEMAP_GENERAL_TILE_HEIGHT,
+                    };
+
+                    pos  := get_tile_pos_by_id(it);
+                    dest := get_world_rect_from_pos(pos);
+
+                    DrawTexturePro(tilemap_texture_general, source, dest, Vector2.{0,0}, 0.0, WHITE);
+                }
+            }
+
+            // Draw hovered tile
+            {
+                hovered_tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
+                DrawRectangleRec(hovered_tile_rect, TRANSPARENT_WHITE);
                 if metagame.debug_mode {
-                    DrawFPS(10, read_then_increment(*debug_text_y, INCREMENT_Y));
-                    DrawText(tprint("dwarf count: %\0", dwarves.count).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 12, WHITE);
-
-                    debug_struct_runtime :: (thing: Any, name_prefix: string, render_struct_name_prefix: bool) #expand {
-                        if thing.type.type != .STRUCT return;
-                        tis := cast(*Type_Info_Struct) thing.type;
-
-                        for tis.members {
-                            // Calculate where this field lives in memory
-                            field_ptr := thing.value_pointer + it.offset_in_bytes;
-                            
-                            // Construct an 'Any' so tprint knows how to format it
-                            field_any: Any;
-                            field_any.type = it.type;
-                            field_any.value_pointer = field_ptr;
-
-                            // Format the string dynamically
-                            text := ifx render_struct_name_prefix
-                                then tprint("%.%: %\0", name_prefix, it.name, field_any)
-                                else tprint("%: %\0", it.name, field_any);
-                            
-                            DrawText(text.data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                        }
-                    }
-
-                    debug_variable_runtime :: (thing: Any, thing_symbol_as_string: string) #expand {
-                        // Format the string dynamically
-                        text := tprint("%: %\0", thing_symbol_as_string, thing);
-                        
-                        DrawText(text.data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                    }
-
-                    // TODO: recursive struct drawing?
-                    // TODO: way to label fields as not wanted as debuggable
-                    debug_with_raylib_draw_text :: (c: Code, render_struct_name_prefix := false) #expand {
-                        var_name := #run code_to_string(c);
-                        var_val  := #insert c;
-                        
-                        ti := type_info(type_of(var_val));
-                        if #complete ti.type == {
-                            case .STRUCT; debug_struct_runtime(var_val, var_name, render_struct_name_prefix);
-
-                            case .INTEGER; #through;   
-                            case .FLOAT;   #through; 
-                            case .BOOL;    #through;
-                            case .STRING;  #through;  
-                            case .ANY;     #through;
-                            case .POINTER; debug_variable_runtime(var_val, var_name);
-
-                            case .PROCEDURE;            #through;
-                            case .VOID;                 #through;
-                            case .ARRAY;                #through;
-                            case .OVERLOAD_SET;         #through;
-                            case .ENUM;                 #through;
-                            case .POLYMORPHIC_VARIABLE; #through;
-                            case .TYPE;                 #through;
-                            case .CODE;                 #through;
-                            case .UNTYPED_LITERAL;      #through;
-                            case .UNTYPED_ENUM;         #through;
-                            case .VARIANT;              assert(false, "Unsupported debug thing");
-                        }
-                        
-                    }
-
-                    debug_with_raylib_draw_text(#code game_state);
-                    debug_with_raylib_draw_text(#code game_state.controls_state_this_frame);
-                    debug_with_raylib_draw_text(#code camera);
-
-                    debug_text_y = 0;
-                    for dwarves {
-                        if CheckCollisionPointRec(mouse_pos_in_world, Rectangle.{ it.pos.x, it.pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT }) {
-                            // TODO: parametrize debug_with_draw_text positions
-                            DrawText(tprint("id: %\0", it.id).data,                                 xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                            DrawText(tprint("pos: %\0", it.pos).data,                               xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                            DrawText(tprint("state: %\0", it.state).data,                           xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                            DrawText(tprint("tile_ids_on_path: %\0", it.tile_ids_on_path).data,     xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                            DrawText(tprint("mining_cooldown_ms: %\0", it.mining_cooldown_ms).data, xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                            DrawText(tprint("attack_cooldown_ms: %\0", it.attack_cooldown_ms).data, xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                            DrawText(tprint("tile_id_mining: %\0", it.tile_id_mining).data,         xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                            DrawText(tprint("direction: %\0", it.direction).data,                   xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                            DrawText(tprint("dwarf_type: %\0", it.dwarf_type).data,                 xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                            DrawText(tprint("hp: %\0", it.hp).data,                                 xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                            DrawText(tprint("ignore_goblins_for: %\0", it.ignore_goblins_for).data, xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                        }
-                    }
-                    
-                    for goblins {
-                        if CheckCollisionPointRec(mouse_pos_in_world, Rectangle.{ it.pos.x, it.pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT }) {
-                            DrawText(tprint("id: %\0", it.id).data,                                 xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                            DrawText(tprint("pos: %\0", it.pos).data,                               xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                            DrawText(tprint("state: %\0", it.state).data,                           xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                            DrawText(tprint("tile_ids_on_path: %\0", it.tile_ids_on_path).data,     xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                            DrawText(tprint("direction: %\0", it.direction).data,                   xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                            DrawText(tprint("hp: %\0", it.hp).data,                                 xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                            DrawText(tprint("attack_cooldown_ms: %\0", it.attack_cooldown_ms).data, xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                        }
+                    found_tile, tile_id := find_tile_id_by_pos(get_rect_pos(hovered_tile_rect));
+                    if found_tile {
+                        DrawText(tprint("%\0", tile_id).data, xx hovered_tile_rect.x, xx hovered_tile_rect.y, 12, WHITE);
                     }
                 }
+            }
 
-                // Draw HUD
-                DRAW_HUD :: true;
-                #if DRAW_HUD {
-                    // Draw information
-                    {
-                        HUD_INFO_FONT_SIZE     :: 18;
-                        HUD_INFO_PADDING       :: 10;
-                        HUD_INFO_SEGMENT_COUNT :: 7;
-                        HUD_INFO_SEGMENT_WIDTH := GetScreenWidth() / HUD_INFO_SEGMENT_COUNT;
-                        HUD_INFO_INCREMENT_X   := HUD_INFO_SEGMENT_WIDTH;
-                        hud_info_x             := HUD_INFO_SEGMENT_WIDTH;
-                        
-                        time_remaining_seconds := game_state.time_remaining_ms / 1000;
-                        time_remaining_minutes := time_remaining_seconds / 60;
+            // Draw particles
+            DRAW_PARTICLES :: true;
+            #if DRAW_PARTICLES {
+                for particle: particles_in_viewport {
+                    TEXT_SIZE     :: 20;
+                    dest_text := get_world_rect_from_pos(particle.pos);
+                    draw_outlined_text(tprint("%\0", particle.text).data, xx dest_text.x, xx dest_text.y, TEXT_SIZE, Color.{ particle.tint.r, particle.tint.g, particle.tint.b, xx (particle.opacity * 255) }, 1, BLACK);
 
-                        draw_outlined_text(
-                            tprint("Miner dwarves: %\0", dwarf_miner_count).data,
-                            xx (read_then_increment(*hud_info_x, HUD_INFO_INCREMENT_X) + HUD_INFO_PADDING), xx (HUD_INFO_PADDING), HUD_INFO_FONT_SIZE, WHITE, 1, BLACK
-                        );
-                        draw_outlined_text(
-                            tprint("Warrior dwarves: %\0", dwarf_warrior_count).data,
-                            xx (read_then_increment(*hud_info_x, HUD_INFO_INCREMENT_X) + HUD_INFO_PADDING), xx (HUD_INFO_PADDING), HUD_INFO_FONT_SIZE, WHITE, 1, BLACK
-                        );
-                        draw_outlined_text(
-                            tprint("Gold: %\0", game_state.gold).data,
-                            xx (read_then_increment(*hud_info_x, HUD_INFO_INCREMENT_X) + HUD_INFO_PADDING), xx (HUD_INFO_PADDING), HUD_INFO_FONT_SIZE, WHITE, 1, BLACK
-                        );
-                        draw_outlined_text(
-                            tprint("Points: %\0", game_state.points).data,
-                            xx (read_then_increment(*hud_info_x, HUD_INFO_INCREMENT_X) + HUD_INFO_PADDING), xx (HUD_INFO_PADDING), HUD_INFO_FONT_SIZE, WHITE, 1, BLACK
-                        );
-                        draw_outlined_text(
-                            tprint("%min %sec\0", time_remaining_minutes, time_remaining_seconds % 60).data,
-                            xx (read_then_increment(*hud_info_x, HUD_INFO_INCREMENT_X) + HUD_INFO_PADDING), xx (HUD_INFO_PADDING), HUD_INFO_FONT_SIZE, WHITE, 1, BLACK
-                        );
+                    if particle.sprite_source_col > -1 && particle.sprite_source_row > -1 {
+                        measured_text_size := poor_mans_measure_text(particle.text, TEXT_SIZE);
+                        dest_sprite := Rectangle.{
+                            dest_text.x + measured_text_size.x,
+                            dest_text.y - measured_text_size.y * 0.25,
+                            dest_text.width,
+                            dest_text.height,
+                        };
+                        source := Rectangle.{
+                            xx (particle.sprite_source_col * TILEMAP_GENERAL_TILE_WIDTH),
+                            xx (particle.sprite_source_row * TILEMAP_GENERAL_TILE_HEIGHT),
+                            TILEMAP_GENERAL_TILE_WIDTH,
+                            TILEMAP_GENERAL_TILE_HEIGHT,
+                        };
+                        DrawTexturePro(tilemap_texture_general, source, dest_sprite, Vector2.{0,0}, 0.0, Color.{ WHITE.r, WHITE.g, WHITE.b, xx (particle.opacity * 255) });
                     }
-
-                    // Draw controls
-                    {
-                        HUD_CONTROLS_PADDING       :: 10;
-                        HUD_CONTROLS_SEGMENT_COUNT :: 10;
-                        HUD_CONTROLS_SEGMENT_WIDTH := GetScreenWidth() / HUD_CONTROLS_SEGMENT_COUNT;
-                        HUD_CONTROLS_INCREMENT_X   := HUD_CONTROLS_SEGMENT_WIDTH;
-                        HUD_CONTROLS_GAP_X         :: 10;
-                        HUD_CONTROLS_HEIGHT        :: 50;
-                        hud_controls_x             := HUD_CONTROLS_SEGMENT_WIDTH;
-                        HUD_CONTROLS_LABEL_Y       := GetScreenHeight()    - HUD_CONTROLS_PADDING * 2;
-                        HUD_CONTROLS_Y             := HUD_CONTROLS_LABEL_Y - HUD_CONTROLS_HEIGHT;
-
-                        draw_hud_control :: (control: Control) -> dest_recangle: Rectangle, is_hovered: bool #expand {
-                            DrawText(
-                                bind_to_readable_name_cstr(control.binds[0]),
-                                xx (hud_controls_x + HUD_CONTROLS_PADDING), xx (HUD_CONTROLS_LABEL_Y), 18, WHITE
-                            );
-
-                            dest_rectangle := Rectangle.{
-                                xx read_then_increment(*`hud_controls_x, HUD_CONTROLS_INCREMENT_X),
-                                xx HUD_CONTROLS_Y,
-                                xx HUD_CONTROLS_HEIGHT,
-                                xx HUD_CONTROLS_HEIGHT,
-                            };
-
-                            is_hovered := false;
-
-                            if CheckCollisionPointRec(`mouse_pos_in_ui, dest_rectangle) {
-                                is_hovered = true;
-
-                                // TODO: isn't this really bad to mutate state in the draw part or whatever?
-                                if game_state.controls_state_this_frame.select_is_pressed_once {
-                                    has_control_mode := (
-                                        control.id == controls.select.id ||                 
-                                        control.id == controls.toggle_base_mode.id ||       
-                                        control.id == controls.toggle_dynamite_mode.id ||   
-                                        control.id == controls.toggle_obsidian_mode.id ||   
-                                        control.id == controls.toggle_wall_mode.id ||       
-                                        control.id == controls.toggle_remove_mode.id
-                                    );
-
-                                    if has_control_mode {
-                                        game_state.control_mode = get_control_mode_from_control(control);
-                                    }
-
-                                    if control.id == controls.panic_pause.id {
-                                        if game_state.panic_pause_timer_ms <= 0 {
-                                            game_state.panic_pause_timer_ms = PANIC_PAUSE_COOLDOWN_MS;
-                                        }
-                                    }
-                                }
-
-                                if game_state.controls_state_this_frame.select_is_held_down {
-                                    if control.id == controls.fast_forward.id {
-                                        game_state.controls_state_this_frame.fast_forward = true;
-                                    }
-                                }
-                            }
-
-                            return dest_rectangle, is_hovered;
-                        }
-
-                        draw_control_tooltip_text :: (control: Control, rect: Rectangle, gold_cost := 0) {
-                            GuiSetStyle(xx GuiControl.DEFAULT, xx GuiDefaultProperty.TEXT_SIZE, 6);
-                            GuiSetStyle(xx GuiControl.TEXTBOX, xx GuiControlProperty.TEXT_COLOR_NORMAL, ColorToInt(WHITE));
-                            GuiSetStyle(xx GuiControl.TEXTBOX, xx GuiTextBoxProperty.TEXT_READONLY, 1);
-                            GuiSetStyle(xx GuiControl.DEFAULT, xx GuiDefaultProperty.TEXT_WRAP_MODE, xx GuiTextWrapMode.TEXT_WRAP_WORD);
-                            GuiSetStyle(xx GuiControl.DEFAULT, xx GuiDefaultProperty.TEXT_ALIGNMENT_VERTICAL, xx GuiTextAlignmentVertical.TEXT_ALIGN_TOP);
-
-                            if gold_cost > 0 {
-                                GuiTextBox(rect, tprint("%\n\nGold cost: %\0", control.tooltip_text, gold_cost).data, xx control.tooltip_text.count, false);
-                            } else {
-                                GuiTextBox(rect, tprint("%\0", control.tooltip_text).data, xx control.tooltip_text.count, false);
-                            }
-
-                            GuiSetStyle(xx GuiControl.DEFAULT, xx GuiDefaultProperty.TEXT_SIZE, 10);
-                            GuiSetStyle(xx GuiControl.DEFAULT, xx GuiDefaultProperty.TEXT_ALIGNMENT_VERTICAL, xx GuiTextAlignmentVertical.TEXT_ALIGN_MIDDLE);
-                            GuiSetStyle(xx GuiControl.DEFAULT, xx GuiDefaultProperty.TEXT_WRAP_MODE, xx GuiTextWrapMode.TEXT_WRAP_NONE);
-                            GuiSetStyle(xx GuiControl.TEXTBOX, xx GuiTextBoxProperty.TEXT_READONLY, 0);
-                        }
-
-                        draw_hud_control_icon :: (control: Control, icon_source_rect: Rectangle, gold_cost := 0) #expand {
-                            dest_rect, is_hovered := draw_hud_control(control);
-
-                            DrawTexturePro(tilemap_texture_general, icon_source_rect, dest_rect, Vector2.{0,0}, 0.0, WHITE);
-
-                            if is_hovered {
-                                DrawText(tprint("%\0", control.name).data, xx (mouse_pos_in_ui.x), xx (mouse_pos_in_ui.y - HUD_CONTROLS_PADDING), 18, WHITE);
-                                
-                                tooltip_rect := Rectangle.{ dest_rect.x, dest_rect.y - dest_rect.height * 3, dest_rect.width * 6, dest_rect.height * 3 };
-                                draw_control_tooltip_text(control, tooltip_rect, gold_cost);
-                            }
-                        }
-
-                        draw_hud_control_color :: (control: Control, color: Color, gold_cost := 0) #expand {
-                            dest_rect, is_hovered := draw_hud_control(control);
-
-                            DrawRectangleRec(dest_rect, color);
-
-                            if is_hovered {
-                                DrawText(tprint("%\0", control.name).data, xx (mouse_pos_in_ui.x), xx (mouse_pos_in_ui.y - HUD_CONTROLS_PADDING), 18, WHITE);
-                                
-                                tooltip_rect := Rectangle.{ dest_rect.x, dest_rect.y - dest_rect.height * 3, dest_rect.width * 6, dest_rect.height * 3 };
-                                draw_control_tooltip_text(control, tooltip_rect, gold_cost);
-                            }
-                        }
-
-                        draw_hud_control_icon(controls.toggle_remove_mode, TILEMAP_SOURCE_RECT_REMOVE);
-                        draw_hud_control_icon(controls.toggle_dynamite_mode, TILEMAP_SOURCE_RECT_DYNAMITE, GOLD_COST_DYNAMITE);
-                        draw_hud_control_icon(controls.toggle_base_mode, TILEMAP_SOURCE_RECT_BASE, GOLD_COST_BASE);
-                        draw_hud_control_color(controls.toggle_wall_mode, DARKPURPLE, GOLD_COST_WALL);
-                        draw_hud_control_color(controls.toggle_obsidian_mode, DARKGRAY, GOLD_COST_OBSIDIAN);
-                        draw_hud_control_color(controls.panic_pause, GRAY);
-                        draw_hud_control_color(controls.fast_forward, SKYBLUE);
-                    }
-                }
-
-                // Draw menus
-                if #complete metagame.state == {
-                    case .RUNNING; // no op
-
-                    case .PAUSED;
-                        PAUSED_TEXT :: "PAUSED";
-                        PAUSED_FONT_SIZE :: 56;
-                        DrawText(PAUSED_TEXT, xx (GetScreenWidth() * 0.5 - MeasureText(PAUSED_TEXT, PAUSED_FONT_SIZE) * 0.5), 20, PAUSED_FONT_SIZE, WHITE);
-
-                        if #complete metagame.pause_state == {
-                            case .MENU;
-                                // Button shared sizing stuff
-                                pause_menu_button_width  := screen_width  * 0.15;
-                                pause_menu_button_height := screen_height * 0.10;
-
-                                pause_menu_button_margin :: 20;
-                                pause_menu_button_gap    :: 10;
-
-                                // TODO: would be cool to generate this constant at compile time somehow
-                                PAUSE_MENU_BUTTON_COUNT :: 4;
-
-                                get_pause_button_rectangle :: (button_gap: int, pause_button_y: float, button_width: float, button_height: float) -> Rectangle {
-                                    // TODO: use existing stuff here
-                                    screen_width  := GetScreenWidth();
-
-                                    return Rectangle.{
-                                        screen_width * 0.5 - button_width * 0.5,
-                                        pause_button_y,
-                                        button_width,
-                                        button_height
-                                    };
-                                }
-
-                                pause_menu_button_y := screen_height * 0.5 - (PAUSE_MENU_BUTTON_COUNT * 0.5 * pause_menu_button_height) - (PAUSE_MENU_BUTTON_COUNT * 0.5 - 0.5) * pause_menu_button_gap;
-
-                                // TODO: DRY these up
-
-                                // Resume button
-                                {
-                                    defer pause_menu_button_y += pause_menu_button_height + pause_menu_button_gap;
-
-                                    resume_button := get_pause_button_rectangle(pause_menu_button_gap, pause_menu_button_y, pause_menu_button_width, pause_menu_button_height);
-
-                                    clicked := GuiButton(resume_button, "RESUME");
-
-                                    if clicked metagame.state = .RUNNING;
-                                }
-
-                                // Options button
-                                {
-                                    defer pause_menu_button_y += pause_menu_button_height + pause_menu_button_gap;
-
-                                    options_button := get_pause_button_rectangle(pause_menu_button_gap, pause_menu_button_y, pause_menu_button_width, pause_menu_button_height);
-
-                                    clicked := GuiButton(options_button, "OPTIONS");
-
-                                    if clicked metagame.pause_state = .OPTIONS;
-                                }
-
-                                // Main menu button
-                                {
-                                    defer pause_menu_button_y += pause_menu_button_height + pause_menu_button_gap;
-
-                                    main_menu_button := get_pause_button_rectangle(pause_menu_button_gap, pause_menu_button_y, pause_menu_button_width, pause_menu_button_height);
-
-                                    clicked := GuiButton(main_menu_button, "MAIN MENU");
-
-                                    if clicked {
-                                        // TODO
-                                    }
-                                }
-
-                                // Quit to desktop button
-                                {
-                                    defer pause_menu_button_y += pause_menu_button_height + pause_menu_button_gap;
-
-                                    quit_button := get_pause_button_rectangle(pause_menu_button_gap, pause_menu_button_y, pause_menu_button_width, pause_menu_button_height);
-
-                                    clicked := GuiButton(quit_button, "QUIT");
-
-                                    if clicked metagame.should_quit_game = true;
-                                }
-
-                            case .OPTIONS;
-                                OPTIONS_HEADER_FONT_SIZE :: 40;
-                        
-                                ACTION_COLUMN_X     : s32 = xx (screen_width * 0);
-                                BIND_ONE_COLUMN_X   := screen_width * 0.25;
-                                BIND_TWO_COLUMN_X   := screen_width * 0.50;
-                                BIND_THREE_COLUMN_X := screen_width * 0.75;
-
-                                OPTIONS_HEADER_Y :: 75;
-
-                                // Options menu headers
-                                {
-                                    DrawText("ACTION", ACTION_COLUMN_X, OPTIONS_HEADER_Y, OPTIONS_HEADER_FONT_SIZE, WHITE);
-                                    DrawText("BIND ONE", xx BIND_ONE_COLUMN_X, OPTIONS_HEADER_Y, OPTIONS_HEADER_FONT_SIZE, WHITE);
-                                    DrawText("BIND TWO", xx BIND_TWO_COLUMN_X, OPTIONS_HEADER_Y, OPTIONS_HEADER_FONT_SIZE, WHITE);
-                                    DrawText("BIND THREE", xx BIND_THREE_COLUMN_X, OPTIONS_HEADER_Y, OPTIONS_HEADER_FONT_SIZE, WHITE);
-                                }
-
-                                // Option menu rows
-                                {
-                                    OPTIONS_Y_INCREMENT :: 65;
-                                    options_row_y : float32 = OPTIONS_HEADER_Y + OPTIONS_Y_INCREMENT;
-
-                                    OPTIONS_ROW_FONT_SIZE : s32 : xx (OPTIONS_HEADER_FONT_SIZE * 0.75);
-                                    
-                                    BIND_BUTTON_WIDTH  := screen_width * 0.25;
-                                    BIND_BUTTON_HEIGHT := BIND_BUTTON_WIDTH * 0.15;
-
-                                    keybind_row :: (control: *Control) #expand {
-                                        DrawText(to_c_string(control.name), `ACTION_COLUMN_X, xx `options_row_y, `OPTIONS_ROW_FONT_SIZE, WHITE);
-
-                                        bind_one_current   := bind_to_readable_name_cstr(control.binds[0]);
-                                        bind_two_current   := bind_to_readable_name_cstr(control.binds[1]);
-                                        bind_three_current := bind_to_readable_name_cstr(control.binds[2]);
-
-                                        bind_one_clicked   := GuiButton(Rectangle.{ `BIND_ONE_COLUMN_X,   `options_row_y, `BIND_BUTTON_WIDTH, `BIND_BUTTON_HEIGHT }, bind_one_current);
-                                        bind_two_clicked   := GuiButton(Rectangle.{ `BIND_TWO_COLUMN_X,   `options_row_y, `BIND_BUTTON_WIDTH, `BIND_BUTTON_HEIGHT }, bind_two_current);
-                                        bind_three_clicked := GuiButton(Rectangle.{ `BIND_THREE_COLUMN_X, `options_row_y, `BIND_BUTTON_WIDTH, `BIND_BUTTON_HEIGHT }, bind_three_current);
-
-                                        if bind_one_clicked   control.binds[0].is_being_rebound = !control.binds[0].is_being_rebound;
-                                        if bind_two_clicked   control.binds[1].is_being_rebound = !control.binds[1].is_being_rebound;
-                                        if bind_three_clicked control.binds[2].is_being_rebound = !control.binds[2].is_being_rebound;  
-
-                                        bind_index_currently_being_rebound := -1;
-                                        if control.binds[0].is_being_rebound bind_index_currently_being_rebound = 0;
-                                        if control.binds[1].is_being_rebound bind_index_currently_being_rebound = 1;
-                                        if control.binds[2].is_being_rebound bind_index_currently_being_rebound = 2;
-
-                                        if bind_index_currently_being_rebound > -1 {
-                                            // NOTE: usually you have GetKeyPressed in a queue because there can be multiple keys
-                                            // pressed per frame. Here, we just take the first one and call it a day.
-                                            key_pressed := GetKeyPressed();
-                                            
-                                            if key_pressed {
-                                                control.binds[bind_index_currently_being_rebound].type  = KeyboardKey;
-                                                control.binds[bind_index_currently_being_rebound].value = key_pressed;
-                                                control.binds[bind_index_currently_being_rebound].is_being_rebound = false;
-                                            } else {
-                                                mouse_value : s32 = -1;
-                                                // TODO: can't I use type_info here or something
-                                                //
-                                                // Intentionally leaving out MOUSE_BUTTON_LEFT, I don't think we ever want to rebind that.
-                                                if IsMouseButtonPressed(.MOUSE_BUTTON_RIGHT)   mouse_value = 1;
-                                                if IsMouseButtonPressed(.MOUSE_BUTTON_MIDDLE)  mouse_value = 2;
-                                                if IsMouseButtonPressed(.MOUSE_BUTTON_SIDE)    mouse_value = 3;
-                                                if IsMouseButtonPressed(.MOUSE_BUTTON_EXTRA)   mouse_value = 4;
-                                                if IsMouseButtonPressed(.MOUSE_BUTTON_FORWARD) mouse_value = 5;
-                                                if IsMouseButtonPressed(.MOUSE_BUTTON_BACK)    mouse_value = 6;
-
-                                                if mouse_value > -1 {
-                                                    control.binds[bind_index_currently_being_rebound].type  = MouseButton;
-                                                    control.binds[bind_index_currently_being_rebound].value = mouse_value;
-                                                    control.binds[bind_index_currently_being_rebound].is_being_rebound = false;
-                                                }
-                                            }
-                                        }
-
-                                        `options_row_y += `OPTIONS_Y_INCREMENT;
-                                    }
-
-                                    keybind_row(*controls.toggle_base_mode);
-                                    keybind_row(*controls.toggle_dynamite_mode);
-                                    keybind_row(*controls.toggle_obsidian_mode);
-                                    keybind_row(*controls.toggle_wall_mode);
-                                    keybind_row(*controls.drag_cam);
-                                    keybind_row(*controls.move_camera_up);
-                                    keybind_row(*controls.move_camera_down);
-                                    keybind_row(*controls.move_camera_left);
-                                    keybind_row(*controls.move_camera_right);
-                                    keybind_row(*controls.toggle_remove_mode);
-                                    keybind_row(*controls.panic_pause);
-                                    keybind_row(*controls.fast_forward);
-                                }
-                        }
-
-                    case .GAME_OVER;
-                        TEXT :: "GAME OVER";
-                        FONT_SIZE :: 56;
-                        DrawText(TEXT, xx (GetScreenWidth() * 0.5 - MeasureText(TEXT, FONT_SIZE) * 0.5), 20, FONT_SIZE, WHITE);
-                        if #complete metagame.game_over_state == {
-                            case .MENU;
-                                // Button shared sizing stuff
-                                game_over_menu_button_width  := screen_width  * 0.15;
-                                game_over_menu_button_height := screen_height * 0.10;
-
-                                game_over_menu_button_margin :: 20;
-                                game_over_menu_button_gap    :: 10;
-
-                                GAME_OVER_MENU_BUTTON_COUNT :: 4;
-
-                                get_game_over_button_rectangle :: (button_gap: int, button_y: float, button_width: float, button_height: float) -> Rectangle {
-                                    // TODO: use existing stuff here
-                                    screen_width := GetScreenWidth();
-
-                                    return Rectangle.{
-                                        screen_width * 0.5 - button_width * 0.5,
-                                        button_y,
-                                        button_width,
-                                        button_height
-                                    };
-                                }
-
-                                game_over_menu_button_y := screen_height * 0.5 - (GAME_OVER_MENU_BUTTON_COUNT * 0.5 * game_over_menu_button_height) - (GAME_OVER_MENU_BUTTON_COUNT * 0.5 - 0.5) * game_over_menu_button_gap;
-
-                                // TODO: DRY these up
-
-                                // Look around button
-                                {
-                                    defer game_over_menu_button_y += game_over_menu_button_height + game_over_menu_button_gap;
-
-                                    look_around_button := get_game_over_button_rectangle(game_over_menu_button_gap, game_over_menu_button_y, game_over_menu_button_width, game_over_menu_button_height);
-
-                                    clicked := GuiButton(look_around_button, "LOOK AROUND");
-
-                                    if clicked metagame.game_over_state = .LOOK_AROUND;
-                                }
-
-                                // Restart button
-                                {
-                                    defer game_over_menu_button_y += game_over_menu_button_height + game_over_menu_button_gap;
-
-                                    restart_button := get_game_over_button_rectangle(game_over_menu_button_gap, game_over_menu_button_y, game_over_menu_button_width, game_over_menu_button_height);
-
-                                    clicked := GuiButton(restart_button, "RESTART");
-
-                                    if clicked {
-                                        game_state, metagame_local, camera = initialize_game();
-                                        metagame = metagame_local;
-                                        metagame.state = .RUNNING;
-                                    }
-                                }
-
-                                // Main menu button
-                                {
-                                    defer game_over_menu_button_y += game_over_menu_button_height + game_over_menu_button_gap;
-
-                                    main_menu_button := get_game_over_button_rectangle(game_over_menu_button_gap, game_over_menu_button_y, game_over_menu_button_width, game_over_menu_button_height);
-
-                                    clicked := GuiButton(main_menu_button, "MAIN MENU");
-
-                                    if clicked {
-                                        // TODO
-                                    }
-                                }
-
-                                // Quit to desktop button
-                                {
-                                    defer game_over_menu_button_y += game_over_menu_button_height + game_over_menu_button_gap;
-
-                                    quit_button := get_game_over_button_rectangle(game_over_menu_button_gap, game_over_menu_button_y, game_over_menu_button_width, game_over_menu_button_height);
-
-                                    clicked := GuiButton(quit_button, "QUIT");
-
-                                    if clicked metagame.should_quit_game = true;
-                                }
-                            
-                            case .LOOK_AROUND; // Don't render anything
-                        }       
-                }
-
-                // Draw control mode cursor icon
-                cursor_mode_icon_rect := Rectangle.{ mouse_pos_in_ui.x + 15, mouse_pos_in_ui.y + 15, 40, 40 };
-
-                if #complete game_state.control_mode == {
-                    case .NORMAL;       // no op
-                    case .ADD_BASE;     DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_BASE, cursor_mode_icon_rect, Vector2.{0,0}, 0.0, WHITE);
-                    case .ADD_DYNAMITE; DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_DYNAMITE, cursor_mode_icon_rect, Vector2.{0,0}, 0.0, WHITE);
-                    case .ADD_OBSIDIAN; DrawRectangleRec(cursor_mode_icon_rect, DARKGRAY); // TODO: draw actual icon
-                    case .ADD_WALL;     DrawRectangleRec(cursor_mode_icon_rect, DARKPURPLE); // TODO: draw actual icon
-                    case .REMOVE;       DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_REMOVE, cursor_mode_icon_rect, Vector2.{0,0}, 0.0, WHITE);
                 }
             }
         }
-    }
-}
 
-// Functions
+        // Draw UI
+        {
+            screen_width  := GetScreenWidth();
+            screen_height := GetScreenHeight();
+
+            // Draw warnings onscreen
+            for dwarf: dwarves {
+                dest     := get_world_rect_from_pos(dwarf.pos);
+                dest_pos := Vector2.{ dest.x, dest.y };
+                radius   := 30.0;
+                center   := GetWorldToScreen2D(Vector2.{ dest_pos.x + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, dest_pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 }, camera);
+
+                dwarf_center  := get_rect_center(get_world_rect_from_pos(dwarf.pos));
+                dwarf_tile_id := get_tile_id_by_pos(dwarf_center);
+
+                // Draw warnings onscreen
+                {
+                    dwarf_is_getting_dangerously_close_to_water := table_contains(*water_warning_tile_ids_set, dwarf_tile_id);
+                    if dwarf_is_getting_dangerously_close_to_water {
+                        DrawRing(center, radius, radius + 3.0, 0, 360, 0, ORANGE);
+                    }
+                    
+                    dwarf_is_getting_dangerously_close_to_lava := table_contains(*lava_warning_tile_ids_set, dwarf_tile_id);
+                    if dwarf_is_getting_dangerously_close_to_lava {
+                        DrawRing(center, radius, radius + 3.0, 0, 360, 0, ORANGE);
+                    }
+                }
+
+                // Draw warnings offscreen
+                {
+                    // If the dwarf is on screen, then there's nothing to do.
+                    if (
+                        dwarf_center.x + TILEMAP_GENERAL_WORLD_WIDTH  * 0.5 > window_start.x &&
+                        dwarf_center.x - TILEMAP_GENERAL_WORLD_WIDTH  * 0.5 < window_end.x   &&
+                        dwarf_center.y - TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 < window_end.y   &&
+                        dwarf_center.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 > window_start.y
+                    ) {
+                        continue;
+                    }
+
+                    draw_warning_rings_if_necessary(dwarf_center, *water_warning_tile_ids_set, camera);
+                    draw_warning_rings_if_necessary(dwarf_center, *lava_warning_tile_ids_set, camera);
+                }
+            }
+
+            // Draw alerts
+            for alert: alerts {
+                radius := 30.0;
+                center := Vector2.{ alert.pos.x + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, alert.pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 };
+
+                if (
+                    center.x + TILEMAP_GENERAL_WORLD_WIDTH  * 0.5 > window_start.x &&
+                    center.x - TILEMAP_GENERAL_WORLD_WIDTH  * 0.5 < window_end.x   &&
+                    center.y - TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 < window_end.y   &&
+                    center.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 > window_start.y
+                ) {
+                    DrawRing(GetWorldToScreen2D(center, camera), radius, radius + 3.0, 0, 360, 0, alert.color);
+                } else {
+                    draw_offscreen_notification(center, camera, false, alert.color);
+                }
+            }
+            
+            // Draw alert banner text
+            if game_state.alert_banner_text_ms > 0 {
+                assert(game_state.alert_banner_text.count > 0, "Tried drawing alert banner text but found no string to draw.");
+
+                FONT_SIZE :: 56;
+                draw_outlined_text(
+                    to_c_string(game_state.alert_banner_text),
+                    xx (GetScreenWidth() * 0.5 - MeasureText(to_c_string(game_state.alert_banner_text),
+                    FONT_SIZE) * 0.5), 20, FONT_SIZE, game_state.alert_banner_text_color, 3, WHITE);
+            }
+
+            // Draw path being drawn cost
+            if game_state.controls_state_this_frame.drawing_path {
+                TEXT_SIZE :: 24;
+
+                gold_cost := get_path_cost(path_being_traced_1) + get_path_cost(path_being_traced_2);
+                measured_text_size := poor_mans_measure_text(tprint("%", gold_cost), TEXT_SIZE);
+
+                text_x := mouse_pos_in_ui.x;
+                text_y := mouse_pos_in_ui.y - measured_text_size.y;
+
+                draw_outlined_text(tprint("%\0", gold_cost).data, xx text_x, xx text_y, TEXT_SIZE, RED, 1, WHITE);
+
+                dest_sprite := Rectangle.{
+                    text_x + measured_text_size.x,
+                    text_y - measured_text_size.y,
+                    TILEMAP_GENERAL_WORLD_WIDTH,
+                    TILEMAP_GENERAL_WORLD_HEIGHT,
+                };
+                source := Rectangle.{
+                    xx (PARTICLE_GOLD_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH),
+                    xx (PARTICLE_GOLD_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT),
+                    TILEMAP_GENERAL_TILE_WIDTH,
+                    TILEMAP_GENERAL_TILE_HEIGHT,
+                };
+                DrawTexturePro(tilemap_texture_general, source, dest_sprite, Vector2.{0,0}, 0.0, WHITE);
+            }
+
+            debug_text_y : s32 = 10;
+            INCREMENT_Y :: 20;
+            if metagame.debug_mode {
+                DrawFPS(10, read_then_increment(*debug_text_y, INCREMENT_Y));
+                DrawText(tprint("dwarf count: %\0", dwarves.count).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 12, WHITE);
+
+                debug_struct_runtime :: (thing: Any, name_prefix: string, render_struct_name_prefix: bool) #expand {
+                    if thing.type.type != .STRUCT return;
+                    tis := cast(*Type_Info_Struct) thing.type;
+
+                    for tis.members {
+                        // Calculate where this field lives in memory
+                        field_ptr := thing.value_pointer + it.offset_in_bytes;
+                        
+                        // Construct an 'Any' so tprint knows how to format it
+                        field_any: Any;
+                        field_any.type = it.type;
+                        field_any.value_pointer = field_ptr;
+
+                        // Format the string dynamically
+                        text := ifx render_struct_name_prefix
+                            then tprint("%.%: %\0", name_prefix, it.name, field_any)
+                            else tprint("%: %\0", it.name, field_any);
+                        
+                        DrawText(text.data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                    }
+                }
+
+                debug_variable_runtime :: (thing: Any, thing_symbol_as_string: string) #expand {
+                    // Format the string dynamically
+                    text := tprint("%: %\0", thing_symbol_as_string, thing);
+                    
+                    DrawText(text.data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                }
+
+                // TODO: recursive struct drawing?
+                // TODO: way to label fields as not wanted as debuggable
+                debug_with_raylib_draw_text :: (c: Code, render_struct_name_prefix := false) #expand {
+                    var_name := #run code_to_string(c);
+                    var_val  := #insert c;
+                    
+                    ti := type_info(type_of(var_val));
+                    if #complete ti.type == {
+                        case .STRUCT; debug_struct_runtime(var_val, var_name, render_struct_name_prefix);
+
+                        case .INTEGER; #through;   
+                        case .FLOAT;   #through; 
+                        case .BOOL;    #through;
+                        case .STRING;  #through;  
+                        case .ANY;     #through;
+                        case .POINTER; debug_variable_runtime(var_val, var_name);
+
+                        case .PROCEDURE;            #through;
+                        case .VOID;                 #through;
+                        case .ARRAY;                #through;
+                        case .OVERLOAD_SET;         #through;
+                        case .ENUM;                 #through;
+                        case .POLYMORPHIC_VARIABLE; #through;
+                        case .TYPE;                 #through;
+                        case .CODE;                 #through;
+                        case .UNTYPED_LITERAL;      #through;
+                        case .UNTYPED_ENUM;         #through;
+                        case .VARIANT;              assert(false, "Unsupported debug thing");
+                    }
+                    
+                }
+
+                debug_with_raylib_draw_text(#code game_state);
+                debug_with_raylib_draw_text(#code game_state.controls_state_this_frame);
+                debug_with_raylib_draw_text(#code camera);
+
+                debug_text_y = 0;
+                for dwarves {
+                    if CheckCollisionPointRec(mouse_pos_in_world, Rectangle.{ it.pos.x, it.pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT }) {
+                        // TODO: parametrize debug_with_draw_text positions
+                        DrawText(tprint("id: %\0", it.id).data,                                 xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                        DrawText(tprint("pos: %\0", it.pos).data,                               xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                        DrawText(tprint("state: %\0", it.state).data,                           xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                        DrawText(tprint("tile_ids_on_path: %\0", it.tile_ids_on_path).data,     xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                        DrawText(tprint("mining_cooldown_ms: %\0", it.mining_cooldown_ms).data, xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                        DrawText(tprint("attack_cooldown_ms: %\0", it.attack_cooldown_ms).data, xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                        DrawText(tprint("tile_id_mining: %\0", it.tile_id_mining).data,         xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                        DrawText(tprint("direction: %\0", it.direction).data,                   xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                        DrawText(tprint("dwarf_type: %\0", it.dwarf_type).data,                 xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                        DrawText(tprint("hp: %\0", it.hp).data,                                 xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                        DrawText(tprint("ignore_goblins_for: %\0", it.ignore_goblins_for).data, xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                    }
+                }
+                
+                for goblins {
+                    if CheckCollisionPointRec(mouse_pos_in_world, Rectangle.{ it.pos.x, it.pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT }) {
+                        DrawText(tprint("id: %\0", it.id).data,                                 xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                        DrawText(tprint("pos: %\0", it.pos).data,                               xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                        DrawText(tprint("state: %\0", it.state).data,                           xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                        DrawText(tprint("tile_ids_on_path: %\0", it.tile_ids_on_path).data,     xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                        DrawText(tprint("direction: %\0", it.direction).data,                   xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                        DrawText(tprint("hp: %\0", it.hp).data,                                 xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                        DrawText(tprint("attack_cooldown_ms: %\0", it.attack_cooldown_ms).data, xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                    }
+                }
+            }
+
+            // Draw HUD
+            DRAW_HUD :: true;
+            #if DRAW_HUD {
+                // Draw information
+                {
+                    HUD_INFO_FONT_SIZE     :: 18;
+                    HUD_INFO_PADDING       :: 10;
+                    HUD_INFO_SEGMENT_COUNT :: 7;
+                    HUD_INFO_SEGMENT_WIDTH := GetScreenWidth() / HUD_INFO_SEGMENT_COUNT;
+                    HUD_INFO_INCREMENT_X   := HUD_INFO_SEGMENT_WIDTH;
+                    hud_info_x             := HUD_INFO_SEGMENT_WIDTH;
+                    
+                    time_remaining_seconds := game_state.time_remaining_ms / 1000;
+                    time_remaining_minutes := time_remaining_seconds / 60;
+
+                    draw_outlined_text(
+                        tprint("Miner dwarves: %\0", dwarf_miner_count).data,
+                        xx (read_then_increment(*hud_info_x, HUD_INFO_INCREMENT_X) + HUD_INFO_PADDING), xx (HUD_INFO_PADDING), HUD_INFO_FONT_SIZE, WHITE, 1, BLACK
+                    );
+                    draw_outlined_text(
+                        tprint("Warrior dwarves: %\0", dwarf_warrior_count).data,
+                        xx (read_then_increment(*hud_info_x, HUD_INFO_INCREMENT_X) + HUD_INFO_PADDING), xx (HUD_INFO_PADDING), HUD_INFO_FONT_SIZE, WHITE, 1, BLACK
+                    );
+                    draw_outlined_text(
+                        tprint("Gold: %\0", game_state.gold).data,
+                        xx (read_then_increment(*hud_info_x, HUD_INFO_INCREMENT_X) + HUD_INFO_PADDING), xx (HUD_INFO_PADDING), HUD_INFO_FONT_SIZE, WHITE, 1, BLACK
+                    );
+                    draw_outlined_text(
+                        tprint("Points: %\0", game_state.points).data,
+                        xx (read_then_increment(*hud_info_x, HUD_INFO_INCREMENT_X) + HUD_INFO_PADDING), xx (HUD_INFO_PADDING), HUD_INFO_FONT_SIZE, WHITE, 1, BLACK
+                    );
+                    draw_outlined_text(
+                        tprint("%min %sec\0", time_remaining_minutes, time_remaining_seconds % 60).data,
+                        xx (read_then_increment(*hud_info_x, HUD_INFO_INCREMENT_X) + HUD_INFO_PADDING), xx (HUD_INFO_PADDING), HUD_INFO_FONT_SIZE, WHITE, 1, BLACK
+                    );
+                }
+
+                // Draw controls
+                {
+                    HUD_CONTROLS_PADDING       :: 10;
+                    HUD_CONTROLS_SEGMENT_COUNT :: 10;
+                    HUD_CONTROLS_SEGMENT_WIDTH := GetScreenWidth() / HUD_CONTROLS_SEGMENT_COUNT;
+                    HUD_CONTROLS_INCREMENT_X   := HUD_CONTROLS_SEGMENT_WIDTH;
+                    HUD_CONTROLS_GAP_X         :: 10;
+                    HUD_CONTROLS_HEIGHT        :: 50;
+                    hud_controls_x             := HUD_CONTROLS_SEGMENT_WIDTH;
+                    HUD_CONTROLS_LABEL_Y       := GetScreenHeight()    - HUD_CONTROLS_PADDING * 2;
+                    HUD_CONTROLS_Y             := HUD_CONTROLS_LABEL_Y - HUD_CONTROLS_HEIGHT;
+
+                    draw_hud_control :: (control: Control) -> dest_recangle: Rectangle, is_hovered: bool #expand {
+                        DrawText(
+                            bind_to_readable_name_cstr(control.binds[0]),
+                            xx (hud_controls_x + HUD_CONTROLS_PADDING), xx (HUD_CONTROLS_LABEL_Y), 18, WHITE
+                        );
+
+                        dest_rectangle := Rectangle.{
+                            xx read_then_increment(*`hud_controls_x, HUD_CONTROLS_INCREMENT_X),
+                            xx HUD_CONTROLS_Y,
+                            xx HUD_CONTROLS_HEIGHT,
+                            xx HUD_CONTROLS_HEIGHT,
+                        };
+
+                        is_hovered := false;
+
+                        if CheckCollisionPointRec(`mouse_pos_in_ui, dest_rectangle) {
+                            is_hovered = true;
+
+                            // TODO: isn't this really bad to mutate state in the draw part or whatever?
+                            if game_state.controls_state_this_frame.select_is_pressed_once {
+                                has_control_mode := (
+                                    control.id == metagame.controls.select.id ||                 
+                                    control.id == metagame.controls.toggle_base_mode.id ||       
+                                    control.id == metagame.controls.toggle_dynamite_mode.id ||   
+                                    control.id == metagame.controls.toggle_obsidian_mode.id ||   
+                                    control.id == metagame.controls.toggle_wall_mode.id ||       
+                                    control.id == metagame.controls.toggle_remove_mode.id
+                                );
+
+                                if has_control_mode {
+                                    game_state.control_mode = get_control_mode_from_control(control);
+                                }
+
+                                if control.id ==metagame.controls.panic_pause.id {
+                                    if game_state.panic_pause_timer_ms <= 0 {
+                                        game_state.panic_pause_timer_ms = PANIC_PAUSE_COOLDOWN_MS;
+                                    }
+                                }
+                            }
+
+                            if game_state.controls_state_this_frame.select_is_held_down {
+                                if control.id ==metagame.controls.fast_forward.id {
+                                    game_state.controls_state_this_frame.fast_forward = true;
+                                }
+                            }
+                        }
+
+                        return dest_rectangle, is_hovered;
+                    }
+
+                    draw_control_tooltip_text :: (control: Control, rect: Rectangle, gold_cost := 0) {
+                        GuiSetStyle(xx GuiControl.DEFAULT, xx GuiDefaultProperty.TEXT_SIZE, 6);
+                        GuiSetStyle(xx GuiControl.TEXTBOX, xx GuiControlProperty.TEXT_COLOR_NORMAL, ColorToInt(WHITE));
+                        GuiSetStyle(xx GuiControl.TEXTBOX, xx GuiTextBoxProperty.TEXT_READONLY, 1);
+                        GuiSetStyle(xx GuiControl.DEFAULT, xx GuiDefaultProperty.TEXT_WRAP_MODE, xx GuiTextWrapMode.TEXT_WRAP_WORD);
+                        GuiSetStyle(xx GuiControl.DEFAULT, xx GuiDefaultProperty.TEXT_ALIGNMENT_VERTICAL, xx GuiTextAlignmentVertical.TEXT_ALIGN_TOP);
+
+                        if gold_cost > 0 {
+                            GuiTextBox(rect, tprint("%\n\nGold cost: %\0", control.tooltip_text, gold_cost).data, xx control.tooltip_text.count, false);
+                        } else {
+                            GuiTextBox(rect, tprint("%\0", control.tooltip_text).data, xx control.tooltip_text.count, false);
+                        }
+
+                        GuiSetStyle(xx GuiControl.DEFAULT, xx GuiDefaultProperty.TEXT_SIZE, 10);
+                        GuiSetStyle(xx GuiControl.DEFAULT, xx GuiDefaultProperty.TEXT_ALIGNMENT_VERTICAL, xx GuiTextAlignmentVertical.TEXT_ALIGN_MIDDLE);
+                        GuiSetStyle(xx GuiControl.DEFAULT, xx GuiDefaultProperty.TEXT_WRAP_MODE, xx GuiTextWrapMode.TEXT_WRAP_NONE);
+                        GuiSetStyle(xx GuiControl.TEXTBOX, xx GuiTextBoxProperty.TEXT_READONLY, 0);
+                    }
+
+                    draw_hud_control_icon :: (control: Control, icon_source_rect: Rectangle, gold_cost := 0) #expand {
+                        dest_rect, is_hovered := draw_hud_control(control);
+
+                        DrawTexturePro(tilemap_texture_general, icon_source_rect, dest_rect, Vector2.{0,0}, 0.0, WHITE);
+
+                        if is_hovered {
+                            DrawText(tprint("%\0", control.name).data, xx (mouse_pos_in_ui.x), xx (mouse_pos_in_ui.y - HUD_CONTROLS_PADDING), 18, WHITE);
+                            
+                            tooltip_rect := Rectangle.{ dest_rect.x, dest_rect.y - dest_rect.height * 3, dest_rect.width * 6, dest_rect.height * 3 };
+                            draw_control_tooltip_text(control, tooltip_rect, gold_cost);
+                        }
+                    }
+
+                    draw_hud_control_color :: (control: Control, color: Color, gold_cost := 0) #expand {
+                        dest_rect, is_hovered := draw_hud_control(control);
+
+                        DrawRectangleRec(dest_rect, color);
+
+                        if is_hovered {
+                            DrawText(tprint("%\0", control.name).data, xx (mouse_pos_in_ui.x), xx (mouse_pos_in_ui.y - HUD_CONTROLS_PADDING), 18, WHITE);
+                            
+                            tooltip_rect := Rectangle.{ dest_rect.x, dest_rect.y - dest_rect.height * 3, dest_rect.width * 6, dest_rect.height * 3 };
+                            draw_control_tooltip_text(control, tooltip_rect, gold_cost);
+                        }
+                    }
+
+                    draw_hud_control_icon(metagame.controls.toggle_remove_mode, TILEMAP_SOURCE_RECT_REMOVE);
+                    draw_hud_control_icon(metagame.controls.toggle_dynamite_mode, TILEMAP_SOURCE_RECT_DYNAMITE, GOLD_COST_DYNAMITE);
+                    draw_hud_control_icon(metagame.controls.toggle_base_mode, TILEMAP_SOURCE_RECT_BASE, GOLD_COST_BASE);
+                    draw_hud_control_color(metagame.controls.toggle_wall_mode, DARKPURPLE, GOLD_COST_WALL);
+                    draw_hud_control_color(metagame.controls.toggle_obsidian_mode, DARKGRAY, GOLD_COST_OBSIDIAN);
+                    draw_hud_control_color(metagame.controls.panic_pause, GRAY);
+                    draw_hud_control_color(metagame.controls.fast_forward, SKYBLUE);
+                }
+            }
+
+            // Draw menus
+            if #complete metagame.state == {
+                case .RUNNING; // no op
+
+                case .PAUSED;
+                    PAUSED_TEXT :: "PAUSED";
+                    PAUSED_FONT_SIZE :: 56;
+                    DrawText(PAUSED_TEXT, xx (GetScreenWidth() * 0.5 - MeasureText(PAUSED_TEXT, PAUSED_FONT_SIZE) * 0.5), 20, PAUSED_FONT_SIZE, WHITE);
+
+                    if #complete metagame.pause_state == {
+                        case .MENU;
+                            // Button shared sizing stuff
+                            pause_menu_button_width  := screen_width  * 0.15;
+                            pause_menu_button_height := screen_height * 0.10;
+
+                            pause_menu_button_margin :: 20;
+                            pause_menu_button_gap    :: 10;
+
+                            // TODO: would be cool to generate this constant at compile time somehow
+                            PAUSE_MENU_BUTTON_COUNT :: 4;
+
+                            get_pause_button_rectangle :: (button_gap: int, pause_button_y: float, button_width: float, button_height: float) -> Rectangle {
+                                // TODO: use existing stuff here
+                                screen_width  := GetScreenWidth();
+
+                                return Rectangle.{
+                                    screen_width * 0.5 - button_width * 0.5,
+                                    pause_button_y,
+                                    button_width,
+                                    button_height
+                                };
+                            }
+
+                            pause_menu_button_y := screen_height * 0.5 - (PAUSE_MENU_BUTTON_COUNT * 0.5 * pause_menu_button_height) - (PAUSE_MENU_BUTTON_COUNT * 0.5 - 0.5) * pause_menu_button_gap;
+
+                            // TODO: DRY these up
+
+                            // Resume button
+                            {
+                                defer pause_menu_button_y += pause_menu_button_height + pause_menu_button_gap;
+
+                                resume_button := get_pause_button_rectangle(pause_menu_button_gap, pause_menu_button_y, pause_menu_button_width, pause_menu_button_height);
+
+                                clicked := GuiButton(resume_button, "RESUME");
+
+                                if clicked metagame.state = .RUNNING;
+                            }
+
+                            // Options button
+                            {
+                                defer pause_menu_button_y += pause_menu_button_height + pause_menu_button_gap;
+
+                                options_button := get_pause_button_rectangle(pause_menu_button_gap, pause_menu_button_y, pause_menu_button_width, pause_menu_button_height);
+
+                                clicked := GuiButton(options_button, "OPTIONS");
+
+                                if clicked metagame.pause_state = .OPTIONS;
+                            }
+
+                            // Main menu button
+                            {
+                                defer pause_menu_button_y += pause_menu_button_height + pause_menu_button_gap;
+
+                                main_menu_button := get_pause_button_rectangle(pause_menu_button_gap, pause_menu_button_y, pause_menu_button_width, pause_menu_button_height);
+
+                                clicked := GuiButton(main_menu_button, "MAIN MENU");
+
+                                if clicked {
+                                    // TODO
+                                }
+                            }
+
+                            // Quit to desktop button
+                            {
+                                defer pause_menu_button_y += pause_menu_button_height + pause_menu_button_gap;
+
+                                quit_button := get_pause_button_rectangle(pause_menu_button_gap, pause_menu_button_y, pause_menu_button_width, pause_menu_button_height);
+
+                                clicked := GuiButton(quit_button, "QUIT");
+
+                                if clicked metagame.should_quit_game = true;
+                            }
+
+                        case .OPTIONS;
+                            OPTIONS_HEADER_FONT_SIZE :: 40;
+                    
+                            ACTION_COLUMN_X     : s32 = xx (screen_width * 0);
+                            BIND_ONE_COLUMN_X   := screen_width * 0.25;
+                            BIND_TWO_COLUMN_X   := screen_width * 0.50;
+                            BIND_THREE_COLUMN_X := screen_width * 0.75;
+
+                            OPTIONS_HEADER_Y :: 75;
+
+                            // Options menu headers
+                            {
+                                DrawText("ACTION", ACTION_COLUMN_X, OPTIONS_HEADER_Y, OPTIONS_HEADER_FONT_SIZE, WHITE);
+                                DrawText("BIND ONE", xx BIND_ONE_COLUMN_X, OPTIONS_HEADER_Y, OPTIONS_HEADER_FONT_SIZE, WHITE);
+                                DrawText("BIND TWO", xx BIND_TWO_COLUMN_X, OPTIONS_HEADER_Y, OPTIONS_HEADER_FONT_SIZE, WHITE);
+                                DrawText("BIND THREE", xx BIND_THREE_COLUMN_X, OPTIONS_HEADER_Y, OPTIONS_HEADER_FONT_SIZE, WHITE);
+                            }
+
+                            // Option menu rows
+                            {
+                                OPTIONS_Y_INCREMENT :: 65;
+                                options_row_y : float32 = OPTIONS_HEADER_Y + OPTIONS_Y_INCREMENT;
+
+                                OPTIONS_ROW_FONT_SIZE : s32 : xx (OPTIONS_HEADER_FONT_SIZE * 0.75);
+                                
+                                BIND_BUTTON_WIDTH  := screen_width * 0.25;
+                                BIND_BUTTON_HEIGHT := BIND_BUTTON_WIDTH * 0.15;
+
+                                keybind_row :: (control: *Control) #expand {
+                                    DrawText(to_c_string(control.name), `ACTION_COLUMN_X, xx `options_row_y, `OPTIONS_ROW_FONT_SIZE, WHITE);
+
+                                    bind_one_current   := bind_to_readable_name_cstr(control.binds[0]);
+                                    bind_two_current   := bind_to_readable_name_cstr(control.binds[1]);
+                                    bind_three_current := bind_to_readable_name_cstr(control.binds[2]);
+
+                                    bind_one_clicked   := GuiButton(Rectangle.{ `BIND_ONE_COLUMN_X,   `options_row_y, `BIND_BUTTON_WIDTH, `BIND_BUTTON_HEIGHT }, bind_one_current);
+                                    bind_two_clicked   := GuiButton(Rectangle.{ `BIND_TWO_COLUMN_X,   `options_row_y, `BIND_BUTTON_WIDTH, `BIND_BUTTON_HEIGHT }, bind_two_current);
+                                    bind_three_clicked := GuiButton(Rectangle.{ `BIND_THREE_COLUMN_X, `options_row_y, `BIND_BUTTON_WIDTH, `BIND_BUTTON_HEIGHT }, bind_three_current);
+
+                                    if bind_one_clicked   control.binds[0].is_being_rebound = !control.binds[0].is_being_rebound;
+                                    if bind_two_clicked   control.binds[1].is_being_rebound = !control.binds[1].is_being_rebound;
+                                    if bind_three_clicked control.binds[2].is_being_rebound = !control.binds[2].is_being_rebound;  
+
+                                    bind_index_currently_being_rebound := -1;
+                                    if control.binds[0].is_being_rebound bind_index_currently_being_rebound = 0;
+                                    if control.binds[1].is_being_rebound bind_index_currently_being_rebound = 1;
+                                    if control.binds[2].is_being_rebound bind_index_currently_being_rebound = 2;
+
+                                    if bind_index_currently_being_rebound > -1 {
+                                        // NOTE: usually you have GetKeyPressed in a queue because there can be multiple keys
+                                        // pressed per frame. Here, we just take the first one and call it a day.
+                                        key_pressed := GetKeyPressed();
+                                        
+                                        if key_pressed {
+                                            control.binds[bind_index_currently_being_rebound].type  = KeyboardKey;
+                                            control.binds[bind_index_currently_being_rebound].value = key_pressed;
+                                            control.binds[bind_index_currently_being_rebound].is_being_rebound = false;
+                                        } else {
+                                            mouse_value : s32 = -1;
+                                            // TODO: can't I use type_info here or something
+                                            //
+                                            // Intentionally leaving out MOUSE_BUTTON_LEFT, I don't think we ever want to rebind that.
+                                            if IsMouseButtonPressed(.MOUSE_BUTTON_RIGHT)   mouse_value = 1;
+                                            if IsMouseButtonPressed(.MOUSE_BUTTON_MIDDLE)  mouse_value = 2;
+                                            if IsMouseButtonPressed(.MOUSE_BUTTON_SIDE)    mouse_value = 3;
+                                            if IsMouseButtonPressed(.MOUSE_BUTTON_EXTRA)   mouse_value = 4;
+                                            if IsMouseButtonPressed(.MOUSE_BUTTON_FORWARD) mouse_value = 5;
+                                            if IsMouseButtonPressed(.MOUSE_BUTTON_BACK)    mouse_value = 6;
+
+                                            if mouse_value > -1 {
+                                                control.binds[bind_index_currently_being_rebound].type  = MouseButton;
+                                                control.binds[bind_index_currently_being_rebound].value = mouse_value;
+                                                control.binds[bind_index_currently_being_rebound].is_being_rebound = false;
+                                            }
+                                        }
+                                    }
+
+                                    `options_row_y += `OPTIONS_Y_INCREMENT;
+                                }
+
+                                keybind_row(*(metagame.controls).toggle_base_mode);
+                                keybind_row(*(metagame.controls).toggle_dynamite_mode);
+                                keybind_row(*(metagame.controls).toggle_obsidian_mode);
+                                keybind_row(*(metagame.controls).toggle_wall_mode);
+                                keybind_row(*(metagame.controls).drag_cam);
+                                keybind_row(*(metagame.controls).move_camera_up);
+                                keybind_row(*(metagame.controls).move_camera_down);
+                                keybind_row(*(metagame.controls).move_camera_left);
+                                keybind_row(*(metagame.controls).move_camera_right);
+                                keybind_row(*(metagame.controls).toggle_remove_mode);
+                                keybind_row(*(metagame.controls).panic_pause);
+                                keybind_row(*(metagame.controls).fast_forward);
+                            }
+                    }
+
+                case .GAME_OVER;
+                    TEXT :: "GAME OVER";
+                    FONT_SIZE :: 56;
+                    DrawText(TEXT, xx (GetScreenWidth() * 0.5 - MeasureText(TEXT, FONT_SIZE) * 0.5), 20, FONT_SIZE, WHITE);
+                    if #complete metagame.game_over_state == {
+                        case .MENU;
+                            // Button shared sizing stuff
+                            game_over_menu_button_width  := screen_width  * 0.15;
+                            game_over_menu_button_height := screen_height * 0.10;
+
+                            game_over_menu_button_margin :: 20;
+                            game_over_menu_button_gap    :: 10;
+
+                            GAME_OVER_MENU_BUTTON_COUNT :: 4;
+
+                            get_game_over_button_rectangle :: (button_gap: int, button_y: float, button_width: float, button_height: float) -> Rectangle {
+                                // TODO: use existing stuff here
+                                screen_width := GetScreenWidth();
+
+                                return Rectangle.{
+                                    screen_width * 0.5 - button_width * 0.5,
+                                    button_y,
+                                    button_width,
+                                    button_height
+                                };
+                            }
+
+                            game_over_menu_button_y := screen_height * 0.5 - (GAME_OVER_MENU_BUTTON_COUNT * 0.5 * game_over_menu_button_height) - (GAME_OVER_MENU_BUTTON_COUNT * 0.5 - 0.5) * game_over_menu_button_gap;
+
+                            // TODO: DRY these up
+
+                            // Look around button
+                            {
+                                defer game_over_menu_button_y += game_over_menu_button_height + game_over_menu_button_gap;
+
+                                look_around_button := get_game_over_button_rectangle(game_over_menu_button_gap, game_over_menu_button_y, game_over_menu_button_width, game_over_menu_button_height);
+
+                                clicked := GuiButton(look_around_button, "LOOK AROUND");
+
+                                if clicked metagame.game_over_state = .LOOK_AROUND;
+                            }
+
+                            // Restart button
+                            {
+                                defer game_over_menu_button_y += game_over_menu_button_height + game_over_menu_button_gap;
+
+                                restart_button := get_game_over_button_rectangle(game_over_menu_button_gap, game_over_menu_button_y, game_over_menu_button_width, game_over_menu_button_height);
+
+                                clicked := GuiButton(restart_button, "RESTART");
+
+                                if clicked {
+                                    game_state.*, metagame, camera.* = initialize_round();
+                                }
+                            }
+
+                            // Main menu button
+                            {
+                                defer game_over_menu_button_y += game_over_menu_button_height + game_over_menu_button_gap;
+
+                                main_menu_button := get_game_over_button_rectangle(game_over_menu_button_gap, game_over_menu_button_y, game_over_menu_button_width, game_over_menu_button_height);
+
+                                clicked := GuiButton(main_menu_button, "MAIN MENU");
+
+                                if clicked {
+                                    // TODO
+                                }
+                            }
+
+                            // Quit to desktop button
+                            {
+                                defer game_over_menu_button_y += game_over_menu_button_height + game_over_menu_button_gap;
+
+                                quit_button := get_game_over_button_rectangle(game_over_menu_button_gap, game_over_menu_button_y, game_over_menu_button_width, game_over_menu_button_height);
+
+                                clicked := GuiButton(quit_button, "QUIT");
+
+                                if clicked metagame.should_quit_game = true;
+                            }
+                        
+                        case .LOOK_AROUND; // Don't render anything
+                    }       
+            }
+
+            // Draw control mode cursor icon
+            cursor_mode_icon_rect := Rectangle.{ mouse_pos_in_ui.x + 15, mouse_pos_in_ui.y + 15, 40, 40 };
+
+            if #complete game_state.control_mode == {
+                case .NORMAL;       // no op
+                case .ADD_BASE;     DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_BASE, cursor_mode_icon_rect, Vector2.{0,0}, 0.0, WHITE);
+                case .ADD_DYNAMITE; DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_DYNAMITE, cursor_mode_icon_rect, Vector2.{0,0}, 0.0, WHITE);
+                case .ADD_OBSIDIAN; DrawRectangleRec(cursor_mode_icon_rect, DARKGRAY); // TODO: draw actual icon
+                case .ADD_WALL;     DrawRectangleRec(cursor_mode_icon_rect, DARKPURPLE); // TODO: draw actual icon
+                case .REMOVE;       DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_REMOVE, cursor_mode_icon_rect, Vector2.{0,0}, 0.0, WHITE);
+            }
+        }
+    }
+
+    return metagame;
+}
 
 create_alert :: (alert_type: AlertType, pos: Vector2, game_state: *GameState) -> Alert {
     color: Color;
@@ -3711,7 +3683,146 @@ reset_memory :: () {
     particle_id_counter = 0;
 }
 
-initialize_game :: () -> GameState, Metagame, Camera2D {
+initialize_round :: () -> GameState, Metagame, Camera2D {
+    // Set temp allocator for various things.
+    {
+        fully_mined_tile_ids_in_viewport.allocator    = temp;
+        actively_mined_tile_ids_in_viewport.allocator = temp;
+        cave_tile_ids_in_viewport.allocator           = temp;
+        encased_tile_ids_in_viewport.allocator        = temp;
+        iron_tile_ids_in_viewport.allocator           = temp;
+        water_still_tile_ids_in_viewport.allocator    = temp;
+        water_flowing_tile_ids_in_viewport.allocator  = temp;
+        lava_still_tile_ids_in_viewport.allocator     = temp;
+        lava_flowing_tile_ids_in_viewport.allocator   = temp;
+        obsidian_tile_ids_in_viewport.allocator       = temp;
+        wall_tile_ids_in_viewport.allocator           = temp;
+        dwarves_in_viewport.allocator                 = temp;
+        goblins_in_viewport.allocator                 = temp;
+        tiles_with_dynamite_ids_in_viewport.allocator = temp;
+        tiles_with_treasure_ids_in_viewport.allocator = temp;
+        hole_tile_ids_in_viewport.allocator           = temp;
+        paths_in_viewport.allocator                   = temp;
+        alerts_in_viewport.allocator                  = temp;
+        bases_in_viewport.allocator                   = temp;
+        tile_ids_to_dwarfs.allocator                  = temp;
+        tile_ids_to_goblins.allocator                 = temp;
+        tile_ids_to_bases.allocator                   = temp;
+    }
+
+    // TODO: parametrize
+    random_seed(123456789);
+
+    // TODO: Defaults to fall back on
+    // TODO: Put in a config file, but keep as jai, and then parse and #insert or something?
+    // Initialize controls
+    controls: Controls;
+    {
+        controls.select.binds[0] = Bind.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_LEFT };
+
+        controls.clear_selection.id   = read_then_increment(*control_id_counter);
+        controls.clear_selection.name = "Clear selection";
+        controls.clear_selection.control_mode = .NORMAL;
+        controls.clear_selection.rebindable_by_user = true;
+        controls.clear_selection.binds[0] = Bind.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_RIGHT };
+
+        controls.toggle_base_mode.id   = read_then_increment(*control_id_counter);
+        controls.toggle_base_mode.name = "Build base mode";
+        // TODO: This text needs to change dynamically ("Cost: % (Next will cost %)")
+        controls.toggle_base_mode.tooltip_text = "Bases increase your max amount of warriors, and allow you to spawn additional miners. Must be built on a path. Cost more each time you build one.";
+        controls.toggle_base_mode.control_mode = .ADD_BASE;
+        controls.toggle_base_mode.rebindable_by_user = true;
+        controls.toggle_base_mode.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_B };
+
+        controls.add_iron.id   = read_then_increment(*control_id_counter);
+        controls.add_iron.name = "DEBUG: Add iron deposit";
+        controls.add_iron.rebindable_by_user = false;
+        controls.add_iron.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_I };
+
+        controls.select_as_place_miner_dwarf.id   = read_then_increment(*control_id_counter);
+        controls.select_as_place_miner_dwarf.name = "DEBUG: Add miner dwarf";
+        controls.select_as_place_miner_dwarf.rebindable_by_user = false;
+        controls.select_as_place_miner_dwarf.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_D };
+
+        controls.select_as_place_warrior_dwarf.id   = read_then_increment(*control_id_counter);
+        controls.select_as_place_warrior_dwarf.name = "DEBUG: Add warrior dwarf";
+        controls.select_as_place_warrior_dwarf.rebindable_by_user = false;
+        controls.select_as_place_warrior_dwarf.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_A };
+
+        controls.toggle_dynamite_mode.id   = read_then_increment(*control_id_counter);
+        controls.toggle_dynamite_mode.name = "Place dynamite mode";
+        controls.toggle_dynamite_mode.tooltip_text = "Blows up a dwarf when stepped on, creating a hole. Holes stop water and lava flows permanently.";
+        controls.toggle_dynamite_mode.control_mode = .ADD_DYNAMITE;
+        controls.toggle_dynamite_mode.rebindable_by_user = true;
+        controls.toggle_dynamite_mode.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_E };
+
+        controls.select_as_place_goblin.id   = read_then_increment(*control_id_counter);
+        controls.select_as_place_goblin.name = "DEBUG: Place goblin";
+        controls.select_as_place_goblin.rebindable_by_user = false;
+        controls.select_as_place_goblin.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_T };
+        
+        controls.toggle_obsidian_mode.id   = read_then_increment(*control_id_counter);
+        controls.toggle_obsidian_mode.name = "Obsidian mode";
+        controls.toggle_obsidian_mode.tooltip_text = "Turns soil into solid obsidian, making it impenetrable to almost anything.";
+        controls.toggle_obsidian_mode.control_mode = .ADD_OBSIDIAN;
+        controls.toggle_obsidian_mode.rebindable_by_user = true;
+        controls.toggle_obsidian_mode.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_Q           };
+        controls.toggle_obsidian_mode.binds[1] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT_SHIFT  };
+        controls.toggle_obsidian_mode.binds[2] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT_SHIFT };
+        
+        controls.toggle_wall_mode.id   = read_then_increment(*control_id_counter);
+        controls.toggle_wall_mode.name = "Build wall mode";
+        controls.toggle_wall_mode.tooltip_text = "Place a wall that permanently stops water, slows down lava, and blocks warriors and certain enemies. Miners, some enemies, and lava can destroy walls.";
+        controls.toggle_wall_mode.control_mode = .ADD_WALL;
+        controls.toggle_wall_mode.rebindable_by_user = true;
+        controls.toggle_wall_mode.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_W };
+        
+        controls.drag_cam.id   = read_then_increment(*control_id_counter);
+        controls.drag_cam.name = "Drag camera";
+        controls.drag_cam.rebindable_by_user = true;
+        controls.drag_cam.binds[0] = Bind.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_RIGHT  };
+        controls.drag_cam.binds[1] = Bind.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_MIDDLE };
+        
+        controls.move_camera_up.id   = read_then_increment(*control_id_counter);
+        controls.move_camera_up.name = "Move camera up";
+        controls.move_camera_up.rebindable_by_user = true;
+        controls.move_camera_up.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_UP };
+        
+        controls.move_camera_down.id   = read_then_increment(*control_id_counter);
+        controls.move_camera_down.name = "Move camera down";
+        controls.move_camera_down.rebindable_by_user = true; 
+        controls.move_camera_down.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_DOWN };
+        
+        controls.move_camera_left.id   = read_then_increment(*control_id_counter);
+        controls.move_camera_left.name = "Move camera left";
+        controls.move_camera_left.rebindable_by_user = true; 
+        controls.move_camera_left.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT };
+        
+        controls.move_camera_right.id   = read_then_increment(*control_id_counter);
+        controls.move_camera_right.name = "Move camera right";
+        controls.move_camera_right.rebindable_by_user = true; 
+        controls.move_camera_right.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT };
+        
+        controls.toggle_remove_mode.id   = read_then_increment(*control_id_counter);
+        controls.toggle_remove_mode.name = "Remove mode";
+        controls.toggle_remove_mode.control_mode = .REMOVE;
+        controls.toggle_remove_mode.tooltip_text = "While active, you can select a created object to destroy it, like dynamite and path arrows.";
+        controls.toggle_remove_mode.rebindable_by_user = true; 
+        controls.toggle_remove_mode.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_R };
+
+        controls.panic_pause.id   = read_then_increment(*control_id_counter);
+        controls.panic_pause.name = "Panic pause";
+        controls.panic_pause.tooltip_text = "Forces time to a halt for a short duration, but has a decently-long cooldown.";
+        controls.panic_pause.rebindable_by_user = true;
+        controls.panic_pause.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_SPACE };
+
+        controls.fast_forward.id   = read_then_increment(*control_id_counter);
+        controls.fast_forward.name = "Fast forward";
+        controls.fast_forward.tooltip_text = "Speeds up the action, takes on resources to do, and has no cooldown.";
+        controls.fast_forward.rebindable_by_user = true;
+        controls.fast_forward.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_S };
+    }
+
     reset_memory();
 
     // TODO: this will come from the main menu selection
@@ -3737,10 +3848,14 @@ initialize_game :: () -> GameState, Metagame, Camera2D {
 
     metagame := Metagame.{
         state            = .RUNNING,
+        screen           = .ROUND,
+        initialized      = true,
         should_quit_game = false,
         debug_mode       = false,
         pause_state      = .MENU,
         game_over_state  = .MENU,
+        main_menu_screen = .ROOT,
+        controls         = controls,
     };
 
     // Initialize caves
