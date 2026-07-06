@@ -105,6 +105,8 @@ TILEMAP_GENERAL_TILE_HEIGHT  :: 32;
 TILEMAP_GENERAL_WORLD_WIDTH  :: TILEMAP_GENERAL_TILE_WIDTH  * SCALE;
 TILEMAP_GENERAL_WORLD_HEIGHT :: TILEMAP_GENERAL_TILE_HEIGHT * SCALE;
 
+// YOU WERE DOING: these are no longer constants, and probably need to be weaved into the game state
+// and initialized
 WORLD_COLS :: 2048;
 WORLD_ROWS :: 2048;
 WORLD_WIDTH  :: WORLD_COLS * TILEMAP_GENERAL_WORLD_WIDTH;
@@ -150,9 +152,10 @@ HOME_BASE_UNDER_ATTACK_COOLDOWN_MS :: 10000;
 // Metagame state
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-MetagameScreen :: enum {
+MetagameThingRunning :: enum {
     MAIN_MENU;
     ROUND;
+    TUTORIAL_CONTROLS;
 }
 
 MainMenuScreen :: enum {
@@ -177,9 +180,14 @@ GameOverState :: enum {
     LOOK_AROUND;
 }
 
+LEVEL :: enum {
+    NORMAL;
+    TUTORIAL_CONTROLS;
+}
+
 Metagame :: struct {
     state            : MetagameState;
-    screen           : MetagameScreen;
+    thing_running    : MetagameThingRunning;
     main_menu_screen : MainMenuScreen;
     initialized      : bool;
     should_quit_game : bool;
@@ -187,6 +195,7 @@ Metagame :: struct {
     pause_state      : PauseState;
     game_over_state  : GameOverState;
     controls         : Controls;
+    level            : Level;
 }
 
 metagame : Metagame;
@@ -639,24 +648,22 @@ main :: () {
     while !metagame.should_quit_game {
         defer metagame.should_quit_game = metagame.should_quit_game || WindowShouldClose();
 
-        if #complete metagame.screen == {
+        if #complete metagame.thing_running == {
             case .MAIN_MENU;
-                metagame = update_and_draw_main_menu_frame();
+                metagame = update_and_draw_frame_main_menu();
             case .ROUND;
                 if metagame.initialized {
-                    metagame = update_and_draw_round_frame(*game_state, *camera);
+                    metagame = update_and_draw_frame_round(*game_state, *camera);
                 } else {
                     game_state, metagame, camera = initialize_round();
                 }
-            // TODO: tutorial, I guess
         }
-
     }
 }
 
 // Functions
 
-update_and_draw_main_menu_frame :: () -> metagame: Metagame {
+update_and_draw_frame_main_menu :: () -> metagame: Metagame {
     screen_width  := GetScreenWidth();
     screen_height := GetScreenHeight();
 
@@ -699,19 +706,22 @@ update_and_draw_main_menu_frame :: () -> metagame: Metagame {
                 if clicked {
                     metagame.screen      = .ROUND;
                     metagame.initialized = false;
+                    metagame.level       = .NORMAL;
                 }
             }
 
-            // Restart button
+            // Tutorial button
             {
                 defer main_menu_button_y += main_menu_button_height + main_menu_button_gap;
 
                 tutorial_button := get_main_button_rectangle(main_menu_button_gap, main_menu_button_y, main_menu_button_width, main_menu_button_height);
 
-                clicked := GuiButton(tutorial_button, "Tutorial (coming soon!)");
+                clicked := GuiButton(tutorial_button, "Tutorial");
 
                 if clicked {
-                    // TODO: implement tutorial
+                    metagame.screen      = .ROUND;
+                    metagame.initialized = false;
+                    metagame.level       = .TUTORIAL_CONTROLS;
                 }
             }
 
@@ -736,7 +746,7 @@ update_and_draw_main_menu_frame :: () -> metagame: Metagame {
 
                 clicked := GuiButton(quit_button, "Quit");
 
-                if clicked metagame.should_quit_game = true;
+                if clicked then metagame.should_quit_game = true;
             }
         case .SETTINGS;
         case .TUTORIAL;
@@ -745,7 +755,7 @@ update_and_draw_main_menu_frame :: () -> metagame: Metagame {
     return metagame;
 }
 
-update_and_draw_round_frame :: (game_state: *GameState, camera: *Camera2D) -> metagame: Metagame {
+update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> metagame: Metagame {
     // PERF: can this be keep_memory?
     table_reset(*tile_ids_to_dwarfs);
     table_reset(*tile_ids_to_goblins);
@@ -3862,109 +3872,114 @@ initialize_round :: () -> GameState, Metagame, Camera2D {
         game_over_state  = .MENU,
         main_menu_screen = .ROOT,
         controls         = controls,
+        level            = metagame.level,
     };
 
-    // Initialize caves
-    GENERATE_CAVES_ENABLED :: true;
-    #if GENERATE_CAVES_ENABLED {
-        CAVE_PERLIN_NOISE_FREQUENCY :: 256; // How many rows / columns
-        CAVE_PERLIN_NOISE_AMPLITUDE :: 2;
-        CAVE_PERLIN_NOISE_OCTAVES   :: 1;
-        CAVE_PERLIN_NOISE_MAX_THRESHOLD :: 0.95;
+    if #complete metagame.level == {
+        case .NORMAL;
+            // Initialize caves
+            GENERATE_CAVES_ENABLED :: true;
+            #if GENERATE_CAVES_ENABLED {
+                CAVE_PERLIN_NOISE_FREQUENCY :: 256; // How many rows / columns
+                CAVE_PERLIN_NOISE_AMPLITUDE :: 2;
+                CAVE_PERLIN_NOISE_OCTAVES   :: 1;
+                CAVE_PERLIN_NOISE_MAX_THRESHOLD :: 0.95;
 
-        cave_noise := perlin_noise_2d(WORLD_COLS, CAVE_PERLIN_NOISE_FREQUENCY, CAVE_PERLIN_NOISE_AMPLITUDE, CAVE_PERLIN_NOISE_OCTAVES);
+                cave_noise := perlin_noise_2d(WORLD_COLS, CAVE_PERLIN_NOISE_FREQUENCY, CAVE_PERLIN_NOISE_AMPLITUDE, CAVE_PERLIN_NOISE_OCTAVES);
 
-        for i: 0..(WORLD_COLS * WORLD_COLS)-1 {
-            normalized := (cave_noise[i] + 1.0) / 2.0;
-            // Clamp just in case floating point math slightly overshoots
-            cave_noise[i] = clamp(normalized, 0.0, 1.0);
-        }
+                for i: 0..(WORLD_COLS * WORLD_COLS)-1 {
+                    normalized := (cave_noise[i] + 1.0) / 2.0;
+                    // Clamp just in case floating point math slightly overshoots
+                    cave_noise[i] = clamp(normalized, 0.0, 1.0);
+                }
 
-        for col: 0..WORLD_COLS-1 {
-            for row: 0..WORLD_ROWS-1 {
-                tile_id := (row * WORLD_COLS) + col + 1;
-                noise_index := row * WORLD_COLS + col;
-                tile_should_be_part_of_cave := cave_noise[noise_index] >= CAVE_PERLIN_NOISE_MAX_THRESHOLD;
+                for col: 0..WORLD_COLS-1 {
+                    for row: 0..WORLD_ROWS-1 {
+                        tile_id := (row * WORLD_COLS) + col + 1;
+                        noise_index := row * WORLD_COLS + col;
+                        tile_should_be_part_of_cave := cave_noise[noise_index] >= CAVE_PERLIN_NOISE_MAX_THRESHOLD;
 
-                if tile_should_be_part_of_cave {
-                    set_tile_as_type(xx tile_id, .CAVE, false, false, *game_state);
+                        if tile_should_be_part_of_cave {
+                            set_tile_as_type(xx tile_id, .CAVE, false, false, *game_state);
+                        }
+                    }
                 }
             }
-        }
-    }
 
-    // Initialize iron
-    GENERATE_IRON_ENABLED :: true;
-    #if GENERATE_IRON_ENABLED {
-        IRON_SPAWN_CHANCE_NUMERATOR   :: 5;
-        IRON_SPAWN_CHANCE_DENOMINATOR :: 1000;
-        IRON_VEIN_SIZE_MIN :: 8;
-        IRON_VEIN_SIZE_MAX :: 15;
+            // Initialize iron
+            GENERATE_IRON_ENABLED :: true;
+            #if GENERATE_IRON_ENABLED {
+                IRON_SPAWN_CHANCE_NUMERATOR   :: 5;
+                IRON_SPAWN_CHANCE_DENOMINATOR :: 1000;
+                IRON_VEIN_SIZE_MIN :: 8;
+                IRON_VEIN_SIZE_MAX :: 15;
 
-        for col: 0..WORLD_COLS-1 {
-            for row: 0..WORLD_ROWS-1 {
-                tile_id := (row * WORLD_COLS) + col + 1;
+                for col: 0..WORLD_COLS-1 {
+                    for row: 0..WORLD_ROWS-1 {
+                        tile_id := (row * WORLD_COLS) + col + 1;
 
-                iron_spawn_dice_roll := cast(int) random_get_within_range(IRON_SPAWN_CHANCE_NUMERATOR, IRON_SPAWN_CHANCE_DENOMINATOR);
-                if iron_spawn_dice_roll <= IRON_SPAWN_CHANCE_NUMERATOR {
-                    spawn_iron(xx tile_id, IRON_VEIN_SIZE_MIN, IRON_VEIN_SIZE_MAX, WORLD_COLS, WORLD_ROWS, *created_chunks, *iron_tile_ids_set);
+                        iron_spawn_dice_roll := cast(int) random_get_within_range(IRON_SPAWN_CHANCE_NUMERATOR, IRON_SPAWN_CHANCE_DENOMINATOR);
+                        if iron_spawn_dice_roll <= IRON_SPAWN_CHANCE_NUMERATOR {
+                            spawn_iron(xx tile_id, IRON_VEIN_SIZE_MIN, IRON_VEIN_SIZE_MAX, WORLD_COLS, WORLD_ROWS, *created_chunks, *iron_tile_ids_set);
+                        }
+                    }
                 }
             }
-        }
-    }
 
-    // Initialize bases
-    GENERATE_BASE_ENABLED :: true;
-    #if GENERATE_BASE_ENABLED {
-        home_base := create_base(
-            Vector2.{
-                WORLD_COLS * TILEMAP_GENERAL_WORLD_WIDTH  / 2,
-                WORLD_ROWS * TILEMAP_GENERAL_WORLD_HEIGHT / 2,
-            },
-            true,
-            *game_state
-        );
-    }
+            // Initialize bases
+            GENERATE_BASE_ENABLED :: true;
+            #if GENERATE_BASE_ENABLED {
+                home_base := create_base(
+                    Vector2.{
+                        WORLD_COLS * TILEMAP_GENERAL_WORLD_WIDTH  / 2,
+                        WORLD_ROWS * TILEMAP_GENERAL_WORLD_HEIGHT / 2,
+                    },
+                    true,
+                    *game_state
+                );
+            }
 
-    // Initialize dwarves
-    GENERATE_DWARVES_ENABLED :: true;
-    #if GENERATE_DWARVES_ENABLED {
-        dx, dy : float;
-        neighbor_pos: Vector2;
-        assert(bases.count > 0);
+            // Initialize dwarves
+            GENERATE_DWARVES_ENABLED :: true;
+            #if GENERATE_DWARVES_ENABLED {
+                dx, dy : float;
+                neighbor_pos: Vector2;
+                assert(bases.count > 0);
 
-        for 1..DWARF_MINER_START_COUNT {
-            // Initialize miner dwarves
-            dx = TILE_DIRECTION_DELTAS[xx Direction.NORTH][0];
-            dy = TILE_DIRECTION_DELTAS[xx Direction.NORTH][1];
-            neighbor_pos = Vector2.{ home_base.pos.x + dx, home_base.pos.y + dy };
+                for 1..DWARF_MINER_START_COUNT {
+                    // Initialize miner dwarves
+                    dx = TILE_DIRECTION_DELTAS[xx Direction.NORTH][0];
+                    dy = TILE_DIRECTION_DELTAS[xx Direction.NORTH][1];
+                    neighbor_pos = Vector2.{ home_base.pos.x + dx, home_base.pos.y + dy };
 
-            create_dwarf(neighbor_pos, .MINER);
-        }
-        
-        for 1..DWARF_WARRIOR_START_COUNT {
-            // Initialize warrior dwarf
-            dx = TILE_DIRECTION_DELTAS[xx Direction.EAST][0];
-            dy = TILE_DIRECTION_DELTAS[xx Direction.EAST][1];
-            neighbor_pos = Vector2.{ home_base.pos.x + dx, home_base.pos.y + dy };
+                    create_dwarf(neighbor_pos, .MINER);
+                }
+                
+                for 1..DWARF_WARRIOR_START_COUNT {
+                    // Initialize warrior dwarf
+                    dx = TILE_DIRECTION_DELTAS[xx Direction.EAST][0];
+                    dy = TILE_DIRECTION_DELTAS[xx Direction.EAST][1];
+                    neighbor_pos = Vector2.{ home_base.pos.x + dx, home_base.pos.y + dy };
 
-            create_dwarf(neighbor_pos, .WARRIOR);
-        }
-    }
+                    create_dwarf(neighbor_pos, .WARRIOR);
+                }
+            }
 
-    // Initialize camera
-    camera: Camera2D;
-    #if GENERATE_BASE_ENABLED {
-        camera.target   = bases[0].pos;
-    } else {
-        camera.target   = Vector2.{
-            WORLD_COLS * TILEMAP_GENERAL_WORLD_WIDTH  / 2,
-            WORLD_ROWS * TILEMAP_GENERAL_WORLD_HEIGHT / 2,
-        };
-    }
-    camera.offset   = Vector2.{ GetScreenWidth() * 0.5, GetScreenHeight() * 0.5 };
-    camera.rotation = 0.0;
-    camera.zoom     = 1.0;
+            // Initialize camera
+            camera: Camera2D;
+            #if GENERATE_BASE_ENABLED {
+                camera.target   = bases[0].pos;
+            } else {
+                camera.target   = Vector2.{
+                    WORLD_COLS * TILEMAP_GENERAL_WORLD_WIDTH  / 2,
+                    WORLD_ROWS * TILEMAP_GENERAL_WORLD_HEIGHT / 2,
+                };
+            }
+            camera.offset   = Vector2.{ GetScreenWidth() * 0.5, GetScreenHeight() * 0.5 };
+            camera.rotation = 0.0;
+            camera.zoom     = 1.0;
+        case .TUTORIAL_CONTROLS;
+
 
     return game_state, metagame, camera;
 }
