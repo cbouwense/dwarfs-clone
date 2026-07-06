@@ -637,6 +637,8 @@ main :: () {
     camera     : Camera2D;
 
     while !metagame.should_quit_game {
+        defer metagame.should_quit_game = metagame.should_quit_game || WindowShouldClose();
+
         if #complete metagame.screen == {
             case .MAIN_MENU;
                 metagame = update_and_draw_main_menu_frame();
@@ -648,17 +650,20 @@ main :: () {
                 }
             // TODO: tutorial, I guess
         }
+
     }
 }
 
 // Functions
 
 update_and_draw_main_menu_frame :: () -> metagame: Metagame {
+    screen_width  := GetScreenWidth();
+    screen_height := GetScreenHeight();
+
     BeginDrawing();
     defer EndDrawing();
 
-    screen_width  := GetScreenWidth();
-    screen_height := GetScreenHeight();
+    ClearBackground(BEIGE);
 
     if #complete metagame.main_menu_screen == {
         case .ROOT;
@@ -741,8 +746,6 @@ update_and_draw_main_menu_frame :: () -> metagame: Metagame {
 }
 
 update_and_draw_round_frame :: (game_state: *GameState, camera: *Camera2D) -> metagame: Metagame {
-    defer metagame.should_quit_game = metagame.should_quit_game || WindowShouldClose();
-
     // PERF: can this be keep_memory?
     table_reset(*tile_ids_to_dwarfs);
     table_reset(*tile_ids_to_goblins);
@@ -3090,7 +3093,7 @@ update_and_draw_round_frame :: (game_state: *GameState, camera: *Camera2D) -> me
 
                                 clicked := GuiButton(resume_button, "RESUME");
 
-                                if clicked metagame.state = .RUNNING;
+                                if clicked then metagame.state = .RUNNING;
                             }
 
                             // Options button
@@ -3101,7 +3104,7 @@ update_and_draw_round_frame :: (game_state: *GameState, camera: *Camera2D) -> me
 
                                 clicked := GuiButton(options_button, "OPTIONS");
 
-                                if clicked metagame.pause_state = .OPTIONS;
+                                if clicked then metagame.pause_state = .OPTIONS;
                             }
 
                             // Main menu button
@@ -3113,7 +3116,10 @@ update_and_draw_round_frame :: (game_state: *GameState, camera: *Camera2D) -> me
                                 clicked := GuiButton(main_menu_button, "MAIN MENU");
 
                                 if clicked {
-                                    // TODO
+                                    metagame.state            = .RUNNING;
+                                    metagame.screen           = .MAIN_MENU;
+                                    metagame.main_menu_screen = .ROOT;
+                                    metagame.initialized      = false;
                                 }
                             }
 
@@ -3125,7 +3131,7 @@ update_and_draw_round_frame :: (game_state: *GameState, camera: *Camera2D) -> me
 
                                 clicked := GuiButton(quit_button, "QUIT");
 
-                                if clicked metagame.should_quit_game = true;
+                                if clicked then metagame.should_quit_game = true;
                             }
 
                         case .OPTIONS;
@@ -5583,7 +5589,6 @@ get_tile_id_count_from_tile_to_tile_cardinal :: (from_tile_id: s32, to_tile_id: 
 
     if on_same_col {
         foo := abs(from_tile_id - to_tile_id) * WORLD_COLS_RECIP;
-        print_vars(from_tile_id, to_tile_id, WORLD_COLS_RECIP, foo, cast(int) foo);
         return cast(int) foo;
     }
 
