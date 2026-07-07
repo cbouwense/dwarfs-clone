@@ -113,8 +113,8 @@ WORLD_COLS_MEDIUM :: WORLD_COLS_LARGE  * 0.5;
 WORLD_ROWS_MEDIUM :: WORLD_COLS_MEDIUM;
 WORLD_COLS_SMALL  :: WORLD_COLS_MEDIUM * 0.5;
 WORLD_ROWS_SMALL  :: WORLD_COLS_SMALL;
-WORLD_COLS_TUTORIAL_CONTROLS         :: 128;
-WORLD_ROWS_TUTORIAL_CONTROLS         :: 128;
+WORLD_COLS_TUTORIAL_CONTROLS         :: 32;
+WORLD_ROWS_TUTORIAL_CONTROLS         :: 32;
 WORLD_COLS_TUTORIAL_LAVA_AND_WATER   :: 128;
 WORLD_ROWS_TUTORIAL_LAVA_AND_WATER   :: 128;
 WORLD_COLS_TUTORIAL_CAVE_TRAPPING    :: 128;
@@ -358,8 +358,9 @@ TILE_DIRECTION_DELTAS :: [2] float32.[
 //     .[0, 0],            // center
 // ];
 
-#add_context world_cols: int;
-#add_context world_rows: int;
+#add_context camera_zoom_min  : float32;
+#add_context world_cols       : int;
+#add_context world_rows       : int;
 #add_context world_cols_mask  : int;  // world_cols - 1;
 #add_context world_rows_mask  : int;  // world_rows - 1;
 #add_context world_cols_shift : int;  // #run integer_log2(world_cols);
@@ -1026,10 +1027,9 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
             {
                 CAMERA_ZOOM_MULTIPLIER :: 1.2;
                 CAMERA_ZOOM_MIN_DEBUG  :: 0.01;
-                CAMERA_ZOOM_MIN_NORMAL :: 0.07428;
                 CAMERA_ZOOM_MAX        :: 13.0;
 
-                camera_zoom_min := ifx metagame.debug_mode then CAMERA_ZOOM_MIN_DEBUG else CAMERA_ZOOM_MIN_NORMAL;
+                camera_zoom_min := ifx metagame.debug_mode then CAMERA_ZOOM_MIN_DEBUG else context.camera_zoom_min;
 
                 can_move_camera := metagame.debug_mode || metagame.state == .RUNNING || (metagame.state == .GAME_OVER && metagame.game_over_state == .LOOK_AROUND);
 
@@ -2904,9 +2904,9 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                     
                 }
 
-                debug_with_raylib_draw_text(#code game_state);
+                debug_with_raylib_draw_text(#code game_state.*);
                 debug_with_raylib_draw_text(#code game_state.controls_state_this_frame);
-                debug_with_raylib_draw_text(#code camera);
+                debug_with_raylib_draw_text(#code camera.*);
 
                 debug_text_y = 0;
                 for dwarves {
@@ -3743,8 +3743,23 @@ get_world_height :: inline () -> int {
 }
 
 initialize_round :: () -> GameState, Metagame, Camera2D {
-    context.world_rows       = WORLD_COLS_HUGE;
-    context.world_cols       = WORLD_ROWS_HUGE;
+    GAME_TIME_REMAINING_MS    :: 900_000; // 15 minutes
+    GAME_STARTING_GOLD_HARD   :: 0;
+    GAME_STARTING_GOLD_MEDIUM :: 150;
+    GAME_STARTING_GOLD_EASY   :: 250;
+
+    if #complete metagame.level == {
+        case .NORMAL;
+            context.world_rows = WORLD_COLS_HUGE;
+            context.world_cols = WORLD_ROWS_HUGE;
+            context.camera_zoom_min = 0.07428;
+        case .TUTORIAL_CONTROLS;
+            context.world_rows = WORLD_COLS_TUTORIAL_CONTROLS;
+            context.world_cols = WORLD_ROWS_TUTORIAL_CONTROLS;
+            context.camera_zoom_min = 1.728;
+    }
+
+    // Set world dimension caches
     context.world_cols_mask  = context.world_cols - 1;
     context.world_rows_mask  = context.world_rows - 1;
     context.world_cols_shift = integer_log2(xx context.world_cols);
@@ -3892,12 +3907,6 @@ initialize_round :: () -> GameState, Metagame, Camera2D {
 
     reset_memory();
 
-    // TODO: this will come from the main menu selection
-    GAME_TIME_REMAINING_MS    :: 900_000; // 15 minutes
-    GAME_STARTING_GOLD_HARD   :: 0;
-    GAME_STARTING_GOLD_MEDIUM :: 150;
-    GAME_STARTING_GOLD_EASY   :: 250;
-
     // Initialize game
     game_state := GameState.{
         hovered_dwarf_index        = 0,
@@ -3913,25 +3922,23 @@ initialize_round :: () -> GameState, Metagame, Camera2D {
         alert_banner_text_ms       = 0,
     };
 
-    metagame := Metagame.{
-        state            = .RUNNING,
-        thing_running    = .ROUND,
-        initialized      = true,
-        should_quit_game = false,
-        debug_mode       = false,
-        pause_state      = .MENU,
-        game_over_state  = .MENU,
-        main_menu_screen = .ROOT,
-        controls         = controls,
-        // level            = metagame.level, // TODO
-    };
+    metagame.state            = .RUNNING;
+    metagame.thing_running    = .ROUND;
+    metagame.initialized      = true;
+    metagame.should_quit_game = false;
+    metagame.debug_mode       = false;
+    metagame.pause_state      = .MENU;
+    metagame.game_over_state  = .MENU;
+    metagame.main_menu_screen = .ROOT;
+    metagame.controls         = controls;
 
     camera: Camera2D;
+
+    GENERATE_CAVES_ENABLED :: true;
 
     if #complete metagame.level == {
         case .NORMAL;
             // Initialize caves
-            GENERATE_CAVES_ENABLED :: true;
             #if GENERATE_CAVES_ENABLED {
                 CAVE_PERLIN_NOISE_FREQUENCY :: 256; // How many rows / columns
                 CAVE_PERLIN_NOISE_AMPLITUDE :: 2;
@@ -4029,11 +4036,16 @@ initialize_round :: () -> GameState, Metagame, Camera2D {
             }
 
         case .TUTORIAL_CONTROLS;
+            // Initialize camera
+            camera.target = Vector2.{
+                context.world_cols * TILEMAP_GENERAL_WORLD_WIDTH  * 0.5,
+                context.world_rows * TILEMAP_GENERAL_WORLD_HEIGHT * 0.5,
+            };
     }
 
     camera.offset   = Vector2.{ GetScreenWidth() * 0.5, GetScreenHeight() * 0.5 };
     camera.rotation = 0.0;
-    camera.zoom     = 1.0;
+    camera.zoom     = 2.0;
 
     return game_state, metagame, camera;
 }

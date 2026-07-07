@@ -11,6 +11,7 @@
 - Dwarf warrior attacked a goblin diagonally when the goblin was attacking a base.
 - Dwarf warrior unable to path to a goblin when standing behind a miner who is attacking that goblin.
 - Revealed water doesnt flow
+- Dwarf didn't grab treasure in treasure cave with only 1 treasure
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Core gameplay
@@ -35,6 +36,7 @@
 - High score / local persistence
 - deteriorating arrows
 - round loading screen
+- Camera restriction within world bounds
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Tutorial
