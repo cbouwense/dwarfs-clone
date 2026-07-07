@@ -105,17 +105,29 @@ TILEMAP_GENERAL_TILE_HEIGHT  :: 32;
 TILEMAP_GENERAL_WORLD_WIDTH  :: TILEMAP_GENERAL_TILE_WIDTH  * SCALE;
 TILEMAP_GENERAL_WORLD_HEIGHT :: TILEMAP_GENERAL_TILE_HEIGHT * SCALE;
 
-// YOU WERE DOING: these are no longer constants, and probably need to be weaved into the game state
-// and initialized
-WORLD_COLS :: 2048;
-WORLD_ROWS :: 2048;
-WORLD_WIDTH  :: WORLD_COLS * TILEMAP_GENERAL_WORLD_WIDTH;
-WORLD_HEIGHT :: WORLD_ROWS * TILEMAP_GENERAL_WORLD_HEIGHT;
-WORLD_COLS_MASK :: WORLD_COLS - 1;
-WORLD_ROWS_MASK :: WORLD_ROWS - 1;
-WORLD_COLS_SHIFT :: #run integer_log2(WORLD_COLS);
-WORLD_COLS_RECIP :: 1.0 / WORLD_COLS;
-WORLD_ROWS_RECIP :: 1.0 / WORLD_ROWS;
+WORLD_COLS_HUGE   :: 2048;
+WORLD_ROWS_HUGE   :: WORLD_COLS_HUGE;
+WORLD_COLS_LARGE  :: WORLD_COLS_HUGE   * 0.5;
+WORLD_ROWS_LARGE  :: WORLD_COLS_LARGE;
+WORLD_COLS_MEDIUM :: WORLD_COLS_LARGE  * 0.5;
+WORLD_ROWS_MEDIUM :: WORLD_COLS_MEDIUM;
+WORLD_COLS_SMALL  :: WORLD_COLS_MEDIUM * 0.5;
+WORLD_ROWS_SMALL  :: WORLD_COLS_SMALL;
+WORLD_COLS_TUTORIAL_CONTROLS         :: 128;
+WORLD_ROWS_TUTORIAL_CONTROLS         :: 128;
+WORLD_COLS_TUTORIAL_LAVA_AND_WATER   :: 128;
+WORLD_ROWS_TUTORIAL_LAVA_AND_WATER   :: 128;
+WORLD_COLS_TUTORIAL_CAVE_TRAPPING    :: 128;
+WORLD_ROWS_TUTORIAL_CAVE_TRAPPING    :: 128;
+WORLD_COLS_TUTORIAL_DARK_CAVES       :: 128;
+WORLD_ROWS_TUTORIAL_DARK_CAVES       :: 128;
+WORLD_COLS_TUTORIAL_FIGHTING_MINIONS :: 128;
+WORLD_ROWS_TUTORIAL_FIGHTING_MINIONS :: 128;
+WORLD_COLS_TUTORIAL_OUTPOSTS         :: 128;
+WORLD_ROWS_TUTORIAL_OUTPOSTS         :: 128;
+WORLD_COLS_TUTORIAL_GRADUATION       :: 128;
+WORLD_ROWS_TUTORIAL_GRADUATION       :: 128;
+
 TILE_WIDTH_F  :: cast(float32) TILEMAP_GENERAL_WORLD_WIDTH;
 TILE_HEIGHT_F :: cast(float32) TILEMAP_GENERAL_WORLD_HEIGHT;
 
@@ -180,7 +192,7 @@ GameOverState :: enum {
     LOOK_AROUND;
 }
 
-LEVEL :: enum {
+Level :: enum {
     NORMAL;
     TUTORIAL_CONTROLS;
 }
@@ -334,17 +346,39 @@ TILE_DIRECTION_DELTAS :: [2] float32.[
     .[0.0, 0.0], // center
 ];
 
-TILE_DIRECTION_ID_DELTAS :: [2] s32.[
-    .[0, -WORLD_COLS],  // north
-    .[0, +WORLD_COLS],  // south
-    .[+1, 0],           // east
-    .[-1, 0],           // west
-    .[+1, -WORLD_COLS], // north east
-    .[-1, -WORLD_COLS], // north west
-    .[+1, +WORLD_COLS], // south east
-    .[-1, +WORLD_COLS], // south west
-    .[0, 0],            // center
-];
+// TILE_DIRECTION_ID_DELTAS :: [2] s32.[
+//     .[0, -WORLD_COLS],  // north
+//     .[0, +WORLD_COLS],  // south
+//     .[+1, 0],           // east
+//     .[-1, 0],           // west
+//     .[+1, -WORLD_COLS], // north east
+//     .[-1, -WORLD_COLS], // north west
+//     .[+1, +WORLD_COLS], // south east
+//     .[-1, +WORLD_COLS], // south west
+//     .[0, 0],            // center
+// ];
+
+#add_context world_cols: int;
+#add_context world_rows: int;
+#add_context world_cols_mask  : int;  // world_cols - 1;
+#add_context world_rows_mask  : int;  // world_rows - 1;
+#add_context world_cols_shift : int;  // #run integer_log2(world_cols);
+#add_context world_cols_recip : float;// 1.0 / world_cols;
+#add_context world_rows_recip : float;// 1.0 / world_rows;
+
+get_tile_direction_id_deltas :: (direction: Direction) -> [2] s32 {
+    if #complete direction == {
+        case .NORTH;      return .[ 0, xx -context.world_cols];
+        case .SOUTH;      return .[ 0, xx +context.world_cols];
+        case .EAST;       return .[+1,  0];
+        case .WEST;       return .[-1,  0];
+        case .NORTH_EAST; return .[+1, xx -context.world_cols];
+        case .NORTH_WEST; return .[-1, xx -context.world_cols];
+        case .SOUTH_EAST; return .[+1, xx +context.world_cols];
+        case .SOUTH_WEST; return .[-1, xx +context.world_cols];
+        case .CENTER;     return .[ 0,  0];
+    }
+}
 
 CaveType :: enum u8 {
     EMPTY;
@@ -657,6 +691,7 @@ main :: () {
                 } else {
                     game_state, metagame, camera = initialize_round();
                 }
+            case .TUTORIAL_CONTROLS;
         }
     }
 }
@@ -704,9 +739,9 @@ update_and_draw_frame_main_menu :: () -> metagame: Metagame {
                 clicked := GuiButton(start_new_button, "Start new round");
 
                 if clicked {
-                    metagame.screen      = .ROUND;
-                    metagame.initialized = false;
-                    metagame.level       = .NORMAL;
+                    metagame.thing_running = .ROUND;
+                    metagame.initialized   = false;
+                    metagame.level         = .NORMAL;
                 }
             }
 
@@ -719,9 +754,9 @@ update_and_draw_frame_main_menu :: () -> metagame: Metagame {
                 clicked := GuiButton(tutorial_button, "Tutorial");
 
                 if clicked {
-                    metagame.screen      = .ROUND;
-                    metagame.initialized = false;
-                    metagame.level       = .TUTORIAL_CONTROLS;
+                    metagame.thing_running = .ROUND;
+                    metagame.initialized   = false;
+                    metagame.level         = .TUTORIAL_CONTROLS;
                 }
             }
 
@@ -980,7 +1015,7 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
         // Update unpausable things
         {
             // Debug break tiles
-            hovered_tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
+            hovered_tile_rect := get_tile_rect_that_pos_is_within(get_world_width(), get_world_height(), TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
             if IsMouseButtonDown(MouseButton.MOUSE_BUTTON_LEFT) && IsKeyDown(KeyboardKey.KEY_LEFT_CONTROL) {
                 tile_id := get_tile_id_by_pos(Vector2.{ hovered_tile_rect.x, hovered_tile_rect.y });
                 set_tile_as_type(tile_id, .MINED, false, false, game_state);
@@ -1129,7 +1164,7 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                                     game_state.selected_dwarf_particle_id = particle.id;
 
                                     // Teleport dwarf to tile we are hovering over and keep it there
-                                    tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
+                                    tile_rect := get_tile_rect_that_pos_is_within(get_world_width(), get_world_height(), TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
                                     dwarves[selected_dwarf_index].pos = get_rect_pos(tile_rect);
                                     
                                     // Stop the dwarf from moving so you can think while dragging a path
@@ -1230,7 +1265,7 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
 
                                 if metagame.debug_mode || (tile_is_mined && !tile_is_encased) {
                                     // Add base.
-                                    base_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
+                                    base_rect := get_tile_rect_that_pos_is_within(get_world_width(), get_world_height(), TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
                                     base_pos  := Vector2.{ base_rect.x, base_rect.y };
                                     base_tile_id := get_tile_id_by_pos(base_pos);
 
@@ -2160,10 +2195,10 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                     IRON_VEIN_SIZE_MAX :: 15;
 
                     if game_state.controls_state_this_frame.add_iron {
-                        iron_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
+                        iron_rect := get_tile_rect_that_pos_is_within(get_world_width(), get_world_height(), TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
                         tile_pos  := Vector2.{ iron_rect.x, iron_rect.y };
                         tile_id   := get_tile_id_by_pos(tile_pos);
-                        spawn_iron(xx tile_id, IRON_VEIN_SIZE_MIN, IRON_VEIN_SIZE_MAX, WORLD_COLS, WORLD_ROWS, *created_chunks, *iron_tile_ids_set);
+                        spawn_iron(xx tile_id, IRON_VEIN_SIZE_MIN, IRON_VEIN_SIZE_MAX, xx context.world_cols, xx context.world_rows, *created_chunks, *iron_tile_ids_set);
                     }
                 }
 
@@ -2364,15 +2399,15 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                 source := Rectangle.{ 
                     0, 
                     0, 
-                    xx (TILEMAP_GENERAL_WORLD_WIDTH  * WORLD_COLS), // Repeat 10,000 times horizontally
-                    xx (TILEMAP_GENERAL_WORLD_HEIGHT * WORLD_ROWS), // Repeat 10,000 times vertically
+                    xx (TILEMAP_GENERAL_WORLD_WIDTH  * context.world_cols), // Repeat 10,000 times horizontally
+                    xx (TILEMAP_GENERAL_WORLD_HEIGHT * context.world_rows), // Repeat 10,000 times vertically
                 };
 
                 dest := Rectangle.{ 
                     0, 
                     0, 
-                    xx (TILEMAP_GENERAL_WORLD_WIDTH  * WORLD_COLS),
-                    xx (TILEMAP_GENERAL_WORLD_HEIGHT * WORLD_ROWS),
+                    xx (TILEMAP_GENERAL_WORLD_WIDTH  * context.world_cols),
+                    xx (TILEMAP_GENERAL_WORLD_HEIGHT * context.world_rows),
                 };
                 
                 DrawTexturePro(dirt_texture, source, dest, Vector2.{0,0}, 0.0, WHITE);
@@ -2492,10 +2527,10 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                     assert(sprite != null);
 
                     determine_rotation_of_lava_flowing_sprite :: (tile_id: s32) -> float {
-                        north_tile_id := tile_id - WORLD_ROWS;
-                        south_tile_id := tile_id + WORLD_ROWS;
-                        east_tile_id  := tile_id + 1;
-                        west_tile_id  := tile_id - 1;
+                        north_tile_id : s32 = tile_id - xx context.world_rows;
+                        south_tile_id : s32 = tile_id + xx context.world_rows;
+                        east_tile_id  : s32 = tile_id + 1;
+                        west_tile_id  : s32 = tile_id - 1;
 
                         is_neighbor_north_lava_still := table_contains(*lava_still_tile_ids_set, north_tile_id);
                         is_neighbor_south_lava_still := table_contains(*lava_still_tile_ids_set, south_tile_id);
@@ -2664,7 +2699,7 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
 
             // Draw hovered tile
             {
-                hovered_tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
+                hovered_tile_rect := get_tile_rect_that_pos_is_within(get_world_width(), get_world_height(), TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
                 DrawRectangleRec(hovered_tile_rect, TRANSPARENT_WHITE);
                 if metagame.debug_mode {
                     found_tile, tile_id := find_tile_id_by_pos(get_rect_pos(hovered_tile_rect));
@@ -3127,7 +3162,7 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
 
                                 if clicked {
                                     metagame.state            = .RUNNING;
-                                    metagame.screen           = .MAIN_MENU;
+                                    metagame.thing_running    = .MAIN_MENU;
                                     metagame.main_menu_screen = .ROOT;
                                     metagame.initialized      = false;
                                 }
@@ -3699,7 +3734,23 @@ reset_memory :: () {
     particle_id_counter = 0;
 }
 
+get_world_width :: inline () -> int {
+    return context.world_cols * TILEMAP_GENERAL_WORLD_WIDTH;
+}
+
+get_world_height :: inline () -> int {
+    return context.world_rows * TILEMAP_GENERAL_WORLD_HEIGHT;
+}
+
 initialize_round :: () -> GameState, Metagame, Camera2D {
+    context.world_rows       = WORLD_COLS_HUGE;
+    context.world_cols       = WORLD_ROWS_HUGE;
+    context.world_cols_mask  = context.world_cols - 1;
+    context.world_rows_mask  = context.world_rows - 1;
+    context.world_cols_shift = integer_log2(xx context.world_cols);
+    context.world_cols_recip = 1.0 / context.world_cols;
+    context.world_rows_recip = 1.0 / context.world_rows;
+
     // Set temp allocator for various things.
     {
         fully_mined_tile_ids_in_viewport.allocator    = temp;
@@ -3864,7 +3915,7 @@ initialize_round :: () -> GameState, Metagame, Camera2D {
 
     metagame := Metagame.{
         state            = .RUNNING,
-        screen           = .ROUND,
+        thing_running    = .ROUND,
         initialized      = true,
         should_quit_game = false,
         debug_mode       = false,
@@ -3872,8 +3923,10 @@ initialize_round :: () -> GameState, Metagame, Camera2D {
         game_over_state  = .MENU,
         main_menu_screen = .ROOT,
         controls         = controls,
-        level            = metagame.level,
+        // level            = metagame.level, // TODO
     };
+
+    camera: Camera2D;
 
     if #complete metagame.level == {
         case .NORMAL;
@@ -3885,18 +3938,18 @@ initialize_round :: () -> GameState, Metagame, Camera2D {
                 CAVE_PERLIN_NOISE_OCTAVES   :: 1;
                 CAVE_PERLIN_NOISE_MAX_THRESHOLD :: 0.95;
 
-                cave_noise := perlin_noise_2d(WORLD_COLS, CAVE_PERLIN_NOISE_FREQUENCY, CAVE_PERLIN_NOISE_AMPLITUDE, CAVE_PERLIN_NOISE_OCTAVES);
+                cave_noise := perlin_noise_2d(xx context.world_cols, CAVE_PERLIN_NOISE_FREQUENCY, CAVE_PERLIN_NOISE_AMPLITUDE, CAVE_PERLIN_NOISE_OCTAVES);
 
-                for i: 0..(WORLD_COLS * WORLD_COLS)-1 {
+                for i: 0..(context.world_cols * context.world_cols)-1 {
                     normalized := (cave_noise[i] + 1.0) / 2.0;
                     // Clamp just in case floating point math slightly overshoots
                     cave_noise[i] = clamp(normalized, 0.0, 1.0);
                 }
 
-                for col: 0..WORLD_COLS-1 {
-                    for row: 0..WORLD_ROWS-1 {
-                        tile_id := (row * WORLD_COLS) + col + 1;
-                        noise_index := row * WORLD_COLS + col;
+                for col: 0..context.world_cols-1 {
+                    for row: 0..context.world_rows-1 {
+                        tile_id := (row * context.world_cols) + col + 1;
+                        noise_index := row * context.world_cols + col;
                         tile_should_be_part_of_cave := cave_noise[noise_index] >= CAVE_PERLIN_NOISE_MAX_THRESHOLD;
 
                         if tile_should_be_part_of_cave {
@@ -3914,13 +3967,13 @@ initialize_round :: () -> GameState, Metagame, Camera2D {
                 IRON_VEIN_SIZE_MIN :: 8;
                 IRON_VEIN_SIZE_MAX :: 15;
 
-                for col: 0..WORLD_COLS-1 {
-                    for row: 0..WORLD_ROWS-1 {
-                        tile_id := (row * WORLD_COLS) + col + 1;
+                for col: 0..context.world_cols-1 {
+                    for row: 0..context.world_rows-1 {
+                        tile_id := (row * context.world_cols) + col + 1;
 
                         iron_spawn_dice_roll := cast(int) random_get_within_range(IRON_SPAWN_CHANCE_NUMERATOR, IRON_SPAWN_CHANCE_DENOMINATOR);
                         if iron_spawn_dice_roll <= IRON_SPAWN_CHANCE_NUMERATOR {
-                            spawn_iron(xx tile_id, IRON_VEIN_SIZE_MIN, IRON_VEIN_SIZE_MAX, WORLD_COLS, WORLD_ROWS, *created_chunks, *iron_tile_ids_set);
+                            spawn_iron(xx tile_id, IRON_VEIN_SIZE_MIN, IRON_VEIN_SIZE_MAX, xx context.world_cols, xx context.world_rows, *created_chunks, *iron_tile_ids_set);
                         }
                     }
                 }
@@ -3931,8 +3984,8 @@ initialize_round :: () -> GameState, Metagame, Camera2D {
             #if GENERATE_BASE_ENABLED {
                 home_base := create_base(
                     Vector2.{
-                        WORLD_COLS * TILEMAP_GENERAL_WORLD_WIDTH  / 2,
-                        WORLD_ROWS * TILEMAP_GENERAL_WORLD_HEIGHT / 2,
+                        context.world_cols * TILEMAP_GENERAL_WORLD_WIDTH  * 0.5,
+                        context.world_rows * TILEMAP_GENERAL_WORLD_HEIGHT * 0.5,
                     },
                     true,
                     *game_state
@@ -3966,20 +4019,21 @@ initialize_round :: () -> GameState, Metagame, Camera2D {
             }
 
             // Initialize camera
-            camera: Camera2D;
             #if GENERATE_BASE_ENABLED {
                 camera.target   = bases[0].pos;
             } else {
                 camera.target   = Vector2.{
-                    WORLD_COLS * TILEMAP_GENERAL_WORLD_WIDTH  / 2,
-                    WORLD_ROWS * TILEMAP_GENERAL_WORLD_HEIGHT / 2,
+                    context.world_cols * TILEMAP_GENERAL_WORLD_WIDTH  / 2,
+                    context.world_rows * TILEMAP_GENERAL_WORLD_HEIGHT / 2,
                 };
             }
-            camera.offset   = Vector2.{ GetScreenWidth() * 0.5, GetScreenHeight() * 0.5 };
-            camera.rotation = 0.0;
-            camera.zoom     = 1.0;
-        case .TUTORIAL_CONTROLS;
 
+        case .TUTORIAL_CONTROLS;
+    }
+
+    camera.offset   = Vector2.{ GetScreenWidth() * 0.5, GetScreenHeight() * 0.5 };
+    camera.rotation = 0.0;
+    camera.zoom     = 1.0;
 
     return game_state, metagame, camera;
 }
@@ -4223,8 +4277,8 @@ set_goblin_direction_to_face_next_target :: (goblin: *Goblin) {
     goblin_tile_id  := get_tile_id_by_pos(goblin.pos);
     assert(target_tile_id != goblin_tile_id, "goblin is softlocked trying to get it the id it's already on, I think.");
 
-    if      target_tile_id == goblin_tile_id - WORLD_ROWS goblin.direction = .NORTH;
-    else if target_tile_id == goblin_tile_id + WORLD_ROWS goblin.direction = .SOUTH;
+    if      target_tile_id == goblin_tile_id - xx context.world_rows goblin.direction = .NORTH;
+    else if target_tile_id == goblin_tile_id + xx context.world_rows goblin.direction = .SOUTH;
     else if target_tile_id == goblin_tile_id + 1          goblin.direction = .EAST;
     else if target_tile_id == goblin_tile_id - 1          goblin.direction = .WEST;
     else assert(false);
@@ -4233,16 +4287,16 @@ set_goblin_direction_to_face_next_target :: (goblin: *Goblin) {
 detect_neighbor :: (tile_id: s32, $T: Type) -> base_neighbor_detected: bool, entity: *T, direction: Direction
 #modify { return uses_entity_with_as(cast(*Type_Info) T, Entity); }
 {
-    for i: 0..7 {
-        dx := TILE_DIRECTION_ID_DELTAS[i][0];
-        dy := TILE_DIRECTION_ID_DELTAS[i][1];
+    for DIRECTIONS_COMPASS {
+        dx := get_tile_direction_id_deltas(it)[0];
+        dy := get_tile_direction_id_deltas(it)[1];
 
         neighbor_id := tile_id + dx + dy;
 
         set_tile_ids_to_entity(T);
 
         found, entity := table_find(*tile_ids_to_entity, neighbor_id);
-        if (found) return true, entity, cast(Direction) i;
+        if (found) return true, entity, it;
     }
 
     return false, null, .CENTER;
@@ -4251,16 +4305,16 @@ detect_neighbor :: (tile_id: s32, $T: Type) -> base_neighbor_detected: bool, ent
 detect_neighbor_cardinal :: (tile_id: s32, $T: Type) -> neighbor_detected: bool, entity: *T, direction: Direction
 #modify { return uses_entity_with_as(cast(*Type_Info) T, Entity); }
 {
-    for i: 0..3 {
-        dx := TILE_DIRECTION_ID_DELTAS[i][0];
-        dy := TILE_DIRECTION_ID_DELTAS[i][1];
+    for DIRECTIONS_CARDINAL {
+        dx := get_tile_direction_id_deltas(it)[0];
+        dy := get_tile_direction_id_deltas(it)[1];
 
         neighbor_id := tile_id + dx + dy;
 
         set_tile_ids_to_entity(T);
 
         found, base := table_find(*tile_ids_to_entity, neighbor_id);
-        if (found) return true, base, cast(Direction) i;
+        if (found) return true, base, it;
     }
 
     return false, null, .CENTER;
@@ -4268,8 +4322,8 @@ detect_neighbor_cardinal :: (tile_id: s32, $T: Type) -> neighbor_detected: bool,
 
 is_tile_id_neighbor_of_tile_id_cardinal :: (my_tile_id: s32, your_tile_id: s32) -> bool {
     return (
-        my_tile_id == your_tile_id - WORLD_COLS || // north
-        my_tile_id == your_tile_id + WORLD_COLS || // south
+        my_tile_id == your_tile_id - xx context.world_cols || // north
+        my_tile_id == your_tile_id + xx context.world_cols || // south
         my_tile_id == your_tile_id + 1          || // east
         my_tile_id == your_tile_id - 1             // west
     );
@@ -4282,8 +4336,8 @@ taunt_dwarf :: (dwarf_id: s32, taunter_tile_id: s32) {
     dwarf_center  := get_rect_center(get_world_rect_from_pos(dwarves[dwarf_index].pos));
     dwarf_tile_id := get_tile_id_by_pos(dwarf_center);
     direction_to_face_taunter : Direction;
-    if      taunter_tile_id == dwarf_tile_id - WORLD_ROWS direction_to_face_taunter = .NORTH;
-    else if taunter_tile_id == dwarf_tile_id + WORLD_ROWS direction_to_face_taunter = .SOUTH;
+    if      taunter_tile_id == dwarf_tile_id - xx context.world_rows direction_to_face_taunter = .NORTH;
+    else if taunter_tile_id == dwarf_tile_id + xx context.world_rows direction_to_face_taunter = .SOUTH;
     else if taunter_tile_id == dwarf_tile_id + 1          direction_to_face_taunter = .EAST;
     else if taunter_tile_id == dwarf_tile_id - 1          direction_to_face_taunter = .WEST;
     else assert(false);
@@ -4324,8 +4378,8 @@ set_entity_direction_to_face_next_target :: (entity: *$T/interface Moveable) {
         entity.id
     );
 
-    if      target_tile_id == previous_tile_id - WORLD_ROWS entity.direction = .NORTH;
-    else if target_tile_id == previous_tile_id + WORLD_ROWS entity.direction = .SOUTH;
+    if      target_tile_id == previous_tile_id - xx context.world_rows entity.direction = .NORTH;
+    else if target_tile_id == previous_tile_id + xx context.world_rows entity.direction = .SOUTH;
     else if target_tile_id == previous_tile_id + 1          entity.direction = .EAST;
     else if target_tile_id == previous_tile_id - 1          entity.direction = .WEST;
     else assert(false);
@@ -4833,15 +4887,16 @@ kill_base_by_id :: (base_id: s32) {
     kill_base_by_index(base_index);
 }
 
-get_neighbor_tile_id_by_index :: (tile_id: s32, direction_index: s64) -> s32 {
-    dx := TILE_DIRECTION_ID_DELTAS[direction_index][0];
-    dy := TILE_DIRECTION_ID_DELTAS[direction_index][1];
-    return tile_id + dx + dy;
-}
+// get_neighbor_tile_id_by_index :: (tile_id: s32, direction_index: s64) -> s32 {
+//     dx := get_tile_direction_id_deltas(direction_index)[0];
+//     dy := get_tile_direction_id_deltas(direction_index)[1];
+//     return tile_id + dx + dy;
+// }
 
 get_neighbor_tile_id_by_direction :: (tile_id: s32, direction: Direction) -> s32 {
-    direction_index : s64 = cast(s64) direction; 
-    return get_neighbor_tile_id_by_index(tile_id, direction_index);
+    dx := get_tile_direction_id_deltas(direction)[0];
+    dy := get_tile_direction_id_deltas(direction)[1];
+    return tile_id + dx + dy;
 }
 
 get_neighbor_tile_ids :: (tile_id: s32) -> [..] s32 {
@@ -4978,9 +5033,9 @@ get_neighbor_tile_ids_of_type :: (tile_id: s32, tile_type: TileType) -> [..] s32
     
     dx, dy : s32;
 
-    for i: 0..7 {
-        dx = TILE_DIRECTION_ID_DELTAS[i][0];
-        dy = TILE_DIRECTION_ID_DELTAS[i][1];
+    for DIRECTIONS_COMPASS {
+        dx = get_tile_direction_id_deltas(it)[0];
+        dy = get_tile_direction_id_deltas(it)[1];
 
         neighbor_id := tile_id + dx + dy;
 
@@ -5059,8 +5114,8 @@ handle_encasement :: (tile_id: s32, game_state: *GameState) {
 
         for directions_of_encasement {
             tile_to_start_encasing_id := tile_id;
-            if it == .NORTH tile_to_start_encasing_id -= WORLD_COLS;
-            if it == .SOUTH tile_to_start_encasing_id += WORLD_COLS;
+            if it == .NORTH tile_to_start_encasing_id -= xx context.world_cols;
+            if it == .SOUTH tile_to_start_encasing_id += xx context.world_cols;
             if it == .EAST  tile_to_start_encasing_id += 1;
             if it == .WEST  tile_to_start_encasing_id -= 1;
 
@@ -5155,9 +5210,9 @@ find_shortest_obsidian_path :: (start_id: s32, end_id: s32, ignore_id: s32) -> f
             break;
         }
 
-        for i: 0..7 {
-            dx := TILE_DIRECTION_ID_DELTAS[i][0];
-            dy := TILE_DIRECTION_ID_DELTAS[i][1];
+        for DIRECTIONS_COMPASS {
+            dx := get_tile_direction_id_deltas(it)[0];
+            dy := get_tile_direction_id_deltas(it)[1];
             
             neighbor_id := curr_id + dx + dy; 
 
@@ -5257,8 +5312,8 @@ try_to_encase_tiles :: (starting_tile_id: s32, game_state: *GameState) {
         table_set(*ids_processed, id, 1738);
 
         // Add neighbors as needing to be processed
-        array_add(*ids_to_process, id - WORLD_COLS);
-        array_add(*ids_to_process, id + WORLD_COLS);
+        array_add(*ids_to_process, id - xx context.world_cols);
+        array_add(*ids_to_process, id + xx context.world_cols);
         array_add(*ids_to_process, id + 1);
         array_add(*ids_to_process, id - 1);
     }
@@ -5274,10 +5329,10 @@ try_to_encase_tiles :: (starting_tile_id: s32, game_state: *GameState) {
 }
 
 are_all_neighbors_unable_to_be_spread_to :: (tile_id: s32) -> bool {
-    north_tile_id := tile_id - WORLD_ROWS;
-    south_tile_id := tile_id + WORLD_ROWS;
-    east_tile_id  := tile_id + 1;
-    west_tile_id  := tile_id - 1;
+    north_tile_id : s32 = tile_id - xx context.world_rows;
+    south_tile_id : s32 = tile_id + xx context.world_rows;
+    east_tile_id  : s32 = tile_id + 1;
+    west_tile_id  : s32 = tile_id - 1;
 
     // "Walkable" means "mined and not liquid". "Mineable" means dirt, iron, or wall.
     is_neighbor_north_spreadable := is_tile_id_fully_mined(north_tile_id);
@@ -5294,10 +5349,10 @@ are_all_neighbors_unable_to_be_spread_to :: (tile_id: s32) -> bool {
 }
 
 are_all_neighbors_liquid :: (tile_id: s32) -> bool {
-    north_tile_id := tile_id - WORLD_ROWS;
-    south_tile_id := tile_id + WORLD_ROWS;
-    east_tile_id  := tile_id + 1;
-    west_tile_id  := tile_id - 1;
+    north_tile_id : s32 = tile_id - xx context.world_rows;
+    south_tile_id : s32 = tile_id + xx context.world_rows;
+    east_tile_id  : s32 = tile_id + 1;
+    west_tile_id  : s32 = tile_id - 1;
 
     is_neighbor_north_water_still := table_contains(*water_still_tile_ids_set, north_tile_id);
     is_neighbor_south_water_still := table_contains(*water_still_tile_ids_set, south_tile_id);
@@ -5516,11 +5571,11 @@ draw_path :: (path: Path) {
 }
 
 get_paths :: (from_pos: Vector2, to_pos: Vector2) -> (path_1: Path, path_2: Path) {
-    new_target_tile_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, to_pos);
+    new_target_tile_rect := get_tile_rect_that_pos_is_within(get_world_width(), get_world_height(), TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, to_pos);
     new_target_tile_pos  := Vector2.{ new_target_tile_rect.x, new_target_tile_rect.y };
     new_target_tile_id   := get_tile_id_by_pos(new_target_tile_pos);
 
-    tile_rect_mouse_started_on := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, from_pos);
+    tile_rect_mouse_started_on := get_tile_rect_that_pos_is_within(get_world_width(), get_world_height(), TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, from_pos);
     tile_pos_mouse_started_on  := get_rect_pos(tile_rect_mouse_started_on);
     tile_id_mouse_started_on   := get_tile_id_by_pos(tile_pos_mouse_started_on);
 
@@ -5569,10 +5624,8 @@ get_path_cost :: (path: Path) -> int {
 }
 
 get_path_end_tile_id :: (path: Path) -> s32 {
-    direction_index : s64 = cast(s64) path.direction;
-
-    dx := TILE_DIRECTION_ID_DELTAS[direction_index][0];
-    dy := TILE_DIRECTION_ID_DELTAS[direction_index][1];
+    dx := get_tile_direction_id_deltas(path.direction)[0];
+    dy := get_tile_direction_id_deltas(path.direction)[1];
 
     return path.start_tile_id + xx (path.tile_count * dx) + xx (path.tile_count * dy);
 }
@@ -5583,10 +5636,8 @@ get_tile_ids_on_path :: (path: Path) -> [..] s32 {
 
     cursor: s32;
     for 0..path.tile_count {
-        direction_index : s64 = cast(s64) path.direction;
-
-        dx := TILE_DIRECTION_ID_DELTAS[direction_index][0];
-        dy := TILE_DIRECTION_ID_DELTAS[direction_index][1];
+        dx := get_tile_direction_id_deltas(path.direction)[0];
+        dy := get_tile_direction_id_deltas(path.direction)[1];
 
         tile_id := path.start_tile_id + xx (it * dx) + xx (it * dy);
 
@@ -5603,7 +5654,7 @@ get_tile_id_count_from_tile_to_tile_cardinal :: (from_tile_id: s32, to_tile_id: 
     assert(on_same_col || on_same_row);
 
     if on_same_col {
-        foo := abs(from_tile_id - to_tile_id) * WORLD_COLS_RECIP;
+        foo := abs(from_tile_id - to_tile_id) * context.world_cols_recip;
         return cast(int) foo;
     }
 
@@ -5617,13 +5668,13 @@ get_tile_id_count_from_tile_to_tile_cardinal :: (from_tile_id: s32, to_tile_id: 
 
 are_tile_ids_on_same_world_column :: (tile_id_a: s32, tile_id_b: s32) -> (same: bool, direction: Direction) {
     direction : Direction = ifx tile_id_a < tile_id_b then .NORTH else .SOUTH;
-    same := abs(tile_id_a - tile_id_b) % WORLD_COLS == 0;
+    same := abs(tile_id_a - tile_id_b) % context.world_cols == 0;
     return same, direction;
 }
 
 are_tile_ids_on_same_world_row :: (tile_id_a: s32, tile_id_b: s32) -> (same: bool, direction: Direction) {
     direction : Direction = ifx tile_id_a < tile_id_b then .WEST else .EAST;
-    same := abs(tile_id_a - tile_id_b) < WORLD_COLS;
+    same := abs(tile_id_a - tile_id_b) < context.world_cols;
     return same, direction;
 }
 
@@ -5634,8 +5685,8 @@ get_tile_ids_from_pos_to_pos :: (from_pos: Vector2, to_pos: Vector2) -> (path_1_
     path_2_tile_ids: [..] s32;
     path_2_tile_ids.allocator = temp;
 
-    target_rect := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, to_pos);
-    from_rect   := get_tile_rect_that_pos_is_within(WORLD_WIDTH, WORLD_HEIGHT, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, from_pos);
+    target_rect := get_tile_rect_that_pos_is_within(get_world_width(), get_world_height(), TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, to_pos);
+    from_rect   := get_tile_rect_that_pos_is_within(get_world_width(), get_world_height(), TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, from_pos);
 
     dx := target_rect.x - from_rect.x;
     dy := target_rect.y - from_rect.y;
@@ -5815,10 +5866,8 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
 
     try_to_add_warning_and_alert_markers :: (tile_id: s32, alert_tile_ids_set: *Table, warning_tile_ids_set: *Table, alert_tile_ids: *[..]s32, warning_tile_ids: *[..]s32) {
         for direction: DIRECTIONS_COMPASS {
-            direction_index : s64 = cast(s64) direction;
-
-            dx := TILE_DIRECTION_ID_DELTAS[direction_index][0];
-            dy := TILE_DIRECTION_ID_DELTAS[direction_index][1];
+            dx := get_tile_direction_id_deltas(direction)[0];
+            dy := get_tile_direction_id_deltas(direction)[1];
 
             neighbor_id_1 := tile_id + dx + dy;
             
@@ -6011,7 +6060,7 @@ detect_treasure_tile_id_within_radius :: (
     starting_tile_id: s32,
     radius: s32
 ) -> found: bool, tile_id: s32 {
-    max_tile_id := WORLD_COLS * WORLD_ROWS;
+    max_tile_id := context.world_cols * context.world_rows;
 
     ids_to_process: [..] s32;
     ids_to_process.allocator = temp;
@@ -6030,8 +6079,8 @@ detect_treasure_tile_id_within_radius :: (
         if id <= 0 continue;
         if id > max_tile_id continue;
         if !table_contains(*fully_mined_tile_ids_set, id) continue;
-        if id == starting_tile_id - (WORLD_ROWS * (radius + 1)) continue; // north
-        if id == starting_tile_id + (WORLD_ROWS * (radius + 1)) continue; // south
+        if id == starting_tile_id - (context.world_rows * (radius + 1)) continue; // north
+        if id == starting_tile_id + (context.world_rows * (radius + 1)) continue; // south
         if id == starting_tile_id + (radius + 1)                continue; // east
         if id == starting_tile_id - (radius + 1)                continue; // west
 
@@ -6042,8 +6091,8 @@ detect_treasure_tile_id_within_radius :: (
         table_set(*ids_processed_set, id, 1738);
 
         // Add neighbors as needing to be processed
-        array_add(*ids_to_process, id - WORLD_ROWS);
-        array_add(*ids_to_process, id + WORLD_ROWS);
+        array_add(*ids_to_process, id - xx context.world_rows);
+        array_add(*ids_to_process, id + xx context.world_rows);
         array_add(*ids_to_process, id + 1);
         array_add(*ids_to_process, id - 1);
     }
@@ -6054,7 +6103,7 @@ detect_treasure_tile_id_within_radius :: (
 detect_entity_within_radius :: ($T: Type, starting_tile_id: s32, max_depth: s32) -> found: bool, entity: T, tile_id_path_to_dwarf: [..] s32
 #modify { return uses_entity_with_as(cast(*Type_Info) T, Entity); }
 {
-    max_tile_id := WORLD_COLS * WORLD_ROWS;
+    max_tile_id := context.world_cols * context.world_rows;
     empty_path: [..] s32; 
 
     Queue_Item :: struct {
@@ -6114,8 +6163,8 @@ detect_entity_within_radius :: ($T: Type, starting_tile_id: s32, max_depth: s32)
         }
 
         // Add neighbors, incrementing the distance by 1
-        queue_neighbor(id - WORLD_ROWS, id, depth + 1);
-        queue_neighbor(id + WORLD_ROWS, id, depth + 1);
+        queue_neighbor(id - xx context.world_rows, id, depth + 1);
+        queue_neighbor(id + xx context.world_rows, id, depth + 1);
         queue_neighbor(id + 1, id, depth + 1);
         queue_neighbor(id - 1, id, depth + 1);
     }
@@ -6146,9 +6195,8 @@ find_line_of_sight_entity :: (tile_id: s32, $T: Type, line_of_sight_tile_count: 
         tile_ids_path : [..] s32;
         tile_ids_path.allocator = temp;
 
-        direction_index : s64 = cast(s64) direction;
-        dx := TILE_DIRECTION_ID_DELTAS[direction_index][0];
-        dy := TILE_DIRECTION_ID_DELTAS[direction_index][1];
+        dx := get_tile_direction_id_deltas(direction)[0];
+        dy := get_tile_direction_id_deltas(direction)[1];
 
         for distance_multiplier: 1..line_of_sight_tile_count {
             neighbor_id := tile_id + (distance_multiplier * dx) + (distance_multiplier * dy);
@@ -6170,7 +6218,7 @@ detect_iron_tile_id_within_radius :: (
     starting_tile_id: s32,
     radius: s32
 ) -> found: bool, tile_id: s32 {
-    max_tile_id := WORLD_COLS * WORLD_ROWS;
+    max_tile_id := context.world_cols * context.world_rows;
 
     ids_to_process: [..] s32;
     ids_to_process.allocator = temp;
@@ -6190,8 +6238,8 @@ detect_iron_tile_id_within_radius :: (
         if id > max_tile_id continue;
         // if table_contains(*fully_mined_tile_ids_set, id) continue;
         // if table_contains(*actively_mined_tile_ids_to_health_table, id) continue;
-        if id == starting_tile_id - (WORLD_ROWS * (radius + 1)) continue; // north
-        if id == starting_tile_id + (WORLD_ROWS * (radius + 1)) continue; // south
+        if id == starting_tile_id - (context.world_rows * (radius + 1)) continue; // north
+        if id == starting_tile_id + (context.world_rows * (radius + 1)) continue; // south
         if id == starting_tile_id + (radius + 1)                continue; // east
         if id == starting_tile_id - (radius + 1)                continue; // west
 
@@ -6202,8 +6250,8 @@ detect_iron_tile_id_within_radius :: (
         table_set(*ids_processed_set, id, 1738);
 
         // Add neighbors as needing to be processed
-        array_add(*ids_to_process, id - WORLD_ROWS);
-        array_add(*ids_to_process, id + WORLD_ROWS);
+        array_add(*ids_to_process, id - xx context.world_rows);
+        array_add(*ids_to_process, id + xx context.world_rows);
         array_add(*ids_to_process, id + 1);
         array_add(*ids_to_process, id - 1);
     }
@@ -6684,10 +6732,10 @@ get_tile_pos_by_id :: inline (id: s32) -> Vector2 {
     index := id - 1;
 
     // Bitwise AND (&) acts as Modulo to get the X column
-    grid_x := index & WORLD_COLS_MASK; 
+    grid_x := index & context.world_cols_mask; 
     
     // Right Shift (>>) acts as Division to get the Y row
-    grid_y := index >> WORLD_COLS_SHIFT; 
+    grid_y := index >> context.world_cols_shift; 
 
     pixel_x := cast(float32) grid_x * TILE_WIDTH_F;
     pixel_y := cast(float32) grid_y * TILE_HEIGHT_F;
@@ -6705,10 +6753,10 @@ find_tile_id_by_pos :: (pos: Vector2) -> found_tile: bool, tile_id: s32 {
     grid_x := cast(s32) (pos.x / TILEMAP_GENERAL_WORLD_WIDTH);
     grid_y := cast(s32) (pos.y / TILEMAP_GENERAL_WORLD_HEIGHT);
 
-    if grid_x < 0 || grid_x >= WORLD_COLS return false, 0;
-    if grid_y < 0 || grid_y >= WORLD_ROWS return false, 0;
+    if grid_x < 0 || grid_x >= context.world_cols return false, 0;
+    if grid_y < 0 || grid_y >= context.world_rows return false, 0;
 
-    index := (grid_y * WORLD_COLS) + grid_x;
+    index : s32 = (grid_y * xx context.world_cols) + grid_x;
 
     return true, index + 1;
 }
@@ -6720,11 +6768,11 @@ get_rect_pos :: (rect: Rectangle) -> Vector2 {
 /**
  * frequency: how many blocks before the next gradient. The higher the frequency, the less blocks in between gradients
  */
-perlin_noise_2d :: ($DESIRED_VALUES: s32, starting_frequency: s32 = 1, starting_amplitude: float32 = 1.0, octaves: s32 = 1) -> perlin_2d: [] float {
-    assert(DESIRED_VALUES > 0,     "You probably want a positive DESIRED_VALUES. If not, delete this assertion.");
+perlin_noise_2d :: (desired_values: s32, starting_frequency: s32 = 1, starting_amplitude: float32 = 1.0, octaves: s32 = 1) -> perlin_2d: [] float {
+    assert(desired_values > 0,     "You probably want a positive DESIRED_VALUES. If not, delete this assertion.");
     assert(starting_frequency > 0, "You probably want a positive starting_frequency. If not, delete this assertion.");
     assert(octaves > 0,            "You probably want a positive octaves. If not, delete this assertion.");
-    assert(DESIRED_VALUES % starting_frequency == 0, "The perlin noise frequency must be a divisor of the number of desired values.");
+    assert(desired_values % starting_frequency == 0, "The perlin noise frequency must be a divisor of the number of desired values.");
 
     // TODO: temp allocator?
     results : [..] float;
@@ -6732,7 +6780,7 @@ perlin_noise_2d :: ($DESIRED_VALUES: s32, starting_frequency: s32 = 1, starting_
     random_grid_gradients: [..] Vector2;
     random_grid_gradients.allocator = temp;
 
-    for i: 0..(DESIRED_VALUES * DESIRED_VALUES - 1) {
+    for i: 0..(desired_values * desired_values - 1) {
         array_add(*results, 0.0);
     }
 
@@ -6742,7 +6790,7 @@ perlin_noise_2d :: ($DESIRED_VALUES: s32, starting_frequency: s32 = 1, starting_
         octave_factor       := pow(2.0, cast(float) octave - 1);
         amplitude           := starting_amplitude / octave_factor;
         frequency           := cast(int) (starting_frequency * octave_factor);
-        blocks_per_section  := cast(int) (DESIRED_VALUES / frequency);
+        blocks_per_section  := cast(int) (desired_values / frequency);
         max_raw_noise_value := blocks_per_section * sqrt(2) / 2;
 
         assert(blocks_per_section > 0, "Got zero blocks per section during 2d perlin noise generation. You probably have too many octaves.");
@@ -6757,8 +6805,8 @@ perlin_noise_2d :: ($DESIRED_VALUES: s32, starting_frequency: s32 = 1, starting_
             }
         }
 
-        for row: 0..DESIRED_VALUES-1 {
-            for col: 0..DESIRED_VALUES-1 {
+        for row: 0..desired_values-1 {
+            for col: 0..desired_values-1 {
                 curr := Vector2.{ xx col, xx row };
                 
                 // The absolute coordinates of the current grid's corners that the point is within. 
@@ -6800,7 +6848,7 @@ perlin_noise_2d :: ($DESIRED_VALUES: s32, starting_frequency: s32 = 1, starting_
                 south_lerp := lerp(south_west_dot, south_east_dot, smootherstep(t_x));
                 perlin     := lerp(north_lerp, south_lerp, smootherstep(t_y));
 
-                results[row * DESIRED_VALUES + col] += amplitude * (perlin / max_raw_noise_value);
+                results[row * desired_values + col] += amplitude * (perlin / max_raw_noise_value);
             }
         }
     }

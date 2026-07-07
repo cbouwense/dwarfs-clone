@@ -10,6 +10,7 @@
 
 - Dwarf warrior attacked a goblin diagonally when the goblin was attacking a base.
 - Dwarf warrior unable to path to a goblin when standing behind a miner who is attacking that goblin.
+- Revealed water doesnt flow
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Core gameplay
