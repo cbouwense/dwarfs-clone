@@ -111,6 +111,7 @@
 - Educate myself on publishing and launching in Steam
 - Educate myself on the different platforms I can publish on
 - Educate myself on publishing on itch.io
+- https://howtomarketagame.com/2026/06/30/nobody-plays-demos-and-that-is-ok/
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Marketing
