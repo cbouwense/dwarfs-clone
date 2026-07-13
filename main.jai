@@ -728,11 +728,23 @@ draw_trench_walls_if_necessary :: (tile_id: s32) {
 
             pos  := get_tile_pos_by_id(neighbor_id);
             dest := get_world_rect_from_pos(pos);
+            rot  := 0.0;
 
-            // TODO
-            // if dir == .NORTH then
+            if dir == .SOUTH {
+                rot     = 180.0;
+                dest.x += TILEMAP_GENERAL_TILE_WIDTH;
+                dest.y += TILEMAP_GENERAL_TILE_HEIGHT;
+            }
+            else if dir == .EAST  {
+                rot = 90.0;
+                dest.x += TILEMAP_GENERAL_TILE_WIDTH;
+            }
+            else if dir == .WEST  {
+                rot = 270.0;
+                dest.y += TILEMAP_GENERAL_TILE_HEIGHT;
+            }
 
-            DrawTexturePro(tilemap_texture_general, source, dest, Vector2.{0,0}, 0.0, WHITE);
+            DrawTexturePro(tilemap_texture_general, source, dest, Vector2.{0,0}, rot, WHITE);
         }
     }
 }
