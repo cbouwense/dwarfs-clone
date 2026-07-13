@@ -709,6 +709,34 @@ main :: () {
 
 // Functions
 
+draw_trench_walls_if_necessary :: (tile_id: s32) {
+    TRENCH_WALL_SPRITE_SOURCE_ROW :: 2;
+    TRENCH_WALL_SPRITE_SOURCE_COL :: 0;
+
+    for dir: DIRECTIONS_CARDINAL {
+        dx := get_tile_direction_id_deltas(dir)[0];
+        dy := get_tile_direction_id_deltas(dir)[1];
+        neighbor_id := tile_id + dx + dy;
+
+        if is_tile_id_dirt(neighbor_id) {
+            source := Rectangle.{
+                xx (TRENCH_WALL_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH),
+                TRENCH_WALL_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
+                TILEMAP_GENERAL_TILE_WIDTH,
+                TILEMAP_GENERAL_TILE_HEIGHT,
+            };
+
+            pos  := get_tile_pos_by_id(neighbor_id);
+            dest := get_world_rect_from_pos(pos);
+
+            // TODO
+            // if dir == .NORTH then
+
+            DrawTexturePro(tilemap_texture_general, source, dest, Vector2.{0,0}, 0.0, WHITE);
+        }
+    }
+}
+
 LiquidType :: enum {
     WATER;
     LAVA;
@@ -2504,6 +2532,8 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                     dest := get_world_rect_from_pos(pos);
 
                     DrawTexturePro(tilemap_texture_general, source, dest, Vector2.{0,0}, 0.0, WHITE);
+
+                    draw_trench_walls_if_necessary(it);
                 }
 
                 for cave_tile_ids_in_viewport {
@@ -2512,6 +2542,8 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                         Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
                         BLACK, // TODO: texture
                     );
+
+                    draw_trench_walls_if_necessary(it);
                 }
 
                 for iron_tile_ids_in_viewport {
@@ -2550,6 +2582,8 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                         TILEMAP_GENERAL_TILE_WIDTH,
                         TILEMAP_GENERAL_TILE_HEIGHT,
                     );
+
+                    draw_trench_walls_if_necessary(it);
                 }
 
                 for water_flowing_tile_ids_in_viewport {
@@ -2585,6 +2619,8 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                         TILEMAP_GENERAL_TILE_WIDTH,
                         TILEMAP_GENERAL_TILE_HEIGHT,
                     );
+
+                    draw_trench_walls_if_necessary(it);
                 }
 
                 // Draw lava still
@@ -2600,6 +2636,8 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                     dest := get_world_rect_from_pos(pos);
 
                     DrawTexturePro(tilemap_texture_general, source, dest, Vector2.{0,0}, 0.0, WHITE);
+
+                    draw_trench_walls_if_necessary(it);
                 }
 
                 // Draw lava flowing
@@ -2636,6 +2674,8 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                         TILEMAP_GENERAL_TILE_WIDTH,
                         TILEMAP_GENERAL_TILE_HEIGHT,
                     );
+
+                    draw_trench_walls_if_necessary(it);
                 }
 
                 for hole_tile_ids_in_viewport {
@@ -5055,6 +5095,17 @@ is_tile_id_dirt :: (tile_id: s32) -> bool {
         !is_tile_id_obsidian(tile_id)      &&
         !is_tile_id_wall(tile_id)          &&
         !is_tile_id_hole(tile_id)
+    );
+}
+
+does_tile_id_need_wall_sprites :: (tile_id: s32) -> bool {
+    return (
+        is_tile_id_cave(tile_id)          ||
+        is_tile_id_fully_mined(tile_id)   ||
+        is_tile_id_water_still(tile_id)   ||
+        is_tile_id_water_flowing(tile_id) ||
+        is_tile_id_lava_still(tile_id)    ||
+        is_tile_id_lava_flowing(tile_id)
     );
 }
 
