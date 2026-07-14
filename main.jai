@@ -27,6 +27,7 @@ window_height := 800;
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 CAMERA_MOVE_SPEED_BASE :: 4;
+CAMERA_ZOOM_LOD_MIN :: 0.3;
 
 DIRT_HEALTH :: 100;
 IRON_HEALTH :: 200;
@@ -711,8 +712,8 @@ main :: () {
 // Functions
 
 draw_trench_walls_if_necessary :: (tile_id: s32) {
-    TRENCH_WALL_STRAIGHT_SPRITE_SOURCE_ROW :: 2;
-    TRENCH_WALL_STRAIGHT_SPRITE_SOURCE_COL :: 0;
+    TRENCH_STRAIGHT_SPRITE_SOURCE_ROW :: 2;
+    TRENCH_STRAIGHT_SPRITE_SOURCE_COL :: 0;
 
     for dir: DIRECTIONS_CARDINAL {
         dx := get_tile_direction_id_deltas(dir)[0];
@@ -721,8 +722,8 @@ draw_trench_walls_if_necessary :: (tile_id: s32) {
 
         if is_tile_id_dirt(neighbor_id) {
             source := Rectangle.{
-                TRENCH_WALL_STRAIGHT_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
-                TRENCH_WALL_STRAIGHT_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
+                TRENCH_STRAIGHT_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
+                TRENCH_STRAIGHT_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
                 TILEMAP_GENERAL_TILE_WIDTH,
                 TILEMAP_GENERAL_TILE_HEIGHT,
             };
@@ -750,105 +751,198 @@ draw_trench_walls_if_necessary :: (tile_id: s32) {
 }
 
 draw_trench_corners_if_necessary :: (tile_id: s32) {
-    TRENCH_WALL_CORNER_MOSTLY_CRUST_NORTH_EAST_SPRITE_SOURCE_ROW :: 2;
-    TRENCH_WALL_CORNER_MOSTLY_CRUST_NORTH_EAST_SPRITE_SOURCE_COL :: 1;
-    TRENCH_WALL_CORNER_MOSTLY_CRUST_NORTH_WEST_SPRITE_SOURCE_ROW :: 2;
-    TRENCH_WALL_CORNER_MOSTLY_CRUST_NORTH_WEST_SPRITE_SOURCE_COL :: 2;
-    TRENCH_WALL_CORNER_MOSTLY_CRUST_SOUTH_EAST_SPRITE_SOURCE_ROW :: 2;
-    TRENCH_WALL_CORNER_MOSTLY_CRUST_SOUTH_EAST_SPRITE_SOURCE_COL :: 3;
-    TRENCH_WALL_CORNER_MOSTLY_CRUST_SOUTH_WEST_SPRITE_SOURCE_ROW :: 2;
-    TRENCH_WALL_CORNER_MOSTLY_CRUST_SOUTH_WEST_SPRITE_SOURCE_COL :: 4;
+    TRENCH_CORNER_MOSTLY_CRUST_NORTH_EAST_SPRITE_SOURCE_ROW :: 2;
+    TRENCH_CORNER_MOSTLY_CRUST_NORTH_EAST_SPRITE_SOURCE_COL :: 1;
+    TRENCH_CORNER_MOSTLY_CRUST_NORTH_WEST_SPRITE_SOURCE_ROW :: 2;
+    TRENCH_CORNER_MOSTLY_CRUST_NORTH_WEST_SPRITE_SOURCE_COL :: 2;
+    TRENCH_CORNER_MOSTLY_CRUST_SOUTH_EAST_SPRITE_SOURCE_ROW :: 2;
+    TRENCH_CORNER_MOSTLY_CRUST_SOUTH_EAST_SPRITE_SOURCE_COL :: 3;
+    TRENCH_CORNER_MOSTLY_CRUST_SOUTH_WEST_SPRITE_SOURCE_ROW :: 2;
+    TRENCH_CORNER_MOSTLY_CRUST_SOUTH_WEST_SPRITE_SOURCE_COL :: 4;
 
-    TRENCH_WALL_CORNER_MOSTLY_DIRT_NORTH_EAST_SPRITE_SOURCE_ROW :: 3;
-    TRENCH_WALL_CORNER_MOSTLY_DIRT_NORTH_EAST_SPRITE_SOURCE_COL :: 1;
-    TRENCH_WALL_CORNER_MOSTLY_DIRT_NORTH_WEST_SPRITE_SOURCE_ROW :: 3;
-    TRENCH_WALL_CORNER_MOSTLY_DIRT_NORTH_WEST_SPRITE_SOURCE_COL :: 2;
-    TRENCH_WALL_CORNER_MOSTLY_DIRT_SOUTH_EAST_SPRITE_SOURCE_ROW :: 3;
-    TRENCH_WALL_CORNER_MOSTLY_DIRT_SOUTH_EAST_SPRITE_SOURCE_COL :: 3;
-    TRENCH_WALL_CORNER_MOSTLY_DIRT_SOUTH_WEST_SPRITE_SOURCE_ROW :: 3;
-    TRENCH_WALL_CORNER_MOSTLY_DIRT_SOUTH_WEST_SPRITE_SOURCE_COL :: 4;
+    TRENCH_CORNER_MOSTLY_DIRT_NORTH_EAST_SPRITE_SOURCE_ROW :: 3;
+    TRENCH_CORNER_MOSTLY_DIRT_NORTH_EAST_SPRITE_SOURCE_COL :: 1;
+    TRENCH_CORNER_MOSTLY_DIRT_NORTH_WEST_SPRITE_SOURCE_ROW :: 3;
+    TRENCH_CORNER_MOSTLY_DIRT_NORTH_WEST_SPRITE_SOURCE_COL :: 2;
+    TRENCH_CORNER_MOSTLY_DIRT_SOUTH_EAST_SPRITE_SOURCE_ROW :: 3;
+    TRENCH_CORNER_MOSTLY_DIRT_SOUTH_EAST_SPRITE_SOURCE_COL :: 3;
+    TRENCH_CORNER_MOSTLY_DIRT_SOUTH_WEST_SPRITE_SOURCE_ROW :: 3;
+    TRENCH_CORNER_MOSTLY_DIRT_SOUTH_WEST_SPRITE_SOURCE_COL :: 4;
 
     for dir: DIRECTIONS_CORNER {
         dx := get_tile_direction_id_deltas(dir)[0];
         dy := get_tile_direction_id_deltas(dir)[1];
         neighbor_id := tile_id + dx + dy;
 
-        if is_tile_id_dirt(neighbor_id) {
-            source := Rectangle.{
-                1738.0, 1337.0,
-                TILEMAP_GENERAL_TILE_WIDTH,
-                TILEMAP_GENERAL_TILE_HEIGHT,
-            };
+        source_one := Rectangle.{
+            1337.0, 1337.0,
+            TILEMAP_GENERAL_TILE_WIDTH,
+            TILEMAP_GENERAL_TILE_HEIGHT,
+        };
+        source_two := Rectangle.{
+            1738.0, 1738.0,
+            TILEMAP_GENERAL_TILE_WIDTH,
+            TILEMAP_GENERAL_TILE_HEIGHT,
+        };
 
-            pos  := get_tile_pos_by_id(neighbor_id);
-            dest := get_world_rect_from_pos(pos);
-            render_it := true;
+        pos_one := get_tile_pos_by_id(neighbor_id);
+        pos_two : Vector2;
 
-            if dir == {
-                case .NORTH_EAST;
-                    neighbor_id_north := tile_id + get_tile_direction_id_deltas(.NORTH)[1];
-                    neighbor_id_east  := tile_id + get_tile_direction_id_deltas(.EAST)[0];
+        dest_one := get_world_rect_from_pos(pos_one);
+        dest_two : Rectangle;
+        
+        render_one := true;
+        render_two := false;
 
+        if dir == {
+            case .NORTH_EAST;
+                id_deltas_north      := get_tile_direction_id_deltas(.NORTH);
+                id_deltas_east       := get_tile_direction_id_deltas(.EAST);
+                id_deltas_north_east := get_tile_direction_id_deltas(.NORTH_EAST);
+
+                neighbor_id_north      := tile_id + id_deltas_north[0] + id_deltas_north[1];
+                neighbor_id_east       := tile_id + id_deltas_east[0] + id_deltas_east[1];
+                neighbor_id_north_east := tile_id + id_deltas_north_east[0] + id_deltas_north_east[1];
+
+                if is_tile_id_dirt(neighbor_id_north_east) {
                     if is_tile_id_dirt(neighbor_id_north) && is_tile_id_dirt(neighbor_id_east) {
-                        source.x = TRENCH_WALL_CORNER_MOSTLY_DIRT_NORTH_EAST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
-                        source.y = TRENCH_WALL_CORNER_MOSTLY_DIRT_NORTH_EAST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
+                        source_one.x = TRENCH_CORNER_MOSTLY_DIRT_NORTH_EAST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
+                        source_one.y = TRENCH_CORNER_MOSTLY_DIRT_NORTH_EAST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
                     }
                     else if !is_tile_id_dirt(neighbor_id_north) && !is_tile_id_dirt(neighbor_id_east) {
-                        source.x = TRENCH_WALL_CORNER_MOSTLY_CRUST_NORTH_EAST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
-                        source.y = TRENCH_WALL_CORNER_MOSTLY_CRUST_NORTH_EAST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
+                        source_one.x = TRENCH_CORNER_MOSTLY_CRUST_NORTH_EAST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
+                        source_one.y = TRENCH_CORNER_MOSTLY_CRUST_NORTH_EAST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
                     }
                     else {
-                        render_it = false;
+                        render_one = false;
                     }
-                case .NORTH_WEST;
-                    neighbor_id_north := tile_id + get_tile_direction_id_deltas(.NORTH)[1];
-                    neighbor_id_west  := tile_id + get_tile_direction_id_deltas(.WEST)[0];
+                } else {
+                    if is_tile_id_dirt(neighbor_id_north) && is_tile_id_dirt(neighbor_id_east) {
+                        source_one.x = TRENCH_CORNER_MOSTLY_CRUST_NORTH_WEST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
+                        source_one.y = TRENCH_CORNER_MOSTLY_CRUST_NORTH_WEST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
+                        pos_one      = get_tile_pos_by_id(neighbor_id_north);
+                        dest_one     = get_world_rect_from_pos(pos_one);
 
+                        source_two.x = TRENCH_CORNER_MOSTLY_CRUST_SOUTH_EAST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
+                        source_two.y = TRENCH_CORNER_MOSTLY_CRUST_SOUTH_EAST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
+                        pos_two      = get_tile_pos_by_id(neighbor_id_east);
+                        dest_two     = get_world_rect_from_pos(pos_two);
+
+                        render_two = true;
+                    }
+                }
+            case .NORTH_WEST;
+                id_deltas_north      := get_tile_direction_id_deltas(.NORTH);
+                id_deltas_west       := get_tile_direction_id_deltas(.WEST);
+                id_deltas_north_west := get_tile_direction_id_deltas(.NORTH_WEST);
+
+                neighbor_id_north      := tile_id + id_deltas_north[0] + id_deltas_north[1];
+                neighbor_id_west       := tile_id + id_deltas_west[0] + id_deltas_west[1];
+                neighbor_id_north_west := tile_id + id_deltas_north_west[0] + id_deltas_north_west[1];
+
+                if is_tile_id_dirt(neighbor_id_north_west) {
                     if is_tile_id_dirt(neighbor_id_north) && is_tile_id_dirt(neighbor_id_west) {
-                        source.x = TRENCH_WALL_CORNER_MOSTLY_DIRT_NORTH_WEST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
-                        source.y = TRENCH_WALL_CORNER_MOSTLY_DIRT_NORTH_WEST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
+                        source_one.x = TRENCH_CORNER_MOSTLY_DIRT_NORTH_WEST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
+                        source_one.y = TRENCH_CORNER_MOSTLY_DIRT_NORTH_WEST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
                     }
                     else if !is_tile_id_dirt(neighbor_id_north) && !is_tile_id_dirt(neighbor_id_west) {
-                        source.x = TRENCH_WALL_CORNER_MOSTLY_CRUST_NORTH_WEST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
-                        source.y = TRENCH_WALL_CORNER_MOSTLY_CRUST_NORTH_WEST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
+                        source_one.x = TRENCH_CORNER_MOSTLY_CRUST_NORTH_WEST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
+                        source_one.y = TRENCH_CORNER_MOSTLY_CRUST_NORTH_WEST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
                     }
                     else {
-                        render_it = false;
+                        render_one = false;
                     }
-                case .SOUTH_EAST;
-                    neighbor_id_south := tile_id + get_tile_direction_id_deltas(.SOUTH)[1];
-                    neighbor_id_east  := tile_id + get_tile_direction_id_deltas(.EAST)[0];
+                } else {
+                    if is_tile_id_dirt(neighbor_id_north) && is_tile_id_dirt(neighbor_id_west) {
+                        source_one.x = TRENCH_CORNER_MOSTLY_CRUST_NORTH_EAST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
+                        source_one.y = TRENCH_CORNER_MOSTLY_CRUST_NORTH_EAST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
+                        pos_one      = get_tile_pos_by_id(neighbor_id_north);
+                        dest_one     = get_world_rect_from_pos(pos_one);
 
+                        source_two.x = TRENCH_CORNER_MOSTLY_CRUST_SOUTH_EAST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
+                        source_two.y = TRENCH_CORNER_MOSTLY_CRUST_SOUTH_EAST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
+                        pos_two      = get_tile_pos_by_id(neighbor_id_west);
+                        dest_two     = get_world_rect_from_pos(pos_two);
+
+                        render_two = true;
+                    }
+                }
+            case .SOUTH_EAST;
+                id_deltas_south      := get_tile_direction_id_deltas(.SOUTH);
+                id_deltas_east       := get_tile_direction_id_deltas(.EAST);
+                id_deltas_south_east := get_tile_direction_id_deltas(.SOUTH_EAST);
+
+                neighbor_id_south      := tile_id + id_deltas_south[0] + id_deltas_south[1];
+                neighbor_id_east       := tile_id + id_deltas_east[0] + id_deltas_east[1];
+                neighbor_id_south_east := tile_id + id_deltas_south_east[0] + id_deltas_south_east[1];
+
+                if is_tile_id_dirt(neighbor_id_south_east) {
                     if is_tile_id_dirt(neighbor_id_south) && is_tile_id_dirt(neighbor_id_east) {
-                        source.x = TRENCH_WALL_CORNER_MOSTLY_DIRT_SOUTH_EAST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
-                        source.y = TRENCH_WALL_CORNER_MOSTLY_DIRT_SOUTH_EAST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
+                        source_one.x = TRENCH_CORNER_MOSTLY_DIRT_SOUTH_EAST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
+                        source_one.y = TRENCH_CORNER_MOSTLY_DIRT_SOUTH_EAST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
                     }
                     else if !is_tile_id_dirt(neighbor_id_south) && !is_tile_id_dirt(neighbor_id_east) {
-                        source.x = TRENCH_WALL_CORNER_MOSTLY_CRUST_SOUTH_EAST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
-                        source.y = TRENCH_WALL_CORNER_MOSTLY_CRUST_SOUTH_EAST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
+                        source_one.x = TRENCH_CORNER_MOSTLY_CRUST_SOUTH_EAST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
+                        source_one.y = TRENCH_CORNER_MOSTLY_CRUST_SOUTH_EAST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
                     }
                     else {
-                        render_it = false;
+                        render_one = false;
                     }
-                case .SOUTH_WEST;
-                    neighbor_id_south := tile_id + get_tile_direction_id_deltas(.SOUTH)[1];
-                    neighbor_id_west  := tile_id + get_tile_direction_id_deltas(.WEST)[0];
+                } else {
+                    if is_tile_id_dirt(neighbor_id_south) && is_tile_id_dirt(neighbor_id_east) {
+                        source_one.x = TRENCH_CORNER_MOSTLY_CRUST_SOUTH_WEST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
+                        source_one.y = TRENCH_CORNER_MOSTLY_CRUST_SOUTH_WEST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
+                        pos_one      = get_tile_pos_by_id(neighbor_id_south);
+                        dest_one     = get_world_rect_from_pos(pos_one);
 
+                        source_two.x = TRENCH_CORNER_MOSTLY_CRUST_NORTH_EAST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
+                        source_two.y = TRENCH_CORNER_MOSTLY_CRUST_NORTH_EAST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
+                        pos_two      = get_tile_pos_by_id(neighbor_id_east);
+                        dest_two     = get_world_rect_from_pos(pos_two);
+
+                        render_two = true;
+                    }
+                }
+            case .SOUTH_WEST;
+                id_deltas_south      := get_tile_direction_id_deltas(.SOUTH);
+                id_deltas_west       := get_tile_direction_id_deltas(.WEST);
+                id_deltas_south_west := get_tile_direction_id_deltas(.SOUTH_WEST);
+
+                neighbor_id_south      := tile_id + id_deltas_south[0] + id_deltas_south[1];
+                neighbor_id_west       := tile_id + id_deltas_west[0] + id_deltas_west[1];
+                neighbor_id_south_west := tile_id + id_deltas_south_west[0] + id_deltas_south_west[1];
+
+                if is_tile_id_dirt(neighbor_id_south_west) {
                     if is_tile_id_dirt(neighbor_id_south) && is_tile_id_dirt(neighbor_id_west) {
-                        source.x = TRENCH_WALL_CORNER_MOSTLY_DIRT_SOUTH_WEST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
-                        source.y = TRENCH_WALL_CORNER_MOSTLY_DIRT_SOUTH_WEST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
+                        source_one.x = TRENCH_CORNER_MOSTLY_DIRT_SOUTH_WEST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
+                        source_one.y = TRENCH_CORNER_MOSTLY_DIRT_SOUTH_WEST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
                     }
                     else if !is_tile_id_dirt(neighbor_id_south) && !is_tile_id_dirt(neighbor_id_west) {
-                        source.x = TRENCH_WALL_CORNER_MOSTLY_CRUST_SOUTH_WEST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
-                        source.y = TRENCH_WALL_CORNER_MOSTLY_CRUST_SOUTH_WEST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
+                        source_one.x = TRENCH_CORNER_MOSTLY_CRUST_SOUTH_WEST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
+                        source_one.y = TRENCH_CORNER_MOSTLY_CRUST_SOUTH_WEST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
                     }
                     else {
-                        render_it = false;
+                        render_one = false;
                     }
-            }
+                } else {
+                    if is_tile_id_dirt(neighbor_id_south) && is_tile_id_dirt(neighbor_id_west) {
+                        source_one.x = TRENCH_CORNER_MOSTLY_CRUST_SOUTH_EAST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
+                        source_one.y = TRENCH_CORNER_MOSTLY_CRUST_SOUTH_EAST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
+                        pos_one      = get_tile_pos_by_id(neighbor_id_south);
+                        dest_one     = get_world_rect_from_pos(pos_one);
 
-            if render_it then DrawTexturePro(tilemap_texture_general, source, dest, Vector2.{0,0}, 0.0, WHITE);
+                        source_two.x = TRENCH_CORNER_MOSTLY_CRUST_NORTH_WEST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
+                        source_two.y = TRENCH_CORNER_MOSTLY_CRUST_NORTH_WEST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
+                        pos_two      = get_tile_pos_by_id(neighbor_id_west);
+                        dest_two     = get_world_rect_from_pos(pos_two);
+
+                        render_two = true;
+                    }
+                }
         }
+
+        if render_one then DrawTexturePro(tilemap_texture_general, source_one, dest_one, Vector2.{0,0}, 0.0, WHITE);
+        if render_two then DrawTexturePro(tilemap_texture_general, source_two, dest_two, Vector2.{0,0}, 0.0, WHITE);
     }
 }
 
@@ -2626,6 +2720,7 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
             // Then draw any uncovered tiles over the base layer
             // Draw tiles
             DRAW_TILES :: true;
+            DRAW_TRENCH_STRAGHT :: true;
             #if DRAW_TILES {
                 for fully_mined_tile_ids_in_viewport {
                     found, tile_column := table_find(*fully_mined_tile_ids_set, it);
@@ -2634,7 +2729,7 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                         print("tile % had no associated tilemap column", it);
                     }
                     // LOD
-                    if camera.zoom < 0.3 tile_column = 3;
+                    // if camera.zoom < CAMERA_ZOOM_LOD_MIN tile_column = 3;
 
                     source := Rectangle.{
                         xx (tile_column * TILEMAP_GENERAL_TILE_WIDTH),
@@ -2648,7 +2743,8 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
 
                     DrawTexturePro(tilemap_texture_general, source, dest, Vector2.{0,0}, 0.0, WHITE);
 
-                    draw_trench_walls_if_necessary(it);
+                    // TODO: put this check inside the function
+                    if DRAW_TRENCH_STRAGHT && camera.zoom >= CAMERA_ZOOM_LOD_MIN then draw_trench_walls_if_necessary(it);
                 }
 
                 for cave_tile_ids_in_viewport {
@@ -2658,7 +2754,7 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                         BLACK, // TODO: texture
                     );
 
-                    draw_trench_walls_if_necessary(it);
+                    if DRAW_TRENCH_STRAGHT && camera.zoom >= CAMERA_ZOOM_LOD_MIN then draw_trench_walls_if_necessary(it);
                 }
 
                 for iron_tile_ids_in_viewport {
@@ -2698,7 +2794,7 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                         TILEMAP_GENERAL_TILE_HEIGHT,
                     );
 
-                    draw_trench_walls_if_necessary(it);
+                    if DRAW_TRENCH_STRAGHT && camera.zoom >= CAMERA_ZOOM_LOD_MIN then draw_trench_walls_if_necessary(it);
                 }
 
                 for water_flowing_tile_ids_in_viewport {
@@ -2706,7 +2802,7 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                     {
                         tile_column := it % 3;
                         // LOD
-                        if camera.zoom < 0.3 tile_column = 3;
+                        if camera.zoom < CAMERA_ZOOM_LOD_MIN tile_column = 3;
 
                         source := Rectangle.{
                             xx (tile_column * TILEMAP_GENERAL_TILE_WIDTH),
@@ -2735,7 +2831,7 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                         TILEMAP_GENERAL_TILE_HEIGHT,
                     );
 
-                    draw_trench_walls_if_necessary(it);
+                    if DRAW_TRENCH_STRAGHT && camera.zoom >= CAMERA_ZOOM_LOD_MIN then draw_trench_walls_if_necessary(it);
                 }
 
                 // Draw lava still
@@ -2752,7 +2848,7 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
 
                     DrawTexturePro(tilemap_texture_general, source, dest, Vector2.{0,0}, 0.0, WHITE);
 
-                    draw_trench_walls_if_necessary(it);
+                    if DRAW_TRENCH_STRAGHT && camera.zoom >= CAMERA_ZOOM_LOD_MIN then draw_trench_walls_if_necessary(it);
                 }
 
                 // Draw lava flowing
@@ -2761,7 +2857,7 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                     {
                         tile_column := it % 3;
                         // LOD
-                        if camera.zoom < 0.3 tile_column = 3;
+                        if camera.zoom < CAMERA_ZOOM_LOD_MIN tile_column = 3;
 
                         source := Rectangle.{
                             xx (tile_column * TILEMAP_GENERAL_TILE_WIDTH),
@@ -2790,7 +2886,7 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                         TILEMAP_GENERAL_TILE_HEIGHT,
                     );
 
-                    draw_trench_walls_if_necessary(it);
+                    if DRAW_TRENCH_STRAGHT && camera.zoom >= CAMERA_ZOOM_LOD_MIN then draw_trench_walls_if_necessary(it);
                 }
 
                 for hole_tile_ids_in_viewport {
@@ -2799,6 +2895,8 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                         Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
                         DARKGRAY, // TODO: texture
                     );
+
+                    if DRAW_TRENCH_STRAGHT && camera.zoom >= CAMERA_ZOOM_LOD_MIN then draw_trench_walls_if_necessary(it);
                 }
 
                 if metagame.debug_mode {
@@ -2843,7 +2941,8 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
             }
 
             // Draw corners
-            #if DRAW_TILES {
+            DRAW_TRENCH_CORNERS :: true;
+            if DRAW_TRENCH_CORNERS && camera.zoom >= CAMERA_ZOOM_LOD_MIN {
                 for fully_mined_tile_ids_in_viewport draw_trench_corners_if_necessary(it);
                 for cave_tile_ids_in_viewport draw_trench_corners_if_necessary(it);
                 for wall_tile_ids_in_viewport draw_trench_corners_if_necessary(it);
