@@ -249,12 +249,13 @@ TILEMAP_SOURCE_RECT_COIN :: Rectangle.{
     TILEMAP_GENERAL_TILE_HEIGHT,
 };
 
+DWARF_MINER_SCALE :: 1.1;
 TILEMAP_DWARF_MINER_MAP_WIDTH    :: 3071;
 TILEMAP_DWARF_MINER_MAP_HEIGHT   :: 192;
-TILEMAP_DWARF_MINER_TILE_WIDTH   :: 64;
+TILEMAP_DWARF_MINER_TILE_WIDTH   :: 32;
 TILEMAP_DWARF_MINER_TILE_HEIGHT  :: 32;
-TILEMAP_DWARF_MINER_WORLD_WIDTH  :: TILEMAP_GENERAL_TILE_WIDTH  * SCALE;
-TILEMAP_DWARF_MINER_WORLD_HEIGHT :: TILEMAP_GENERAL_TILE_HEIGHT * SCALE;
+TILEMAP_DWARF_MINER_WORLD_WIDTH  :: TILEMAP_GENERAL_TILE_WIDTH  * DWARF_MINER_SCALE;
+TILEMAP_DWARF_MINER_WORLD_HEIGHT :: TILEMAP_GENERAL_TILE_HEIGHT * DWARF_MINER_SCALE;
 
 tilemap_texture_general : Texture;
 lava_flowing_texture    : Texture;
@@ -465,6 +466,13 @@ DwarfType :: enum {
     WARRIOR;
 }
 
+DwarfAnimation :: enum {
+    IDLE :: 0;
+    WALK :: 1;
+    MINE :: 2;
+    DIE  :: 3;
+};
+
 Dwarf :: struct {
     #as using entity: Entity;
     using move: Moveable;
@@ -472,7 +480,7 @@ Dwarf :: struct {
     kind = Dwarf;
 
     state               : DwarfState;
-    animations          : [5] AnimatedSprite;
+    animations          : [4] AnimatedSprite;
     mining_cooldown_ms  : s32;
     tile_id_mining      : s32;
     goblin_id_attacking : s32; // TODO: is this right? feels overly specific
@@ -708,6 +716,13 @@ main :: () {
 }
 
 // Functions
+
+dwarf_set_active_animation :: (dwarf: *Dwarf, active_animation_index: DwarfAnimation) {
+    dwarf.animations[DwarfAnimation.IDLE].active = active_animation_index == DwarfAnimation.IDLE;
+    dwarf.animations[DwarfAnimation.WALK].active = active_animation_index == DwarfAnimation.WALK;
+    dwarf.animations[DwarfAnimation.MINE].active = active_animation_index == DwarfAnimation.MINE;
+    dwarf.animations[DwarfAnimation.DIE].active  = active_animation_index == DwarfAnimation.DIE;
+}
 
 draw_trench_walls_if_necessary :: (tile_id: s32) {
     TRENCH_STRAIGHT_SPRITE_SOURCE_ROW :: 2;
@@ -1731,6 +1746,8 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                         if #complete dwarf.state == {
                             // You've just landed on a tile, now figure out what to do next
                             case .DECIDING;
+                                dwarf_set_active_animation(dwarf, DwarfAnimation.IDLE);
+
                                 is_dwarf_done_deciding := false;
 
                                 // By default, we're going to expect that this dwarf decises what to do this frame
@@ -1919,6 +1936,8 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                                 assert_soft(dwarf.state != .DECIDING || dwarf_can_remain_undecided, "Dwarf % got to end of DECIDING state without making a decision", dwarf.id);
 
                             case .MOVING;
+                                dwarf_set_active_animation(dwarf, DwarfAnimation.WALK);
+
                                 assert_soft(dwarf.tile_ids_on_path.count > 0, "Dwarf % wanted to move, but has nowhere to go", dwarf.id);
 
                                 target_tile_id  := dwarf.tile_ids_on_path[0];
@@ -1989,6 +2008,8 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                                 }
 
                             case .MINING;
+                                dwarf_set_active_animation(dwarf, DwarfAnimation.MINE);
+
                                 assert(dwarf.tile_id_mining > 0, "Dwarf tryna mine but he got no gotdamn tile to mine!!!!!!!");
 
                                 // If you try to mine liquid, you're fucking banned
@@ -2066,6 +2087,8 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                                 }
 
                             case .ATTACKING;
+                                dwarf_set_active_animation(dwarf, DwarfAnimation.MINE);
+
                                 if dwarf.attack_cooldown_ms > 0 {
                                     dwarf.attack_cooldown_ms -= xx (dt_seconds * 1000);
                                 } else {
@@ -2125,6 +2148,7 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                                     }
                                 }
                             case .IDLE;
+                                dwarf_set_active_animation(dwarf, DwarfAnimation.IDLE);
                         }
 
                         // Update animations
@@ -2962,14 +2986,19 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
             // Draw dwarves
             {
                 for dwarf: dwarves_in_viewport {
-                    sprite_draw(
-                        dwarf.animations[0],
-                        dwarf.pos,
-                        TILEMAP_DWARF_MINER_WORLD_WIDTH,
-                        TILEMAP_DWARF_MINER_WORLD_HEIGHT,
-                        TILEMAP_DWARF_MINER_TILE_WIDTH,
-                        TILEMAP_DWARF_MINER_TILE_HEIGHT,
-                    );
+                    // PERF: would it be faster to store the active index?
+                    for anim: dwarf.animations {
+                        if !anim.active continue;
+
+                        sprite_draw(
+                            anim,
+                            dwarf.pos,
+                            xx TILEMAP_DWARF_MINER_WORLD_WIDTH,
+                            xx TILEMAP_DWARF_MINER_WORLD_HEIGHT,
+                            TILEMAP_DWARF_MINER_TILE_WIDTH,
+                            TILEMAP_DWARF_MINER_TILE_HEIGHT,
+                        );
+                    }
                 }
             }
 
@@ -4975,10 +5004,10 @@ create_dwarf :: (pos: Vector2, dwarf_type: DwarfType) -> Dwarf {
     dwarf_id   := increment_then_read(*entity_id_counter);
     direction  := cast(Direction) cast(int) random_get_within_range(0, 3);
 
-    dwarf_miner_animated_sprite_walk := AnimatedSprite.{
+    dwarf_miner_animated_sprite_base := AnimatedSprite.{
         texture     = dwarf_miner_texture,
-        active      = true,
-        first_frame = 8,
+        active      = false,
+        first_frame = 0,
         color       = WHITE,
         rotation    = 0.0,
         frame_count       = 8,
@@ -4987,12 +5016,23 @@ create_dwarf :: (pos: Vector2, dwarf_type: DwarfType) -> Dwarf {
         loops             = true,
     };
 
+    dwarf_miner_animated_sprite_idle := dwarf_miner_animated_sprite_base;
+    dwarf_miner_animated_sprite_idle.first_frame = 0;
+
+    dwarf_miner_animated_sprite_walk := dwarf_miner_animated_sprite_base;
+    dwarf_miner_animated_sprite_walk.first_frame = 8;
+
+    dwarf_miner_animated_sprite_mine := dwarf_miner_animated_sprite_base;
+    dwarf_miner_animated_sprite_mine.first_frame = 16;
+
+    dwarf_miner_animated_sprite_die := dwarf_miner_animated_sprite_base;
+    dwarf_miner_animated_sprite_die.first_frame = 40;
+
     animations := AnimatedSprite.[
+        dwarf_miner_animated_sprite_idle,
         dwarf_miner_animated_sprite_walk,
-        dwarf_miner_animated_sprite_walk,
-        dwarf_miner_animated_sprite_walk,
-        dwarf_miner_animated_sprite_walk,
-        dwarf_miner_animated_sprite_walk,
+        dwarf_miner_animated_sprite_mine,
+        dwarf_miner_animated_sprite_die,
     ];
 
     dwarf := Dwarf.{
