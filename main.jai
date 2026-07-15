@@ -750,6 +750,7 @@ draw_trench_walls_if_necessary :: (tile_id: s32) {
     }
 }
 
+// TODO: this function is kinda fat
 draw_trench_corners_if_necessary :: (tile_id: s32) {
     TRENCH_CORNER_MOSTLY_CRUST_NORTH_EAST_SPRITE_SOURCE_ROW :: 2;
     TRENCH_CORNER_MOSTLY_CRUST_NORTH_EAST_SPRITE_SOURCE_COL :: 1;
@@ -2670,23 +2671,27 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
 
             // First, draw base layer of dirt which is just one giant quad
             {
-                // This accomplishes the tiling effect when we sample the source
-                // with such a big triangle.
-                source := Rectangle.{ 
-                    0, 
-                    0, 
-                    xx (TILEMAP_GENERAL_WORLD_WIDTH  * context.world_cols), // Repeat 10,000 times horizontally
-                    xx (TILEMAP_GENERAL_WORLD_HEIGHT * context.world_rows), // Repeat 10,000 times vertically
-                };
-
                 dest := Rectangle.{ 
-                    0, 
-                    0, 
+                    0,
+                    0,
                     xx (TILEMAP_GENERAL_WORLD_WIDTH  * context.world_cols),
                     xx (TILEMAP_GENERAL_WORLD_HEIGHT * context.world_rows),
                 };
-                
-                DrawTexturePro(dirt_texture, source, dest, Vector2.{0,0}, 0.0, WHITE);
+
+                if camera.zoom >= CAMERA_ZOOM_LOD_MIN {
+                    // This accomplishes the tiling effect when we sample the source
+                    // with such a big triangle.
+                    source := Rectangle.{ 
+                        0, 
+                        0, 
+                        xx (TILEMAP_GENERAL_WORLD_WIDTH  * context.world_cols), // Repeat 10,000 times horizontally
+                        xx (TILEMAP_GENERAL_WORLD_HEIGHT * context.world_rows), // Repeat 10,000 times vertically
+                    };
+
+                    DrawTexturePro(dirt_texture, source, dest, Vector2.{0,0}, 0.0, WHITE);
+                } else {
+                    DrawRectangleRec(dest, Color.{ 113, 65, 59, 255 });
+                }
             }
 
             // Then draw any uncovered tiles over the base layer
@@ -2746,11 +2751,17 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                 }
 
                 for wall_tile_ids_in_viewport {
-                    DrawRectangleV(
-                        get_tile_pos_by_id(it),
-                        Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
-                        DARKPURPLE, // TODO: texture
-                    );
+                    source := Rectangle.{
+                        4.0 * TILEMAP_GENERAL_TILE_WIDTH,
+                        1.0 * TILEMAP_GENERAL_TILE_HEIGHT,
+                        TILEMAP_GENERAL_TILE_WIDTH,
+                        TILEMAP_GENERAL_TILE_HEIGHT,
+                    };
+
+                    pos  := get_tile_pos_by_id(it);
+                    dest := get_world_rect_from_pos(pos);
+
+                    DrawTexturePro(tilemap_texture_general, source, dest, Vector2.{0,0}, 0.0, WHITE);
                 }
 
                 for water_still_tile_ids_in_viewport {

@@ -2,7 +2,7 @@
 # In progress
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- Art: Wall sprites
+- Art: Wall sprite
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Bugs
@@ -44,7 +44,6 @@
 - Art: Dwarf digger spritesheet
 - Art: Dwarf warrior spritesheet
 - Art: Goblin spritesheet
-- Art: Mined dirt spritesheet
 - Art: Iron ore sprite
 - Art: Obsidian sprite
 - Art: Dynamite sprite
@@ -52,9 +51,9 @@
 - Art: Home base sprite
 - Art: Outpost base sprites
 
-- Art: Better unmined dirt spritesheet
 - Art: Better lava sprites / animations
 - Art: Better water sprites / animations
+- Art: Better treasure sprites
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Tutorial
