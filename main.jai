@@ -775,7 +775,7 @@ draw_trench_corners_if_necessary :: (tile_id: s32) {
         neighbor_id := tile_id + dx + dy;
 
         source_one := Rectangle.{
-            1337.0, 1337.0,
+            1738.0, 1738.0,
             TILEMAP_GENERAL_TILE_WIDTH,
             TILEMAP_GENERAL_TILE_HEIGHT,
         };
@@ -859,8 +859,8 @@ draw_trench_corners_if_necessary :: (tile_id: s32) {
                         pos_one      = get_tile_pos_by_id(neighbor_id_north);
                         dest_one     = get_world_rect_from_pos(pos_one);
 
-                        source_two.x = TRENCH_CORNER_MOSTLY_CRUST_SOUTH_EAST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
-                        source_two.y = TRENCH_CORNER_MOSTLY_CRUST_SOUTH_EAST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
+                        source_two.x = TRENCH_CORNER_MOSTLY_CRUST_SOUTH_WEST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
+                        source_two.y = TRENCH_CORNER_MOSTLY_CRUST_SOUTH_WEST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
                         pos_two      = get_tile_pos_by_id(neighbor_id_west);
                         dest_two     = get_world_rect_from_pos(pos_two);
 
@@ -888,20 +888,6 @@ draw_trench_corners_if_necessary :: (tile_id: s32) {
                     else {
                         render_one = false;
                     }
-                } else {
-                    if is_tile_id_dirt(neighbor_id_south) && is_tile_id_dirt(neighbor_id_east) {
-                        source_one.x = TRENCH_CORNER_MOSTLY_CRUST_SOUTH_WEST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
-                        source_one.y = TRENCH_CORNER_MOSTLY_CRUST_SOUTH_WEST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
-                        pos_one      = get_tile_pos_by_id(neighbor_id_south);
-                        dest_one     = get_world_rect_from_pos(pos_one);
-
-                        source_two.x = TRENCH_CORNER_MOSTLY_CRUST_NORTH_EAST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
-                        source_two.y = TRENCH_CORNER_MOSTLY_CRUST_NORTH_EAST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
-                        pos_two      = get_tile_pos_by_id(neighbor_id_east);
-                        dest_two     = get_world_rect_from_pos(pos_two);
-
-                        render_two = true;
-                    }
                 }
             case .SOUTH_WEST;
                 id_deltas_south      := get_tile_direction_id_deltas(.SOUTH);
@@ -923,20 +909,6 @@ draw_trench_corners_if_necessary :: (tile_id: s32) {
                     }
                     else {
                         render_one = false;
-                    }
-                } else {
-                    if is_tile_id_dirt(neighbor_id_south) && is_tile_id_dirt(neighbor_id_west) {
-                        source_one.x = TRENCH_CORNER_MOSTLY_CRUST_SOUTH_EAST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
-                        source_one.y = TRENCH_CORNER_MOSTLY_CRUST_SOUTH_EAST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
-                        pos_one      = get_tile_pos_by_id(neighbor_id_south);
-                        dest_one     = get_world_rect_from_pos(pos_one);
-
-                        source_two.x = TRENCH_CORNER_MOSTLY_CRUST_NORTH_WEST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
-                        source_two.y = TRENCH_CORNER_MOSTLY_CRUST_NORTH_WEST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
-                        pos_two      = get_tile_pos_by_id(neighbor_id_west);
-                        dest_two     = get_world_rect_from_pos(pos_two);
-
-                        render_two = true;
                     }
                 }
         }
