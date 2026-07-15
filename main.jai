@@ -249,19 +249,28 @@ TILEMAP_SOURCE_RECT_COIN :: Rectangle.{
     TILEMAP_GENERAL_TILE_HEIGHT,
 };
 
+TILEMAP_DWARF_MINER_MAP_WIDTH    :: 3071;
+TILEMAP_DWARF_MINER_MAP_HEIGHT   :: 192;
+TILEMAP_DWARF_MINER_TILE_WIDTH   :: 64;
+TILEMAP_DWARF_MINER_TILE_HEIGHT  :: 32;
+TILEMAP_DWARF_MINER_WORLD_WIDTH  :: TILEMAP_GENERAL_TILE_WIDTH  * SCALE;
+TILEMAP_DWARF_MINER_WORLD_HEIGHT :: TILEMAP_GENERAL_TILE_HEIGHT * SCALE;
+
 tilemap_texture_general : Texture;
 lava_flowing_texture    : Texture;
 water_flowing_texture   : Texture;
 water_still_texture     : Texture;
 dirt_texture            : Texture;
+dwarf_miner_texture     : Texture;
 
 init_textures :: () {
-    // TODO: have just one big happy atlas
+    // TODO: have just one big happy atlas, maybe?
     tilemap_texture_general = LoadTexture("data/tilemap-general.png");
     lava_flowing_texture    = LoadTexture("data/lava-flowing.png");
     water_flowing_texture   = LoadTexture("data/water-flowing.png");
     water_still_texture     = LoadTexture("data/water-still.png");
     dirt_texture            = LoadTexture("data/dirt.png");
+    dwarf_miner_texture     = LoadTexture("data/dwarf-miner.png");
 
     // The plan is just to just render a big-ass quad and tile the dirt over it.
     SetTextureWrap(dirt_texture, .TEXTURE_WRAP_REPEAT);
@@ -358,26 +367,14 @@ TILE_DIRECTION_DELTAS :: [2] float32.[
     .[0.0, 0.0], // center
 ];
 
-// TILE_DIRECTION_ID_DELTAS :: [2] s32.[
-//     .[0, -WORLD_COLS],  // north
-//     .[0, +WORLD_COLS],  // south
-//     .[+1, 0],           // east
-//     .[-1, 0],           // west
-//     .[+1, -WORLD_COLS], // north east
-//     .[-1, -WORLD_COLS], // north west
-//     .[+1, +WORLD_COLS], // south east
-//     .[-1, +WORLD_COLS], // south west
-//     .[0, 0],            // center
-// ];
-
 #add_context camera_zoom_min  : float32;
 #add_context world_cols       : int;
 #add_context world_rows       : int;
-#add_context world_cols_mask  : int;  // world_cols - 1;
-#add_context world_rows_mask  : int;  // world_rows - 1;
-#add_context world_cols_shift : int;  // #run integer_log2(world_cols);
-#add_context world_cols_recip : float;// 1.0 / world_cols;
-#add_context world_rows_recip : float;// 1.0 / world_rows;
+#add_context world_cols_mask  : int;  
+#add_context world_rows_mask  : int;  
+#add_context world_cols_shift : int;  
+#add_context world_cols_recip : float;
+#add_context world_rows_recip : float;
 
 get_tile_direction_id_deltas :: (direction: Direction) -> [2] s32 {
     if #complete direction == {
@@ -475,6 +472,7 @@ Dwarf :: struct {
     kind = Dwarf;
 
     state               : DwarfState;
+    animations          : [5] AnimatedSprite;
     mining_cooldown_ms  : s32;
     tile_id_mining      : s32;
     goblin_id_attacking : s32; // TODO: is this right? feels overly specific
@@ -2128,6 +2126,9 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                                 }
                             case .IDLE;
                         }
+
+                        // Update animations
+                        for *anim: dwarf.animations sprite_update(anim, dt_seconds);
                     }
 
                     for dwarf_ids_to_kill_this_frame kill_dwarf_by_id(it);
@@ -2706,7 +2707,7 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                         print("tile % had no associated tilemap column", it);
                     }
                     // LOD
-                    // if camera.zoom < CAMERA_ZOOM_LOD_MIN tile_column = 3;
+                    if camera.zoom < CAMERA_ZOOM_LOD_MIN tile_column = 3;
 
                     source := Rectangle.{
                         xx (tile_column * TILEMAP_GENERAL_TILE_WIDTH),
@@ -2762,6 +2763,8 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                     dest := get_world_rect_from_pos(pos);
 
                     DrawTexturePro(tilemap_texture_general, source, dest, Vector2.{0,0}, 0.0, WHITE);
+
+                    if DRAW_TRENCH_STRAGHT && camera.zoom >= CAMERA_ZOOM_LOD_MIN then draw_trench_walls_if_necessary(it);
                 }
 
                 for water_still_tile_ids_in_viewport {
@@ -2959,18 +2962,14 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
             // Draw dwarves
             {
                 for dwarf: dwarves_in_viewport {
-                    index : float = ifx dwarf.dwarf_type == .MINER then 1.0 else 6.0;
-
-                    source := Rectangle.{
-                        index * TILEMAP_GENERAL_TILE_WIDTH,
-                        0 * TILEMAP_GENERAL_TILE_HEIGHT,
-                        TILEMAP_GENERAL_TILE_WIDTH,
-                        TILEMAP_GENERAL_TILE_HEIGHT,
-                    };
-
-                    dest := get_world_rect_from_pos(dwarf.pos);
-
-                    DrawTexturePro(tilemap_texture_general, source, dest, Vector2.{0,0}, 0.0, WHITE);
+                    sprite_draw(
+                        dwarf.animations[0],
+                        dwarf.pos,
+                        TILEMAP_DWARF_MINER_WORLD_WIDTH,
+                        TILEMAP_DWARF_MINER_WORLD_HEIGHT,
+                        TILEMAP_DWARF_MINER_TILE_WIDTH,
+                        TILEMAP_DWARF_MINER_TILE_HEIGHT,
+                    );
                 }
             }
 
@@ -4973,14 +4972,35 @@ create_miss_particles :: (pos: Vector2) {
 }
 
 create_dwarf :: (pos: Vector2, dwarf_type: DwarfType) -> Dwarf {
-    dwarf_id    := increment_then_read(*entity_id_counter);
-    direction   := cast(Direction) cast(int) random_get_within_range(0, 3);
+    dwarf_id   := increment_then_read(*entity_id_counter);
+    direction  := cast(Direction) cast(int) random_get_within_range(0, 3);
+
+    dwarf_miner_animated_sprite_walk := AnimatedSprite.{
+        texture     = dwarf_miner_texture,
+        active      = true,
+        first_frame = 8,
+        color       = WHITE,
+        rotation    = 0.0,
+        frame_count       = 8,
+        frame_duration_ms = 100,
+        timer_ms          = 0,
+        loops             = true,
+    };
+
+    animations := AnimatedSprite.[
+        dwarf_miner_animated_sprite_walk,
+        dwarf_miner_animated_sprite_walk,
+        dwarf_miner_animated_sprite_walk,
+        dwarf_miner_animated_sprite_walk,
+        dwarf_miner_animated_sprite_walk,
+    ];
 
     dwarf := Dwarf.{
         id                    = dwarf_id,
         pos                   = pos,
         hp                    = dwarf_starting_hp_by_type(dwarf_type),
         state                 = .DECIDING,
+        animations            = animations,          
         direction             = direction,
         dwarf_type            = dwarf_type,
         mining_cooldown_ms    = 0,
