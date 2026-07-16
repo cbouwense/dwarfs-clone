@@ -155,7 +155,7 @@ pop_front :: (array: *[] $T) -> T {
     return result;
 }
 
-pop_front_fast :: (array: *[] $T) -> T {
+pop_front_unordered_fast :: (array: *[] $T) -> T {
     result := array.*[0];
     array_unordered_remove_by_index(array, 0);
     return result;
