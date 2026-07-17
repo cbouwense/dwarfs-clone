@@ -329,7 +329,7 @@ ControlsState :: struct {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // TODO: add this as param in build or something
-PAUSE_ON_PANIC :: false;
+PAUSE_ON_PANIC :: true;
 
 mouse_drag_began_at_pos : Vector2;
 mouse_pos_when_path_creation_started : Vector2;
@@ -495,7 +495,7 @@ Dwarf :: struct {
 
     state               : DwarfState;
     animations          : [4] AnimatedSprite;
-    // mining_cooldown_ms  : s32;
+    did_anim_action     : bool;
     attack_cooldown_ms  : s32;
     tile_id_mining      : s32;
     goblin_id_attacking : s32; // TODO: is this right? feels overly specific
@@ -1727,16 +1727,12 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                     dwarf_ids_to_kill_this_frame : [..] s32;
 
                     for *dwarf, dwarf_index: dwarves {
+                        print_vars(dwarf.did_anim_action);
                         is_dwarf_done_updating := false;
 
                         dwarf_center   := get_rect_center(get_world_rect_from_pos(dwarf.pos));
                         dwarf_tile_id  := get_tile_id_by_pos(dwarf_center);
                         dwarf_tile_pos := get_tile_pos_by_id(dwarf_tile_id);
-
-                        // TODO: maintain active animation index so we don't need to search for it
-                        //
-                        // Update animations
-                        for *anim: dwarf.animations sprite_update(anim, dt_seconds);
 
                         if #complete dwarf.state == {
                             // You've just landed on a tile, now figure out what to do next
@@ -2005,28 +2001,19 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                             case .MINING;
                                 assert(dwarf.tile_id_mining > 0, "Dwarf tryna mine but he got no gotdamn tile to mine!!!!!!!");
 
-                                // NOTE: pretty sure this is dupe logic. If dwarves start mining liquid then put this back I guess
-                                //
-                                // // If you try to mine liquid, you're fucking banned
-                                // if (
-                                //     table_contains(*water_still_tile_ids_to_sprite, dwarf.tile_id_mining) ||
-                                //     table_contains(*water_flowing_tile_ids_to_sprite, dwarf.tile_id_mining) ||
-                                //     table_contains(*lava_still_tile_ids_set, dwarf.tile_id_mining) ||
-                                //     table_contains(*lava_flowing_tile_ids_to_sprite, dwarf.tile_id_mining)
-                                // ) {
-                                //     kill_dwarf_by_index(dwarf_index);
-                                // }
-
                                 frame := sprite_animation_get_current_frame(dwarf.animations[DwarfAnimation.MINE]);
 
-                                if frame == DWARF_MINER_ANIMATION_MINE_FRAME_ACTION {
-                                    print("Dealing mining damage!\n");
+                                if frame == DWARF_MINER_ANIMATION_MINE_FRAME_ACTION && !dwarf.did_anim_action {
+                                    dwarf.did_anim_action = true;
 
                                     // Decrease the tile health by the dwarf mining damage
                                     found_tile_dwarf_is_mining, current_health := table_find(*actively_mined_tile_ids_to_health_table, dwarf.tile_id_mining);
                                     
                                     if found_tile_dwarf_is_mining {
+                                        dmg := dwarf_get_dig_damage(dwarf);
                                         new_health := current_health - dwarf_get_dig_damage(dwarf);
+
+                                        print_vars(current_health, new_health, dmg);
 
                                         if new_health <= 0 {
                                             just_mined_iron := table_contains(*iron_tile_ids_set, dwarf.tile_id_mining);
@@ -2137,6 +2124,14 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                                     }
                                 }
                             case .IDLE;
+                        }
+
+                        // TODO: maintain active animation index so we don't need to search for it
+                        //
+                        // Update animations
+                        for *anim: dwarf.animations {
+                            reset_anim := sprite_update(anim, dt_seconds);
+                            if reset_anim then dwarf.did_anim_action = false;
                         }
                     }
 
@@ -2976,8 +2971,10 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
             {
                 for dwarf: dwarves_in_viewport {
                     // PERF: would it be faster to store the active index?
+                    found := false;
                     for anim: dwarf.animations {
                         if !anim.active continue;
+                        found = true;
 
                         sprite_draw(
                             anim,
@@ -2989,6 +2986,7 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                             dwarf.is_facing_left,
                         );
                     }
+                    assert_soft(found, "Dwarf % had no animation active\n", dwarf.id);
                 }
             }
 
@@ -5027,11 +5025,12 @@ create_dwarf :: (pos: Vector2, dwarf_type: DwarfType) -> Dwarf {
         frame_count       = 8,
         frame_duration_ms = 100,
         timer_ms          = 0,
-        loops             = false,
+        loops             = true,
     };
 
     dwarf_miner_animated_sprite_idle := dwarf_miner_animated_sprite_base;
     dwarf_miner_animated_sprite_idle.first_frame = 0;
+    dwarf_miner_animated_sprite_idle.active = true;
 
     dwarf_miner_animated_sprite_walk := dwarf_miner_animated_sprite_base;
     dwarf_miner_animated_sprite_walk.first_frame = 8;
@@ -5054,10 +5053,9 @@ create_dwarf :: (pos: Vector2, dwarf_type: DwarfType) -> Dwarf {
         pos                   = pos,
         hp                    = dwarf_starting_hp_by_type(dwarf_type),
         state                 = .DECIDING,
-        animations            = animations,          
+        animations            = animations,
         direction             = direction,
         dwarf_type            = dwarf_type,
-        // mining_cooldown_ms    = 0,
         tile_id_mining        = 0,
         goblin_id_attacking   = 0,
         attack_cooldown_ms    = dwarf_get_attack_cooldown_by_type(dwarf_type),

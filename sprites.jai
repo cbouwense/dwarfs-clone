@@ -42,17 +42,17 @@ sprite_draw :: (sprite: $T/Sprite, pos: Vector2, sprite_width: int, sprite_heigh
     DrawTexturePro(sprite.texture, source_rect, dest_rect, Vector2.{ xx sprite_width * 0.5, xx sprite_height * 0.5 }, sprite.rotation, sprite.color);
 }
 
-sprite_update :: (sprite: *AnimatedSprite, dt_seconds: float) {
-    print("before update: %\n", sprite_animation_get_current_frame(sprite));
+sprite_update :: (sprite: *AnimatedSprite, dt_seconds: float) -> reset_anim: bool {
     if sprite.active {
         sprite.timer_ms += xx (dt_seconds * 1000);
 
-        if !sprite.loops && sprite.timer_ms > sprite_animation_get_total_duration_ms(sprite) {
+        if sprite.timer_ms > sprite_animation_get_total_duration_ms(sprite) {
             sprite.timer_ms = 0;
-            sprite.active   = false;
+            sprite.active = sprite.loops;
+            return true;
         }
     } else {
         sprite.timer_ms = 0;
     }
-    print("after update: %\n", sprite_animation_get_current_frame(sprite));
+    return false;
 }

@@ -176,7 +176,7 @@ enum_count :: ($T: Type) -> int {
     return info.values.count;
 }
 
-assert_soft :: (condition: bool, format_string: string, args: .. Any) #expand {
+assert_soft :: (condition: bool, format_string: string = "", args: .. Any) #expand {
     #if PAUSE_ON_PANIC {
         if !condition {
             `metagame.state = .PAUSED;
