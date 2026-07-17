@@ -52,12 +52,16 @@ DWARF_MINER_ANIMATION_IDLE_FRAME_COUNT       :: 8;
 DWARF_MINER_ANIMATION_WALK_FRAME_DURATION_MS :: 100;
 DWARF_MINER_ANIMATION_WALK_START_FRAME       :: 8;
 DWARF_MINER_ANIMATION_WALK_FRAME_COUNT       :: 8;
-DWARF_MINER_ANIMATION_MINE_FRAME_DURATION_MS :: 100;
-DWARF_MINER_ANIMATION_MINE_START_FRAME       :: 16;
-DWARF_MINER_ANIMATION_MINE_FRAME_COUNT       :: 8;
-DWARF_MINER_ANIMATION_MINE_FRAME_ACTION      :: 22;
+DWARF_MINER_ANIMATION_MINE_DOWN_FRAME_DURATION_MS :: 100;
+DWARF_MINER_ANIMATION_MINE_DOWN_START_FRAME       :: 16;
+DWARF_MINER_ANIMATION_MINE_DOWN_FRAME_COUNT       :: 8;
+DWARF_MINER_ANIMATION_MINE_DOWN_FRAME_ACTION      :: 22;
+DWARF_MINER_ANIMATION_MINE_SIDE_FRAME_DURATION_MS :: 100;
+DWARF_MINER_ANIMATION_MINE_SIDE_START_FRAME       :: 24;
+DWARF_MINER_ANIMATION_MINE_SIDE_FRAME_COUNT       :: 8;
+DWARF_MINER_ANIMATION_MINE_SIDE_FRAME_ACTION      :: 29;
 DWARF_MINER_ANIMATION_DIE_FRAME_DURATION_MS  :: 100;
-DWARF_MINER_ANIMATION_DIE_START_FRAME        :: 40;
+DWARF_MINER_ANIMATION_DIE_START_FRAME        :: 48;
 DWARF_MINER_ANIMATION_DIE_FRAME_COUNT        :: 6;
 
 DWARF_WARRIOR_START_COUNT :: 1;
@@ -483,8 +487,9 @@ DwarfType :: enum {
 DwarfAnimation :: enum {
     IDLE :: 0;
     WALK :: 1;
-    MINE :: 2;
-    DIE  :: 3;
+    MINE_DOWN :: 2;
+    MINE_SIDE :: 3;
+    DIE  :: 4;
 };
 
 Dwarf :: struct {
@@ -494,7 +499,7 @@ Dwarf :: struct {
     kind = Dwarf;
 
     state               : DwarfState;
-    animations          : [4] AnimatedSprite;
+    animations          : [5] AnimatedSprite;
     did_anim_action     : bool;
     attack_cooldown_ms  : s32;
     tile_id_mining      : s32;
@@ -743,7 +748,8 @@ dwarf_maybe_set_active_animation :: (dwarf: *Dwarf, active_animation_index: Dwar
 dwarf_set_active_animation :: (dwarf: *Dwarf, active_animation_index: DwarfAnimation) {
     dwarf.animations[DwarfAnimation.IDLE].active = active_animation_index == DwarfAnimation.IDLE;
     dwarf.animations[DwarfAnimation.WALK].active = active_animation_index == DwarfAnimation.WALK;
-    dwarf.animations[DwarfAnimation.MINE].active = active_animation_index == DwarfAnimation.MINE;
+    dwarf.animations[DwarfAnimation.MINE_DOWN].active = active_animation_index == DwarfAnimation.MINE_DOWN;
+    dwarf.animations[DwarfAnimation.MINE_SIDE].active = active_animation_index == DwarfAnimation.MINE_SIDE;
     dwarf.animations[DwarfAnimation.DIE].active  = active_animation_index == DwarfAnimation.DIE;
 }
 
@@ -2001,9 +2007,19 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                             case .MINING;
                                 assert(dwarf.tile_id_mining > 0, "Dwarf tryna mine but he got no gotdamn tile to mine!!!!!!!");
 
-                                frame := sprite_animation_get_current_frame(dwarf.animations[DwarfAnimation.MINE]);
+                                // TODO: probably want a function for this
+                                anim_index   : DwarfAnimation;
+                                action_frame : int;
+                                if dwarf.tile_id_mining == dwarf_tile_id + context.world_cols {
+                                    anim_index   = DwarfAnimation.MINE_DOWN;
+                                    action_frame = DWARF_MINER_ANIMATION_MINE_DOWN_FRAME_ACTION; 
+                                } else {
+                                    anim_index   = DwarfAnimation.MINE_SIDE;
+                                    action_frame = DWARF_MINER_ANIMATION_MINE_SIDE_FRAME_ACTION; 
+                                }
+                                frame := sprite_animation_get_current_frame(dwarf.animations[anim_index]);
 
-                                if frame == DWARF_MINER_ANIMATION_MINE_FRAME_ACTION && !dwarf.did_anim_action {
+                                if frame == action_frame && !dwarf.did_anim_action {
                                     dwarf.did_anim_action = true;
 
                                     // Decrease the tile health by the dwarf mining damage
@@ -2080,10 +2096,19 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                                     if is_tile_id_neighbor_of_tile_id_cardinal(dwarf_tile_id, goblin_tile_id) {
                                         assert_soft(dwarf.goblin_id_attacking == goblin.id, "Dwarf % thinks he's attacking goblin % but really found goblin %", dwarf.id, dwarf.goblin_id_attacking, goblin.id);
                                         
-                                        // TODO: different animation for attacking?
-                                        frame := sprite_animation_get_current_frame(dwarf.animations[DwarfAnimation.MINE]);
+                                        // TODO: probably want a function for this
+                                        anim_index   : DwarfAnimation;
+                                        action_frame : int;
+                                        if dwarf.tile_id_mining == dwarf_tile_id + context.world_cols {
+                                            anim_index   = DwarfAnimation.MINE_DOWN;
+                                            action_frame = DWARF_MINER_ANIMATION_MINE_DOWN_FRAME_ACTION; 
+                                        } else {
+                                            anim_index = DwarfAnimation.MINE_SIDE;
+                                            action_frame = DWARF_MINER_ANIMATION_MINE_SIDE_FRAME_ACTION; 
+                                        }
+                                        frame := sprite_animation_get_current_frame(dwarf.animations[anim_index]);
 
-                                        if frame == DWARF_MINER_ANIMATION_MINE_FRAME_ACTION && !dwarf.did_anim_action {
+                                        if frame == action_frame && !dwarf.did_anim_action {
                                             dwarf.did_anim_action = true;
 
                                             // Hit check
@@ -4400,11 +4425,12 @@ dwarf_transition_state :: (dwarf: *Dwarf, new_state: DwarfState) {
     dwarf.state = new_state;
 
     // What to do when entering these states
+    // TODO: MINE_SIDe
     if #complete new_state == {
-        case .ATTACKING; dwarf_set_active_animation(dwarf, .MINE);
+        case .ATTACKING; dwarf_set_active_animation(dwarf, .MINE_SIDE);
         case .DECIDING;  
         case .IDLE;      dwarf_set_active_animation(dwarf, .IDLE);
-        case .MINING;    dwarf_set_active_animation(dwarf, .MINE);
+        case .MINING;    dwarf_set_active_animation(dwarf, .MINE_SIDE);
         case .MOVING;    dwarf_set_active_animation(dwarf, .WALK);
     }
 }
@@ -5030,22 +5056,26 @@ create_dwarf :: (pos: Vector2, dwarf_type: DwarfType) -> Dwarf {
     };
 
     dwarf_miner_animated_sprite_idle := dwarf_miner_animated_sprite_base;
-    dwarf_miner_animated_sprite_idle.first_frame = 0;
+    dwarf_miner_animated_sprite_idle.first_frame = DWARF_MINER_ANIMATION_IDLE_START_FRAME;
     dwarf_miner_animated_sprite_idle.active = true;
 
     dwarf_miner_animated_sprite_walk := dwarf_miner_animated_sprite_base;
-    dwarf_miner_animated_sprite_walk.first_frame = 8;
+    dwarf_miner_animated_sprite_walk.first_frame = DWARF_MINER_ANIMATION_WALK_START_FRAME;
 
-    dwarf_miner_animated_sprite_mine := dwarf_miner_animated_sprite_base;
-    dwarf_miner_animated_sprite_mine.first_frame = 16;
+    dwarf_miner_animated_sprite_mine_down := dwarf_miner_animated_sprite_base;
+    dwarf_miner_animated_sprite_mine_down.first_frame = DWARF_MINER_ANIMATION_MINE_DOWN_START_FRAME;
+
+    dwarf_miner_animated_sprite_mine_side := dwarf_miner_animated_sprite_base;
+    dwarf_miner_animated_sprite_mine_side.first_frame = DWARF_MINER_ANIMATION_MINE_SIDE_START_FRAME;
 
     dwarf_miner_animated_sprite_die := dwarf_miner_animated_sprite_base;
-    dwarf_miner_animated_sprite_die.first_frame = 40;
+    dwarf_miner_animated_sprite_die.first_frame = DWARF_MINER_ANIMATION_DIE_START_FRAME;
 
     animations := AnimatedSprite.[
         dwarf_miner_animated_sprite_idle,
         dwarf_miner_animated_sprite_walk,
-        dwarf_miner_animated_sprite_mine,
+        dwarf_miner_animated_sprite_mine_down,
+        dwarf_miner_animated_sprite_mine_side,
         dwarf_miner_animated_sprite_die,
     ];
 
@@ -7133,7 +7163,7 @@ reveal_cave_if_necessary :: (tile_id: s32, grant_points: bool, grant_gold: bool,
         set_cave_as_mined(cave_tile_id, cave_type, grant_points, grant_gold, game_state);
 
         // Lastly, if this cave has liquid in it, we'll need to kick off the flowing by spawning a flowing tile
-        // in place of the tile the dwdarf just mined. Otherwise, the liquid wouldn't start flowing, since we
+        // in place of the tile the dwarf just mined. Otherwise, the liquid wouldn't start flowing, since we
         // need to spawn still liquid.
         if #complete cave_type == {
             case .EMPTY;        // no op
