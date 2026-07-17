@@ -71,7 +71,7 @@ DWARF_WARRIOR_STARTING_HP :: 100;
 
 GOBLIN_MOVE_SPEED :: 50;
 GOBLIN_ATTACK_COOLDOWN_MS :: 1000;
-GOBLIN_ATTACK_DAMAGE_PER_SWING :: 25;
+GOBLIN_ATTACK_DAMAGE_PER_SWING :: 0;// 25;
 GOBLIN_HIT_CHANCE :: 0.80; // TODO: will have to be based on level
 GOBLIN_SPAWN_ENABLED :: true;
 GOBLIN_STARTING_HP :: 100;
@@ -2013,8 +2013,6 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                                         dmg := dwarf_get_dig_damage(dwarf);
                                         new_health := current_health - dwarf_get_dig_damage(dwarf);
 
-                                        print_vars(current_health, new_health, dmg);
-
                                         if new_health <= 0 {
                                             just_mined_iron := table_contains(*iron_tile_ids_set, dwarf.tile_id_mining);
                                             
@@ -2068,21 +2066,25 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                                 }
 
                             case .ATTACKING;
-                                if dwarf.attack_cooldown_ms > 0 {
-                                    dwarf.attack_cooldown_ms -= xx (dt_seconds * 1000);
-                                } else {
-                                    dwarf.attack_cooldown_ms = dwarf_get_attack_cooldown(dwarf);
-                                    // TODO: swing animation, I guess
+                                // Make sure the goblin is still alive, it's possible that other dwarves have killed it this frame.
+                                found, goblin_index := table_find(*goblin_id_to_index, dwarf.goblin_id_attacking);
+                                if found {
+                                    goblin         := *goblins[goblin_index];
+                                    goblin_center  := get_rect_center(get_world_rect_from_pos(goblin.pos));
+                                    goblin_tile_id := get_tile_id_by_pos(goblin_center);
 
-                                    // Make sure the goblin is still alive, it's possible that other dwarves have killed it this frame.
-                                    found, goblin_index := table_find(*goblin_id_to_index, dwarf.goblin_id_attacking);
-                                    if found {
-                                        goblin         := *goblins[goblin_index];
-                                        goblin_center  := get_rect_center(get_world_rect_from_pos(goblin.pos));
-                                        goblin_tile_id := get_tile_id_by_pos(goblin_center);
+                                    // Turn the dwarf to face whichever way it should be.
+                                    if dwarf.is_facing_left  && goblin.pos.x > dwarf_tile_pos.x then dwarf.is_facing_left = false;
+                                    if !dwarf.is_facing_left && goblin.pos.x < dwarf_tile_pos.x then dwarf.is_facing_left = true;
 
-                                        if is_tile_id_neighbor_of_tile_id_cardinal(dwarf_tile_id, goblin_tile_id) {
-                                            assert_soft(dwarf.goblin_id_attacking == goblin.id, "Dwarf % thinks he's attacking goblin % but really found goblin %", dwarf.id, dwarf.goblin_id_attacking, goblin.id);
+                                    if is_tile_id_neighbor_of_tile_id_cardinal(dwarf_tile_id, goblin_tile_id) {
+                                        assert_soft(dwarf.goblin_id_attacking == goblin.id, "Dwarf % thinks he's attacking goblin % but really found goblin %", dwarf.id, dwarf.goblin_id_attacking, goblin.id);
+                                        
+                                        // TODO: different animation for attacking?
+                                        frame := sprite_animation_get_current_frame(dwarf.animations[DwarfAnimation.MINE]);
+
+                                        if frame == DWARF_MINER_ANIMATION_MINE_FRAME_ACTION && !dwarf.did_anim_action {
+                                            dwarf.did_anim_action = true;
 
                                             // Hit check
                                             rng := random_get_within_range(0, 1);
@@ -2116,12 +2118,12 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                                             } else {
                                                 create_miss_particles(goblin.pos);
                                             }
-                                        } else {
-                                            dwarf_transition_state(dwarf, .DECIDING);
-                                        }                                            
+                                        }
                                     } else {
                                         dwarf_transition_state(dwarf, .DECIDING);
                                     }
+                                } else {
+                                    dwarf_transition_state(dwarf, .DECIDING);
                                 }
                             case .IDLE;
                         }
@@ -3250,8 +3252,7 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                         DrawText(tprint("pos: %\0", it.pos).data,                               xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                         DrawText(tprint("state: %\0", it.state).data,                           xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                         DrawText(tprint("tile_ids_on_path: %\0", it.tile_ids_on_path).data,     xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                        // DrawText(tprint("mining_cooldown_ms: %\0", it.mining_cooldown_ms).data, xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                        DrawText(tprint("attack_cooldown_ms: %\0", it.attack_cooldown_ms).data, xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                        DrawText(tprint("goblin_id_attacking: %\0", it.goblin_id_attacking).data, xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                         DrawText(tprint("tile_id_mining: %\0", it.tile_id_mining).data,         xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                         DrawText(tprint("direction: %\0", it.direction).data,                   xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                         DrawText(tprint("dwarf_type: %\0", it.dwarf_type).data,                 xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
@@ -4386,7 +4387,7 @@ initialize_round :: () -> GameState, Metagame, Camera2D {
 
 dwarf_transition_state :: (dwarf: *Dwarf, new_state: DwarfState) {
     // What to do when exiting these states
-    if #complete new_state == {
+    if #complete dwarf.state == {
         case .ATTACKING;
             dwarf.goblin_id_attacking = 0;
         case .DECIDING;
