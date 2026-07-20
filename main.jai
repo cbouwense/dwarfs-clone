@@ -556,7 +556,6 @@ Chunk :: struct {
     actively_mined_tile_ids : [..] s32;
     iron_tile_ids           : [..] s32;
     obsidian_tile_ids       : [..] s32;
-    wall_tile_ids           : [..] s32;
     water_still_tile_ids    : [..] s32;
     water_flowing_tile_ids  : [..] s32;
     lava_still_tile_ids     : [..] s32;
@@ -651,9 +650,6 @@ lava_alert_tile_ids_in_viewport : [..] s32;
 
 obsidian_tile_ids_set         : Table(s32, Any);
 obsidian_tile_ids_in_viewport : [..] s32;
-
-wall_tile_ids_set         : Table(s32, s32);
-wall_tile_ids_in_viewport : [..] s32;
 
 entity_id_counter   : s32 = 0;
 control_id_counter  : s32 = 0;
@@ -1637,7 +1633,7 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                                 tile_is_empty           := tile_is_unrevealed_cave || tile_is_water_still || tile_is_water_flowing || tile_is_lava_still || tile_is_lava_flowing;
 
                                 tile_is_obsidian        := table_contains(*obsidian_tile_ids_set, tile_id);
-                                tile_is_wall            := table_contains(*wall_tile_ids_set, tile_id);
+                                tile_is_wall            := is_tile_wall(tile_id);
                                 tile_is_placed_object   := tile_is_obsidian || tile_is_wall;
 
                                 tile_is_encased         := table_contains(*encased_tile_ids_set, tile_id);
@@ -1885,7 +1881,7 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                                                 new_health: s32;
                                                 if      is_tile_id_dirt(tile_id_next_in_dwarfs_path) new_health = xx DIRT_HEALTH;
                                                 else if is_tile_id_iron(tile_id_next_in_dwarfs_path) new_health = xx IRON_HEALTH;
-                                                else if is_tile_id_wall(tile_id_next_in_dwarfs_path) new_health = xx WALL_HEALTH;
+                                                else if is_tile_wall(tile_id_next_in_dwarfs_path) new_health = xx WALL_HEALTH;
                                                 else if (
                                                     table_contains(*water_still_tile_ids_to_sprite, dwarf.tile_id_mining) ||
                                                     table_contains(*water_flowing_tile_ids_to_sprite, dwarf.tile_id_mining) ||
@@ -1907,7 +1903,7 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                                                     is_lava_still     := table_contains(*lava_still_tile_ids_set, tile_id_next_in_dwarfs_path);
                                                     is_lava_flowing   := table_contains(*lava_flowing_tile_ids_to_sprite, tile_id_next_in_dwarfs_path);
                                                     is_obsidian       := table_contains(*obsidian_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                                    is_wall           := table_contains(*wall_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                                    is_wall           := is_tile_wall(tile_id_next_in_dwarfs_path);
                                                     is_hole           := is_tile_hole(tile_id_next_in_dwarfs_path);
                                                     print_vars(
                                                         is_fully_mined,
@@ -1961,7 +1957,7 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                                     is_lava_still     := table_contains(*lava_still_tile_ids_set, target_tile_id);
                                     is_lava_flowing   := table_contains(*lava_flowing_tile_ids_to_sprite, target_tile_id);
                                     is_obsidian       := table_contains(*obsidian_tile_ids_set, target_tile_id);
-                                    is_wall           := table_contains(*wall_tile_ids_set, target_tile_id);
+                                    is_wall           := is_tile_wall(target_tile_id);
                                     is_hole           := is_tile_hole(target_tile_id);
                                     is_dwarf          := table_contains(*tile_ids_to_dwarfs, target_tile_id);
                                     is_goblin         := table_contains(*tile_ids_to_goblins, target_tile_id);
@@ -2741,32 +2737,93 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
             // Draw tiles
             DRAW_TILES :: true;
             DRAW_TRENCH_STRAGHT :: true;
-            for tile : context.tiles {
-                tile_id : s32 = xx it_index;
-                
-                if #complete tile.type == {
-                    case .DIRT;
-                    case .MINED;
-                    case .CAVE;
-                    case .WATER_STILL;
-                    case .WATER_FLOWING;
-                    case .LAVA_STILL;
-                    case .LAVA_FLOWING;
-                    case .IRON;
-                    case .OBSIDIAN;
-                    case .WALL;
-                    case .HOLE;
-                        print_vars(tile, get_tile_pos_by_id(xx tile_id));
-                        DrawRectangleV(
-                            get_tile_pos_by_id(tile_id),
-                            Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
-                            DARKGRAY, // TODO: texture
-                        );
 
-                        if camera.zoom >= CAMERA_ZOOM_LOD_MIN {
-                            if DRAW_TRENCH_STRAGHT then draw_trench_walls_if_necessary(tile_id);
-                            draw_trench_corners_if_necessary(tile_id);
+            // Get the world coordinates of the top-left and bottom-right of the screen
+            window_start := GetScreenToWorld2D(Vector2.{ 0, 0 }, camera);
+            window_end   := GetScreenToWorld2D(Vector2.{ cast(float) GetScreenWidth(), cast(float) GetScreenHeight()}, camera);
+
+            // Convert world bounds to tile grid coordinates
+            start_col := cast(s32) floor(window_start.x / TILEMAP_GENERAL_WORLD_WIDTH);
+            end_col   := cast(s32) floor(window_end.x   / TILEMAP_GENERAL_WORLD_WIDTH);
+            start_row := cast(s32) floor(window_start.y / TILEMAP_GENERAL_WORLD_HEIGHT);
+            end_row   := cast(s32) floor(window_end.y   / TILEMAP_GENERAL_WORLD_HEIGHT);
+
+            // Clamp to map boundaries to avoid out-of-bounds array access
+            start_col = clamp(start_col, 0, cast(s32) context.world_cols - 1);
+            end_col   = clamp(end_col,   0, cast(s32) context.world_cols - 1);
+            start_row = clamp(start_row, 0, cast(s32) context.world_rows - 1);
+            end_row   = clamp(end_row,   0, cast(s32) context.world_rows - 1);
+
+            // Iterate only over the visible rows and columns
+            for row: start_row..end_row {
+                for col: start_col..end_col {
+                    // Calculate the 1D index. 
+                    // TODO: 0-based tile ids
+                    tile_id := (row * cast(s32) context.world_cols) + col + 1;
+                    
+                    // Safety check just in case
+                    assert(tile_id > 0 && tile_id < context.tiles.count);
+
+                    tile      := context.tiles[tile_id];
+                    tile_pos  := get_tile_pos_by_id(tile_id);
+                    tile_dest := get_world_rect_from_pos(tile_pos);
+
+                    if #complete tile.type == {
+                        case .DIRT; {
+
                         }
+                        case .MINED; {
+
+                        }
+                        case .CAVE; {
+
+                        }
+                        case .WATER_STILL; {
+
+                        }
+                        case .WATER_FLOWING; {
+
+                        }
+                        case .LAVA_STILL; {
+
+                        }
+                        case .LAVA_FLOWING; {
+
+                        }
+                        case .IRON; {
+
+                        }
+                        case .OBSIDIAN; {
+
+                        }
+                        case .WALL; {
+                            source := Rectangle.{
+                                4.0 * TILEMAP_GENERAL_TILE_WIDTH,
+                                1.0 * TILEMAP_GENERAL_TILE_HEIGHT,
+                                TILEMAP_GENERAL_TILE_WIDTH,
+                                TILEMAP_GENERAL_TILE_HEIGHT,
+                            };
+
+                            DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                            
+                            if camera.zoom >= CAMERA_ZOOM_LOD_MIN {
+                                if DRAW_TRENCH_STRAGHT then draw_trench_walls_if_necessary(tile_id);
+                                draw_trench_corners_if_necessary(tile_id);
+                            }
+                        }
+                        case .HOLE; {
+                            DrawRectangleV(
+                                tile_pos,
+                                Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
+                                DARKGRAY, // TODO: texture
+                            );
+
+                            if camera.zoom >= CAMERA_ZOOM_LOD_MIN {
+                                if DRAW_TRENCH_STRAGHT then draw_trench_walls_if_necessary(tile_id);
+                                draw_trench_corners_if_necessary(tile_id);
+                            }
+                        }
+                    }
                 }
             }
 
@@ -2820,22 +2877,6 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                         Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
                         DARKGRAY, // TODO: texture
                     );
-                }
-
-                for wall_tile_ids_in_viewport {
-                    source := Rectangle.{
-                        4.0 * TILEMAP_GENERAL_TILE_WIDTH,
-                        1.0 * TILEMAP_GENERAL_TILE_HEIGHT,
-                        TILEMAP_GENERAL_TILE_WIDTH,
-                        TILEMAP_GENERAL_TILE_HEIGHT,
-                    };
-
-                    pos  := get_tile_pos_by_id(it);
-                    dest := get_world_rect_from_pos(pos);
-
-                    DrawTexturePro(tilemap_texture_general, source, dest, Vector2.{0,0}, 0.0, WHITE);
-
-                    if DRAW_TRENCH_STRAGHT && camera.zoom >= CAMERA_ZOOM_LOD_MIN then draw_trench_walls_if_necessary(it);
                 }
 
                 for water_still_tile_ids_in_viewport {
@@ -2995,7 +3036,6 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
             if DRAW_TRENCH_CORNERS && camera.zoom >= CAMERA_ZOOM_LOD_MIN {
                 for fully_mined_tile_ids_in_viewport draw_trench_corners_if_necessary(it);
                 for cave_tile_ids_in_viewport draw_trench_corners_if_necessary(it);
-                for wall_tile_ids_in_viewport draw_trench_corners_if_necessary(it);
                 for water_still_tile_ids_in_viewport draw_trench_corners_if_necessary(it);
                 for water_flowing_tile_ids_in_viewport draw_trench_corners_if_necessary(it);
                 for lava_still_tile_ids_in_viewport draw_trench_corners_if_necessary(it);
@@ -4091,8 +4131,6 @@ reset_memory :: () {
 
     table_reset(*obsidian_tile_ids_set);
 
-    table_reset(*wall_tile_ids_set);
-
     array_reset(*bases);
     table_reset(*base_id_to_index);
 
@@ -4174,7 +4212,6 @@ initialize_round :: () -> GameState, Metagame, Camera2D {
         lava_still_tile_ids_in_viewport.allocator     = temp;
         lava_flowing_tile_ids_in_viewport.allocator   = temp;
         obsidian_tile_ids_in_viewport.allocator       = temp;
-        wall_tile_ids_in_viewport.allocator           = temp;
         dwarves_in_viewport.allocator                 = temp;
         goblins_in_viewport.allocator                 = temp;
         tiles_with_dynamite_ids_in_viewport.allocator = temp;
@@ -5432,8 +5469,8 @@ is_tile_id_obsidian :: (tile_id: s32) -> bool {
     return table_contains(*obsidian_tile_ids_set, tile_id);
 }
 
-is_tile_id_wall :: (tile_id: s32) -> bool {
-    return table_contains(*wall_tile_ids_set, tile_id);
+is_tile_wall :: inline (tile_id: s32) -> bool {
+    return get_tile_by_id(tile_id).type == .WALL;
 }
 
 is_tile_hole :: inline (tile_id: s32) -> bool {
@@ -5454,7 +5491,7 @@ is_tile_id_dirt :: (tile_id: s32) -> bool {
         !is_tile_id_lava_still(tile_id)    && 
         !is_tile_id_lava_flowing(tile_id)  && 
         !is_tile_id_obsidian(tile_id)      &&
-        !is_tile_id_wall(tile_id)          &&
+        !is_tile_wall(tile_id)          &&
         !is_tile_hole(tile_id)
     );
 }
@@ -5508,7 +5545,7 @@ is_tile_id_mineable :: (tile_id: s32) -> bool {
     return (
         is_tile_id_dirt(tile_id) ||
         is_tile_id_iron(tile_id) ||
-        is_tile_id_wall(tile_id)
+        is_tile_wall(tile_id)
     );
 }
 
@@ -5545,7 +5582,7 @@ get_neighbor_tile_ids_of_type :: (tile_id: s32, tile_type: TileType) -> [..] s32
             case .LAVA_FLOWING;  should_add_neighbor_to_list = is_tile_id_lava_flowing(neighbor_id);
             case .IRON;          should_add_neighbor_to_list = is_tile_id_iron(neighbor_id);
             case .OBSIDIAN;      should_add_neighbor_to_list = is_tile_id_obsidian(neighbor_id);
-            case .WALL;          should_add_neighbor_to_list = is_tile_id_wall(neighbor_id);
+            case .WALL;          should_add_neighbor_to_list = is_tile_wall(neighbor_id);
             case .HOLE;          should_add_neighbor_to_list = is_tile_hole(neighbor_id);
         }
 
@@ -5925,10 +5962,9 @@ try_to_set_cardinal_neighbors_as_flowing_tile_type :: (tile_id: s32, as_type: Ti
         if tile_is_obsidian continue;
 
         // If the tile is a wall and you are lava, damage it a bit.
-        tile_is_wall := table_contains(*wall_tile_ids_set, neighbor_id);
         as_lava := as_type == .LAVA_STILL || as_type == .LAVA_FLOWING;
 
-        if tile_is_wall && as_lava {
+        if is_tile_wall(neighbor_id) && as_lava {
             found, current_health := table_find(*actively_mined_tile_ids_to_health_table, neighbor_id);
             // If we don't see the wall in the actively mined tile list, then it's full health
             if (!found) current_health = WALL_HEALTH;
@@ -6320,9 +6356,6 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
 
         array_unordered_remove_by_value(*chunk.obsidian_tile_ids, tile_id);
         table_remove(*obsidian_tile_ids_set, tile_id);
-
-        array_unordered_remove_by_value(*chunk.wall_tile_ids, tile_id);
-        table_remove(*wall_tile_ids_set, tile_id);
         
         array_unordered_remove_by_value(*chunk.actively_mined_tile_ids, tile_id);
         table_remove(*actively_mined_tile_ids_to_health_table, tile_id);
@@ -6494,8 +6527,7 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
             table_set(*obsidian_tile_ids_set, tile_id, 1738);
         }
         case .WALL; {
-            array_add(*chunk.wall_tile_ids, tile_id);
-            table_set(*wall_tile_ids_set, tile_id, 1738);
+            context.tiles[tile_id].type = .WALL;
         }
         case .HOLE; {
             context.tiles[tile_id].type = .HOLE;
@@ -6779,7 +6811,6 @@ derive_entities_in_viewport :: (camera: Camera2D) {
     array_reset(*actively_mined_tile_ids_in_viewport);
     array_reset(*iron_tile_ids_in_viewport);
     array_reset(*obsidian_tile_ids_in_viewport);
-    array_reset(*wall_tile_ids_in_viewport);
     array_reset(*water_still_tile_ids_in_viewport);
     array_reset(*water_flowing_tile_ids_in_viewport);
     array_reset(*lava_still_tile_ids_in_viewport);
@@ -6891,18 +6922,6 @@ derive_entities_in_viewport :: (camera: Camera2D) {
                 if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
                 array_add(*obsidian_tile_ids_in_viewport, tile_id);
-            }
-
-            // Wall tiles
-            for tile_id: chunk.wall_tile_ids {
-                pos := get_tile_pos_by_id(tile_id);
-
-                if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
-                if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
-                if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
-                if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
-
-                array_add(*wall_tile_ids_in_viewport, tile_id);
             }
 
             // Water still tiles
