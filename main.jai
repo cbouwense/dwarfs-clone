@@ -4427,11 +4427,18 @@ dwarf_transition_state :: (dwarf: *Dwarf, new_state: DwarfState) {
     // What to do when entering these states
     // TODO: MINE_SIDe
     if #complete new_state == {
-        case .ATTACKING; dwarf_set_active_animation(dwarf, .MINE_SIDE);
+        case .ATTACKING;
+            dwarf_set_active_animation(dwarf, .MINE_SIDE);
         case .DECIDING;  
-        case .IDLE;      dwarf_set_active_animation(dwarf, .IDLE);
-        case .MINING;    dwarf_set_active_animation(dwarf, .MINE_SIDE);
-        case .MOVING;    dwarf_set_active_animation(dwarf, .WALK);
+        case .IDLE;
+            dwarf_set_active_animation(dwarf, .IDLE);
+        case .MINING;
+            if dwarf.direction == .NORTH then dwarf_set_active_animation(dwarf, .MINE_SIDE);
+            if dwarf.direction == .SOUTH then dwarf_set_active_animation(dwarf, .MINE_DOWN);
+            if dwarf.direction == .EAST  then dwarf_set_active_animation(dwarf, .MINE_SIDE);
+            if dwarf.direction == .WEST  then dwarf_set_active_animation(dwarf, .MINE_SIDE);
+        case .MOVING;
+            dwarf_set_active_animation(dwarf, .WALK);
     }
 }
 
