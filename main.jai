@@ -550,7 +550,6 @@ Path :: struct {
 }
 
 Chunk :: struct {
-    fully_mined_tile_ids    : [..] s32;
     actively_mined_tile_ids : [..] s32;
     obsidian_tile_ids       : [..] s32;
     water_still_tile_ids    : [..] s32;
@@ -599,10 +598,6 @@ data_folder: string;
 // get_tile_pos_by_id.
 actively_mined_tile_ids_to_health_table : Table(s32, s32);
 actively_mined_tile_ids_in_viewport     : [..] s32;
-
-// The value in the key-value pair corresponds to the tile column, zero-indexed
-fully_mined_tile_ids_set         : Table(s32, s32);
-fully_mined_tile_ids_in_viewport : [..] s32;
 
 water_still_tile_ids             : [..] s32;
 water_still_tile_ids_to_sprite   : Table(s32, AnimatedSprite); // TODO: can I just have 1 global sprite for water that tiles?
@@ -1561,7 +1556,7 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                         if game_state.controls_state_this_frame.select_is_pressed_once {
                             if metagame.debug_mode || game_state.gold >= GOLD_COST_BASE {
                                 tile_id         := get_tile_id_by_pos(mouse_pos_in_world);
-                                tile_is_mined   := table_contains(*fully_mined_tile_ids_set, tile_id);
+                                tile_is_mined   := is_tile_fully_mined(tile_id);
                                 tile_is_encased := is_tile_encased(tile_id);
 
                                 if metagame.debug_mode || (tile_is_mined && !tile_is_encased) {
@@ -1586,7 +1581,7 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                             if metagame.debug_mode || game_state.gold >= GOLD_COST_DYNAMITE {
                                 // Try to add dynamite to the selected tile
                                 tile_id         := get_tile_id_by_pos(mouse_pos_in_world);
-                                tile_is_mined   := table_contains(*fully_mined_tile_ids_set, tile_id);
+                                tile_is_mined   := is_tile_fully_mined(tile_id);
                                 tile_is_encased := is_tile_encased(tile_id);
 
                                 if tile_is_mined && !tile_is_encased {
@@ -1610,7 +1605,7 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
 
                                 tile_is_iron            := is_tile_iron(tile_id);
                                 tile_is_being_mined     := table_contains(*actively_mined_tile_ids_to_health_table, tile_id);
-                                tile_is_mined           := table_contains(*fully_mined_tile_ids_set, tile_id);
+                                tile_is_mined           := is_tile_fully_mined(tile_id);
                                 tile_is_mineable        := tile_is_iron || tile_is_being_mined || !tile_is_mined;
 
                                 tile_is_unrevealed_cave := is_tile_cave(tile_id);
@@ -1688,7 +1683,7 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                             if metagame.debug_mode || game_state.gold >= GOLD_COST_WALL {
                                 // Try to turn the selected tile into a wall
                                 tile_id := get_tile_id_by_pos(mouse_pos_in_world);
-                                tile_is_fully_mined   := table_contains(*fully_mined_tile_ids_set, tile_id);
+                                tile_is_fully_mined   := is_tile_fully_mined(tile_id);
                                 tile_has_base_on_it   := table_contains(*tile_ids_to_bases, tile_id);
                                 tile_has_dwarf_on_it  := table_contains(*tile_ids_to_dwarfs, tile_id);
                                 tile_has_goblin_on_it := table_contains(*tile_ids_to_goblins, tile_id);
@@ -2705,7 +2700,27 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
 
                         }
                         case .MINED; {
+                            // LOD
+                            if camera.zoom < CAMERA_ZOOM_LOD_MIN {
+                                LOW_LEVEL_OF_DETAIL_MINED_DIRT_COLOR :: Color.{ 219, 164, 99, 255 };
+                                DrawRectangleV(
+                                    tile_pos,
+                                    Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
+                                    LOW_LEVEL_OF_DETAIL_MINED_DIRT_COLOR,
+                                );
+                            } else {
+                                source := Rectangle.{
+                                    xx (tile.sprite_index * TILEMAP_GENERAL_TILE_WIDTH),
+                                    1 * TILEMAP_GENERAL_TILE_HEIGHT,
+                                    TILEMAP_GENERAL_TILE_WIDTH,
+                                    TILEMAP_GENERAL_TILE_HEIGHT,
+                                };
 
+                                DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+
+                                draw_trench_walls_if_necessary(tile_id);
+                                draw_trench_corners_if_necessary(tile_id);
+                            }
                         }
                         case .CAVE; {
                             DrawRectangleV(
@@ -2784,31 +2799,6 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
             }
 
             #if DRAW_TILES {
-                for fully_mined_tile_ids_in_viewport {
-                    found, tile_column := table_find(*fully_mined_tile_ids_set, it);
-                    if !found {
-                        metagame.state == .PAUSED;
-                        print("tile % had no associated tilemap column", it);
-                    }
-                    // LOD
-                    if camera.zoom < CAMERA_ZOOM_LOD_MIN tile_column = 3;
-
-                    source := Rectangle.{
-                        xx (tile_column * TILEMAP_GENERAL_TILE_WIDTH),
-                        1 * TILEMAP_GENERAL_TILE_HEIGHT,
-                        TILEMAP_GENERAL_TILE_WIDTH,
-                        TILEMAP_GENERAL_TILE_HEIGHT,
-                    };
-
-                    pos  := get_tile_pos_by_id(it);
-                    dest := get_world_rect_from_pos(pos);
-
-                    DrawTexturePro(tilemap_texture_general, source, dest, Vector2.{0,0}, 0.0, WHITE);
-
-                    // TODO: put this check inside the function
-                    if DRAW_TRENCH_STRAGHT && camera.zoom >= CAMERA_ZOOM_LOD_MIN then draw_trench_walls_if_necessary(it);
-                }
-
                 for obsidian_tile_ids_in_viewport {
                     DrawRectangleV(
                         get_tile_pos_by_id(it),
@@ -2962,7 +2952,6 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
             // Draw corners
             DRAW_TRENCH_CORNERS :: true;
             if DRAW_TRENCH_CORNERS && camera.zoom >= CAMERA_ZOOM_LOD_MIN {
-                for fully_mined_tile_ids_in_viewport draw_trench_corners_if_necessary(it);
                 for water_still_tile_ids_in_viewport draw_trench_corners_if_necessary(it);
                 for water_flowing_tile_ids_in_viewport draw_trench_corners_if_necessary(it);
                 for lava_still_tile_ids_in_viewport draw_trench_corners_if_necessary(it);
@@ -4027,7 +4016,6 @@ get_next_direction_to_face_from_base_neighbor_direction :: (direction: Direction
 
 reset_memory :: () {
     table_reset(*actively_mined_tile_ids_to_health_table);
-    table_reset(*fully_mined_tile_ids_set);
 
     array_reset(*water_still_tile_ids);
     table_reset(*water_still_tile_ids_to_sprite);
@@ -4126,7 +4114,6 @@ initialize_round :: () -> GameState, Metagame, Camera2D {
 
     // Set temp allocator for various things.
     {
-        fully_mined_tile_ids_in_viewport.allocator    = temp;
         actively_mined_tile_ids_in_viewport.allocator = temp;
         water_still_tile_ids_in_viewport.allocator    = temp;
         water_flowing_tile_ids_in_viewport.allocator  = temp;
@@ -5348,8 +5335,8 @@ get_tile_by_id :: inline (tile_id: s32) -> *Tile {
     return *context.tiles[tile_id];
 }
 
-is_tile_id_fully_mined :: (tile_id: s32) -> bool {
-    return table_contains(*fully_mined_tile_ids_set, tile_id);
+is_tile_fully_mined :: inline (tile_id: s32) -> bool {
+    return get_tile_by_id(tile_id).type == .MINED;
 }
 
 is_tile_id_actively_mined :: (tile_id: s32) -> bool {
@@ -5402,7 +5389,7 @@ is_tile_id_dirt :: (tile_id: s32) -> bool {
     // and I would like a way to know I'm not missing anything from this list at 
     // compile time.
     return (
-        !is_tile_id_fully_mined(tile_id)   &&
+        !is_tile_fully_mined(tile_id)   &&
         !is_tile_cave(tile_id)          && 
         !is_tile_iron(tile_id)          && 
         !is_tile_id_water_still(tile_id)   && 
@@ -5418,7 +5405,7 @@ is_tile_id_dirt :: (tile_id: s32) -> bool {
 does_tile_id_need_wall_sprites :: (tile_id: s32) -> bool {
     return (
         is_tile_cave(tile_id)          ||
-        is_tile_id_fully_mined(tile_id)   ||
+        is_tile_fully_mined(tile_id)   ||
         is_tile_id_water_still(tile_id)   ||
         is_tile_id_water_flowing(tile_id) ||
         is_tile_id_lava_still(tile_id)    ||
@@ -5435,7 +5422,7 @@ is_tile_id_walkable :: (tile_id: s32) -> bool {
     if found_goblin return false;
 
     return (
-        is_tile_id_fully_mined(tile_id)   ||
+        is_tile_fully_mined(tile_id)   ||
         is_tile_id_water_still(tile_id)   ||
         is_tile_id_water_flowing(tile_id) ||
         is_tile_id_lava_still(tile_id)    ||
@@ -5452,7 +5439,7 @@ is_tile_id_walkable_for_entity :: (tile_id: s32, entity_id: s32) -> bool {
     if found_goblin && goblin.id != entity_id return false;
 
     return (
-        is_tile_id_fully_mined(tile_id)   ||
+        is_tile_fully_mined(tile_id)   ||
         is_tile_id_water_still(tile_id)   ||
         is_tile_id_water_flowing(tile_id) ||
         is_tile_id_lava_still(tile_id)    ||
@@ -5491,7 +5478,7 @@ get_neighbor_tile_ids_of_type :: (tile_id: s32, tile_type: TileType) -> [..] s32
         should_add_neighbor_to_list := false;
         if #complete tile_type == {
             case .DIRT;          should_add_neighbor_to_list = is_tile_id_dirt(neighbor_id);
-            case .MINED;         should_add_neighbor_to_list = is_tile_id_fully_mined(neighbor_id);
+            case .MINED;         should_add_neighbor_to_list = is_tile_fully_mined(neighbor_id);
             case .CAVE;          should_add_neighbor_to_list = is_tile_cave(neighbor_id);
             case .WATER_STILL;   should_add_neighbor_to_list = is_tile_id_water_still(neighbor_id);
             case .WATER_FLOWING; should_add_neighbor_to_list = is_tile_id_water_flowing(neighbor_id);
@@ -5781,10 +5768,10 @@ are_all_neighbors_unable_to_be_spread_to :: (tile_id: s32) -> bool {
     west_tile_id  : s32 = tile_id - 1;
 
     // "Walkable" means "mined and not liquid". "Mineable" means dirt, iron, or wall.
-    is_neighbor_north_spreadable := is_tile_id_fully_mined(north_tile_id);
-    is_neighbor_south_spreadable := is_tile_id_fully_mined(south_tile_id);
-    is_neighbor_east_spreadable  := is_tile_id_fully_mined(east_tile_id);
-    is_neighbor_west_spreadable  := is_tile_id_fully_mined(west_tile_id);
+    is_neighbor_north_spreadable := is_tile_fully_mined(north_tile_id);
+    is_neighbor_south_spreadable := is_tile_fully_mined(south_tile_id);
+    is_neighbor_east_spreadable  := is_tile_fully_mined(east_tile_id);
+    is_neighbor_west_spreadable  := is_tile_fully_mined(west_tile_id);
 
     return (
         !is_neighbor_north_spreadable &&
@@ -5898,7 +5885,7 @@ try_to_set_cardinal_neighbors_as_flowing_tile_type :: (tile_id: s32, as_type: Ti
         tile_is_being_mined := table_contains(*actively_mined_tile_ids_to_health_table, neighbor_id);
         if tile_is_being_mined continue;
 
-        tile_is_empty := table_contains(*fully_mined_tile_ids_set, neighbor_id);
+        tile_is_empty := is_tile_fully_mined(neighbor_id);
         if !tile_is_empty continue;
 
         set_tile_as_type(neighbor_id, as_type, false, false, game_state);
@@ -6248,26 +6235,17 @@ set_cave_as_mined :: (tile_id: s32, cave_type: CaveType, grant_points: bool, gra
 set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant_gold: bool, game_state: *GameState) {
     _result, chunk := find_or_create_chunk_by_tile_id(tile_id);
 
-    tile_was_fully_mined := table_contains(*fully_mined_tile_ids_set, tile_id);
     tile_was_iron        := is_tile_iron(tile_id);
-    tile_was_dirt        := !tile_was_iron && !table_contains(*fully_mined_tile_ids_set, tile_id);
+    tile_was_dirt        := !tile_was_iron && !is_tile_fully_mined(tile_id);
     tile_was_alert_water := table_contains(*water_alert_tile_ids_set, tile_id);
     tile_was_alert_lava  := table_contains(*lava_alert_tile_ids_set, tile_id);
 
-    // PERF: removing by value has to iterate to find where the tile is, removing by index feels like it'd be a
-    // lot faster, especially considering we do this function a shit ton.
-    //
-    // Remove the tile from all of the tile trackers. We will even remove it from lists that it should
-    // stick around in. We put it into the one it should be right below this.
     {
         array_unordered_remove_by_value(*chunk.obsidian_tile_ids, tile_id);
         table_remove(*obsidian_tile_ids_set, tile_id);
         
         array_unordered_remove_by_value(*chunk.actively_mined_tile_ids, tile_id);
         table_remove(*actively_mined_tile_ids_to_health_table, tile_id);
-        
-        array_unordered_remove_by_value(*chunk.fully_mined_tile_ids, tile_id);
-        table_remove(*fully_mined_tile_ids_set, tile_id);
 
         array_unordered_remove_by_value(*water_still_tile_ids, tile_id);
         array_unordered_remove_by_value(*chunk.water_still_tile_ids, tile_id);
@@ -6315,9 +6293,8 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
     if #complete as_type == {
         case .CAVE;
         case .MINED; {
-            array_add(*chunk.fully_mined_tile_ids, tile_id);
-            tile_column := cast(s32) random_get_within_range(0, 2);
-            table_set(*fully_mined_tile_ids_set, tile_id, tile_column);
+            tile_column := cast(u8) random_get_within_range(0, 2);
+            get_tile_by_id(tile_id).sprite_index = tile_column;
 
             tile_pos := get_tile_pos_by_id(tile_id);
 
@@ -6327,7 +6304,7 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
                     create_gold_particle(tile_pos, GOLD_FROM_MINE_IRON);
                 }
 
-                if grant_points game_state.points += POINTS_FROM_MINE_IRON;
+                if grant_points then game_state.points += POINTS_FROM_MINE_IRON;
             }
 
             if tile_was_dirt {
@@ -6336,7 +6313,7 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
                     create_gold_particle(tile_pos, GOLD_FROM_MINE_DIRT);
                 }
 
-                if grant_points game_state.points += POINTS_FROM_MINE_DIRT;
+                if grant_points then game_state.points += POINTS_FROM_MINE_DIRT;
             }
 
             // TODO: It would be better if we had a parameter that explicitly was called mined_manually tbh.
@@ -6494,7 +6471,7 @@ detect_treasure_tile_id_within_radius :: (
         if table_contains(*ids_processed_set, id) continue;
         if id <= 0 continue;
         if id > max_tile_id continue;
-        if !table_contains(*fully_mined_tile_ids_set, id) continue;
+        if !is_tile_fully_mined(id) continue;
         if id == starting_tile_id - (context.world_rows * (radius + 1)) continue; // north
         if id == starting_tile_id + (context.world_rows * (radius + 1)) continue; // south
         if id == starting_tile_id + (radius + 1)                continue; // east
@@ -6546,7 +6523,7 @@ detect_entity_within_radius :: ($T: Type, starting_tile_id: s32, max_depth: s32)
         if depth > max_depth                              continue; 
         if id <= 0                                        continue;
         if id > max_tile_id                               continue;
-        if !table_contains(*fully_mined_tile_ids_set, id) continue;
+        if !is_tile_fully_mined(id) continue;
 
         detected, entity := table_find(*tile_ids_to_entity, id);
         if detected {
@@ -6677,7 +6654,6 @@ derive_entities_in_viewport :: (camera: Camera2D) {
     window_start := GetScreenToWorld2D(Vector2.{ 0, 0 }, camera);
     window_end   := GetScreenToWorld2D(Vector2.{ cast(float) GetScreenWidth(), cast(float) GetScreenHeight()}, camera);
 
-    array_reset(*fully_mined_tile_ids_in_viewport);
     array_reset(*actively_mined_tile_ids_in_viewport);
     array_reset(*obsidian_tile_ids_in_viewport);
     array_reset(*water_still_tile_ids_in_viewport);
@@ -6719,18 +6695,6 @@ derive_entities_in_viewport :: (camera: Camera2D) {
             found, chunk := table_find(*created_chunks, key);
             // If the chunk doesn't exist, nobody has mined or walked here, so just move on.
             if !found continue; 
-
-            // Fully mined tiles
-            for tile_id: chunk.fully_mined_tile_ids {
-                pos := get_tile_pos_by_id(tile_id);
-
-                if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
-                if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
-                if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
-                if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
-
-                array_add(*fully_mined_tile_ids_in_viewport, tile_id);
-            }
 
             // Actively mined tiles
             // TODO: do we need to do this?

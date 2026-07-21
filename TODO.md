@@ -8,6 +8,7 @@
 # Bugs
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+- Fast forward stops working after letting go once
 - Dwarf warrior attacked a goblin diagonally when the goblin was attacking a base.
 - Dwarf warrior unable to path to a goblin when standing behind a miner who is attacking that goblin.
 - Dwarf didn't grab treasure in treasure cave with only 1 treasure
@@ -90,6 +91,7 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 - Add dwarves to chunks and refactor lookups with chunking
+- Keep array of touched tile ids that we ever update. Basically ids touched by dwarves, cave reveals, liquid flows, etc?
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Publishing
