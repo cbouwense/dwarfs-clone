@@ -733,7 +733,7 @@ draw_trench_walls_if_necessary :: (tile_id: s32) {
         dy := get_tile_direction_id_deltas(dir)[1];
         neighbor_id := tile_id + dx + dy;
 
-        if is_tile_id_dirt(neighbor_id) {
+        if is_tile_dirt(neighbor_id) {
             source := Rectangle.{
                 TRENCH_STRAIGHT_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
                 TRENCH_STRAIGHT_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
@@ -818,12 +818,12 @@ draw_trench_corners_if_necessary :: (tile_id: s32) {
                 neighbor_id_east       := tile_id + id_deltas_east[0] + id_deltas_east[1];
                 neighbor_id_north_east := tile_id + id_deltas_north_east[0] + id_deltas_north_east[1];
 
-                if is_tile_id_dirt(neighbor_id_north_east) {
-                    if is_tile_id_dirt(neighbor_id_north) && is_tile_id_dirt(neighbor_id_east) {
+                if is_tile_dirt(neighbor_id_north_east) {
+                    if is_tile_dirt(neighbor_id_north) && is_tile_dirt(neighbor_id_east) {
                         source_one.x = TRENCH_CORNER_MOSTLY_DIRT_NORTH_EAST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
                         source_one.y = TRENCH_CORNER_MOSTLY_DIRT_NORTH_EAST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
                     }
-                    else if !is_tile_id_dirt(neighbor_id_north) && !is_tile_id_dirt(neighbor_id_east) {
+                    else if !is_tile_dirt(neighbor_id_north) && !is_tile_dirt(neighbor_id_east) {
                         source_one.x = TRENCH_CORNER_MOSTLY_CRUST_NORTH_EAST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
                         source_one.y = TRENCH_CORNER_MOSTLY_CRUST_NORTH_EAST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
                     }
@@ -831,7 +831,7 @@ draw_trench_corners_if_necessary :: (tile_id: s32) {
                         render_one = false;
                     }
                 } else {
-                    if is_tile_id_dirt(neighbor_id_north) && is_tile_id_dirt(neighbor_id_east) {
+                    if is_tile_dirt(neighbor_id_north) && is_tile_dirt(neighbor_id_east) {
                         source_one.x = TRENCH_CORNER_MOSTLY_CRUST_NORTH_WEST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
                         source_one.y = TRENCH_CORNER_MOSTLY_CRUST_NORTH_WEST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
                         pos_one      = get_tile_pos_by_id(neighbor_id_north);
@@ -854,12 +854,12 @@ draw_trench_corners_if_necessary :: (tile_id: s32) {
                 neighbor_id_west       := tile_id + id_deltas_west[0] + id_deltas_west[1];
                 neighbor_id_north_west := tile_id + id_deltas_north_west[0] + id_deltas_north_west[1];
 
-                if is_tile_id_dirt(neighbor_id_north_west) {
-                    if is_tile_id_dirt(neighbor_id_north) && is_tile_id_dirt(neighbor_id_west) {
+                if is_tile_dirt(neighbor_id_north_west) {
+                    if is_tile_dirt(neighbor_id_north) && is_tile_dirt(neighbor_id_west) {
                         source_one.x = TRENCH_CORNER_MOSTLY_DIRT_NORTH_WEST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
                         source_one.y = TRENCH_CORNER_MOSTLY_DIRT_NORTH_WEST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
                     }
-                    else if !is_tile_id_dirt(neighbor_id_north) && !is_tile_id_dirt(neighbor_id_west) {
+                    else if !is_tile_dirt(neighbor_id_north) && !is_tile_dirt(neighbor_id_west) {
                         source_one.x = TRENCH_CORNER_MOSTLY_CRUST_NORTH_WEST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
                         source_one.y = TRENCH_CORNER_MOSTLY_CRUST_NORTH_WEST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
                     }
@@ -867,7 +867,7 @@ draw_trench_corners_if_necessary :: (tile_id: s32) {
                         render_one = false;
                     }
                 } else {
-                    if is_tile_id_dirt(neighbor_id_north) && is_tile_id_dirt(neighbor_id_west) {
+                    if is_tile_dirt(neighbor_id_north) && is_tile_dirt(neighbor_id_west) {
                         source_one.x = TRENCH_CORNER_MOSTLY_CRUST_NORTH_EAST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
                         source_one.y = TRENCH_CORNER_MOSTLY_CRUST_NORTH_EAST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
                         pos_one      = get_tile_pos_by_id(neighbor_id_north);
@@ -890,12 +890,12 @@ draw_trench_corners_if_necessary :: (tile_id: s32) {
                 neighbor_id_east       := tile_id + id_deltas_east[0] + id_deltas_east[1];
                 neighbor_id_south_east := tile_id + id_deltas_south_east[0] + id_deltas_south_east[1];
 
-                if is_tile_id_dirt(neighbor_id_south_east) {
-                    if is_tile_id_dirt(neighbor_id_south) && is_tile_id_dirt(neighbor_id_east) {
+                if is_tile_dirt(neighbor_id_south_east) {
+                    if is_tile_dirt(neighbor_id_south) && is_tile_dirt(neighbor_id_east) {
                         source_one.x = TRENCH_CORNER_MOSTLY_DIRT_SOUTH_EAST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
                         source_one.y = TRENCH_CORNER_MOSTLY_DIRT_SOUTH_EAST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
                     }
-                    else if !is_tile_id_dirt(neighbor_id_south) && !is_tile_id_dirt(neighbor_id_east) {
+                    else if !is_tile_dirt(neighbor_id_south) && !is_tile_dirt(neighbor_id_east) {
                         source_one.x = TRENCH_CORNER_MOSTLY_CRUST_SOUTH_EAST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
                         source_one.y = TRENCH_CORNER_MOSTLY_CRUST_SOUTH_EAST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
                     }
@@ -912,12 +912,12 @@ draw_trench_corners_if_necessary :: (tile_id: s32) {
                 neighbor_id_west       := tile_id + id_deltas_west[0] + id_deltas_west[1];
                 neighbor_id_south_west := tile_id + id_deltas_south_west[0] + id_deltas_south_west[1];
 
-                if is_tile_id_dirt(neighbor_id_south_west) {
-                    if is_tile_id_dirt(neighbor_id_south) && is_tile_id_dirt(neighbor_id_west) {
+                if is_tile_dirt(neighbor_id_south_west) {
+                    if is_tile_dirt(neighbor_id_south) && is_tile_dirt(neighbor_id_west) {
                         source_one.x = TRENCH_CORNER_MOSTLY_DIRT_SOUTH_WEST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
                         source_one.y = TRENCH_CORNER_MOSTLY_DIRT_SOUTH_WEST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
                     }
-                    else if !is_tile_id_dirt(neighbor_id_south) && !is_tile_id_dirt(neighbor_id_west) {
+                    else if !is_tile_dirt(neighbor_id_south) && !is_tile_dirt(neighbor_id_west) {
                         source_one.x = TRENCH_CORNER_MOSTLY_CRUST_SOUTH_WEST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
                         source_one.y = TRENCH_CORNER_MOSTLY_CRUST_SOUTH_WEST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
                     }
@@ -1830,7 +1830,7 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                                                 // Add the tile the dwarf is about to mine to the global table of actively mined tiles and,
                                                 // in doing so, set its health.
                                                 new_health: s32;
-                                                if      is_tile_id_dirt(tile_id_next_in_dwarfs_path) new_health = xx DIRT_HEALTH;
+                                                if      is_tile_dirt(tile_id_next_in_dwarfs_path) new_health = xx DIRT_HEALTH;
                                                 else if is_tile_iron(tile_id_next_in_dwarfs_path) new_health = xx IRON_HEALTH;
                                                 else if is_tile_wall(tile_id_next_in_dwarfs_path) new_health = xx WALL_HEALTH;
                                                 else if (
@@ -5396,23 +5396,8 @@ is_tile_hole :: inline (tile_id: s32) -> bool {
     return get_tile_by_id(tile_id).type == .HOLE;
 }
 
-is_tile_id_dirt :: (tile_id: s32) -> bool {
-    // TODO: is there some way I can have a metaprogram do some sort of #complete on
-    // a generated enum of these? I just realized I missed is_hole in this boolean,
-    // and I would like a way to know I'm not missing anything from this list at 
-    // compile time.
-    return (
-        !is_tile_fully_mined(tile_id)   &&
-        !is_tile_cave(tile_id)          && 
-        !is_tile_iron(tile_id)          && 
-        !is_tile_water_still(tile_id)   && 
-        !is_tile_water_flowing(tile_id) && 
-        !is_tile_id_lava_still(tile_id)    && 
-        !is_tile_id_lava_flowing(tile_id)  && 
-        !is_tile_obsidian(tile_id)      &&
-        !is_tile_wall(tile_id)          &&
-        !is_tile_hole(tile_id)
-    );
+is_tile_dirt :: inline (tile_id: s32) -> bool {
+    return get_tile_by_id(tile_id).type == .DIRT;
 }
 
 does_tile_id_need_wall_sprites :: (tile_id: s32) -> bool {
@@ -5462,7 +5447,7 @@ is_tile_id_walkable_for_entity :: (tile_id: s32, entity_id: s32) -> bool {
 
 is_tile_mineable :: (tile_id: s32) -> bool {
     return (
-        is_tile_id_dirt(tile_id) ||
+        is_tile_dirt(tile_id) ||
         is_tile_iron(tile_id) ||
         is_tile_wall(tile_id)
     );
@@ -5490,7 +5475,7 @@ get_neighbor_tile_ids_of_type :: (tile_id: s32, tile_type: TileType) -> [..] s32
 
         should_add_neighbor_to_list := false;
         if #complete tile_type == {
-            case .DIRT;          should_add_neighbor_to_list = is_tile_id_dirt(neighbor_id);
+            case .DIRT;          should_add_neighbor_to_list = is_tile_dirt(neighbor_id);
             case .MINED;         should_add_neighbor_to_list = is_tile_fully_mined(neighbor_id);
             case .CAVE;          should_add_neighbor_to_list = is_tile_cave(neighbor_id);
             case .WATER_STILL;   should_add_neighbor_to_list = is_tile_water_still(neighbor_id);
