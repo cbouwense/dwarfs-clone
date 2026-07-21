@@ -6143,7 +6143,6 @@ set_cave_as_mined :: (tile_id: s32, cave_type: CaveType, grant_points: bool, gra
                 array_add(*tiles_with_treasure_ids, tile_id);
                 table_set(*tiles_with_treasure_ids_set, tile_id, 1738);
             }
-
         case .GOBLIN;
             tile_type = .MINED;
 
@@ -6152,7 +6151,6 @@ set_cave_as_mined :: (tile_id: s32, cave_type: CaveType, grant_points: bool, gra
                 is_goblin := rng <= 0.25;
                 if is_goblin create_goblin(get_tile_pos_by_id(tile_id));
             }
-
         case .SHAMAN;
             tile_type = .MINED;
         case .SPIDER_QUEEN;
@@ -6165,9 +6163,11 @@ set_cave_as_mined :: (tile_id: s32, cave_type: CaveType, grant_points: bool, gra
     for DIRECTIONS_CARDINAL {
         neighbor_id := get_neighbor_tile_id_by_direction(tile_id, it);
 
-        if !is_tile_cave(tile_id) continue;
+        print_vars(tile_id, neighbor_id, get_tile_by_id(tile_id).*);
 
-        set_cave_as_mined(neighbor_id, cave_type, grant_points, grant_gold, game_state);
+        if is_tile_cave(neighbor_id) {
+            set_cave_as_mined(neighbor_id, cave_type, grant_points, grant_gold, game_state);
+        }
     }
 }
 
@@ -6267,7 +6267,7 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
                 first_frame       = 0, 
                 frame_count       = WATER_STILL_FRAME_COUNT,
                 frame_duration_ms = WATER_STILL_FRAME_DURATION_MS,
-                timer_ms          = WATER_STILL_FRAME_DURATION_MS, // Start at the end so it resets immediately so water starts flowing instantly
+                timer_ms          = WATER_STILL_FRAME_COUNT * WATER_STILL_FRAME_DURATION_MS, // Start at the end so it resets immediately so water starts flowing instantly
                 loops             = true,
             };
 
@@ -6845,13 +6845,15 @@ reveal_cave_if_necessary :: (tile_id: s32, grant_points: bool, grant_gold: bool,
             if is_tile_cave(neighbor_id) return true, neighbor_id;
         }
 
-        return false, 1738;
+        return false, -1;
     }
 
     cave_type: CaveType;
 
     neighbor_is_unrevealed_cave, cave_tile_id := check_is_neighbor_unreavealed_cave(tile_id);
     if neighbor_is_unrevealed_cave {
+        // TODO: tweak these chances
+        //
         // First, decide what kind of cave this will be.
         cave_type = cast(CaveType) cast(int) random_get_within_range(0, xx enum_count(CaveType));
 
@@ -6869,19 +6871,6 @@ reveal_cave_if_necessary :: (tile_id: s32, grant_points: bool, grant_gold: bool,
 
         // Third, recursively reveal the tiles of the cave.
         set_cave_as_mined(cave_tile_id, cave_type, grant_points, grant_gold, game_state);
-
-        // Lastly, if this cave has liquid in it, we'll need to kick off the flowing by spawning a flowing tile
-        // in place of the tile the dwarf just mined. Otherwise, the liquid wouldn't start flowing, since we
-        // need to spawn still liquid.
-        if #complete cave_type == {
-            case .EMPTY;        // no op
-            case .TREASURE;     // no op
-            case .GOBLIN;       // no op
-            case .SHAMAN;       // no op
-            case .SPIDER_QUEEN; // no op
-            case .WATER; set_tile_as_type(tile_id, .WATER_FLOWING, false, false, game_state);
-            case .LAVA;  set_tile_as_type(tile_id, .LAVA_FLOWING, false, false, game_state);
-        }
     }
 
     return neighbor_is_unrevealed_cave, cave_type;
