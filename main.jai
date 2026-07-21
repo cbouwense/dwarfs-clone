@@ -553,7 +553,6 @@ Chunk :: struct {
     fully_mined_tile_ids    : [..] s32;
     encased_tile_ids        : [..] s32;
     actively_mined_tile_ids : [..] s32;
-    iron_tile_ids           : [..] s32;
     obsidian_tile_ids       : [..] s32;
     water_still_tile_ids    : [..] s32;
     water_flowing_tile_ids  : [..] s32;
@@ -608,9 +607,6 @@ fully_mined_tile_ids_in_viewport : [..] s32;
 
 encased_tile_ids_set         : Table(s32, Any);
 encased_tile_ids_in_viewport : [..] s32;
-
-iron_tile_ids_set         : Table(s32, Any);
-iron_tile_ids_in_viewport : [..] s32;
 
 water_still_tile_ids             : [..] s32;
 water_still_tile_ids_to_sprite   : Table(s32, AnimatedSprite); // TODO: can I just have 1 global sprite for water that tiles?
@@ -1616,7 +1612,7 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                                 // Try to turn the selected tile into obsidian
                                 tile_id := get_tile_id_by_pos(mouse_pos_in_world);
 
-                                tile_is_iron            := table_contains(*iron_tile_ids_set, tile_id);
+                                tile_is_iron            := is_tile_iron(tile_id);
                                 tile_is_being_mined     := table_contains(*actively_mined_tile_ids_to_health_table, tile_id);
                                 tile_is_mined           := table_contains(*fully_mined_tile_ids_set, tile_id);
                                 tile_is_mineable        := tile_is_iron || tile_is_being_mined || !tile_is_mined;
@@ -1876,7 +1872,7 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                                                 // in doing so, set its health.
                                                 new_health: s32;
                                                 if      is_tile_id_dirt(tile_id_next_in_dwarfs_path) new_health = xx DIRT_HEALTH;
-                                                else if is_tile_id_iron(tile_id_next_in_dwarfs_path) new_health = xx IRON_HEALTH;
+                                                else if is_tile_iron(tile_id_next_in_dwarfs_path) new_health = xx IRON_HEALTH;
                                                 else if is_tile_wall(tile_id_next_in_dwarfs_path) new_health = xx WALL_HEALTH;
                                                 else if (
                                                     table_contains(*water_still_tile_ids_to_sprite, dwarf.tile_id_mining) ||
@@ -1893,7 +1889,7 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                                                     is_actively_mined := table_contains(*fully_mined_tile_ids_set, tile_id_next_in_dwarfs_path);
                                                     is_cave           := is_tile_cave(tile_id_next_in_dwarfs_path);
                                                     is_encased        := table_contains(*encased_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                                    is_iron           := table_contains(*iron_tile_ids_set, tile_id_next_in_dwarfs_path);
+                                                    is_iron           := is_tile_iron(tile_id_next_in_dwarfs_path);
                                                     is_water_still    := table_contains(*water_still_tile_ids_to_sprite, tile_id_next_in_dwarfs_path);
                                                     is_water_flowing  := table_contains(*water_flowing_tile_ids_to_sprite, tile_id_next_in_dwarfs_path);
                                                     is_lava_still     := table_contains(*lava_still_tile_ids_set, tile_id_next_in_dwarfs_path);
@@ -1947,7 +1943,7 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                                     is_actively_mined := table_contains(*actively_mined_tile_ids_to_health_table, target_tile_id);
                                     is_cave           := is_tile_cave(target_tile_id);
                                     is_encased        := table_contains(*encased_tile_ids_set, target_tile_id);
-                                    is_iron           := table_contains(*iron_tile_ids_set, target_tile_id);
+                                    is_iron           := is_tile_iron(target_tile_id);
                                     is_water_still    := table_contains(*water_still_tile_ids_to_sprite, target_tile_id);
                                     is_water_flowing  := table_contains(*water_flowing_tile_ids_to_sprite, target_tile_id);
                                     is_lava_still     := table_contains(*lava_still_tile_ids_set, target_tile_id);
@@ -2033,7 +2029,7 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                                         new_health := current_health - dwarf_get_dig_damage(dwarf);
 
                                         if new_health <= 0 {
-                                            just_mined_iron := table_contains(*iron_tile_ids_set, dwarf.tile_id_mining);
+                                            just_mined_iron := is_tile_iron(dwarf.tile_id_mining);
                                             
                                             set_tile_as_type(dwarf.tile_id_mining, .MINED, true, true, game_state);
 
@@ -2490,14 +2486,11 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                 // Update iron
                 UPDATE_IRON :: true;
                 #if UPDATE_IRON {
-                    IRON_VEIN_SIZE_MIN :: 8;
-                    IRON_VEIN_SIZE_MAX :: 15;
-
                     if game_state.controls_state_this_frame.add_iron {
                         iron_rect := get_tile_rect_that_pos_is_within(get_world_width(), get_world_height(), TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
                         tile_pos  := Vector2.{ iron_rect.x, iron_rect.y };
                         tile_id   := get_tile_id_by_pos(tile_pos);
-                        spawn_iron(xx tile_id, IRON_VEIN_SIZE_MIN, IRON_VEIN_SIZE_MAX, xx context.world_cols, xx context.world_rows, *created_chunks, *iron_tile_ids_set);
+                        spawn_iron(tile_id, game_state);
                     }
                 }
 
@@ -2796,7 +2789,11 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
 
                         }
                         case .IRON; {
-
+                            DrawRectangleV(
+                                get_tile_pos_by_id(tile_id),
+                                Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
+                                LIGHTGRAY, // TODO: texture
+                            );
                         }
                         case .OBSIDIAN; {
 
@@ -2856,14 +2853,6 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
 
                     // TODO: put this check inside the function
                     if DRAW_TRENCH_STRAGHT && camera.zoom >= CAMERA_ZOOM_LOD_MIN then draw_trench_walls_if_necessary(it);
-                }
-
-                for iron_tile_ids_in_viewport {
-                    DrawRectangleV(
-                        get_tile_pos_by_id(it),
-                        Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
-                        LIGHTGRAY, // TODO: texture
-                    );
                 }
 
                 for obsidian_tile_ids_in_viewport {
@@ -4096,7 +4085,6 @@ reset_memory :: () {
     table_reset(*actively_mined_tile_ids_to_health_table);
     table_reset(*fully_mined_tile_ids_set);
     table_reset(*encased_tile_ids_set);
-    table_reset(*iron_tile_ids_set);
 
     array_reset(*water_still_tile_ids);
     table_reset(*water_still_tile_ids_to_sprite);
@@ -4198,7 +4186,6 @@ initialize_round :: () -> GameState, Metagame, Camera2D {
         fully_mined_tile_ids_in_viewport.allocator    = temp;
         actively_mined_tile_ids_in_viewport.allocator = temp;
         encased_tile_ids_in_viewport.allocator        = temp;
-        iron_tile_ids_in_viewport.allocator           = temp;
         water_still_tile_ids_in_viewport.allocator    = temp;
         water_flowing_tile_ids_in_viewport.allocator  = temp;
         lava_still_tile_ids_in_viewport.allocator     = temp;
@@ -4404,7 +4391,7 @@ initialize_round :: () -> GameState, Metagame, Camera2D {
 
                         iron_spawn_dice_roll := cast(int) random_get_within_range(IRON_SPAWN_CHANCE_NUMERATOR, IRON_SPAWN_CHANCE_DENOMINATOR);
                         if iron_spawn_dice_roll <= IRON_SPAWN_CHANCE_NUMERATOR {
-                            spawn_iron(xx tile_id, IRON_VEIN_SIZE_MIN, IRON_VEIN_SIZE_MAX, xx context.world_cols, xx context.world_rows, *created_chunks, *iron_tile_ids_set);
+                            spawn_iron(xx tile_id, *game_state);
                         }
                     }
                 }
@@ -5435,8 +5422,8 @@ is_tile_id_encased :: (tile_id: s32) -> bool {
     return table_contains(*encased_tile_ids_set, tile_id);
 }
 
-is_tile_id_iron :: (tile_id: s32) -> bool {
-    return table_contains(*iron_tile_ids_set, tile_id);
+is_tile_iron :: inline (tile_id: s32) -> bool {
+    return get_tile_by_id(tile_id).type == .IRON;
 }
 
 is_tile_id_water_still :: (tile_id: s32) -> bool {
@@ -5475,7 +5462,7 @@ is_tile_id_dirt :: (tile_id: s32) -> bool {
     return (
         !is_tile_id_fully_mined(tile_id)   &&
         !is_tile_cave(tile_id)          && 
-        !is_tile_id_iron(tile_id)          && 
+        !is_tile_iron(tile_id)          && 
         !is_tile_id_water_still(tile_id)   && 
         !is_tile_id_water_flowing(tile_id) && 
         !is_tile_id_lava_still(tile_id)    && 
@@ -5534,7 +5521,7 @@ is_tile_id_walkable_for_entity :: (tile_id: s32, entity_id: s32) -> bool {
 is_tile_id_mineable :: (tile_id: s32) -> bool {
     return (
         is_tile_id_dirt(tile_id) ||
-        is_tile_id_iron(tile_id) ||
+        is_tile_iron(tile_id) ||
         is_tile_wall(tile_id)
     );
 }
@@ -5570,7 +5557,7 @@ get_neighbor_tile_ids_of_type :: (tile_id: s32, tile_type: TileType) -> [..] s32
             case .WATER_FLOWING; should_add_neighbor_to_list = is_tile_id_water_flowing(neighbor_id);
             case .LAVA_STILL;    should_add_neighbor_to_list = is_tile_id_lava_still(neighbor_id);
             case .LAVA_FLOWING;  should_add_neighbor_to_list = is_tile_id_lava_flowing(neighbor_id);
-            case .IRON;          should_add_neighbor_to_list = is_tile_id_iron(neighbor_id);
+            case .IRON;          should_add_neighbor_to_list = is_tile_iron(neighbor_id);
             case .OBSIDIAN;      should_add_neighbor_to_list = is_tile_id_obsidian(neighbor_id);
             case .WALL;          should_add_neighbor_to_list = is_tile_wall(neighbor_id);
             case .HOLE;          should_add_neighbor_to_list = is_tile_hole(neighbor_id);
@@ -5945,7 +5932,7 @@ try_to_set_cardinal_neighbors_as_flowing_tile_type :: (tile_id: s32, as_type: Ti
 
         tile_is_flowing_lava := table_contains(*lava_flowing_tile_ids_to_sprite, neighbor_id);
 
-        tile_is_iron := table_contains(*iron_tile_ids_set, neighbor_id);
+        tile_is_iron := is_tile_iron(neighbor_id);
         if tile_is_iron continue;
 
         tile_is_obsidian := table_contains(*obsidian_tile_ids_set, neighbor_id);
@@ -6324,7 +6311,7 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
     _result, chunk := find_or_create_chunk_by_tile_id(tile_id);
 
     tile_was_fully_mined := table_contains(*fully_mined_tile_ids_set, tile_id);
-    tile_was_iron        := table_contains(*iron_tile_ids_set, tile_id);
+    tile_was_iron        := is_tile_iron(tile_id);
     tile_was_dirt        := !tile_was_iron && !table_contains(*fully_mined_tile_ids_set, tile_id);
     tile_was_alert_water := table_contains(*water_alert_tile_ids_set, tile_id);
     tile_was_alert_lava  := table_contains(*lava_alert_tile_ids_set, tile_id);
@@ -6335,14 +6322,6 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
     // Remove the tile from all of the tile trackers. We will even remove it from lists that it should
     // stick around in. We put it into the one it should be right below this.
     {
-        // TODO: why do I even check whether it was iron or not?
-        //
-        // If the tile was a resource remove the resource from the map
-        if tile_was_iron {
-            array_unordered_remove_by_value(*chunk.iron_tile_ids, tile_id);
-            table_remove(*iron_tile_ids_set, tile_id);
-        }
-
         array_unordered_remove_by_value(*chunk.obsidian_tile_ids, tile_id);
         table_remove(*obsidian_tile_ids_set, tile_id);
         
@@ -6509,22 +6488,17 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
         case .WALL;
         case .HOLE;
         case .DIRT;
-        case .IRON; assert(false, "Tried setting block as type %, but that doesn't really make sense.", as_type);
+        case .IRON;
     }
 }
 
 // Flood fill
-spawn_iron :: (
-    starting_tile_id: s32, 
-    vein_size_min: s32, 
-    vein_size_max: s32, 
-    world_columns: s32, 
-    world_rows: s32, 
-    created_chunks: *Table,
-    iron_tile_ids_set : *Table
-) {
-    size := cast(int) random_get_within_range(xx vein_size_min, xx vein_size_max);
-    max_tile_id := world_columns * world_rows;
+spawn_iron :: (starting_tile_id: s32, game_state: *GameState) {
+    IRON_VEIN_SIZE_MIN :: 8;
+    IRON_VEIN_SIZE_MAX :: 15;
+
+    size := cast(int) random_get_within_range(xx IRON_VEIN_SIZE_MIN, xx IRON_VEIN_SIZE_MAX);
+    max_tile_id := context.world_cols * context.world_rows;
 
     ids_to_process: [..] s32;
     ids_to_process.allocator = temp;
@@ -6548,16 +6522,15 @@ spawn_iron :: (
         _result, chunk := find_or_create_chunk_by_tile_id(id);
 
         // Mark the tile id as iron
-        array_add(*chunk.iron_tile_ids, id);
-        table_set(iron_tile_ids_set, id, 0);
+        set_tile_as_type(id, .IRON, false, false, game_state);
 
         // Mark it as processed
         table_add(*ids_processed_set, id, 1738);
         size -= 1;
 
         // Add neighbors as needing to be processed
-        array_add(*ids_to_process, id - world_columns);
-        array_add(*ids_to_process, id + world_columns);
+        array_add(*ids_to_process, xx (id - context.world_cols));
+        array_add(*ids_to_process, xx (id + context.world_cols));
         array_add(*ids_to_process, id + 1);
         array_add(*ids_to_process, id - 1);
     }
@@ -6744,15 +6717,13 @@ detect_iron_tile_id_within_radius :: (
         if table_contains(*ids_processed_set, id) continue;
         if id <= 0 continue;
         if id > max_tile_id continue;
-        // if table_contains(*fully_mined_tile_ids_set, id) continue;
-        // if table_contains(*actively_mined_tile_ids_to_health_table, id) continue;
         if id == starting_tile_id - (context.world_rows * (radius + 1)) continue; // north
         if id == starting_tile_id + (context.world_rows * (radius + 1)) continue; // south
         if id == starting_tile_id + (radius + 1)                continue; // east
         if id == starting_tile_id - (radius + 1)                continue; // west
 
         // If iron is found, return
-        if table_contains(*iron_tile_ids_set, id) return true, id;
+        if is_tile_iron(id) return true, id;
 
         // Mark it as processed
         table_set(*ids_processed_set, id, 1738);
@@ -6774,7 +6745,6 @@ derive_entities_in_viewport :: (camera: Camera2D) {
     array_reset(*fully_mined_tile_ids_in_viewport);
     array_reset(*encased_tile_ids_in_viewport);
     array_reset(*actively_mined_tile_ids_in_viewport);
-    array_reset(*iron_tile_ids_in_viewport);
     array_reset(*obsidian_tile_ids_in_viewport);
     array_reset(*water_still_tile_ids_in_viewport);
     array_reset(*water_flowing_tile_ids_in_viewport);
@@ -6851,18 +6821,6 @@ derive_entities_in_viewport :: (camera: Camera2D) {
                 if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
                 array_add(*actively_mined_tile_ids_in_viewport, tile_id);
-            }
-
-            // Iron tiles
-            for tile_id: chunk.iron_tile_ids {
-                pos := get_tile_pos_by_id(tile_id);
-
-                if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
-                if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
-                if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
-                if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
-
-                array_add(*iron_tile_ids_in_viewport, tile_id);
             }
 
             // Obsidian tiles
