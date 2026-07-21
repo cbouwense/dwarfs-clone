@@ -551,7 +551,6 @@ Path :: struct {
 
 Chunk :: struct {
     fully_mined_tile_ids    : [..] s32;
-    encased_tile_ids        : [..] s32;
     actively_mined_tile_ids : [..] s32;
     obsidian_tile_ids       : [..] s32;
     water_still_tile_ids    : [..] s32;
@@ -604,9 +603,6 @@ actively_mined_tile_ids_in_viewport     : [..] s32;
 // The value in the key-value pair corresponds to the tile column, zero-indexed
 fully_mined_tile_ids_set         : Table(s32, s32);
 fully_mined_tile_ids_in_viewport : [..] s32;
-
-encased_tile_ids_set         : Table(s32, Any);
-encased_tile_ids_in_viewport : [..] s32;
 
 water_still_tile_ids             : [..] s32;
 water_still_tile_ids_to_sprite   : Table(s32, AnimatedSprite); // TODO: can I just have 1 global sprite for water that tiles?
@@ -1566,7 +1562,7 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                             if metagame.debug_mode || game_state.gold >= GOLD_COST_BASE {
                                 tile_id         := get_tile_id_by_pos(mouse_pos_in_world);
                                 tile_is_mined   := table_contains(*fully_mined_tile_ids_set, tile_id);
-                                tile_is_encased := table_contains(*encased_tile_ids_set, tile_id);
+                                tile_is_encased := is_tile_encased(tile_id);
 
                                 if metagame.debug_mode || (tile_is_mined && !tile_is_encased) {
                                     // Add base.
@@ -1591,7 +1587,7 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                                 // Try to add dynamite to the selected tile
                                 tile_id         := get_tile_id_by_pos(mouse_pos_in_world);
                                 tile_is_mined   := table_contains(*fully_mined_tile_ids_set, tile_id);
-                                tile_is_encased := table_contains(*encased_tile_ids_set, tile_id);
+                                tile_is_encased := is_tile_encased(tile_id);
 
                                 if tile_is_mined && !tile_is_encased {
                                     // Place down the dynamite.
@@ -1628,7 +1624,7 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                                 tile_is_wall            := is_tile_wall(tile_id);
                                 tile_is_placed_object   := tile_is_obsidian || tile_is_wall;
 
-                                tile_is_encased         := table_contains(*encased_tile_ids_set, tile_id);
+                                tile_is_encased         := is_tile_encased(tile_id);
 
                                 if tile_is_mineable && !tile_is_empty && !tile_is_placed_object && !tile_is_encased {
                                     // Place down the obsidian.
@@ -1885,31 +1881,7 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                                                     is_dwarf_done_deciding = true;
                                                 }
                                                 else {
-                                                    is_fully_mined    := table_contains(*fully_mined_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                                    is_actively_mined := table_contains(*fully_mined_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                                    is_cave           := is_tile_cave(tile_id_next_in_dwarfs_path);
-                                                    is_encased        := table_contains(*encased_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                                    is_iron           := is_tile_iron(tile_id_next_in_dwarfs_path);
-                                                    is_water_still    := table_contains(*water_still_tile_ids_to_sprite, tile_id_next_in_dwarfs_path);
-                                                    is_water_flowing  := table_contains(*water_flowing_tile_ids_to_sprite, tile_id_next_in_dwarfs_path);
-                                                    is_lava_still     := table_contains(*lava_still_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                                    is_lava_flowing   := table_contains(*lava_flowing_tile_ids_to_sprite, tile_id_next_in_dwarfs_path);
-                                                    is_obsidian       := table_contains(*obsidian_tile_ids_set, tile_id_next_in_dwarfs_path);
-                                                    is_wall           := is_tile_wall(tile_id_next_in_dwarfs_path);
-                                                    is_hole           := is_tile_hole(tile_id_next_in_dwarfs_path);
-                                                    print_vars(
-                                                        is_fully_mined,
-                                                        is_cave,
-                                                        is_encased,
-                                                        is_iron,
-                                                        is_water_still,
-                                                        is_water_flowing,
-                                                        is_lava_still,
-                                                        is_lava_flowing,
-                                                        is_obsidian,
-                                                        is_wall,
-                                                        is_hole
-                                                    );
+                                                    print_vars(get_tile_by_id(tile_id_next_in_dwarfs_path));
                                                     assert_soft(false, "Dwarf % tryna mine some weird ass shit (tile id %)", dwarf.id, tile_id_next_in_dwarfs_path);
                                                 }
 
@@ -1939,36 +1911,7 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
 
                                 // TODO: #if DEBUG
                                 if !is_tile_id_walkable_for_entity(target_tile_id, dwarf.id) {
-                                    is_fully_mined    := table_contains(*fully_mined_tile_ids_set, target_tile_id);
-                                    is_actively_mined := table_contains(*actively_mined_tile_ids_to_health_table, target_tile_id);
-                                    is_cave           := is_tile_cave(target_tile_id);
-                                    is_encased        := table_contains(*encased_tile_ids_set, target_tile_id);
-                                    is_iron           := is_tile_iron(target_tile_id);
-                                    is_water_still    := table_contains(*water_still_tile_ids_to_sprite, target_tile_id);
-                                    is_water_flowing  := table_contains(*water_flowing_tile_ids_to_sprite, target_tile_id);
-                                    is_lava_still     := table_contains(*lava_still_tile_ids_set, target_tile_id);
-                                    is_lava_flowing   := table_contains(*lava_flowing_tile_ids_to_sprite, target_tile_id);
-                                    is_obsidian       := table_contains(*obsidian_tile_ids_set, target_tile_id);
-                                    is_wall           := is_tile_wall(target_tile_id);
-                                    is_hole           := is_tile_hole(target_tile_id);
-                                    is_dwarf          := table_contains(*tile_ids_to_dwarfs, target_tile_id);
-                                    is_goblin         := table_contains(*tile_ids_to_goblins, target_tile_id);
-                                    print_vars(
-                                        is_fully_mined,
-                                        is_actively_mined,
-                                        is_cave,
-                                        is_encased,
-                                        is_iron,
-                                        is_water_still,
-                                        is_water_flowing,
-                                        is_lava_still,
-                                        is_lava_flowing,
-                                        is_obsidian,
-                                        is_wall,
-                                        is_hole,
-                                        is_dwarf,
-                                        is_goblin
-                                    );
+                                    print_vars(get_tile_by_id(target_tile_id));
                                     // assert_soft(false, "Dwarf % is trying to move into the invalid tile %\n", dwarf.id, target_tile_id);
                                 }
 
@@ -2826,6 +2769,17 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                             }
                         }
                     }
+
+                    if !metagame.debug_mode {
+                        if is_tile_encased(tile_id) {
+                        // Draw encased tiles
+                            DrawRectangleV(
+                                get_tile_pos_by_id(tile_id),
+                                Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
+                                TRANSPARENT_WHITE
+                            );
+                        }
+                    }
                 }
             }
 
@@ -3001,16 +2955,6 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                         real_pos := Vector2.{ pos.x + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 };
                         DrawCircleV(real_pos, 4.0, WHITE);
                         DrawCircleV(real_pos, 3.0, RED);
-                    }
-                }
-
-                if !metagame.debug_mode {
-                    for encased_tile_ids_in_viewport {
-                        DrawRectangleV(
-                            get_tile_pos_by_id(it),
-                            Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
-                            TRANSPARENT_WHITE
-                        );
                     }
                 }
             }
@@ -4084,7 +4028,6 @@ get_next_direction_to_face_from_base_neighbor_direction :: (direction: Direction
 reset_memory :: () {
     table_reset(*actively_mined_tile_ids_to_health_table);
     table_reset(*fully_mined_tile_ids_set);
-    table_reset(*encased_tile_ids_set);
 
     array_reset(*water_still_tile_ids);
     table_reset(*water_still_tile_ids_to_sprite);
@@ -4185,7 +4128,6 @@ initialize_round :: () -> GameState, Metagame, Camera2D {
     {
         fully_mined_tile_ids_in_viewport.allocator    = temp;
         actively_mined_tile_ids_in_viewport.allocator = temp;
-        encased_tile_ids_in_viewport.allocator        = temp;
         water_still_tile_ids_in_viewport.allocator    = temp;
         water_flowing_tile_ids_in_viewport.allocator  = temp;
         lava_still_tile_ids_in_viewport.allocator     = temp;
@@ -5400,10 +5342,10 @@ get_neighbor_tile_ids :: (tile_id: s32) -> [..] s32 {
     return neighbor_tile_ids;
 }
 
-get_tile_by_id :: inline (tile_id: s32) -> Tile {
+get_tile_by_id :: inline (tile_id: s32) -> *Tile {
     // TODO: 0-index tile ids
     assert(tile_id > 0);
-    return context.tiles[tile_id];
+    return *context.tiles[tile_id];
 }
 
 is_tile_id_fully_mined :: (tile_id: s32) -> bool {
@@ -5418,8 +5360,8 @@ is_tile_cave :: inline (tile_id: s32) -> bool {
     return get_tile_by_id(tile_id).type == .CAVE;
 }
 
-is_tile_id_encased :: (tile_id: s32) -> bool {
-    return table_contains(*encased_tile_ids_set, tile_id);
+is_tile_encased :: inline (tile_id: s32) -> bool {
+    return (get_tile_by_id(tile_id).props & TileProperties.ENCASED) > 0;
 }
 
 is_tile_iron :: inline (tile_id: s32) -> bool {
@@ -5551,8 +5493,6 @@ get_neighbor_tile_ids_of_type :: (tile_id: s32, tile_type: TileType) -> [..] s32
             case .DIRT;          should_add_neighbor_to_list = is_tile_id_dirt(neighbor_id);
             case .MINED;         should_add_neighbor_to_list = is_tile_id_fully_mined(neighbor_id);
             case .CAVE;          should_add_neighbor_to_list = is_tile_cave(neighbor_id);
-            // TODO: property
-            // case .ENCASED;       should_add_neighbor_to_list = is_tile_id_encased(neighbor_id);
             case .WATER_STILL;   should_add_neighbor_to_list = is_tile_id_water_still(neighbor_id);
             case .WATER_FLOWING; should_add_neighbor_to_list = is_tile_id_water_flowing(neighbor_id);
             case .LAVA_STILL;    should_add_neighbor_to_list = is_tile_id_lava_still(neighbor_id);
@@ -5829,9 +5769,7 @@ try_to_encase_tiles :: (starting_tile_id: s32, game_state: *GameState) {
     // If we found a liquid, mark the tiles as encased
     if found_liquid {
         for encased_ids {
-            _result, chunk := find_or_create_chunk_by_tile_id(it);
-            array_add(*chunk.encased_tile_ids, it);
-            table_set(*encased_tile_ids_set, it, 1738);
+            get_tile_by_id(it).props |= TileProperties.ENCASED;
         }
     }
 }
@@ -6331,9 +6269,6 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
         array_unordered_remove_by_value(*chunk.fully_mined_tile_ids, tile_id);
         table_remove(*fully_mined_tile_ids_set, tile_id);
 
-        array_unordered_remove_by_value(*chunk.encased_tile_ids, tile_id);
-        table_remove(*encased_tile_ids_set, tile_id);
-
         array_unordered_remove_by_value(*water_still_tile_ids, tile_id);
         array_unordered_remove_by_value(*chunk.water_still_tile_ids, tile_id);
         table_remove(*water_still_tile_ids_to_sprite, tile_id);
@@ -6743,7 +6678,6 @@ derive_entities_in_viewport :: (camera: Camera2D) {
     window_end   := GetScreenToWorld2D(Vector2.{ cast(float) GetScreenWidth(), cast(float) GetScreenHeight()}, camera);
 
     array_reset(*fully_mined_tile_ids_in_viewport);
-    array_reset(*encased_tile_ids_in_viewport);
     array_reset(*actively_mined_tile_ids_in_viewport);
     array_reset(*obsidian_tile_ids_in_viewport);
     array_reset(*water_still_tile_ids_in_viewport);
@@ -6796,18 +6730,6 @@ derive_entities_in_viewport :: (camera: Camera2D) {
                 if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
                 array_add(*fully_mined_tile_ids_in_viewport, tile_id);
-            }
-
-            // Encased tiles
-            for tile_id: chunk.encased_tile_ids {
-                pos := get_tile_pos_by_id(tile_id);
-
-                if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
-                if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
-                if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
-                if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
-
-                array_add(*encased_tile_ids_in_viewport, tile_id);
             }
 
             // Actively mined tiles
