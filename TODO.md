@@ -17,7 +17,6 @@
 # Core gameplay
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- SoA refactor
 - Dwarf miner animations
 - In addition to control modes, allows users to hold down controls
 - Death poof particles
@@ -40,6 +39,7 @@
 - deteriorating arrows
 - round loading screen
 - Camera restriction within world bounds
+- Water AnimatedSprite per world column for wave effect
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 #  Art
@@ -90,6 +90,7 @@
 # Performance
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+- SoA refactor
 - Add dwarves to chunks and refactor lookups with chunking
 - Keep array of touched tile ids that we ever update. Basically ids touched by dwarves, cave reveals, liquid flows, etc?
 
