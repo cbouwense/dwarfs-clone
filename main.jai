@@ -550,8 +550,6 @@ Path :: struct {
 }
 
 Chunk :: struct {
-    actively_mined_tile_ids : [..] s32;
-    obsidian_tile_ids       : [..] s32;
     water_still_tile_ids    : [..] s32;
     water_flowing_tile_ids  : [..] s32;
     lava_still_tile_ids     : [..] s32;
@@ -588,17 +586,6 @@ data_folder: string;
 
 #add_context tiles: [] Tile;
 
-// Tile ID's will go row-wise, starting at 1 (zero means invalid or whatever)
-// so like
-// 1 2 3
-// 4 5 6
-// 7 8 9
-// This means that to get the position of a tile you just have to do some math,
-// which also means that we don't need to store that anywhere. Check out
-// get_tile_pos_by_id.
-actively_mined_tile_ids_to_health_table : Table(s32, s32);
-actively_mined_tile_ids_in_viewport     : [..] s32;
-
 water_still_tile_ids             : [..] s32;
 water_still_tile_ids_to_sprite   : Table(s32, AnimatedSprite); // TODO: can I just have 1 global sprite for water that tiles?
 water_still_tile_ids_in_viewport : [..] s32;
@@ -630,9 +617,6 @@ lava_warning_tile_ids_in_viewport  : [..] s32;
 lava_alert_tile_ids             : [..] s32;
 lava_alert_tile_ids_set         : Table(s32, Any);
 lava_alert_tile_ids_in_viewport : [..] s32;
-
-obsidian_tile_ids_set         : Table(s32, Any);
-obsidian_tile_ids_in_viewport : [..] s32;
 
 entity_id_counter   : s32 = 0;
 control_id_counter  : s32 = 0;
@@ -1604,9 +1588,8 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                                 tile_id := get_tile_id_by_pos(mouse_pos_in_world);
 
                                 tile_is_iron            := is_tile_iron(tile_id);
-                                tile_is_being_mined     := table_contains(*actively_mined_tile_ids_to_health_table, tile_id);
                                 tile_is_mined           := is_tile_fully_mined(tile_id);
-                                tile_is_mineable        := tile_is_iron || tile_is_being_mined || !tile_is_mined;
+                                tile_is_mineable        := tile_is_iron || !tile_is_mined;
 
                                 tile_is_unrevealed_cave := is_tile_cave(tile_id);
                                 tile_is_water_still     := table_contains(*water_still_tile_ids_to_sprite, tile_id);
@@ -1615,7 +1598,7 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                                 tile_is_lava_flowing    := table_contains(*lava_flowing_tile_ids_to_sprite, tile_id);
                                 tile_is_empty           := tile_is_unrevealed_cave || tile_is_water_still || tile_is_water_flowing || tile_is_lava_still || tile_is_lava_flowing;
 
-                                tile_is_obsidian        := table_contains(*obsidian_tile_ids_set, tile_id);
+                                tile_is_obsidian        := is_tile_obsidian(tile_id);
                                 tile_is_wall            := is_tile_wall(tile_id);
                                 tile_is_placed_object   := tile_is_obsidian || tile_is_wall;
 
@@ -1848,17 +1831,13 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                                     }
                                     // If it's unmined, then they'll have to mine it
                                     else {
-                                        if is_tile_id_mineable(tile_id_next_in_dwarfs_path) {
+                                        if is_tile_mineable(tile_id_next_in_dwarfs_path) {
                                             dwarf_transition_state(dwarf, .MINING);
                                             dwarf.tile_id_mining = tile_id_next_in_dwarfs_path;
 
                                             // Set up the world state to accomodate the fact that the dwarf is about to mine this tile.
                                             // Plus, do some sanity checks to make sure that everything looks good.
                                             {
-                                                // Add the tile the dwarf is about to mine to the chunk's list of actively mined tiles.
-                                                _result, chunk := find_or_create_chunk_by_tile_id(tile_id_next_in_dwarfs_path);
-                                                array_add(*chunk.actively_mined_tile_ids, tile_id_next_in_dwarfs_path);
-
                                                 // Add the tile the dwarf is about to mine to the global table of actively mined tiles and,
                                                 // in doing so, set its health.
                                                 new_health: s32;
@@ -1880,7 +1859,7 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                                                     assert_soft(false, "Dwarf % tryna mine some weird ass shit (tile id %)", dwarf.id, tile_id_next_in_dwarfs_path);
                                                 }
 
-                                                table_set(*actively_mined_tile_ids_to_health_table, tile_id_next_in_dwarfs_path, new_health);
+                                                get_tile_by_id(tile_id_next_in_dwarfs_path).health = xx new_health;
                                             }
                                         }
                                         // If it's unmineable, first of all I'm pretty sure this shouldn't have been on their path,
@@ -1944,27 +1923,34 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                             case .MINING;
                                 assert(dwarf.tile_id_mining > 0, "Dwarf tryna mine but he got no gotdamn tile to mine!!!!!!!");
 
-                                // TODO: probably want a function for this
-                                anim_index   : DwarfAnimation;
-                                action_frame : int;
-                                if dwarf.tile_id_mining == dwarf_tile_id + context.world_cols {
-                                    anim_index   = DwarfAnimation.MINE_DOWN;
-                                    action_frame = DWARF_MINER_ANIMATION_MINE_DOWN_FRAME_ACTION; 
+                                tile_to_mine := get_tile_by_id(dwarf.tile_id_mining);
+
+                                // It's possible for the tile the dwarf is mining to suddenly be changed, like into obsidian.
+                                // In this case, the dwarf should abandon the idea of mining its current tile.
+                                if tile_to_mine.health <= 0 || !is_tile_mineable(dwarf.tile_id_mining) {
+                                    if metagame.debug_mode print("INFO: Dwarf was mining tile % but suddenly it was no longer mineable.\n", dwarf.tile_id_mining);
+                                    array_reset(*(dwarf.tile_ids_on_path));
+                                    dwarf_transition_state(dwarf, .DECIDING);
                                 } else {
-                                    anim_index   = DwarfAnimation.MINE_SIDE;
-                                    action_frame = DWARF_MINER_ANIMATION_MINE_SIDE_FRAME_ACTION; 
-                                }
-                                frame := sprite_animation_get_current_frame(dwarf.animations[anim_index]);
+                                    // TODO: probably want a function for this
+                                    anim_index   : DwarfAnimation;
+                                    action_frame : int;
+                                    if dwarf.tile_id_mining == dwarf_tile_id + context.world_cols {
+                                        anim_index   = DwarfAnimation.MINE_DOWN;
+                                        action_frame = DWARF_MINER_ANIMATION_MINE_DOWN_FRAME_ACTION; 
+                                    } else {
+                                        anim_index   = DwarfAnimation.MINE_SIDE;
+                                        action_frame = DWARF_MINER_ANIMATION_MINE_SIDE_FRAME_ACTION; 
+                                    }
 
-                                if frame == action_frame && !dwarf.did_anim_action {
-                                    dwarf.did_anim_action = true;
+                                    frame := sprite_animation_get_current_frame(dwarf.animations[anim_index]);
 
-                                    // Decrease the tile health by the dwarf mining damage
-                                    found_tile_dwarf_is_mining, current_health := table_find(*actively_mined_tile_ids_to_health_table, dwarf.tile_id_mining);
-                                    
-                                    if found_tile_dwarf_is_mining {
+                                    if frame == action_frame && !dwarf.did_anim_action {
+                                        dwarf.did_anim_action = true;
+
+                                        // Decrease the tile health by the dwarf mining damage
                                         dmg := dwarf_get_dig_damage(dwarf);
-                                        new_health := current_health - dwarf_get_dig_damage(dwarf);
+                                        new_health := tile_to_mine.health - dwarf_get_dig_damage(dwarf);
 
                                         if new_health <= 0 {
                                             just_mined_iron := is_tile_iron(dwarf.tile_id_mining);
@@ -2003,18 +1989,10 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                                             dwarf_transition_state(dwarf, .DECIDING);
                                         } else {
                                             // If the tile just needs to take some damage, well, then damage it ya fuckin jallopy
-                                            table_set(*actively_mined_tile_ids_to_health_table, dwarf.tile_id_mining, new_health);
+                                            print_vars(tile_to_mine.*);
+                                            tile_to_mine.health -= xx new_health;
+                                            print_vars(tile_to_mine.*);
                                         }
-
-                                        // Reset cooldown
-                                        // dwarf.mining_cooldown_ms = dwarf_get_mining_cooldown(dwarf);
-                                    } else {
-                                        if metagame.debug_mode print("INFO: Dwarf was mining tile % but suddenly it was removed from the table of actively mined tiles.\n", dwarf.tile_id_mining);
-                                        // It's possible for the tile the dwarf is mining to suddenly be changed, like into obsidian.
-                                        // In this case, the dwarf should abandon the idea of mining its current tile.
-                                        array_reset(*(dwarf.tile_ids_on_path));
-
-                                        dwarf_transition_state(dwarf, .DECIDING);
                                     }
                                 }
 
@@ -2754,7 +2732,11 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                             );
                         }
                         case .OBSIDIAN; {
-
+                            DrawRectangleV(
+                                get_tile_pos_by_id(tile_id),
+                                Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
+                                DARKGRAY, // TODO: texture
+                            );
                         }
                         case .WALL; {
                             source := Rectangle.{
@@ -2799,14 +2781,6 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
             }
 
             #if DRAW_TILES {
-                for obsidian_tile_ids_in_viewport {
-                    DrawRectangleV(
-                        get_tile_pos_by_id(it),
-                        Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
-                        DARKGRAY, // TODO: texture
-                    );
-                }
-
                 for water_still_tile_ids_in_viewport {
                     sprite := table_find_pointer(*water_still_tile_ids_to_sprite, it);
                     assert(sprite != null);
@@ -4015,8 +3989,6 @@ get_next_direction_to_face_from_base_neighbor_direction :: (direction: Direction
 }
 
 reset_memory :: () {
-    table_reset(*actively_mined_tile_ids_to_health_table);
-
     array_reset(*water_still_tile_ids);
     table_reset(*water_still_tile_ids_to_sprite);
 
@@ -4040,8 +4012,6 @@ reset_memory :: () {
 
     array_reset(*lava_alert_tile_ids);
     table_reset(*lava_alert_tile_ids_set);
-
-    table_reset(*obsidian_tile_ids_set);
 
     array_reset(*bases);
     table_reset(*base_id_to_index);
@@ -4114,12 +4084,10 @@ initialize_round :: () -> GameState, Metagame, Camera2D {
 
     // Set temp allocator for various things.
     {
-        actively_mined_tile_ids_in_viewport.allocator = temp;
         water_still_tile_ids_in_viewport.allocator    = temp;
         water_flowing_tile_ids_in_viewport.allocator  = temp;
         lava_still_tile_ids_in_viewport.allocator     = temp;
         lava_flowing_tile_ids_in_viewport.allocator   = temp;
-        obsidian_tile_ids_in_viewport.allocator       = temp;
         dwarves_in_viewport.allocator                 = temp;
         goblins_in_viewport.allocator                 = temp;
         tiles_with_dynamite_ids_in_viewport.allocator = temp;
@@ -5339,10 +5307,6 @@ is_tile_fully_mined :: inline (tile_id: s32) -> bool {
     return get_tile_by_id(tile_id).type == .MINED;
 }
 
-is_tile_id_actively_mined :: (tile_id: s32) -> bool {
-    return table_contains(*actively_mined_tile_ids_to_health_table, tile_id);
-}
-
 is_tile_cave :: inline (tile_id: s32) -> bool {
     return get_tile_by_id(tile_id).type == .CAVE;
 }
@@ -5371,8 +5335,8 @@ is_tile_id_lava_flowing :: (tile_id: s32) -> bool {
     return table_contains(*lava_flowing_tile_ids_to_sprite, tile_id);
 }
 
-is_tile_id_obsidian :: (tile_id: s32) -> bool {
-    return table_contains(*obsidian_tile_ids_set, tile_id);
+is_tile_obsidian :: inline (tile_id: s32) -> bool {
+    return get_tile_by_id(tile_id).type == .OBSIDIAN;
 }
 
 is_tile_wall :: inline (tile_id: s32) -> bool {
@@ -5396,7 +5360,7 @@ is_tile_id_dirt :: (tile_id: s32) -> bool {
         !is_tile_id_water_flowing(tile_id) && 
         !is_tile_id_lava_still(tile_id)    && 
         !is_tile_id_lava_flowing(tile_id)  && 
-        !is_tile_id_obsidian(tile_id)      &&
+        !is_tile_obsidian(tile_id)      &&
         !is_tile_wall(tile_id)          &&
         !is_tile_hole(tile_id)
     );
@@ -5447,7 +5411,7 @@ is_tile_id_walkable_for_entity :: (tile_id: s32, entity_id: s32) -> bool {
     );
 }
 
-is_tile_id_mineable :: (tile_id: s32) -> bool {
+is_tile_mineable :: (tile_id: s32) -> bool {
     return (
         is_tile_id_dirt(tile_id) ||
         is_tile_iron(tile_id) ||
@@ -5456,11 +5420,11 @@ is_tile_id_mineable :: (tile_id: s32) -> bool {
 }
 
 is_tile_id_walkable_or_mineable :: (tile_id: s32) -> bool {
-    return is_tile_id_walkable(tile_id) || is_tile_id_mineable(tile_id);
+    return is_tile_id_walkable(tile_id) || is_tile_mineable(tile_id);
 }
 
 is_tile_id_walkable_or_mineable_for_entity :: (tile_id: s32, entity_id: s32) -> bool {
-    return is_tile_id_walkable_for_entity(tile_id, entity_id) || is_tile_id_mineable(tile_id);
+    return is_tile_id_walkable_for_entity(tile_id, entity_id) || is_tile_mineable(tile_id);
 }
 
 get_neighbor_tile_ids_of_type :: (tile_id: s32, tile_type: TileType) -> [..] s32 {
@@ -5485,7 +5449,7 @@ get_neighbor_tile_ids_of_type :: (tile_id: s32, tile_type: TileType) -> [..] s32
             case .LAVA_STILL;    should_add_neighbor_to_list = is_tile_id_lava_still(neighbor_id);
             case .LAVA_FLOWING;  should_add_neighbor_to_list = is_tile_id_lava_flowing(neighbor_id);
             case .IRON;          should_add_neighbor_to_list = is_tile_iron(neighbor_id);
-            case .OBSIDIAN;      should_add_neighbor_to_list = is_tile_id_obsidian(neighbor_id);
+            case .OBSIDIAN;      should_add_neighbor_to_list = is_tile_obsidian(neighbor_id);
             case .WALL;          should_add_neighbor_to_list = is_tile_wall(neighbor_id);
             case .HOLE;          should_add_neighbor_to_list = is_tile_hole(neighbor_id);
         }
@@ -5654,7 +5618,7 @@ find_shortest_obsidian_path :: (start_id: s32, end_id: s32, ignore_id: s32) -> f
             // Don't step on the tile we just placed. If we could, then we wouldn't actually
             // be detecting any loops. Think about it.
             if neighbor_id == ignore_id continue;
-            if !table_contains(*obsidian_tile_ids_set, neighbor_id) && !is_tile_hole(neighbor_id) continue;
+            if !is_tile_obsidian(neighbor_id) && !is_tile_hole(neighbor_id) continue;
             if table_contains(*visited, neighbor_id) continue;
 
             if is_tile_hole(neighbor_id) found_at_least_one_hole = true;
@@ -5720,7 +5684,7 @@ try_to_encase_tiles :: (starting_tile_id: s32, game_state: *GameState) {
         // Make sure the id is valid and hasn't already been processed
         id_already_processed := table_contains(*ids_processed, id);
         if id_already_processed continue;
-        if table_contains(*obsidian_tile_ids_set, id) continue;
+        if is_tile_obsidian(id) continue;
         if is_tile_hole(id) continue;
 
         // Check if this tile is liquid
@@ -5860,30 +5824,23 @@ try_to_set_cardinal_neighbors_as_flowing_tile_type :: (tile_id: s32, as_type: Ti
         tile_is_iron := is_tile_iron(neighbor_id);
         if tile_is_iron continue;
 
-        tile_is_obsidian := table_contains(*obsidian_tile_ids_set, neighbor_id);
+        tile_is_obsidian := is_tile_obsidian(neighbor_id);
         if tile_is_obsidian continue;
 
         // If the tile is a wall and you are lava, damage it a bit.
         as_lava := as_type == .LAVA_STILL || as_type == .LAVA_FLOWING;
 
         if is_tile_wall(neighbor_id) && as_lava {
-            found, current_health := table_find(*actively_mined_tile_ids_to_health_table, neighbor_id);
-            // If we don't see the wall in the actively mined tile list, then it's full health
-            if (!found) current_health = WALL_HEALTH;
-
-            new_health := current_health - LAVA_DAMAGE_PER_HIT;
+            new_health : s16 = xx (get_tile_by_id(neighbor_id).health - LAVA_DAMAGE_PER_HIT);
 
             if new_health <= 0 {
                 set_tile_as_type(neighbor_id, .MINED, false, false, game_state);
             } else {
-                table_set(*actively_mined_tile_ids_to_health_table, neighbor_id, new_health);
+                get_tile_by_id(neighbor_id).health = new_health;
             }
 
             continue;
         }
-
-        tile_is_being_mined := table_contains(*actively_mined_tile_ids_to_health_table, neighbor_id);
-        if tile_is_being_mined continue;
 
         tile_is_empty := is_tile_fully_mined(neighbor_id);
         if !tile_is_empty continue;
@@ -6240,13 +6197,7 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
     tile_was_alert_water := table_contains(*water_alert_tile_ids_set, tile_id);
     tile_was_alert_lava  := table_contains(*lava_alert_tile_ids_set, tile_id);
 
-    {
-        array_unordered_remove_by_value(*chunk.obsidian_tile_ids, tile_id);
-        table_remove(*obsidian_tile_ids_set, tile_id);
-        
-        array_unordered_remove_by_value(*chunk.actively_mined_tile_ids, tile_id);
-        table_remove(*actively_mined_tile_ids_to_health_table, tile_id);
-
+    { 
         array_unordered_remove_by_value(*water_still_tile_ids, tile_id);
         array_unordered_remove_by_value(*chunk.water_still_tile_ids, tile_id);
         table_remove(*water_still_tile_ids_to_sprite, tile_id);
@@ -6272,7 +6223,7 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
             neighbor_id_1 := tile_id + dx + dy;
             
             if is_cardinal_direction(direction) {
-                if !is_tile_id_obsidian(neighbor_id_1) && !is_tile_hole(neighbor_id_1) {
+                if !is_tile_obsidian(neighbor_id_1) && !is_tile_hole(neighbor_id_1) {
                     table_set(alert_tile_ids_set, neighbor_id_1, 1738);
                     array_add(alert_tile_ids, neighbor_id_1);
 
@@ -6288,8 +6239,10 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
         }
     }
 
+    // Set the type to the new tile type.
     context.tiles[tile_id].type = as_type;
 
+    // Do any side effects that need to happen as part of this mutation.
     if #complete as_type == {
         case .CAVE;
         case .MINED; {
@@ -6393,10 +6346,7 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
 
             try_to_add_warning_and_alert_markers(tile_id, *lava_alert_tile_ids_set, *lava_warning_tile_ids_set, *lava_alert_tile_ids, *lava_warning_tile_ids);
         }
-        case .OBSIDIAN; {
-            array_add(*chunk.obsidian_tile_ids, tile_id);
-            table_set(*obsidian_tile_ids_set, tile_id, 1738);
-        }
+        case .OBSIDIAN;
         case .WALL;
         case .HOLE;
         case .DIRT;
@@ -6654,8 +6604,6 @@ derive_entities_in_viewport :: (camera: Camera2D) {
     window_start := GetScreenToWorld2D(Vector2.{ 0, 0 }, camera);
     window_end   := GetScreenToWorld2D(Vector2.{ cast(float) GetScreenWidth(), cast(float) GetScreenHeight()}, camera);
 
-    array_reset(*actively_mined_tile_ids_in_viewport);
-    array_reset(*obsidian_tile_ids_in_viewport);
     array_reset(*water_still_tile_ids_in_viewport);
     array_reset(*water_flowing_tile_ids_in_viewport);
     array_reset(*lava_still_tile_ids_in_viewport);
@@ -6695,31 +6643,6 @@ derive_entities_in_viewport :: (camera: Camera2D) {
             found, chunk := table_find(*created_chunks, key);
             // If the chunk doesn't exist, nobody has mined or walked here, so just move on.
             if !found continue; 
-
-            // Actively mined tiles
-            // TODO: do we need to do this?
-            for tile_id: chunk.actively_mined_tile_ids {
-                pos := get_tile_pos_by_id(tile_id);
-
-                if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
-                if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
-                if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
-                if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
-
-                array_add(*actively_mined_tile_ids_in_viewport, tile_id);
-            }
-
-            // Obsidian tiles
-            for tile_id: chunk.obsidian_tile_ids {
-                pos := get_tile_pos_by_id(tile_id);
-
-                if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
-                if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
-                if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
-                if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
-
-                array_add(*obsidian_tile_ids_in_viewport, tile_id);
-            }
 
             // Water still tiles
             for tile_id: chunk.water_still_tile_ids {
