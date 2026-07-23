@@ -157,8 +157,6 @@ TILE_HEIGHT_F :: cast(float32) TILEMAP_GENERAL_WORLD_HEIGHT;
 
 TRANSPARENT_WHITE :: Color.{ 255, 255, 255, 100 };
 
-CHUNK_SIZE :: 32; // 32 x 32 tiles
-
 WATER_FLOW_COOLDOWN_MS :: 1000;
 LAVA_FLOW_COOLDOWN_MS  :: 2500;
 
@@ -601,14 +599,6 @@ Path :: struct {
     tile_count    : int;
 }
 
-Chunk :: struct {
-    base_ids                : [..] s32;
-
-    // TODO: Will probably want these
-    // dwarf_ids               : [..] s32;
-    // dynamite : [..] Dynamite;
-}
-
 NOTIFICATION_RADIUS :: TILEMAP_GENERAL_WORLD_WIDTH;
 ALERT_TIME_TO_LIVE_MS :: 5000;
 
@@ -667,8 +657,6 @@ tile_ids_to_bases   : Table(s32, *Base);
 
 alerts             : [..] Alert;
 alerts_in_viewport : [..] Alert;
-
-created_chunks: Table(u64, *Chunk);
 
 #insert #run generate_kind_enum_from_base_struct(Entity);
 
@@ -1429,7 +1417,6 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                                 }
                             } else {
                                 if game_state.controls_state_this_frame.select_is_pressed_once {
-                                    // PERF: would massively benefit from chunking
                                     for dwarf: dwarves {
                                         if CheckCollisionPointRec(mouse_pos_in_world, get_world_rect_from_pos(dwarf.pos)) {
                                             game_state.selected_dwarf_id = dwarf.id;
@@ -2380,86 +2367,66 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                 }
 
                 // Update tiles
-                #if false {
+                UPDATE_TILES :: true;
+                #if UPDATE_TILES {
                     for *tile: context.tiles {
-                        tile_id : s32 = cast(s32) it_index;
-
                         if #complete tile.type == {
                             case .UNTOUCHED_DIRT;
                             case .TOUCHED_DIRT;
-
-                            case .MINED; {
-
-                            }
-
-                            case .CAVE; {
-
-                            }
+                            case .MINED;
+                            case .CAVE;
+                            case .IRON;
+                            case .OBSIDIAN;
+                            case .WALL;
+                            case .HOLE;
 
                             case .WATER_STILL; {
-                                inflict_liquid_consequences(tile_id);
+                                inflict_liquid_consequences(tile.id);
 
                                 reset_animation := sprite_update(*tile.animated_sprite, dt_seconds);
 
                                 if reset_animation {
-                                    try_to_set_cardinal_neighbors_as_flowing_tile_type(tile_id, .WATER_FLOWING, game_state);
+                                    try_to_set_cardinal_neighbors_as_flowing_tile_type(tile.id, .WATER_FLOWING, game_state);
                                 }
                             }
 
                             case .WATER_FLOWING; {
-                                inflict_liquid_consequences(tile_id);
+                                inflict_liquid_consequences(tile.id);
 
                                 reset_animation := sprite_update(*tile.animated_sprite, dt_seconds);
 
                                 if reset_animation {
-                                    try_to_set_cardinal_neighbors_as_flowing_tile_type(tile_id, .WATER_FLOWING, game_state);
+                                    try_to_set_cardinal_neighbors_as_flowing_tile_type(tile.id, .WATER_FLOWING, game_state);
 
-                                    if are_all_neighbors_unable_to_be_spread_to(tile_id) {
-                                        set_tile_as_type(tile_id, .WATER_STILL, false, false, game_state);
+                                    if are_all_neighbors_unable_to_be_spread_to(tile.id) {
+                                        set_tile_as_type(tile.id, .WATER_STILL, false, false, game_state);
                                     }
                                 }
                             }
 
                             case .LAVA_STILL; {
-                                inflict_liquid_consequences(tile_id);
+                                inflict_liquid_consequences(tile.id);
 
                                 reset_animation := sprite_update(*tile.animated_sprite, dt_seconds);
                                 
                                 if should_spread_lava_this_frame {
-                                    try_to_set_cardinal_neighbors_as_flowing_tile_type(it, .LAVA_FLOWING, game_state);
+                                    try_to_set_cardinal_neighbors_as_flowing_tile_type(tile.id, .LAVA_FLOWING, game_state);
                                 }
                             }
 
                             case .LAVA_FLOWING; {
-                                inflict_liquid_consequences(tile_id);
+                                inflict_liquid_consequences(tile.id);
 
-                                reset_animation := (sprite, dt_seconds);
+                                reset_animation := sprite_update(*tile.animated_sprite, dt_seconds);
 
                                 if reset_animation {
-                                    try_to_set_cardinal_neighbors_as_flowing_tile_type(it, .LAVA_FLOWING, game_state);
+                                    try_to_set_cardinal_neighbors_as_flowing_tile_type(tile.id, .LAVA_FLOWING, game_state);
 
-                                    if are_all_neighbors_unable_to_be_spread_to(it) {
-                                        set_tile_as_type(it, .LAVA_STILL, false, false, game_state);
+                                    if are_all_neighbors_unable_to_be_spread_to(tile.id) {
+                                        set_tile_as_type(tile.id, .LAVA_STILL, false, false, game_state);
                                     }
                                 }
                             }
-
-                            case .IRON; {
-
-                            }
-
-                            case .OBSIDIAN; {
-
-                            }
-
-                            case .WALL; {
-
-                            }
-
-                            case .HOLE; {
-
-                            }
-
                         }
                     }
                 }
@@ -2683,9 +2650,6 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
 
                                 DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, WHITE);
                             }
-                            ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-                            // VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV //
-                            ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
                             case .WATER_STILL; {
                                 if camera.zoom < CAMERA_ZOOM_LOD_MIN {
                                     WATER_LOW_LOD_SPRITE_SOURCE_ROW :: 3;
@@ -2727,10 +2691,6 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
 
                                     DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, WHITE);
                                 }
-
-                            ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-                            // VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV //
-                            ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
                 
                                 tile.animated_sprite.rotation = determine_rotation_of_liquid_flowing_sprite(tile_id, .WATER); 
 
@@ -2770,10 +2730,6 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
 
                                     DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, WHITE);
                                 }
-
-                            ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-                            // VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV //
-                            ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
                                 tile.animated_sprite.rotation = determine_rotation_of_liquid_flowing_sprite(tile_id, .LAVA); 
 
@@ -3910,8 +3866,6 @@ reset_memory :: () {
 
     array_reset(*paths);
 
-    table_reset(*created_chunks);
-
     array_reset(*particles);
     table_reset(*particle_id_to_index);
 
@@ -4915,9 +4869,7 @@ create_dwarf :: (pos: Vector2, dwarf_type: DwarfType) -> Dwarf {
     };
 
     dwarf_tile_id := get_tile_id_by_pos(pos);
-    // TODO
-    // chunk := find_or_create_chunk_by_tile_id(dwarf_tile_id);
-    // array_add(*chunk.dwarf_ids, dwarf_id);
+
     table_set(*dwarf_id_to_index, dwarf_id, dwarves.count);
     array_add(*dwarves, dwarf);
 
@@ -4939,8 +4891,7 @@ create_goblin :: (pos: Vector2) -> Goblin {
     };
 
     tile_id := get_tile_id_by_pos(pos);
-    // chunk := find_or_create_chunk_by_tile_id(dwarf_tile_id);
-    // array_add(*chunk.dwarf_ids, dwarf_id);
+
     table_set(*goblin_id_to_index, goblin_id, goblins.count);
     array_add(*goblins, goblin);
 
@@ -4959,8 +4910,6 @@ create_base :: (pos: Vector2, is_home_base: bool, game_state: *GameState) -> Bas
     };
 
     base_tile_id := get_tile_id_by_pos(base.pos);
-    _result, chunk := find_or_create_chunk_by_tile_id(base_tile_id);
-    array_add(*chunk.base_ids, base_id);
 
     table_set(*base_id_to_index, base_id, bases.count);
     array_add(*bases, base);
@@ -5089,9 +5038,6 @@ kill_base_by_index :: (base_index: s64) {
     base_id_being_killed  := bases[base_index].id;
 
     tile_id_of_base_being_killed := get_tile_id_by_pos(base_being_killed.pos);
-
-    _result, chunk := find_or_create_chunk_by_tile_id(tile_id_of_base_being_killed);
-    array_unordered_remove_by_value(*chunk.base_ids, base_id_being_killed);
 
     if base_id_being_swapped != base_id_being_killed {
         table_set(*base_id_to_index, base_id_being_swapped, base_index);
@@ -5732,66 +5678,6 @@ try_to_set_cardinal_neighbors_as_flowing_tile_type :: (tile_id: s32, as_type: Ti
     }
 
     return directions_flowed;
-}
-
-FindOrCreateChunkReturnStatus :: enum u16 {
-    CHUNK_WOULD_BE_OUT_OF_BOUNDS;
-    CHUNK_CREATED;
-    CHUNK_FOUND;
-}
-
-find_or_create_chunk_by_tile_id :: (tile_id: s32) -> (status: FindOrCreateChunkReturnStatus, chunk: *Chunk) {
-    world_pos := get_tile_pos_by_id(tile_id);
-    chunk_x   := world_to_chunk_pos(world_pos.x, TILEMAP_GENERAL_WORLD_WIDTH);
-    chunk_y   := world_to_chunk_pos(world_pos.y, TILEMAP_GENERAL_WORLD_HEIGHT);
-    result, chunk := find_or_create_chunk(chunk_x, chunk_y);
-    return result, chunk;
-    // if #complete result == {
-    //     case .CHUNK_WOULD_BE_OUT_OF_BOUNDS;
-    //         assert(false, "Expected to find chunk for tile id %, but didn't!", tile_id);
-    //         return null;
-    //     case .CHUNK_CREATED; #through;
-    //     case .CHUNK_FOUND;
-    //         return chunk;
-    // }
-}
-
-find_or_create_chunk :: (chunk_x: s32, chunk_y: s32) -> (status: FindOrCreateChunkReturnStatus, chunk: *Chunk) {
-    key_is_within_map_bounds, key := find_chunk_key(chunk_x, chunk_y);
-    if !key_is_within_map_bounds return .CHUNK_WOULD_BE_OUT_OF_BOUNDS, null;
-
-    found_chunk, chunk := table_find(*created_chunks, key);
-    if found_chunk return .CHUNK_FOUND, chunk;
-
-    // The chunk doesn't exist yet, so let's make a new one.
-    new_chunk := New(Chunk);
-    
-    table_set(*created_chunks, key, new_chunk);
-    
-    return .CHUNK_CREATED, new_chunk;
-}
-
-find_chunk_key :: (chunk_x: s32, chunk_y: s32) -> (found: bool, key: u64) {
-    if chunk_x < 0 return false, 0;
-    if chunk_y < 0 return false, 0;
-
-    x_u64 := cast(u64) cast(u32) chunk_x;
-    y_u64 := cast(u64) cast(u32) chunk_y;
-    
-    // TODO: does endian-ness matter? Probably not?...
-    // x occupies the top 32 bits, y occupies the bottom 32 bits.
-    return true, (x_u64 << 32) | y_u64;
-}
-
-get_chunk_key :: (chunk_x: s32, chunk_y: s32) -> u64 {
-    found, key := find_chunk_key(chunk_x, chunk_y);
-    assert(found, "Expected to find chunk key, but didn't!");
-    return key;
-}
-
-world_to_chunk_pos :: (world_pos: float, tile_pixel_size: float) -> s32 {
-    chunk_size_in_pixels := cast(float)(CHUNK_SIZE) * tile_pixel_size;
-    return cast(s32) floor(world_pos / chunk_size_in_pixels);
 }
 
 get_world_rect_from_pos :: (pos: Vector2) -> Rectangle {
@@ -6469,44 +6355,17 @@ derive_entities_in_viewport :: (camera: Camera2D) {
     array_reset(*goblins_in_viewport);
     array_reset(*paths_in_viewport);
     array_reset(*particles_in_viewport);
-    
-    // Calculate chunk dimensions in pixels
-    chunk_pixel_width  := cast(float)(CHUNK_SIZE) * TILEMAP_GENERAL_WORLD_WIDTH;
-    chunk_pixel_height := cast(float)(CHUNK_SIZE) * TILEMAP_GENERAL_WORLD_HEIGHT;
 
-    // Convert camera world bounds to chunk coordinates
-    // NOTE Using floor() is critical here so negative world coordinates map to the correct chunks.
-    start_chunk_x := cast(s32) floor(window_start.x / chunk_pixel_width);
-    end_chunk_x   := cast(s32) floor(window_end.x   / chunk_pixel_width);
-    
-    start_chunk_y := cast(s32) floor(window_start.y / chunk_pixel_height);
-    end_chunk_y   := cast(s32) floor(window_end.y   / chunk_pixel_height);
+    // Bases
+    for base: bases {
+        pos := base.pos;
 
-    for cy: start_chunk_y..end_chunk_y {
-        for cx: start_chunk_x..end_chunk_x {
+        if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
+        if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
+        if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
+        if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
 
-            key_was_valid, key := find_chunk_key(cx, cy);
-            // This happens if the camera is looking out of bounds.
-            if !key_was_valid continue;
-
-            found, chunk := table_find(*created_chunks, key);
-            // If the chunk doesn't exist, nobody has mined or walked here, so just move on.
-            if !found continue; 
-
-            // Bases
-            for base_id: chunk.base_ids {
-                found, base_index := table_find(*base_id_to_index, base_id);
-                assert(found);
-                base := bases[base_index];
-
-                if base.pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < window_start.x continue;
-                if base.pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > window_end.x   continue;
-                if base.pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > window_end.y   continue;
-                if base.pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < window_start.y continue;
-
-                array_add(*bases_in_viewport, base);
-            }
-        }
+        array_add(*bases_in_viewport, base);
     }
 
     // Derive viewable dwarves
