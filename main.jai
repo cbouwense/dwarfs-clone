@@ -485,7 +485,6 @@ Tile :: struct {
     type            : TileType;
     props           : TileProperties;
     health          : s16;
-    sprite_index    : u8; // TODO: do we actually need this?
     animated_sprite : AnimatedSprite;
 }
 
@@ -2617,7 +2616,7 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                             case .TOUCHED_DIRT;   // Nothing to draw, we tile dirt on one texture in the background
                             case .MINED; {
                                 // LOD
-                                if camera.zoom < CAMERA_ZOOM_LOD_MIN {
+                                // if camera.zoom < CAMERA_ZOOM_LOD_MIN {
                                     source := Rectangle.{
                                         xx (3 * TILEMAP_GENERAL_TILE_WIDTH),
                                         1 * TILEMAP_GENERAL_TILE_HEIGHT,
@@ -2626,16 +2625,18 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                                     };
 
                                     DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, WHITE);
-                                } else {
-                                    source := Rectangle.{
-                                        xx (tile.sprite_index * TILEMAP_GENERAL_TILE_WIDTH),
-                                        1 * TILEMAP_GENERAL_TILE_HEIGHT,
-                                        TILEMAP_GENERAL_TILE_WIDTH,
-                                        TILEMAP_GENERAL_TILE_HEIGHT,
-                                    };
-
-                                    DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, WHITE);
-                                }
+                                // TODO
+                                // } else {
+                                //     sprite_draw(
+                                //         tile.animated_sprite,
+                                //         tile_pos,
+                                //         TILEMAP_GENERAL_WORLD_WIDTH,
+                                //         TILEMAP_GENERAL_WORLD_HEIGHT,
+                                //         TILEMAP_GENERAL_TILE_WIDTH,
+                                //         TILEMAP_GENERAL_TILE_HEIGHT,
+                                //         false,
+                                //     );
+                                // }
                             }
                             case .CAVE; {
                                 CAVE_SPRITE_SOURCE_ROW :: 2;
@@ -2900,7 +2901,6 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                             DrawText(tprint("type: %\0", tile.type).data, xx hovered_tile_rect.x, read_then_increment(*tile_y, 20), 12, WHITE);
                             DrawText(tprint("props: %\0", tile.props).data, xx hovered_tile_rect.x, read_then_increment(*tile_y, 20), 12, WHITE);
                             DrawText(tprint("health: %\0", tile.health).data, xx hovered_tile_rect.x, read_then_increment(*tile_y, 20), 12, WHITE);
-                            DrawText(tprint("sprite_index: %\0", tile.sprite_index).data, xx hovered_tile_rect.x, read_then_increment(*tile_y, 20), 12, WHITE);
                             DrawText(tprint("animated_sprite: %\0", tile.animated_sprite).data, xx hovered_tile_rect.x, read_then_increment(*tile_y, 20), 12, WHITE);
                         }
                     }
@@ -5992,7 +5992,6 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
             type            = as_type,
             props           = 0,
             health          = DIRT_HEALTH,       // TODO ?
-            sprite_index    = 0,                 // TODO: don't need this?
             animated_sprite = AnimatedSprite.{}, // TODO ?
         };
 
@@ -6011,8 +6010,15 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
         case .TOUCHED_DIRT;
         case .CAVE;
         case .MINED; {
-            tile_column := cast(u8) random_get_within_range(0, 2);
-            get_tile_by_id(tile_id).sprite_index = tile_column;
+            // TODO: make this work
+            // tile_column := cast(u8) random_get_within_range(0, 2);
+            // get_tile_by_id(tile_id).animated_sprite = Sprite.{
+            //     texture     = tilemap_texture_general,
+            //     active      = true,
+            //     first_frame = int; // Starts from 0
+            //     color       = Color;
+            //     rotation    = float;
+            // };
 
             tile_pos := get_tile_pos_by_id(tile_id);
 
