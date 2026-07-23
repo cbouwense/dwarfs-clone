@@ -479,13 +479,25 @@ TileProperties :: enum_flags u8 {
     HAS_TREASURE   :: 0b01000000;
 }
 
+TrenchDirections :: enum_flags u8 {
+    NORTH      :: 0b00000001;
+    SOUTH      :: 0b00000010;
+    EAST       :: 0b00000100;
+    WEST       :: 0b00001000;
+    NORTH_EAST :: 0b00010000; 
+    NORTH_WEST :: 0b00100000; 
+    SOUTH_EAST :: 0b01000000; 
+    SOUTH_WEST :: 0b10000000;
+}
+
 // TODO: soa
 Tile :: struct {
-    id              : s32;
-    type            : TileType;
-    props           : TileProperties;
-    health          : s16;
-    animated_sprite : AnimatedSprite;
+    id                : s32;
+    type              : TileType;
+    props             : TileProperties;
+    health            : s16;
+    animated_sprite   : AnimatedSprite;
+    trench_directions : TrenchDirections;
 }
 
 CaveType :: enum u8 {
@@ -709,6 +721,30 @@ main :: () {
 
 // Functions
 
+try_to_add_warning_and_alert_markers :: (tile_id: s32, cave_type: CaveType) {
+    prop_alert   : TileProperties = ifx cave_type == .WATER then .WATER_ALERT else .LAVA_ALERT;
+    prop_warning : TileProperties = ifx cave_type == .WATER then .WATER_WARNING else .LAVA_WARNING;
+
+    for direction: DIRECTIONS_COMPASS {
+        dx := get_tile_direction_id_deltas(direction)[0];
+        dy := get_tile_direction_id_deltas(direction)[1];
+
+        neighbor_id_1 := tile_id + dx + dy;
+        
+        if is_cardinal_direction(direction) {
+            if !is_tile_obsidian(neighbor_id_1) && !is_tile_hole(neighbor_id_1) {
+                set_tile_property(neighbor_id_1, prop_alert);
+
+                neighbor_id_2 := tile_id + (2 * dx) + (2* dy);
+
+                set_tile_property(neighbor_id_2, prop_warning);
+            }
+        } else {
+            set_tile_property(neighbor_id_1, prop_warning);
+        }
+    }
+}
+
 dwarf_maybe_set_active_animation :: (dwarf: *Dwarf, active_animation_index: DwarfAnimation) {
     for dwarf.animations {
         // If there are any animations currently playing, let them finish before moving on
@@ -725,43 +761,62 @@ dwarf_set_active_animation :: (dwarf: *Dwarf, active_animation_index: DwarfAnima
     dwarf.animations[DwarfAnimation.DIE].active  = active_animation_index == DwarfAnimation.DIE;
 }
 
-draw_trench_walls_if_necessary :: (tile_id: s32) {
+update_trench_walls_if_necessary :: (tile: *Tile) {
+    if (tile == null) return;
+
+    neighbor_id_north := tile.id + get_tile_direction_id_deltas(.NORTH)[0] + get_tile_direction_id_deltas(.NORTH)[1];
+    neighbor_id_south := tile.id + get_tile_direction_id_deltas(.SOUTH)[0] + get_tile_direction_id_deltas(.SOUTH)[1];
+    neighbor_id_east  := tile.id + get_tile_direction_id_deltas(.EAST)[0]  + get_tile_direction_id_deltas(.EAST)[1];
+    neighbor_id_west  := tile.id + get_tile_direction_id_deltas(.WEST)[0]  + get_tile_direction_id_deltas(.WEST)[1];
+
+    if is_tile_dirt(neighbor_id_north) then tile.trench_directions |= TrenchDirections.NORTH; else tile.trench_directions &= ~TrenchDirections.NORTH;
+    if is_tile_dirt(neighbor_id_south) then tile.trench_directions |= TrenchDirections.SOUTH; else tile.trench_directions &= ~TrenchDirections.SOUTH;
+    if is_tile_dirt(neighbor_id_east ) then tile.trench_directions |= TrenchDirections.EAST;  else tile.trench_directions &= ~TrenchDirections.EAST;
+    if is_tile_dirt(neighbor_id_west ) then tile.trench_directions |= TrenchDirections.WEST;  else tile.trench_directions &= ~TrenchDirections.WEST;
+}
+
+draw_trench_walls_if_necessary :: (tile: *Tile) {
     TRENCH_STRAIGHT_SPRITE_SOURCE_ROW :: 2;
     TRENCH_STRAIGHT_SPRITE_SOURCE_COL :: 0;
 
-    for dir: DIRECTIONS_CARDINAL {
-        dx := get_tile_direction_id_deltas(dir)[0];
-        dy := get_tile_direction_id_deltas(dir)[1];
-        neighbor_id := tile_id + dx + dy;
+    source := Rectangle.{
+        TRENCH_STRAIGHT_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
+        TRENCH_STRAIGHT_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
+        TILEMAP_GENERAL_TILE_WIDTH,
+        TILEMAP_GENERAL_TILE_HEIGHT,
+    };
 
-        if is_tile_dirt(neighbor_id) {
-            source := Rectangle.{
-                TRENCH_STRAIGHT_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
-                TRENCH_STRAIGHT_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
-                TILEMAP_GENERAL_TILE_WIDTH,
-                TILEMAP_GENERAL_TILE_HEIGHT,
-            };
+    pos  := get_tile_pos_by_id(tile.id);
+    dest := get_world_rect_from_pos(pos);
+    rot  := 0.0;
+    origin := Vector2.{ TILEMAP_GENERAL_TILE_WIDTH * 0.5, TILEMAP_GENERAL_TILE_HEIGHT * 0.5 };
 
-            pos  := get_tile_pos_by_id(neighbor_id);
-            dest := get_world_rect_from_pos(pos);
-            rot  := 0.0;
-
-            if dir == {
-                case .SOUTH;
-                    rot     = 180.0;
-                    dest.x += TILEMAP_GENERAL_TILE_WIDTH;
-                    dest.y += TILEMAP_GENERAL_TILE_HEIGHT;
-                case .EAST;
-                    rot = 90.0;
-                    dest.x += TILEMAP_GENERAL_TILE_WIDTH;
-                case .WEST;
-                    rot = 270.0;
-                    dest.y += TILEMAP_GENERAL_TILE_HEIGHT;
-            }
-
-            DrawTexturePro(tilemap_texture_general, source, dest, Vector2.{0,0}, rot, WHITE);
-        }
+    if tile.trench_directions & TrenchDirections.NORTH {
+        dest.x += TILEMAP_GENERAL_TILE_HEIGHT * 0.5;
+        dest.y -= TILEMAP_GENERAL_TILE_HEIGHT * 0.5;
+        DrawTexturePro(tilemap_texture_general, source, dest, origin, rot, WHITE);
     }
+
+    if tile.trench_directions & TrenchDirections.SOUTH {
+        rot     = 180.0;
+        dest.x += TILEMAP_GENERAL_TILE_HEIGHT * 0.5;
+        dest.y += TILEMAP_GENERAL_TILE_HEIGHT * 1.5;
+        DrawTexturePro(tilemap_texture_general, source, dest, origin, rot, WHITE);
+    }
+
+    if tile.trench_directions & TrenchDirections.EAST {
+        rot     = 90.0;
+        // dest.x += TILEMAP_GENERAL_TILE_HEIGHT;
+        // dest.y += TILEMAP_GENERAL_TILE_HEIGHT;
+        DrawTexturePro(tilemap_texture_general, source, dest, origin, rot, WHITE);
+    }
+
+    // if tile.trench_directions & TrenchDirections.WEST {
+    //     rot     = 270.0;
+    //     // dest.x -= TILEMAP_GENERAL_TILE_WIDTH * 0.5;
+    //     // dest.y += TILEMAP_GENERAL_TILE_HEIGHT;
+    //     DrawTexturePro(tilemap_texture_general, source, dest, origin, rot, WHITE);
+    // }
 }
 
 // TODO: this function is kinda fat
@@ -2759,8 +2814,8 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                         }
 
                         // Draw trenches
-                        DRAW_TRENCHES :: true;
-                        #if DRAW_TRENCHES {
+                        DRAW_TRENCHES_SLOW :: false;
+                        #if DRAW_TRENCHES_SLOW {
                             if camera.zoom >= CAMERA_ZOOM_LOD_MIN {
                                 if #complete tile.type == {
                                     case .UNTOUCHED_DIRT;
@@ -2776,8 +2831,18 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                                     case .HOLE;          #through;
                                     case .MINED;         #through;
                                     case .CAVE;
-                                        draw_trench_walls_if_necessary(tile_id);
+                                        draw_trench_walls_if_necessary(tile);
                                         draw_trench_corners_if_necessary(tile_id);
+                                }
+                            }
+                        }
+
+                        DRAW_TRENCHES :: true;
+                        #if DRAW_TRENCHES {
+                            if camera.zoom >= CAMERA_ZOOM_LOD_MIN {
+                                if tile.trench_directions > 0 {
+                                    draw_trench_walls_if_necessary(*tile);
+                                    // draw_trench_corners_if_necessary(tile_id);
                                 }
                             }
                         }
@@ -2896,12 +2961,14 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                             tile := context.tiles[tile_index];
 
                             tile_y : s32 = xx hovered_tile_rect.y;
+                            TILE_DEBUG_INC :: 15;
 
-                            DrawText(tprint("id: %\0", tile.id).data, xx hovered_tile_rect.x, read_then_increment(*tile_y, 20), 12, WHITE);
-                            DrawText(tprint("type: %\0", tile.type).data, xx hovered_tile_rect.x, read_then_increment(*tile_y, 20), 12, WHITE);
-                            DrawText(tprint("props: %\0", tile.props).data, xx hovered_tile_rect.x, read_then_increment(*tile_y, 20), 12, WHITE);
-                            DrawText(tprint("health: %\0", tile.health).data, xx hovered_tile_rect.x, read_then_increment(*tile_y, 20), 12, WHITE);
-                            DrawText(tprint("animated_sprite: %\0", tile.animated_sprite).data, xx hovered_tile_rect.x, read_then_increment(*tile_y, 20), 12, WHITE);
+                            DrawText(tprint("id: %\0", tile.id).data, xx hovered_tile_rect.x, read_then_increment(*tile_y, TILE_DEBUG_INC), 12, WHITE);
+                            DrawText(tprint("type: %\0", tile.type).data, xx hovered_tile_rect.x, read_then_increment(*tile_y, TILE_DEBUG_INC), 12, WHITE);
+                            DrawText(tprint("props: %\0", tile.props).data, xx hovered_tile_rect.x, read_then_increment(*tile_y, TILE_DEBUG_INC), 12, WHITE);
+                            DrawText(tprint("health: %\0", tile.health).data, xx hovered_tile_rect.x, read_then_increment(*tile_y, TILE_DEBUG_INC), 12, WHITE);
+                            DrawText(tprint("animated_sprite: %\0", tile.animated_sprite).data, xx hovered_tile_rect.x, read_then_increment(*tile_y, TILE_DEBUG_INC), 12, WHITE);
+                            DrawText(tprint("trench_directions: %\0", tile.trench_directions).data, xx hovered_tile_rect.x, read_then_increment(*tile_y, TILE_DEBUG_INC), 12, WHITE);
                         }
                     }
                 }
@@ -3040,98 +3107,100 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
             if metagame.debug_mode {
                 DrawFPS(10, read_then_increment(*debug_text_y, INCREMENT_Y));
                 DrawText(tprint("dwarf count: %\0", dwarves.count).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 12, WHITE);
+                #if false {
 
-                debug_struct_runtime :: (thing: Any, name_prefix: string, render_struct_name_prefix: bool) #expand {
-                    if thing.type.type != .STRUCT return;
-                    tis := cast(*Type_Info_Struct) thing.type;
+                    debug_struct_runtime :: (thing: Any, name_prefix: string, render_struct_name_prefix: bool) #expand {
+                        if thing.type.type != .STRUCT return;
+                        tis := cast(*Type_Info_Struct) thing.type;
 
-                    for tis.members {
-                        // Calculate where this field lives in memory
-                        field_ptr := thing.value_pointer + it.offset_in_bytes;
-                        
-                        // Construct an 'Any' so tprint knows how to format it
-                        field_any: Any;
-                        field_any.type = it.type;
-                        field_any.value_pointer = field_ptr;
+                        for tis.members {
+                            // Calculate where this field lives in memory
+                            field_ptr := thing.value_pointer + it.offset_in_bytes;
+                            
+                            // Construct an 'Any' so tprint knows how to format it
+                            field_any: Any;
+                            field_any.type = it.type;
+                            field_any.value_pointer = field_ptr;
 
+                            // Format the string dynamically
+                            text := ifx render_struct_name_prefix
+                                then tprint("%.%: %\0", name_prefix, it.name, field_any)
+                                else tprint("%: %\0", it.name, field_any);
+                            
+                            DrawText(text.data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
+                        }
+                    }
+
+                    debug_variable_runtime :: (thing: Any, thing_symbol_as_string: string) #expand {
                         // Format the string dynamically
-                        text := ifx render_struct_name_prefix
-                            then tprint("%.%: %\0", name_prefix, it.name, field_any)
-                            else tprint("%: %\0", it.name, field_any);
+                        text := tprint("%: %\0", thing_symbol_as_string, thing);
                         
                         DrawText(text.data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
                     }
-                }
 
-                debug_variable_runtime :: (thing: Any, thing_symbol_as_string: string) #expand {
-                    // Format the string dynamically
-                    text := tprint("%: %\0", thing_symbol_as_string, thing);
-                    
-                    DrawText(text.data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                }
+                    // TODO: recursive struct drawing?
+                    // TODO: way to label fields as not wanted as debuggable
+                    debug_with_raylib_draw_text :: (c: Code, render_struct_name_prefix := false) #expand {
+                        var_name := #run code_to_string(c);
+                        var_val  := #insert c;
+                        
+                        ti := type_info(type_of(var_val));
+                        if #complete ti.type == {
+                            case .STRUCT; debug_struct_runtime(var_val, var_name, render_struct_name_prefix);
 
-                // TODO: recursive struct drawing?
-                // TODO: way to label fields as not wanted as debuggable
-                debug_with_raylib_draw_text :: (c: Code, render_struct_name_prefix := false) #expand {
-                    var_name := #run code_to_string(c);
-                    var_val  := #insert c;
-                    
-                    ti := type_info(type_of(var_val));
-                    if #complete ti.type == {
-                        case .STRUCT; debug_struct_runtime(var_val, var_name, render_struct_name_prefix);
+                            case .INTEGER; #through;   
+                            case .FLOAT;   #through; 
+                            case .BOOL;    #through;
+                            case .STRING;  #through;  
+                            case .ANY;     #through;
+                            case .POINTER; debug_variable_runtime(var_val, var_name);
 
-                        case .INTEGER; #through;   
-                        case .FLOAT;   #through; 
-                        case .BOOL;    #through;
-                        case .STRING;  #through;  
-                        case .ANY;     #through;
-                        case .POINTER; debug_variable_runtime(var_val, var_name);
+                            case .PROCEDURE;            #through;
+                            case .VOID;                 #through;
+                            case .ARRAY;                #through;
+                            case .OVERLOAD_SET;         #through;
+                            case .ENUM;                 #through;
+                            case .POLYMORPHIC_VARIABLE; #through;
+                            case .TYPE;                 #through;
+                            case .CODE;                 #through;
+                            case .UNTYPED_LITERAL;      #through;
+                            case .UNTYPED_ENUM;         #through;
+                            case .VARIANT;              assert(false, "Unsupported debug thing");
+                        }
+                        
+                    }
 
-                        case .PROCEDURE;            #through;
-                        case .VOID;                 #through;
-                        case .ARRAY;                #through;
-                        case .OVERLOAD_SET;         #through;
-                        case .ENUM;                 #through;
-                        case .POLYMORPHIC_VARIABLE; #through;
-                        case .TYPE;                 #through;
-                        case .CODE;                 #through;
-                        case .UNTYPED_LITERAL;      #through;
-                        case .UNTYPED_ENUM;         #through;
-                        case .VARIANT;              assert(false, "Unsupported debug thing");
+                    debug_with_raylib_draw_text(#code game_state.*);
+                    debug_with_raylib_draw_text(#code game_state.controls_state_this_frame);
+                    debug_with_raylib_draw_text(#code camera.*);
+
+                    debug_text_y = 0;
+                    for dwarves {
+                        if CheckCollisionPointRec(mouse_pos_in_world, Rectangle.{ it.pos.x, it.pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT }) {
+                            // TODO: parametrize debug_with_draw_text positions
+                            DrawText(tprint("id: %\0", it.id).data,                                 xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                            DrawText(tprint("pos: %\0", it.pos).data,                               xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                            DrawText(tprint("state: %\0", it.state).data,                           xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                            DrawText(tprint("tile_ids_on_path: %\0", it.tile_ids_on_path).data,     xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                            DrawText(tprint("goblin_id_attacking: %\0", it.goblin_id_attacking).data, xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                            DrawText(tprint("tile_id_mining: %\0", it.tile_id_mining).data,         xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                            DrawText(tprint("direction: %\0", it.direction).data,                   xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                            DrawText(tprint("dwarf_type: %\0", it.dwarf_type).data,                 xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                            DrawText(tprint("hp: %\0", it.hp).data,                                 xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                            DrawText(tprint("ignore_goblins_for: %\0", it.ignore_goblins_for).data, xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                        }
                     }
                     
-                }
-
-                debug_with_raylib_draw_text(#code game_state.*);
-                debug_with_raylib_draw_text(#code game_state.controls_state_this_frame);
-                debug_with_raylib_draw_text(#code camera.*);
-
-                debug_text_y = 0;
-                for dwarves {
-                    if CheckCollisionPointRec(mouse_pos_in_world, Rectangle.{ it.pos.x, it.pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT }) {
-                        // TODO: parametrize debug_with_draw_text positions
-                        DrawText(tprint("id: %\0", it.id).data,                                 xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                        DrawText(tprint("pos: %\0", it.pos).data,                               xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                        DrawText(tprint("state: %\0", it.state).data,                           xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                        DrawText(tprint("tile_ids_on_path: %\0", it.tile_ids_on_path).data,     xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                        DrawText(tprint("goblin_id_attacking: %\0", it.goblin_id_attacking).data, xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                        DrawText(tprint("tile_id_mining: %\0", it.tile_id_mining).data,         xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                        DrawText(tprint("direction: %\0", it.direction).data,                   xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                        DrawText(tprint("dwarf_type: %\0", it.dwarf_type).data,                 xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                        DrawText(tprint("hp: %\0", it.hp).data,                                 xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                        DrawText(tprint("ignore_goblins_for: %\0", it.ignore_goblins_for).data, xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                    }
-                }
-                
-                for goblins {
-                    if CheckCollisionPointRec(mouse_pos_in_world, Rectangle.{ it.pos.x, it.pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT }) {
-                        DrawText(tprint("id: %\0", it.id).data,                                 xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                        DrawText(tprint("pos: %\0", it.pos).data,                               xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                        DrawText(tprint("state: %\0", it.state).data,                           xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                        DrawText(tprint("tile_ids_on_path: %\0", it.tile_ids_on_path).data,     xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                        DrawText(tprint("direction: %\0", it.direction).data,                   xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                        DrawText(tprint("hp: %\0", it.hp).data,                                 xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                        DrawText(tprint("attack_cooldown_ms: %\0", it.attack_cooldown_ms).data, xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                    for goblins {
+                        if CheckCollisionPointRec(mouse_pos_in_world, Rectangle.{ it.pos.x, it.pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT }) {
+                            DrawText(tprint("id: %\0", it.id).data,                                 xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                            DrawText(tprint("pos: %\0", it.pos).data,                               xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                            DrawText(tprint("state: %\0", it.state).data,                           xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                            DrawText(tprint("tile_ids_on_path: %\0", it.tile_ids_on_path).data,     xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                            DrawText(tprint("direction: %\0", it.direction).data,                   xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                            DrawText(tprint("hp: %\0", it.hp).data,                                 xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                            DrawText(tprint("attack_cooldown_ms: %\0", it.attack_cooldown_ms).data, xx (mouse_pos_in_ui.x + 20), xx (mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                        }
                     }
                 }
             }
@@ -5953,38 +6022,18 @@ set_cave_as_mined :: (tile_id: s32, cave_type: CaveType, grant_points: bool, gra
 }
 
 set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant_gold: bool, game_state: *GameState) {
+    type_before_change : TileType;
+    
+    // TODO: use type_before_change
     tile_was_iron        := is_tile_iron(tile_id);
     tile_was_dirt        := !tile_was_iron && !is_tile_fully_mined(tile_id);
     tile_was_alert_water := is_tile_alert_water(tile_id);
     tile_was_alert_lava  := is_tile_alert_lava(tile_id);
 
-    try_to_add_warning_and_alert_markers :: (tile_id: s32, cave_type: CaveType) {
-        prop_alert   : TileProperties = ifx cave_type == .WATER then .WATER_ALERT else .LAVA_ALERT;
-        prop_warning : TileProperties = ifx cave_type == .WATER then .WATER_WARNING else .LAVA_WARNING;
-
-        for direction: DIRECTIONS_COMPASS {
-            dx := get_tile_direction_id_deltas(direction)[0];
-            dy := get_tile_direction_id_deltas(direction)[1];
-
-            neighbor_id_1 := tile_id + dx + dy;
-            
-            if is_cardinal_direction(direction) {
-                if !is_tile_obsidian(neighbor_id_1) && !is_tile_hole(neighbor_id_1) {
-                    set_tile_property(neighbor_id_1, prop_alert);
-
-                    neighbor_id_2 := tile_id + (2 * dx) + (2* dy);
-
-                    set_tile_property(neighbor_id_2, prop_warning);
-                }
-            } else {
-                set_tile_property(neighbor_id_1, prop_warning);
-            }
-        }
-    }
-
     // Set the type to the new tile type.
     tile_exists, tile_index := table_find(*context.tile_ids_to_index, tile_id);
     if tile_exists {
+        type_before_change = context.tiles[tile_index].type;
         context.tiles[tile_index].type = as_type;
     } else {
         new_tile := Tile.{
@@ -5999,6 +6048,9 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
         array_add(*context.tiles, new_tile);
     }
 
+    tile := get_tile_by_id(tile_id);
+    assert(tile != null);
+
     // Do any side effects that need to happen as part of this mutation.
     if #complete as_type == {
         case .UNTOUCHED_DIRT; {
@@ -6008,7 +6060,18 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
             table_remove(*context.tile_ids_to_index, tile_id);
         }
         case .TOUCHED_DIRT;
-        case .CAVE;
+        case .CAVE; {
+            update_trench_walls_if_necessary(tile);
+            for dir: DIRECTIONS_CARDINAL {
+                deltas := get_tile_direction_id_deltas(dir);
+                dx := deltas[0];
+                dy := deltas[1];
+
+                neighbor_tile := get_tile_by_id(tile.id + dx + dy);
+                update_trench_walls_if_necessary(neighbor_tile);
+            }
+        }
+        // TODO: trenches
         case .MINED; {
             // TODO: make this work
             // tile_column := cast(u8) random_get_within_range(0, 2);
@@ -6102,7 +6165,7 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
             try_to_add_warning_and_alert_markers(tile_id, .LAVA);
         }
         case .OBSIDIAN;
-        case .WALL;
+        case .WALL; // TODO: trenches
         case .HOLE;
         case .IRON;
     }
