@@ -274,6 +274,46 @@ TILEMAP_SOURCE_RECT_COIN :: Rectangle.{
     TILEMAP_GENERAL_TILE_HEIGHT,
 };
 
+HOLE_SPRITE_SOURCE_ROW :: 6.0;
+HOLE_SPRITE_SOURCE_COL :: 9.0;
+
+TILEMAP_SOURCE_RECT_HOLE := Rectangle.{
+    HOLE_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
+    HOLE_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
+    TILEMAP_GENERAL_TILE_WIDTH,
+    TILEMAP_GENERAL_TILE_HEIGHT,
+};
+
+WALL_SPRITE_SOURCE_ROW :: 4.0;
+WALL_SPRITE_SOURCE_COL :: 1.0;
+
+TILEMAP_SOURCE_RECT_WALL := Rectangle.{
+    WALL_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_WIDTH,
+    WALL_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_HEIGHT,
+    TILEMAP_GENERAL_TILE_WIDTH,
+    TILEMAP_GENERAL_TILE_HEIGHT,
+};
+
+OBSIDIAN_SPRITE_SOURCE_ROW :: 5.0;
+OBSIDIAN_SPRITE_SOURCE_COL :: 9.0;
+
+TILEMAP_SOURCE_RECT_OBSIDIAN := Rectangle.{
+    OBSIDIAN_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
+    OBSIDIAN_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
+    TILEMAP_GENERAL_TILE_WIDTH,
+    TILEMAP_GENERAL_TILE_HEIGHT,
+};
+
+IRON_SPRITE_SOURCE_ROW :: 4.0;
+IRON_SPRITE_SOURCE_COL :: 9.0;
+
+TILEMAP_SOURCE_RECT_IRON := Rectangle.{
+    IRON_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
+    IRON_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
+    TILEMAP_GENERAL_TILE_WIDTH,
+    TILEMAP_GENERAL_TILE_HEIGHT,
+};
+
 DWARF_MINER_SCALE :: 1.1;
 TILEMAP_DWARF_MINER_MAP_WIDTH    :: 3071;
 TILEMAP_DWARF_MINER_MAP_HEIGHT   :: 192;
@@ -2611,12 +2651,14 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                             case .MINED; {
                                 // LOD
                                 if camera.zoom < CAMERA_ZOOM_LOD_MIN {
-                                    LOW_LEVEL_OF_DETAIL_MINED_DIRT_COLOR :: Color.{ 219, 164, 99, 255 };
-                                    DrawRectangleV(
-                                        tile_pos,
-                                        Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
-                                        LOW_LEVEL_OF_DETAIL_MINED_DIRT_COLOR,
-                                    );
+                                    source := Rectangle.{
+                                        xx (3 * TILEMAP_GENERAL_TILE_WIDTH),
+                                        1 * TILEMAP_GENERAL_TILE_HEIGHT,
+                                        TILEMAP_GENERAL_TILE_WIDTH,
+                                        TILEMAP_GENERAL_TILE_HEIGHT,
+                                    };
+
+                                    DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, WHITE);
                                 } else {
                                     source := Rectangle.{
                                         xx (tile.sprite_index * TILEMAP_GENERAL_TILE_WIDTH),
@@ -2629,27 +2671,34 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                                 }
                             }
                             case .CAVE; {
-                                if camera.zoom < CAMERA_ZOOM_LOD_MIN {
-                                    DrawRectangleV(
-                                        tile_pos,
-                                        Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
-                                        BLACK,
-                                    );
-                                } else {
-                                    DrawRectangleV(
-                                        tile_pos,
-                                        Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
-                                        BLACK, // TODO: texture
-                                    );
-                                }
+                                CAVE_SPRITE_SOURCE_ROW :: 2;
+                                CAVE_SPRITE_SOURCE_COL :: 9;
+
+                                source := Rectangle.{
+                                    xx (CAVE_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH),
+                                    xx (CAVE_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT),
+                                    TILEMAP_GENERAL_TILE_WIDTH,
+                                    TILEMAP_GENERAL_TILE_HEIGHT,
+                                };
+
+                                DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, WHITE);
                             }
+                            ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                            // VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV //
+                            ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
                             case .WATER_STILL; {
                                 if camera.zoom < CAMERA_ZOOM_LOD_MIN {
-                                    DrawRectangleV(
-                                        tile_pos,
-                                        Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
-                                        BLUE,
-                                    );
+                                    WATER_LOW_LOD_SPRITE_SOURCE_ROW :: 3;
+                                    WATER_LOW_LOD_SPRITE_SOURCE_COL :: 9;
+
+                                    source := Rectangle.{
+                                        xx (WATER_LOW_LOD_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH),
+                                        xx (WATER_LOW_LOD_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT),
+                                        TILEMAP_GENERAL_TILE_WIDTH,
+                                        TILEMAP_GENERAL_TILE_HEIGHT,
+                                    };
+
+                                    DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, WHITE);
                                 } else {
                                     sprite_draw(
                                         tile.animated_sprite,
@@ -2679,6 +2728,10 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                                     DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, WHITE);
                                 }
 
+                            ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                            // VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV //
+                            ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                
                                 tile.animated_sprite.rotation = determine_rotation_of_liquid_flowing_sprite(tile_id, .WATER); 
 
                                 sprite_draw(
@@ -2718,6 +2771,10 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                                     DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, WHITE);
                                 }
 
+                            ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                            // VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV //
+                            ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
                                 tile.animated_sprite.rotation = determine_rotation_of_liquid_flowing_sprite(tile_id, .LAVA); 
 
                                 sprite_draw(
@@ -2731,35 +2788,16 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                                 );
                             }
                             case .IRON; {
-                                DrawRectangleV(
-                                    get_tile_pos_by_id(tile_id),
-                                    Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
-                                    LIGHTGRAY, // TODO: texture
-                                );
+                                DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_IRON, tile_dest, Vector2.{0,0}, 0.0, WHITE);
                             }
                             case .OBSIDIAN; {
-                                DrawRectangleV(
-                                    get_tile_pos_by_id(tile_id),
-                                    Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
-                                    DARKGRAY, // TODO: texture
-                                );
+                                DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OBSIDIAN, tile_dest, Vector2.{0,0}, 0.0, WHITE);
                             }
                             case .WALL; {
-                                source := Rectangle.{
-                                    4.0 * TILEMAP_GENERAL_TILE_WIDTH,
-                                    1.0 * TILEMAP_GENERAL_TILE_HEIGHT,
-                                    TILEMAP_GENERAL_TILE_WIDTH,
-                                    TILEMAP_GENERAL_TILE_HEIGHT,
-                                };
-
-                                DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_WALL, tile_dest, Vector2.{0,0}, 0.0, WHITE);
                             }
                             case .HOLE; {
-                                DrawRectangleV(
-                                    tile_pos,
-                                    Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
-                                    DARKGRAY, // TODO: texture
-                                );
+                                DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOLE, tile_dest, Vector2.{0,0}, 0.0, WHITE);
                             }
                         }
 
@@ -3273,26 +3311,13 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                         }
                     }
 
-                    draw_hud_control_color :: (control: Control, color: Color, gold_cost := 0) #expand {
-                        dest_rect, is_hovered := draw_hud_control(control);
-
-                        DrawRectangleRec(dest_rect, color);
-
-                        if is_hovered {
-                            DrawText(tprint("%\0", control.name).data, xx (mouse_pos_in_ui.x), xx (mouse_pos_in_ui.y - HUD_CONTROLS_PADDING), 18, WHITE);
-                            
-                            tooltip_rect := Rectangle.{ dest_rect.x, dest_rect.y - dest_rect.height * 3, dest_rect.width * 6, dest_rect.height * 3 };
-                            draw_control_tooltip_text(control, tooltip_rect, gold_cost);
-                        }
-                    }
-
                     draw_hud_control_icon(metagame.controls.toggle_remove_mode, TILEMAP_SOURCE_RECT_REMOVE);
                     draw_hud_control_icon(metagame.controls.toggle_dynamite_mode, TILEMAP_SOURCE_RECT_DYNAMITE, GOLD_COST_DYNAMITE);
                     draw_hud_control_icon(metagame.controls.toggle_base_mode, TILEMAP_SOURCE_RECT_BASE, GOLD_COST_BASE);
-                    draw_hud_control_color(metagame.controls.toggle_wall_mode, DARKPURPLE, GOLD_COST_WALL);
-                    draw_hud_control_color(metagame.controls.toggle_obsidian_mode, DARKGRAY, GOLD_COST_OBSIDIAN);
-                    draw_hud_control_color(metagame.controls.panic_pause, GRAY);
-                    draw_hud_control_color(metagame.controls.fast_forward, SKYBLUE);
+                    draw_hud_control_icon(metagame.controls.toggle_wall_mode, TILEMAP_SOURCE_RECT_WALL, GOLD_COST_WALL);
+                    draw_hud_control_icon(metagame.controls.toggle_obsidian_mode, TILEMAP_SOURCE_RECT_OBSIDIAN, GOLD_COST_OBSIDIAN);
+                    draw_hud_control_icon(metagame.controls.panic_pause, TILEMAP_SOURCE_RECT_OBSIDIAN);
+                    draw_hud_control_icon(metagame.controls.fast_forward, TILEMAP_SOURCE_RECT_OBSIDIAN);
                 }
             }
 
@@ -3567,8 +3592,8 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                 case .NORMAL;       // no op
                 case .ADD_BASE;     DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_BASE, cursor_mode_icon_rect, Vector2.{0,0}, 0.0, WHITE);
                 case .ADD_DYNAMITE; DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_DYNAMITE, cursor_mode_icon_rect, Vector2.{0,0}, 0.0, WHITE);
-                case .ADD_OBSIDIAN; DrawRectangleRec(cursor_mode_icon_rect, DARKGRAY); // TODO: draw actual icon
-                case .ADD_WALL;     DrawRectangleRec(cursor_mode_icon_rect, DARKPURPLE); // TODO: draw actual icon
+                case .ADD_OBSIDIAN; DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OBSIDIAN, cursor_mode_icon_rect, Vector2.{0,0}, 0.0, WHITE);
+                case .ADD_WALL;     DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_WALL, cursor_mode_icon_rect, Vector2.{0,0}, 0.0, WHITE);
                 case .REMOVE;       DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_REMOVE, cursor_mode_icon_rect, Vector2.{0,0}, 0.0, WHITE);
             }
         }
