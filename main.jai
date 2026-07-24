@@ -723,6 +723,24 @@ main :: () {
 
 // Functions
 
+update_trenches_if_necessary :: (tile_id: s32) {
+    for dir: DIRECTIONS_ALL {
+        deltas := get_tile_direction_id_deltas(dir);
+        dx := deltas[0];
+        dy := deltas[1];
+
+        tile := get_tile_by_id(tile_id + dx + dy);
+
+        if dir == .NORTH  update_trench_walls_if_necessary(tile);
+        if dir == .SOUTH  update_trench_walls_if_necessary(tile);
+        if dir == .EAST   update_trench_walls_if_necessary(tile);
+        if dir == .WEST   update_trench_walls_if_necessary(tile);
+        if dir == .CENTER update_trench_walls_if_necessary(tile);
+
+        update_trench_corners_if_necessary(tile);
+    }
+}
+
 try_to_add_warning_and_alert_markers :: (tile_id: s32, cave_type: CaveType) {
     prop_alert   : TileProperties = ifx cave_type == .WATER then .WATER_ALERT else .LAVA_ALERT;
     prop_warning : TileProperties = ifx cave_type == .WATER then .WATER_WARNING else .LAVA_WARNING;
@@ -6160,15 +6178,7 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
         }
         case .TOUCHED_DIRT;
         case .CAVE; {
-            update_trench_walls_if_necessary(tile);
-            for dir: DIRECTIONS_CARDINAL {
-                deltas := get_tile_direction_id_deltas(dir);
-                dx := deltas[0];
-                dy := deltas[1];
-
-                neighbor_tile := get_tile_by_id(tile.id + dx + dy);
-                update_trench_walls_if_necessary(neighbor_tile);
-            }
+            update_trenches_if_necessary(tile_id);
         }
         case .MINED; {
             // TODO: make this work
@@ -6217,15 +6227,7 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
                 create_alert(.LAVA, pos, game_state);
             }
 
-            for dir: DIRECTIONS_ALL {
-                deltas := get_tile_direction_id_deltas(dir);
-                dx := deltas[0];
-                dy := deltas[1];
-
-                trench_tile := get_tile_by_id(tile_id + dx + dy);
-                update_trench_walls_if_necessary(trench_tile);
-                update_trench_corners_if_necessary(trench_tile);
-            }
+            update_trenches_if_necessary(tile_id);
         }
         case .WATER_STILL; {
             get_tile_by_id(tile_id).animated_sprite = AnimatedSprite.{
@@ -6272,10 +6274,18 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
 
             try_to_add_warning_and_alert_markers(tile_id, .LAVA);
         }
-        case .OBSIDIAN;
-        case .WALL; // TODO: trenches
-        case .HOLE;
-        case .IRON;
+        case .OBSIDIAN; {
+
+        }
+        case .WALL; {
+            update_trenches_if_necessary(tile_id);
+        }
+        case .HOLE; {
+
+        }
+        case .IRON; {
+
+        }
     }
 }
 
