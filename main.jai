@@ -2939,8 +2939,6 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                         #if DRAW_TRENCHES {
                             if camera.zoom >= CAMERA_ZOOM_LOD_MIN {
                                 if tile.trench_directions_sides > 0 then draw_trench_sides(*tile);
-                                if tile.trench_directions_corners_mostly_crust > 0 then draw_trench_corners_mostly_crust(*tile);
-                                if tile.trench_directions_corners_mostly_dirt > 0  then draw_trench_corners_mostly_dirt(*tile);
                             }
                         }
 
@@ -2985,6 +2983,29 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                                         TRANSPARENT_WHITE
                                     );
                                 }
+                            }
+                        }
+                    }
+                }
+
+                for row: start_row..end_row {
+                    for col: start_col..end_col {
+                        // Calculate the 1D index. 
+                        tile_id := (row * cast(s32) context.world_cols) + col + 1;
+
+                        // PERF: this is probably slow as fuck
+                        tile_exists, tile_index := table_find(*context.tile_ids_to_index, tile_id);
+                        if !tile_exists || tile_index < 0 || tile_index >= context.tiles.count continue;
+
+                        tile      := context.tiles[tile_index];
+                        tile_pos  := get_tile_pos_by_id(tile_id);
+                        tile_dest := get_world_rect_from_pos(tile_pos);
+
+                        DRAW_TRENCHES :: true;
+                        #if DRAW_TRENCHES {
+                            if camera.zoom >= CAMERA_ZOOM_LOD_MIN {
+                                if tile.trench_directions_corners_mostly_crust > 0 then draw_trench_corners_mostly_crust(*tile);
+                                if tile.trench_directions_corners_mostly_dirt  > 0 then draw_trench_corners_mostly_dirt(*tile);
                             }
                         }
                     }
