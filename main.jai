@@ -470,24 +470,24 @@ TileType :: enum u8 {
 }
 
 TileProperties :: enum_flags u8 {
-    ENCASED        :: 0b00000001;
-    HAS_DYNAMITE   :: 0b00000010;
-    WATER_WARNING  :: 0b00000100;
-    WATER_ALERT    :: 0b00001000;
-    LAVA_WARNING   :: 0b00010000;
-    LAVA_ALERT     :: 0b00100000;
-    HAS_TREASURE   :: 0b01000000;
+    ENCASED        :: 0b00000001; // 1
+    HAS_DYNAMITE   :: 0b00000010; // 2
+    WATER_WARNING  :: 0b00000100; // 4
+    WATER_ALERT    :: 0b00001000; // 8
+    LAVA_WARNING   :: 0b00010000; // 16
+    LAVA_ALERT     :: 0b00100000; // 32
+    HAS_TREASURE   :: 0b01000000; // 64
 }
 
 TrenchDirections :: enum_flags u8 {
-    NORTH      :: 0b00000001;
-    SOUTH      :: 0b00000010;
-    EAST       :: 0b00000100;
-    WEST       :: 0b00001000;
-    NORTH_EAST :: 0b00010000; 
-    NORTH_WEST :: 0b00100000; 
-    SOUTH_EAST :: 0b01000000; 
-    SOUTH_WEST :: 0b10000000;
+    NORTH      :: 0b00000001; // 1
+    SOUTH      :: 0b00000010; // 2
+    EAST       :: 0b00000100; // 4
+    WEST       :: 0b00001000; // 8
+    NORTH_EAST :: 0b00010000; // 16
+    NORTH_WEST :: 0b00100000; // 32
+    SOUTH_EAST :: 0b01000000; // 64
+    SOUTH_WEST :: 0b10000000; // 128
 }
 
 // TODO: soa
@@ -792,31 +792,50 @@ draw_trench_walls_if_necessary :: (tile: *Tile) {
     origin := Vector2.{ TILEMAP_GENERAL_TILE_WIDTH * 0.5, TILEMAP_GENERAL_TILE_HEIGHT * 0.5 };
 
     if tile.trench_directions & TrenchDirections.NORTH {
-        dest.x += TILEMAP_GENERAL_TILE_HEIGHT * 0.5;
-        dest.y -= TILEMAP_GENERAL_TILE_HEIGHT * 0.5;
-        DrawTexturePro(tilemap_texture_general, source, dest, origin, rot, WHITE);
+        final_dest := Rectangle.{
+            dest.x + TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
+            dest.y - TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
+            dest.width, dest.height,
+        };
+
+        DrawTexturePro(tilemap_texture_general, source, final_dest, origin, rot, WHITE);
     }
 
     if tile.trench_directions & TrenchDirections.SOUTH {
         rot     = 180.0;
-        dest.x += TILEMAP_GENERAL_TILE_HEIGHT * 0.5;
-        dest.y += TILEMAP_GENERAL_TILE_HEIGHT * 1.5;
-        DrawTexturePro(tilemap_texture_general, source, dest, origin, rot, WHITE);
+        
+        final_dest := Rectangle.{
+            dest.x + TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
+            dest.y + TILEMAP_GENERAL_TILE_HEIGHT * 1.5,
+            dest.width, dest.height,
+        };
+
+        DrawTexturePro(tilemap_texture_general, source, final_dest, origin, rot, WHITE);
     }
 
     if tile.trench_directions & TrenchDirections.EAST {
         rot     = 90.0;
-        // dest.x += TILEMAP_GENERAL_TILE_HEIGHT;
-        // dest.y += TILEMAP_GENERAL_TILE_HEIGHT;
-        DrawTexturePro(tilemap_texture_general, source, dest, origin, rot, WHITE);
+        
+        final_dest := Rectangle.{
+            dest.x + TILEMAP_GENERAL_TILE_HEIGHT * 1.5,
+            dest.y + TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
+            dest.width, dest.height,
+        };
+    
+        DrawTexturePro(tilemap_texture_general, source, final_dest, origin, rot, WHITE);
     }
 
-    // if tile.trench_directions & TrenchDirections.WEST {
-    //     rot     = 270.0;
-    //     // dest.x -= TILEMAP_GENERAL_TILE_WIDTH * 0.5;
-    //     // dest.y += TILEMAP_GENERAL_TILE_HEIGHT;
-    //     DrawTexturePro(tilemap_texture_general, source, dest, origin, rot, WHITE);
-    // }
+    if tile.trench_directions & TrenchDirections.WEST {
+        rot     = 270.0;
+        
+        final_dest := Rectangle.{
+            dest.x - TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
+            dest.y + TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
+            dest.width, dest.height,
+        };
+
+        DrawTexturePro(tilemap_texture_general, source, final_dest, origin, rot, WHITE);
+    }
 }
 
 // TODO: this function is kinda fat
@@ -1978,7 +1997,7 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
 
                                 // TODO: #if DEBUG
                                 if !is_tile_id_walkable_for_entity(target_tile_id, dwarf.id) {
-                                    print_vars(get_tile_by_id(target_tile_id));
+                                    // print_vars(get_tile_by_id(target_tile_id));
                                     // assert_soft(false, "Dwarf % is trying to move into the invalid tile %\n", dwarf.id, target_tile_id);
                                 }
 
@@ -6071,7 +6090,6 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
                 update_trench_walls_if_necessary(neighbor_tile);
             }
         }
-        // TODO: trenches
         case .MINED; {
             // TODO: make this work
             // tile_column := cast(u8) random_get_within_range(0, 2);
@@ -6117,6 +6135,16 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
                 pos := get_tile_pos_by_id(tile_id);
                 
                 create_alert(.LAVA, pos, game_state);
+            }
+
+            update_trench_walls_if_necessary(tile);
+            for dir: DIRECTIONS_CARDINAL {
+                deltas := get_tile_direction_id_deltas(dir);
+                dx := deltas[0];
+                dy := deltas[1];
+
+                neighbor_tile := get_tile_by_id(tile.id + dx + dy);
+                update_trench_walls_if_necessary(neighbor_tile);
             }
         }
         case .WATER_STILL; {
