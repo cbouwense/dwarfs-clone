@@ -18,8 +18,7 @@ main :: () {
     a : TrenchDirections = 0;
     b := TrenchDirections.NORTH;
 
-    c := a & ~b;
-    a &= ~b;
+    c := a | (b << 4);
 
     print_vars(a, b, c);
 }
