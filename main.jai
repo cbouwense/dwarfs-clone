@@ -2762,8 +2762,7 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
 
             // Draw tiles
             DRAW_TRENCHES :: false;
-            DRAW_TILES :: true;
-            #if DRAW_TILES {
+            draw_tiles :: (camera: Camera2D) {
                 // Get the world coordinates of the top-left and bottom-right of the screen
                 window_start := GetScreenToWorld2D(Vector2.{ 0, 0 }, camera);
                 window_end   := GetScreenToWorld2D(Vector2.{ cast(float) GetScreenWidth(), cast(float) GetScreenHeight()}, camera);
@@ -2970,7 +2969,6 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                         }
                     }
                 }
-
                 
                 #if DRAW_TRENCHES {
                     if camera.zoom >= CAMERA_ZOOM_LOD_MIN {
@@ -2984,19 +2982,22 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                     }
                 }
             }
+            DRAW_TILES    :: true;
+            #if DRAW_TILES then draw_tiles(camera);
 
             // Draw bases
-            DRAW_BASES :: true;
-            #if DRAW_BASES {
+            draw_bases :: () {
                 for base: bases_in_viewport {
                     dest := get_world_rect_from_pos(base.pos);
 
                     DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_BASE, dest, Vector2.{0,0}, 0.0, WHITE);
                 }
             }
+            DRAW_BASES :: true;
+            #if DRAW_BASES then draw_bases();
 
             // Draw paths
-            {
+            draw_paths :: (game_state: GameState) {
                 if game_state.controls_state_this_frame.drawing_path {
                     if path_being_traced_1.start_tile_id > 0 draw_path(path_being_traced_1);
                     if path_being_traced_2.start_tile_id > 0 draw_path(path_being_traced_2);
@@ -3004,9 +3005,10 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
 
                 for path: paths_in_viewport draw_path(path);
             }
+            draw_paths(game_state);
 
             // Draw dwarves
-            {
+            draw_dwarves :: () {
                 for dwarf: dwarves_in_viewport {
                     // PERF: would it be faster to store the active index?
                     found := false;
@@ -3027,9 +3029,10 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                     assert_soft(found, "Dwarf % had no animation active\n", dwarf.id);
                 }
             }
+            draw_dwarves();
 
             // Draw goblins
-            {
+            draw_goblins :: () {
                 for goblin: goblins_in_viewport {
                     dest := get_world_rect_from_pos(goblin.pos);
                     DrawRectangleV(
@@ -3039,9 +3042,10 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                     );
                 }
             }
+            draw_goblins();
 
             // Draw hovered tile
-            {
+            draw_hovered_tile :: (mouse_pos_in_world: Vector2) {
                 hovered_tile_rect := get_tile_rect_that_pos_is_within(get_world_width(), get_world_height(), TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, mouse_pos_in_world);
                 DrawRectangleRec(hovered_tile_rect, TRANSPARENT_WHITE);
                 if metagame.debug_mode {
@@ -3066,10 +3070,10 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                     }
                 }
             }
+            draw_hovered_tile(mouse_pos_in_world);
 
             // Draw particles
-            DRAW_PARTICLES :: true;
-            #if DRAW_PARTICLES {
+            draw_particles :: () {
                 for particle: particles_in_viewport {
                     TEXT_SIZE     :: 20;
                     dest_text := get_world_rect_from_pos(particle.pos);
@@ -3093,6 +3097,8 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                     }
                 }
             }
+            DRAW_PARTICLES :: true;
+            #if DRAW_PARTICLES then draw_particles();
         }
 
         // Draw UI
