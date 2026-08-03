@@ -913,7 +913,7 @@ update_trench_corners_if_necessary :: (tile: *Tile) {
     }
 }
 
-draw_trench_sides :: (tile: *Tile) {
+draw_trench_sides :: (tile: Tile) {
     TRENCH_STRAIGHT_SPRITE_SOURCE_ROW :: 2;
     TRENCH_STRAIGHT_SPRITE_SOURCE_COL :: 0;
 
@@ -976,9 +976,7 @@ draw_trench_sides :: (tile: *Tile) {
     }
 }
 
-draw_trench_corners_mostly_crust :: (tile: *Tile) {
-    if (tile == null) return;
-
+draw_trench_corners_mostly_crust :: (tile: Tile) {
     TRENCH_CORNER_MOSTLY_CRUST_NORTH_EAST_SPRITE_SOURCE_ROW :: 2;
     TRENCH_CORNER_MOSTLY_CRUST_NORTH_EAST_SPRITE_SOURCE_COL :: 1;
     TRENCH_CORNER_MOSTLY_CRUST_NORTH_WEST_SPRITE_SOURCE_ROW :: 2;
@@ -1047,9 +1045,7 @@ draw_trench_corners_mostly_crust :: (tile: *Tile) {
     }
 }
 
-draw_trench_corners_mostly_dirt :: (tile: *Tile) {
-    if (tile == null) return;
-
+draw_trench_corners_mostly_dirt :: (tile: Tile) {
     TRENCH_CORNER_MOSTLY_DIRT_NORTH_EAST_SPRITE_SOURCE_ROW :: 3;
     TRENCH_CORNER_MOSTLY_DIRT_NORTH_EAST_SPRITE_SOURCE_COL :: 1;
     TRENCH_CORNER_MOSTLY_DIRT_NORTH_WEST_SPRITE_SOURCE_ROW :: 3;
@@ -2576,6 +2572,8 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                             case .WATER_FLOWING; {
                                 inflict_liquid_consequences(tile.id);
 
+                                tile.animated_sprite.rotation = determine_rotation_of_liquid_flowing_sprite(tile.id, .WATER);
+
                                 reset_animation := sprite_update(*tile.animated_sprite, dt_seconds);
 
                                 if reset_animation {
@@ -2599,6 +2597,8 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
 
                             case .LAVA_FLOWING; {
                                 inflict_liquid_consequences(tile.id);
+
+                                tile.animated_sprite.rotation = determine_rotation_of_liquid_flowing_sprite(tile.id, .LAVA);
 
                                 reset_animation := sprite_update(*tile.animated_sprite, dt_seconds);
 
@@ -2761,15 +2761,19 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
             }
 
             // Draw tiles
+            DRAW_TRENCHES :: false;
             DRAW_TILES :: true;
             #if DRAW_TILES {
                 // Get the world coordinates of the top-left and bottom-right of the screen
                 window_start := GetScreenToWorld2D(Vector2.{ 0, 0 }, camera);
                 window_end   := GetScreenToWorld2D(Vector2.{ cast(float) GetScreenWidth(), cast(float) GetScreenHeight()}, camera);
 
-                for * tile: context.tiles {
+                for tile: context.tiles {
                     tile_pos  := get_tile_pos_by_id(tile.id);
                     tile_dest := get_world_rect_from_pos(tile_pos);
+
+                    if tile_pos.x < window_start.x || tile_pos.x > window_end.x continue;
+                    if tile_pos.y < window_start.y || tile_pos.y > window_end.y continue;
 
                     // Draw tile type
                     if #complete tile.type == {
@@ -2855,8 +2859,6 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                                 DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, WHITE);
                             }
             
-                            tile.animated_sprite.rotation = determine_rotation_of_liquid_flowing_sprite(tile.id, .WATER); 
-
                             sprite_draw(
                                 tile.animated_sprite,
                                 tile_pos,
@@ -2894,8 +2896,6 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                                 DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, WHITE);
                             }
 
-                            tile.animated_sprite.rotation = determine_rotation_of_liquid_flowing_sprite(tile.id, .LAVA); 
-
                             sprite_draw(
                                 tile.animated_sprite,
                                 tile_pos,
@@ -2920,7 +2920,6 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                         }
                     }
 
-                    DRAW_TRENCHES :: true;
                     #if DRAW_TRENCHES {
                         if camera.zoom >= CAMERA_ZOOM_LOD_MIN {
                             if tile.trench_directions_sides > 0 then draw_trench_sides(tile);
@@ -2928,7 +2927,7 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                     }
 
                     // Draw tile properties
-                    {
+                    if tile.props > 0 {
                         if tile.props & TileProperties.HAS_DYNAMITE {
                             DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_DYNAMITE, tile_dest, Vector2.{0,0}, 0.0, WHITE);
                         }
@@ -2972,28 +2971,18 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
                     }
                 }
 
-                // for row: start_row..end_row {
-                //     for col: start_col..end_col {
-                //         // Calculate the 1D index. 
-                //         tile_id := (row * cast(s32) context.world_cols) + col + 1;
+                
+                #if DRAW_TRENCHES {
+                    if camera.zoom >= CAMERA_ZOOM_LOD_MIN {
+                        for tile: context.tiles {
+                            tile_pos  := get_tile_pos_by_id(tile.id);
+                            tile_dest := get_world_rect_from_pos(tile_pos);
 
-                //         // PERF: this is probably slow as fuck
-                //         tile_exists, tile_index := table_find(*context.tile_ids_to_index, tile_id);
-                //         if !tile_exists || tile_index < 0 || tile_index >= context.tiles.count continue;
-
-                //         tile      := context.tiles[tile_index];
-                //         tile_pos  := get_tile_pos_by_id(tile_id);
-                //         tile_dest := get_world_rect_from_pos(tile_pos);
-
-                //         DRAW_TRENCHES :: true;
-                //         #if DRAW_TRENCHES {
-                //             if camera.zoom >= CAMERA_ZOOM_LOD_MIN {
-                //                 if tile.trench_directions_corners_mostly_crust > 0 then draw_trench_corners_mostly_crust(*tile);
-                //                 if tile.trench_directions_corners_mostly_dirt  > 0 then draw_trench_corners_mostly_dirt(*tile);
-                //             }
-                //         }
-                //     }
-                // }
+                            if tile.trench_directions_corners_mostly_crust > 0 then draw_trench_corners_mostly_crust(tile);
+                            if tile.trench_directions_corners_mostly_dirt  > 0 then draw_trench_corners_mostly_dirt(tile);
+                        }
+                    }
+                }
             }
 
             // Draw bases
@@ -3107,9 +3096,8 @@ update_and_draw_frame_round :: (game_state: *GameState, camera: *Camera2D) -> me
         }
 
         // Draw UI
-        if metagame.debug_mode then DrawFPS(10, 10);
-
-        #if false {
+        DRAW_UI :: true;
+        #if DRAW_UI {
             screen_width  := GetScreenWidth();
             screen_height := GetScreenHeight();
 
@@ -4235,7 +4223,7 @@ initialize_round :: () -> GameState, Metagame, Camera2D {
 
     camera: Camera2D;
 
-    GENERATE_CAVES_ENABLED :: false;
+    GENERATE_CAVES_ENABLED :: true;
 
     if #complete metagame.level == {
         case .NORMAL;
