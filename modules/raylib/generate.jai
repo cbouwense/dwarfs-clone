@@ -64,11 +64,11 @@ generate_bindings :: (args: [] string, minimum_os_version: type_of(Build_Options
             macos_x64_version_arg   := "-mmacos-version-min=10.13"; // Our current x64 min version
             macos_arm64_version_arg := "-mmacos-version-min=11.0";  // Earliest version that supports arm64
             // x64 variant
-            success &&= build_cpp_dynamic_lib(lib_path_x64,   source_file, extra = .["-arch", "x86_64", macos_x64_version_arg],   debug=compile_debug);
-            success &&= build_cpp_static_lib( lib_path_x64,   source_file, extra = .["-arch", "x86_64", macos_x64_version_arg],   debug=compile_debug);
+            success &&= build_cpp_dynamic_lib(lib_path_x64,   source_file, extra = .["-arch", "x86_64", macos_x64_version_arg, "/Z7"],   debug=compile_debug);
+            success &&= build_cpp_static_lib( lib_path_x64,   source_file, extra = .["-arch", "x86_64", macos_x64_version_arg, "/Z7"],   debug=compile_debug);
             // arm64 variant
-            success &&= build_cpp_dynamic_lib(lib_path_arm64, source_file, extra = .["-arch", "arm64",  macos_arm64_version_arg], debug=compile_debug);
-            success &&= build_cpp_static_lib( lib_path_arm64, source_file, extra = .["-arch", "arm64",  macos_arm64_version_arg], debug=compile_debug);
+            success &&= build_cpp_dynamic_lib(lib_path_arm64, source_file, extra = .["-arch", "arm64",  macos_arm64_version_arg, "/Z7"], debug=compile_debug);
+            success &&= build_cpp_static_lib( lib_path_arm64, source_file, extra = .["-arch", "arm64",  macos_arm64_version_arg, "/Z7"], debug=compile_debug);
             // create universal binaries
             run_result := run_command("lipo", "-create", tprint("%.dylib", lib_path_x64), tprint("%.dylib", lib_path_arm64), "-output", tprint("%.dylib", lib_path));
             success &&= (run_result.exit_code == 0);
@@ -76,12 +76,13 @@ generate_bindings :: (args: [] string, minimum_os_version: type_of(Build_Options
             success &&= (run_result.exit_code == 0);
         } else {
             extra: [..] string;
-            if os_target == .ANDROID {
-                _, target_triple_with_sdk := get_android_target_triple(cpu_target);
-                array_add(*extra, "-target", target_triple_with_sdk);
-            }
+            // if os_target == .ANDROID {
+            //     _, target_triple_with_sdk := get_android_target_triple(cpu_target);
+            //     array_add(*extra, "-target", target_triple_with_sdk);
+            // }
             if os_target == .WINDOWS {
                 array_add(*extra, "-DSTBI_WINDOWS_UTF8");
+                array_add(*extra, "/Z7");
             } else {
                 array_add(*extra, "-fPIC");
             }
@@ -147,5 +148,5 @@ END
 #import "Compiler";
 #import "File";
 #import "Process";
-#import "Toolchains/Android";
+// #import "Toolchains/Android";
 

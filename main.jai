@@ -922,19 +922,17 @@ update_trench_corners_if_necessary :: (tile: *Tile) {
     }
 }
 
+TRENCH_STRAIGHT_SPRITE_SOURCE_ROW :: 2;
+TRENCH_STRAIGHT_SPRITE_SOURCE_COL :: 0;
+TRENCH_SIDES_SOURCE := Rectangle.{
+    TRENCH_STRAIGHT_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
+    TRENCH_STRAIGHT_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
+    TILEMAP_GENERAL_TILE_WIDTH,
+    TILEMAP_GENERAL_TILE_HEIGHT,
+};
+
 draw_trench_sides :: (tile: Tile) {
-    TRENCH_STRAIGHT_SPRITE_SOURCE_ROW :: 2;
-    TRENCH_STRAIGHT_SPRITE_SOURCE_COL :: 0;
-
-    source := Rectangle.{
-        TRENCH_STRAIGHT_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
-        TRENCH_STRAIGHT_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
-        TILEMAP_GENERAL_TILE_WIDTH,
-        TILEMAP_GENERAL_TILE_HEIGHT,
-    };
-
-    pos  := get_tile_pos_by_id(tile.id);
-    dest := get_world_rect_from_pos(pos);
+    dest := get_world_rect_from_pos(tile.pos);
     rot  := 0.0;
     origin := Vector2.{ TILEMAP_GENERAL_TILE_WIDTH * 0.5, TILEMAP_GENERAL_TILE_HEIGHT * 0.5 };
 
@@ -945,7 +943,7 @@ draw_trench_sides :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        DrawTexturePro(tilemap_texture_general, source, final_dest, origin, rot, WHITE);
+        DrawTexturePro(tilemap_texture_general, TRENCH_SIDES_SOURCE, final_dest, origin, rot, WHITE);
     }
 
     if tile.trench_directions_sides & TrenchDirections.SOUTH {
@@ -957,7 +955,7 @@ draw_trench_sides :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        DrawTexturePro(tilemap_texture_general, source, final_dest, origin, rot, WHITE);
+        DrawTexturePro(tilemap_texture_general, TRENCH_SIDES_SOURCE, final_dest, origin, rot, WHITE);
     }
 
     if tile.trench_directions_sides & TrenchDirections.EAST {
@@ -969,7 +967,7 @@ draw_trench_sides :: (tile: Tile) {
             dest.width, dest.height,
         };
     
-        DrawTexturePro(tilemap_texture_general, source, final_dest, origin, rot, WHITE);
+        DrawTexturePro(tilemap_texture_general, TRENCH_SIDES_SOURCE, final_dest, origin, rot, WHITE);
     }
 
     if tile.trench_directions_sides & TrenchDirections.WEST {
@@ -981,25 +979,24 @@ draw_trench_sides :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        DrawTexturePro(tilemap_texture_general, source, final_dest, origin, rot, WHITE);
+        DrawTexturePro(tilemap_texture_general, TRENCH_SIDES_SOURCE, final_dest, origin, rot, WHITE);
     }
 }
 
-draw_trench_corners_mostly_crust :: (tile: Tile) {
-    TRENCH_CORNER_MOSTLY_CRUST_NORTH_EAST_SPRITE_SOURCE_ROW :: 2;
-    TRENCH_CORNER_MOSTLY_CRUST_NORTH_EAST_SPRITE_SOURCE_COL :: 1;
-    TRENCH_CORNER_MOSTLY_CRUST_NORTH_WEST_SPRITE_SOURCE_ROW :: 2;
-    TRENCH_CORNER_MOSTLY_CRUST_NORTH_WEST_SPRITE_SOURCE_COL :: 2;
-    TRENCH_CORNER_MOSTLY_CRUST_SOUTH_EAST_SPRITE_SOURCE_ROW :: 2;
-    TRENCH_CORNER_MOSTLY_CRUST_SOUTH_EAST_SPRITE_SOURCE_COL :: 3;
-    TRENCH_CORNER_MOSTLY_CRUST_SOUTH_WEST_SPRITE_SOURCE_ROW :: 2;
-    TRENCH_CORNER_MOSTLY_CRUST_SOUTH_WEST_SPRITE_SOURCE_COL :: 4;
+TRENCH_CORNER_MOSTLY_CRUST_NORTH_EAST_SPRITE_SOURCE_ROW :: 2;
+TRENCH_CORNER_MOSTLY_CRUST_NORTH_EAST_SPRITE_SOURCE_COL :: 1;
+TRENCH_CORNER_MOSTLY_CRUST_NORTH_WEST_SPRITE_SOURCE_ROW :: 2;
+TRENCH_CORNER_MOSTLY_CRUST_NORTH_WEST_SPRITE_SOURCE_COL :: 2;
+TRENCH_CORNER_MOSTLY_CRUST_SOUTH_EAST_SPRITE_SOURCE_ROW :: 2;
+TRENCH_CORNER_MOSTLY_CRUST_SOUTH_EAST_SPRITE_SOURCE_COL :: 3;
+TRENCH_CORNER_MOSTLY_CRUST_SOUTH_WEST_SPRITE_SOURCE_ROW :: 2;
+TRENCH_CORNER_MOSTLY_CRUST_SOUTH_WEST_SPRITE_SOURCE_COL :: 4;
 
+ORIGIN :: Vector2.{ TILEMAP_GENERAL_TILE_WIDTH * 0.5, TILEMAP_GENERAL_TILE_HEIGHT * 0.5 };
+
+draw_trench_corners_mostly_crust :: (tile: Tile) {
     source := Rectangle.{ 0, 0, TILEMAP_GENERAL_TILE_WIDTH, TILEMAP_GENERAL_TILE_HEIGHT };
-    pos    := get_tile_pos_by_id(tile.id);
-    dest   := get_world_rect_from_pos(pos);
-    rot    := 0.0;
-    origin := Vector2.{ TILEMAP_GENERAL_TILE_WIDTH * 0.5, TILEMAP_GENERAL_TILE_HEIGHT * 0.5 };
+    dest   := get_world_rect_from_pos(tile.pos);
 
     if tile.trench_directions_corners_mostly_crust & TrenchDirections.NORTH_EAST {
         source.x = TRENCH_CORNER_MOSTLY_CRUST_NORTH_EAST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
@@ -1011,7 +1008,7 @@ draw_trench_corners_mostly_crust :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        DrawTexturePro(tilemap_texture_general, source, final_dest, origin, rot, WHITE);
+        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, WHITE);
     }
 
     if tile.trench_directions_corners_mostly_crust & TrenchDirections.NORTH_WEST {
@@ -1024,7 +1021,7 @@ draw_trench_corners_mostly_crust :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        DrawTexturePro(tilemap_texture_general, source, final_dest, origin, rot, WHITE);
+        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, WHITE);
     }
 
     if tile.trench_directions_corners_mostly_crust & TrenchDirections.SOUTH_EAST {
@@ -1037,7 +1034,7 @@ draw_trench_corners_mostly_crust :: (tile: Tile) {
             dest.width, dest.height,
         };
     
-        DrawTexturePro(tilemap_texture_general, source, final_dest, origin, rot, WHITE);
+        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, WHITE);
     }
 
     if tile.trench_directions_corners_mostly_crust & TrenchDirections.SOUTH_WEST {
@@ -1050,25 +1047,22 @@ draw_trench_corners_mostly_crust :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        DrawTexturePro(tilemap_texture_general, source, final_dest, origin, rot, WHITE);
+        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, WHITE);
     }
 }
 
-draw_trench_corners_mostly_dirt :: (tile: Tile) {
-    TRENCH_CORNER_MOSTLY_DIRT_NORTH_EAST_SPRITE_SOURCE_ROW :: 3;
-    TRENCH_CORNER_MOSTLY_DIRT_NORTH_EAST_SPRITE_SOURCE_COL :: 1;
-    TRENCH_CORNER_MOSTLY_DIRT_NORTH_WEST_SPRITE_SOURCE_ROW :: 3;
-    TRENCH_CORNER_MOSTLY_DIRT_NORTH_WEST_SPRITE_SOURCE_COL :: 2;
-    TRENCH_CORNER_MOSTLY_DIRT_SOUTH_EAST_SPRITE_SOURCE_ROW :: 3;
-    TRENCH_CORNER_MOSTLY_DIRT_SOUTH_EAST_SPRITE_SOURCE_COL :: 3;
-    TRENCH_CORNER_MOSTLY_DIRT_SOUTH_WEST_SPRITE_SOURCE_ROW :: 3;
-    TRENCH_CORNER_MOSTLY_DIRT_SOUTH_WEST_SPRITE_SOURCE_COL :: 4;
+TRENCH_CORNER_MOSTLY_DIRT_NORTH_EAST_SPRITE_SOURCE_ROW :: 3;
+TRENCH_CORNER_MOSTLY_DIRT_NORTH_EAST_SPRITE_SOURCE_COL :: 1;
+TRENCH_CORNER_MOSTLY_DIRT_NORTH_WEST_SPRITE_SOURCE_ROW :: 3;
+TRENCH_CORNER_MOSTLY_DIRT_NORTH_WEST_SPRITE_SOURCE_COL :: 2;
+TRENCH_CORNER_MOSTLY_DIRT_SOUTH_EAST_SPRITE_SOURCE_ROW :: 3;
+TRENCH_CORNER_MOSTLY_DIRT_SOUTH_EAST_SPRITE_SOURCE_COL :: 3;
+TRENCH_CORNER_MOSTLY_DIRT_SOUTH_WEST_SPRITE_SOURCE_ROW :: 3;
+TRENCH_CORNER_MOSTLY_DIRT_SOUTH_WEST_SPRITE_SOURCE_COL :: 4;
 
+draw_trench_corners_mostly_dirt :: (tile: Tile) {
     source := Rectangle.{ 0, 0, TILEMAP_GENERAL_TILE_WIDTH, TILEMAP_GENERAL_TILE_HEIGHT };
-    pos    := get_tile_pos_by_id(tile.id);
-    dest   := get_world_rect_from_pos(pos);
-    rot    := 0.0;
-    origin := Vector2.{ TILEMAP_GENERAL_TILE_WIDTH * 0.5, TILEMAP_GENERAL_TILE_HEIGHT * 0.5 };
+    dest   := get_world_rect_from_pos(tile.pos);
 
     if tile.trench_directions_corners_mostly_dirt & TrenchDirections.NORTH_EAST {
         source.x = TRENCH_CORNER_MOSTLY_DIRT_NORTH_EAST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
@@ -1080,7 +1074,7 @@ draw_trench_corners_mostly_dirt :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        DrawTexturePro(tilemap_texture_general, source, final_dest, origin, rot, WHITE);
+        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, WHITE);
     }
 
     if tile.trench_directions_corners_mostly_dirt & TrenchDirections.NORTH_WEST {
@@ -1093,7 +1087,7 @@ draw_trench_corners_mostly_dirt :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        DrawTexturePro(tilemap_texture_general, source, final_dest, origin, rot, WHITE);
+        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, WHITE);
     }
 
     if tile.trench_directions_corners_mostly_dirt & TrenchDirections.SOUTH_EAST {
@@ -1106,7 +1100,7 @@ draw_trench_corners_mostly_dirt :: (tile: Tile) {
             dest.width, dest.height,
         };
     
-        DrawTexturePro(tilemap_texture_general, source, final_dest, origin, rot, WHITE);
+        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, WHITE);
     }
 
     if tile.trench_directions_corners_mostly_dirt & TrenchDirections.SOUTH_WEST {
@@ -1119,7 +1113,7 @@ draw_trench_corners_mostly_dirt :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        DrawTexturePro(tilemap_texture_general, source, final_dest, origin, rot, WHITE);
+        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, WHITE);
     }
 }
 
@@ -2771,7 +2765,7 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
             draw_base_dirt_layer();
 
             // Draw tiles
-            DRAW_TRENCHES :: false;
+            DRAW_TRENCHES :: true;
             draw_tiles :: () {
                 for tile: context.tiles {
                     tile_dest := get_world_rect_from_pos(tile.pos);
@@ -2978,6 +2972,9 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
                 #if DRAW_TRENCHES {
                     if context.camera.zoom >= CAMERA_ZOOM_LOD_MIN {
                         for tile: context.tiles {
+                            if tile.pos.x < context.window_start.x || tile.pos.x > context.window_end.x continue;
+                            if tile.pos.y < context.window_start.y || tile.pos.y > context.window_end.y continue;
+
                             if tile.trench_directions_corners_mostly_crust > 0 then draw_trench_corners_mostly_crust(tile);
                             if tile.trench_directions_corners_mostly_dirt  > 0 then draw_trench_corners_mostly_dirt(tile);
                         }
@@ -5856,7 +5853,7 @@ try_to_set_cardinal_neighbors_as_flowing_tile_type :: (tile_id: s32, as_type: Ti
     return directions_flowed;
 }
 
-get_world_rect_from_pos :: (pos: Vector2) -> Rectangle {
+get_world_rect_from_pos :: inline (pos: Vector2) -> Rectangle {
     return Rectangle.{
         pos.x, pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT,
     };
