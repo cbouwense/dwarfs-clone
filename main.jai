@@ -514,6 +514,7 @@ TrenchDirections :: enum_flags u8 {
 // TODO: soa
 Tile :: struct {
     id              : s32;
+    pos             : Vector2;
     type            : TileType;
     props           : TileProperties;
     health          : s16;
@@ -2773,11 +2774,10 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
             DRAW_TRENCHES :: false;
             draw_tiles :: () {
                 for tile: context.tiles {
-                    tile_pos  := get_tile_pos_by_id(tile.id);
-                    tile_dest := get_world_rect_from_pos(tile_pos);
+                    tile_dest := get_world_rect_from_pos(tile.pos);
 
-                    if tile_pos.x < context.window_start.x || tile_pos.x > context.window_end.x continue;
-                    if tile_pos.y < context.window_start.y || tile_pos.y > context.window_end.y continue;
+                    if tile.pos.x < context.window_start.x || tile.pos.x > context.window_end.x continue;
+                    if tile.pos.y < context.window_start.y || tile.pos.y > context.window_end.y continue;
 
                     // Draw tile type
                     if #complete tile.type == {
@@ -2799,7 +2799,7 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
                             // } else {
                             //     sprite_draw(
                             //         tile.animated_sprite,
-                            //         tile_pos,
+                            //         tile.pos,
                             //         TILEMAP_GENERAL_WORLD_WIDTH,
                             //         TILEMAP_GENERAL_WORLD_HEIGHT,
                             //         TILEMAP_GENERAL_TILE_WIDTH,
@@ -2837,7 +2837,7 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
                             } else {
                                 sprite_draw(
                                     tile.animated_sprite,
-                                    tile_pos,
+                                    tile.pos,
                                     TILEMAP_GENERAL_WORLD_WIDTH,
                                     TILEMAP_GENERAL_WORLD_HEIGHT,
                                     TILEMAP_GENERAL_TILE_WIDTH,
@@ -2865,7 +2865,7 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
             
                             sprite_draw(
                                 tile.animated_sprite,
-                                tile_pos,
+                                tile.pos,
                                 TILEMAP_GENERAL_WORLD_WIDTH,
                                 TILEMAP_GENERAL_WORLD_HEIGHT,
                                 TILEMAP_GENERAL_TILE_WIDTH,
@@ -2902,7 +2902,7 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
 
                             sprite_draw(
                                 tile.animated_sprite,
-                                tile_pos,
+                                tile.pos,
                                 TILEMAP_GENERAL_WORLD_WIDTH,
                                 TILEMAP_GENERAL_WORLD_HEIGHT,
                                 TILEMAP_GENERAL_TILE_WIDTH,
@@ -2941,7 +2941,7 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
                         }
 
                         if metagame.debug_mode {
-                            real_pos := Vector2.{ tile_pos.x + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, tile_pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 };
+                            real_pos := Vector2.{ tile.pos.x + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, tile.pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 };
 
                             if tile.props & TileProperties.WATER_WARNING {
                                 DrawCircleV(real_pos, 4.0, WHITE);
@@ -2966,7 +2966,7 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
                             // Draw encased tiles
                             if tile.props & TileProperties.ENCASED {
                                 DrawRectangleV(
-                                    tile_pos,
+                                    tile.pos,
                                     Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
                                     TRANSPARENT_WHITE
                                 );
@@ -2978,9 +2978,6 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
                 #if DRAW_TRENCHES {
                     if context.camera.zoom >= CAMERA_ZOOM_LOD_MIN {
                         for tile: context.tiles {
-                            tile_pos  := get_tile_pos_by_id(tile.id);
-                            tile_dest := get_world_rect_from_pos(tile_pos);
-
                             if tile.trench_directions_corners_mostly_crust > 0 then draw_trench_corners_mostly_crust(tile);
                             if tile.trench_directions_corners_mostly_dirt  > 0 then draw_trench_corners_mostly_dirt(tile);
                         }
@@ -6148,6 +6145,7 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
     } else {
         new_tile := Tile.{
             id              = tile_id,
+            pos             = get_tile_pos_by_id(tile_id),
             type            = as_type,
             props           = 0,
             health          = DIRT_HEALTH,       // TODO ?
