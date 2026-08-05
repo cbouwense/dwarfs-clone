@@ -232,8 +232,6 @@ Metagame :: struct {
     level            : Level;
 }
 
-metagame : Metagame;
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Textures
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -444,6 +442,7 @@ TILE_DIRECTION_DELTAS :: [2] float32.[
 #add_context dt_seconds          : float;
 #add_context dt_seconds_raw      : float;
 #add_context game_state          : GameState;
+#add_context metagame            : Metagame;
 #add_context camera              : Camera2D;
 #add_context camera_zoom_min     : float32;
 #add_context world_cols          : int;
@@ -723,20 +722,20 @@ main :: () {
         GuiSetFont(font);
     }
 
-    while !metagame.should_quit_game {
-        defer metagame.should_quit_game = metagame.should_quit_game || WindowShouldClose();
-
-        if #complete metagame.thing_running == {
+    while !context.metagame.should_quit_game {
+        if #complete context.metagame.thing_running == {
             case .MAIN_MENU;
-                metagame = update_and_draw_frame_main_menu();
+                update_and_draw_frame_main_menu();
             case .ROUND;
-                if metagame.initialized {
-                    metagame = update_and_draw_frame_round();
+                if context.metagame.initialized {
+                    update_and_draw_frame_round();
                 } else {
-                    metagame = initialize_round();
+                    initialize_round();
                 }
             case .TUTORIAL_CONTROLS;
         }
+
+        defer context.metagame.should_quit_game = context.metagame.should_quit_game || WindowShouldClose();
     }
 }
 
@@ -1153,7 +1152,7 @@ determine_rotation_of_liquid_flowing_sprite :: (tile_id: s32, liquid_type: Liqui
     return 0;
 }
 
-update_and_draw_frame_main_menu :: () -> metagame: Metagame {
+update_and_draw_frame_main_menu :: () {
     screen_width  := GetScreenWidth();
     screen_height := GetScreenHeight();
 
@@ -1162,7 +1161,7 @@ update_and_draw_frame_main_menu :: () -> metagame: Metagame {
 
     ClearBackground(BEIGE);
 
-    if #complete metagame.main_menu_screen == {
+    if #complete context.metagame.main_menu_screen == {
         case .ROOT;
             // Button shared sizing stuff
             main_menu_button_width  := screen_width  * 0.15;
@@ -1194,9 +1193,9 @@ update_and_draw_frame_main_menu :: () -> metagame: Metagame {
                 clicked := GuiButton(start_new_button, "Start new round");
 
                 if clicked {
-                    metagame.thing_running = .ROUND;
-                    metagame.initialized   = false;
-                    metagame.level         = .NORMAL;
+                    context.metagame.thing_running = .ROUND;
+                    context.metagame.initialized   = false;
+                    context.metagame.level         = .NORMAL;
                 }
             }
 
@@ -1209,9 +1208,9 @@ update_and_draw_frame_main_menu :: () -> metagame: Metagame {
                 clicked := GuiButton(tutorial_button, "Tutorial");
 
                 if clicked {
-                    metagame.thing_running = .ROUND;
-                    metagame.initialized   = false;
-                    metagame.level         = .TUTORIAL_CONTROLS;
+                    context.metagame.thing_running = .ROUND;
+                    context.metagame.initialized   = false;
+                    context.metagame.level         = .TUTORIAL_CONTROLS;
                 }
             }
 
@@ -1236,16 +1235,14 @@ update_and_draw_frame_main_menu :: () -> metagame: Metagame {
 
                 clicked := GuiButton(quit_button, "Quit");
 
-                if clicked then metagame.should_quit_game = true;
+                if clicked then context.metagame.should_quit_game = true;
             }
         case .SETTINGS;
         case .TUTORIAL;
     }
-
-    return metagame;
 }
 
-update_and_draw_frame_round :: () -> metagame: Metagame {
+update_and_draw_frame_round :: () {
     // PERF: can this be keep_memory?
     table_reset(*tile_ids_to_dwarfs);
     table_reset(*tile_ids_to_goblins);
@@ -1263,9 +1260,6 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
             context.dt_seconds *= DT_MULTIPLIER_FAST_FORWARD;
         }
     }
-
-    panic_pause_is_active := context.game_state.panic_pause_timer_ms > 0 && context.game_state.panic_pause_timer_ms >= PANIC_PAUSE_COOLDOWN_MS - PANIC_PAUSE_DURATION_MS;
-    panic_pause_is_cooling_down := context.game_state.panic_pause_timer_ms > 0;
 
     context.mouse_pos_in_ui    = GetMousePosition();
     context.mouse_pos_in_world = GetScreenToWorld2D(context.mouse_pos_in_ui, context.camera);
@@ -1342,79 +1336,79 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
     //
     // Input
     //
-    {
+    input :: () {
         // TODO: codify metagame controls/
         //
         // Metagame controls
         if IsKeyPressed(.KEY_ESCAPE) {
-            if #complete metagame.state == {
+            if #complete context.metagame.state == {
                 case .RUNNING;
-                    metagame.state = .PAUSED;
+                    context.metagame.state = .PAUSED;
                 case .PAUSED;
-                    if #complete metagame.pause_state == {
+                    if #complete context.metagame.pause_state == {
                         case .MENU;
-                            metagame.state = .RUNNING;
+                            context.metagame.state = .RUNNING;
                         case .OPTIONS;
                             // TODO: do this somewhat intelligently
                             //
                             // Set any binds currently being set to not being set
-                            for *metagame.controls.select.binds                        it.is_being_rebound = false;
-                            for *metagame.controls.clear_selection.binds               it.is_being_rebound = false;
-                            for *metagame.controls.toggle_base_mode.binds              it.is_being_rebound = false;
-                            for *metagame.controls.add_iron.binds                      it.is_being_rebound = false;
-                            for *metagame.controls.select_as_place_miner_dwarf.binds   it.is_being_rebound = false;
-                            for *metagame.controls.select_as_place_warrior_dwarf.binds it.is_being_rebound = false;
-                            for *metagame.controls.toggle_dynamite_mode.binds          it.is_being_rebound = false;
-                            for *metagame.controls.select_as_place_goblin.binds        it.is_being_rebound = false;
-                            for *metagame.controls.toggle_obsidian_mode.binds          it.is_being_rebound = false;
-                            for *metagame.controls.toggle_wall_mode.binds              it.is_being_rebound = false;
-                            for *metagame.controls.drag_as_create_path.binds           it.is_being_rebound = false;
-                            for *metagame.controls.drag_cam.binds                      it.is_being_rebound = false;
-                            for *metagame.controls.move_camera_up.binds                it.is_being_rebound = false;
-                            for *metagame.controls.move_camera_down.binds              it.is_being_rebound = false;
-                            for *metagame.controls.move_camera_left.binds              it.is_being_rebound = false;
-                            for *metagame.controls.move_camera_right.binds             it.is_being_rebound = false;
-                            for *metagame.controls.toggle_remove_mode.binds            it.is_being_rebound = false;
-                            for *metagame.controls.panic_pause.binds                   it.is_being_rebound = false;
-                            for *metagame.controls.fast_forward.binds                  it.is_being_rebound = false;
+                            for *context.metagame.controls.select.binds                        it.is_being_rebound = false;
+                            for *context.metagame.controls.clear_selection.binds               it.is_being_rebound = false;
+                            for *context.metagame.controls.toggle_base_mode.binds              it.is_being_rebound = false;
+                            for *context.metagame.controls.add_iron.binds                      it.is_being_rebound = false;
+                            for *context.metagame.controls.select_as_place_miner_dwarf.binds   it.is_being_rebound = false;
+                            for *context.metagame.controls.select_as_place_warrior_dwarf.binds it.is_being_rebound = false;
+                            for *context.metagame.controls.toggle_dynamite_mode.binds          it.is_being_rebound = false;
+                            for *context.metagame.controls.select_as_place_goblin.binds        it.is_being_rebound = false;
+                            for *context.metagame.controls.toggle_obsidian_mode.binds          it.is_being_rebound = false;
+                            for *context.metagame.controls.toggle_wall_mode.binds              it.is_being_rebound = false;
+                            for *context.metagame.controls.drag_as_create_path.binds           it.is_being_rebound = false;
+                            for *context.metagame.controls.drag_cam.binds                      it.is_being_rebound = false;
+                            for *context.metagame.controls.move_camera_up.binds                it.is_being_rebound = false;
+                            for *context.metagame.controls.move_camera_down.binds              it.is_being_rebound = false;
+                            for *context.metagame.controls.move_camera_left.binds              it.is_being_rebound = false;
+                            for *context.metagame.controls.move_camera_right.binds             it.is_being_rebound = false;
+                            for *context.metagame.controls.toggle_remove_mode.binds            it.is_being_rebound = false;
+                            for *context.metagame.controls.panic_pause.binds                   it.is_being_rebound = false;
+                            for *context.metagame.controls.fast_forward.binds                  it.is_being_rebound = false;
 
-                            metagame.pause_state = .MENU;
+                            context.metagame.pause_state = .MENU;
                     }
                 case .GAME_OVER;
-                    if #complete metagame.game_over_state == {
+                    if #complete context.metagame.game_over_state == {
                         case .MENU; // Pressing escape does nothing in the game over menu
-                        case .LOOK_AROUND; metagame.game_over_state = .MENU;
+                        case .LOOK_AROUND; context.metagame.game_over_state = .MENU;
                     }
             }
         }
 
-        if IsKeyPressed(.KEY_G) metagame.debug_mode = !metagame.debug_mode;
+        if IsKeyPressed(.KEY_G) context.metagame.debug_mode = !context.metagame.debug_mode;
 
         // Update previous controls state
         context.game_state.controls_state_prev_frame = context.game_state.controls_state_this_frame;
 
         // Update controls this frame
-        {
-            context.game_state.controls_state_this_frame.select_is_pressed_once        = control_is_pressed(metagame.controls.select);
-            context.game_state.controls_state_this_frame.select_is_held_down           = control_is_down(metagame.controls.select);
-            context.game_state.controls_state_this_frame.selection_cleared             = control_is_pressed(metagame.controls.clear_selection);
-            context.game_state.controls_state_this_frame.toggle_base_mode              = control_is_pressed(metagame.controls.toggle_base_mode);
-            context.game_state.controls_state_this_frame.toggle_dynamite_mode          = control_is_pressed(metagame.controls.toggle_dynamite_mode);
-            context.game_state.controls_state_this_frame.toggle_obsidian_mode          = control_is_pressed(metagame.controls.toggle_obsidian_mode);
-            context.game_state.controls_state_this_frame.toggle_wall_mode              = control_is_pressed(metagame.controls.toggle_wall_mode);
-            context.game_state.controls_state_this_frame.toggle_remove_mode            = control_is_pressed(metagame.controls.toggle_remove_mode);
-            context.game_state.controls_state_this_frame.add_iron                      = control_is_pressed(metagame.controls.add_iron);
-            context.game_state.controls_state_this_frame.select_as_place_miner_dwarf   = control_is_down(metagame.controls.select_as_place_miner_dwarf);
-            context.game_state.controls_state_this_frame.select_as_place_warrior_dwarf = control_is_down(metagame.controls.select_as_place_warrior_dwarf);
-            context.game_state.controls_state_this_frame.select_as_place_goblin        = control_is_down(metagame.controls.select_as_place_goblin);
-            context.game_state.controls_state_this_frame.drag_cam_pressed              = control_is_pressed(metagame.controls.drag_cam);
-            context.game_state.controls_state_this_frame.drag_cam_down                 = control_is_down(metagame.controls.drag_cam);
-            context.game_state.controls_state_this_frame.move_camera_up                = control_is_down(metagame.controls.move_camera_up);
-            context.game_state.controls_state_this_frame.move_camera_down              = control_is_down(metagame.controls.move_camera_down);
-            context.game_state.controls_state_this_frame.move_camera_left              = control_is_down(metagame.controls.move_camera_left);
-            context.game_state.controls_state_this_frame.move_camera_right             = control_is_down(metagame.controls.move_camera_right);
-            context.game_state.controls_state_this_frame.panic_pause                   = control_is_pressed(metagame.controls.panic_pause);
-            context.game_state.controls_state_this_frame.fast_forward                  = control_is_down(metagame.controls.fast_forward);
+        update_controls_this_frame :: () {
+            context.game_state.controls_state_this_frame.select_is_pressed_once        = control_is_pressed(context.metagame.controls.select);
+            context.game_state.controls_state_this_frame.select_is_held_down           = control_is_down(context.metagame.controls.select);
+            context.game_state.controls_state_this_frame.selection_cleared             = control_is_pressed(context.metagame.controls.clear_selection);
+            context.game_state.controls_state_this_frame.toggle_base_mode              = control_is_pressed(context.metagame.controls.toggle_base_mode);
+            context.game_state.controls_state_this_frame.toggle_dynamite_mode          = control_is_pressed(context.metagame.controls.toggle_dynamite_mode);
+            context.game_state.controls_state_this_frame.toggle_obsidian_mode          = control_is_pressed(context.metagame.controls.toggle_obsidian_mode);
+            context.game_state.controls_state_this_frame.toggle_wall_mode              = control_is_pressed(context.metagame.controls.toggle_wall_mode);
+            context.game_state.controls_state_this_frame.toggle_remove_mode            = control_is_pressed(context.metagame.controls.toggle_remove_mode);
+            context.game_state.controls_state_this_frame.add_iron                      = control_is_pressed(context.metagame.controls.add_iron);
+            context.game_state.controls_state_this_frame.select_as_place_miner_dwarf   = control_is_down(context.metagame.controls.select_as_place_miner_dwarf);
+            context.game_state.controls_state_this_frame.select_as_place_warrior_dwarf = control_is_down(context.metagame.controls.select_as_place_warrior_dwarf);
+            context.game_state.controls_state_this_frame.select_as_place_goblin        = control_is_down(context.metagame.controls.select_as_place_goblin);
+            context.game_state.controls_state_this_frame.drag_cam_pressed              = control_is_pressed(context.metagame.controls.drag_cam);
+            context.game_state.controls_state_this_frame.drag_cam_down                 = control_is_down(context.metagame.controls.drag_cam);
+            context.game_state.controls_state_this_frame.move_camera_up                = control_is_down(context.metagame.controls.move_camera_up);
+            context.game_state.controls_state_this_frame.move_camera_down              = control_is_down(context.metagame.controls.move_camera_down);
+            context.game_state.controls_state_this_frame.move_camera_left              = control_is_down(context.metagame.controls.move_camera_left);
+            context.game_state.controls_state_this_frame.move_camera_right             = control_is_down(context.metagame.controls.move_camera_right);
+            context.game_state.controls_state_this_frame.panic_pause                   = control_is_pressed(context.metagame.controls.panic_pause);
+            context.game_state.controls_state_this_frame.fast_forward                  = control_is_down(context.metagame.controls.fast_forward);
 
             context.game_state.controls_state_this_frame.started_to_draw_path = (
                 context.game_state.controls_state_this_frame.select_is_pressed_once         &&
@@ -1430,6 +1424,7 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
                 (context.game_state.controls_state_prev_frame.drawing_path || context.game_state.controls_state_prev_frame.started_to_draw_path)
             );
         }
+        update_controls_this_frame();
 
         // TODO: should this go here?
         //
@@ -1460,13 +1455,14 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
             }
         }
     }
+    input();
 
     //
     // Update
     //
-    {
+    update :: () {
         // Update unpausable things
-        {
+        update_unpausable_things :: () {
             // Debug break tiles
             hovered_tile_rect := get_tile_rect_that_pos_is_within(get_world_width(), get_world_height(), TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, context.mouse_pos_in_world);
             if IsMouseButtonDown(MouseButton.MOUSE_BUTTON_LEFT) && IsKeyDown(KeyboardKey.KEY_LEFT_CONTROL) {
@@ -1481,9 +1477,9 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
                 CAMERA_ZOOM_MIN_DEBUG  :: 0.01;
                 CAMERA_ZOOM_MAX        :: 13.0;
 
-                camera_zoom_min := ifx metagame.debug_mode then CAMERA_ZOOM_MIN_DEBUG else context.camera_zoom_min;
+                camera_zoom_min := ifx context.metagame.debug_mode then CAMERA_ZOOM_MIN_DEBUG else context.camera_zoom_min;
 
-                can_move_camera := metagame.debug_mode || metagame.state == .RUNNING || (metagame.state == .GAME_OVER && metagame.game_over_state == .LOOK_AROUND);
+                can_move_camera := context.metagame.debug_mode || context.metagame.state == .RUNNING || (context.metagame.state == .GAME_OVER && context.metagame.game_over_state == .LOOK_AROUND);
 
                 if can_move_camera && context.game_state.controls_state_this_frame.move_camera_up    context.camera.target.y -= CAMERA_MOVE_SPEED_BASE;
                 if can_move_camera && context.game_state.controls_state_this_frame.move_camera_down  context.camera.target.y += CAMERA_MOVE_SPEED_BASE;
@@ -1538,22 +1534,25 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
             }
             update_timers();
         }
+        update_unpausable_things();
 
         // Update time remaining for game
-        if metagame.state == .RUNNING {
+        if context.metagame.state == .RUNNING {
             context.game_state.time_remaining_ms -= xx (context.dt_seconds_raw * 1000);
 
             if context.game_state.time_remaining_ms <= 0 {
                 context.game_state.time_remaining_ms = 0;
-                metagame.state = .GAME_OVER;
+                context.metagame.state = .GAME_OVER;
             }
         }
 
         // Update pausable things
-        if metagame.state == .RUNNING {
+        update_pausable_things :: () {
             // Update user action
             {
                 if context.game_state.controls_state_this_frame.panic_pause {
+                    panic_pause_is_cooling_down := context.game_state.panic_pause_timer_ms > 0;
+
                     if !panic_pause_is_cooling_down {
                         context.game_state.panic_pause_timer_ms = PANIC_PAUSE_COOLDOWN_MS;
                     }
@@ -1563,7 +1562,7 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
                     case .NORMAL;
                         if context.game_state.controls_state_this_frame.select_as_place_miner_dwarf {
                             if context.game_state.controls_state_this_frame.select_is_pressed_once {
-                                if metagame.debug_mode {
+                                if context.metagame.debug_mode {
                                     tile_id := get_tile_id_by_pos(context.mouse_pos_in_world);
                                     create_dwarf(get_tile_pos_by_id(tile_id), .MINER);
                                 }
@@ -1571,7 +1570,7 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
                         }
                         else if context.game_state.controls_state_this_frame.select_as_place_warrior_dwarf {
                             if context.game_state.controls_state_this_frame.select_is_pressed_once {
-                                if metagame.debug_mode {
+                                if context.metagame.debug_mode {
                                     tile_id := get_tile_id_by_pos(context.mouse_pos_in_world);
                                     create_dwarf(get_tile_pos_by_id(tile_id), .WARRIOR);
                                 }
@@ -1636,7 +1635,7 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
                                 // Draw out the path that is currently being traced, if it is more than 1 tile long.
                                 potential_path_being_traced_1, potential_path_being_traced_2 := get_paths(mouse_pos_when_path_creation_started, context.mouse_pos_in_world);
 
-                                if !metagame.debug_mode {
+                                if !context.metagame.debug_mode {
                                     potential_path_cost := get_path_cost(potential_path_being_traced_1) + get_path_cost(potential_path_being_traced_2);
 
                                     unaffordable_tile_count := cast(int) ceil((cast(float) (potential_path_cost - context.game_state.gold)) / cast(float)GOLD_COST_PATH_STEP);
@@ -1703,7 +1702,7 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
                                 {
                                     gold_cost := get_path_cost(path_being_traced_1) + get_path_cost(path_being_traced_2);
 
-                                    if !metagame.debug_mode context.game_state.gold -= gold_cost;
+                                    if !context.metagame.debug_mode context.game_state.gold -= gold_cost;
                                     if gold_cost > 0 create_gold_particle(context.mouse_pos_in_world, -1 * gold_cost);
                                 }
                             }
@@ -1711,12 +1710,12 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
                     case .ADD_BASE;
                         // TODO: check if placement is valid
                         if context.game_state.controls_state_this_frame.select_is_pressed_once {
-                            if metagame.debug_mode || context.game_state.gold >= GOLD_COST_BASE {
+                            if context.metagame.debug_mode || context.game_state.gold >= GOLD_COST_BASE {
                                 tile_id         := get_tile_id_by_pos(context.mouse_pos_in_world);
                                 tile_is_mined   := is_tile_fully_mined(tile_id);
                                 tile_is_encased := is_tile_encased(tile_id);
 
-                                if metagame.debug_mode || (tile_is_mined && !tile_is_encased) {
+                                if context.metagame.debug_mode || (tile_is_mined && !tile_is_encased) {
                                     // Add base.
                                     base_rect := get_tile_rect_that_pos_is_within(get_world_width(), get_world_height(), TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, context.mouse_pos_in_world);
                                     base_pos  := Vector2.{ base_rect.x, base_rect.y };
@@ -1725,7 +1724,7 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
                                     create_base(base_pos, false);
 
                                     // Debit the gold cost.
-                                    if !metagame.debug_mode context.game_state.gold -= GOLD_COST_BASE;
+                                    if !context.metagame.debug_mode context.game_state.gold -= GOLD_COST_BASE;
                                     create_gold_particle(base_pos, -1 * GOLD_COST_BASE);
 
                                     // Reset control mode.
@@ -1735,7 +1734,7 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
                         }
                     case .ADD_DYNAMITE;
                         if context.game_state.controls_state_this_frame.select_is_pressed_once {
-                            if metagame.debug_mode || context.game_state.gold >= GOLD_COST_DYNAMITE {
+                            if context.metagame.debug_mode || context.game_state.gold >= GOLD_COST_DYNAMITE {
                                 // Try to add dynamite to the selected tile
                                 tile_id         := get_tile_id_by_pos(context.mouse_pos_in_world);
                                 tile_is_mined   := is_tile_fully_mined(tile_id);
@@ -1746,7 +1745,7 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
                                     set_tile_property(tile_id, .HAS_DYNAMITE);
 
                                     // Debit the gold cost.
-                                    if !metagame.debug_mode context.game_state.gold -= GOLD_COST_DYNAMITE;
+                                    if !context.metagame.debug_mode context.game_state.gold -= GOLD_COST_DYNAMITE;
                                     create_gold_particle(context.mouse_pos_in_world, -1 * GOLD_COST_DYNAMITE);
 
                                     // Reset control mode.
@@ -1756,7 +1755,7 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
                         }
                     case .ADD_OBSIDIAN;
                         if context.game_state.controls_state_this_frame.select_is_held_down {
-                            if metagame.debug_mode || context.game_state.gold >= GOLD_COST_OBSIDIAN {
+                            if context.metagame.debug_mode || context.game_state.gold >= GOLD_COST_OBSIDIAN {
                                 // Try to turn the selected tile into obsidian
                                 tile_id := get_tile_id_by_pos(context.mouse_pos_in_world);
 
@@ -1827,14 +1826,14 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
                                     handle_encasement(tile_id);
 
                                     // Debit the gold cost.
-                                    if !metagame.debug_mode then context.game_state.gold -= GOLD_COST_OBSIDIAN;
+                                    if !context.metagame.debug_mode then context.game_state.gold -= GOLD_COST_OBSIDIAN;
                                     create_gold_particle(context.mouse_pos_in_world, -1 * GOLD_COST_OBSIDIAN);
                                 }
                             }
                         }
                     case .ADD_WALL;
                         if context.game_state.controls_state_this_frame.select_is_held_down {
-                            if metagame.debug_mode || context.game_state.gold >= GOLD_COST_WALL {
+                            if context.metagame.debug_mode || context.game_state.gold >= GOLD_COST_WALL {
                                 // Try to turn the selected tile into a wall
                                 tile_id := get_tile_id_by_pos(context.mouse_pos_in_world);
                                 tile_is_fully_mined   := is_tile_fully_mined(tile_id);
@@ -1854,7 +1853,7 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
                                     set_tile_as_type(tile_id, .WALL, false, false);
 
                                     // Debit the gold cost.
-                                    if !metagame.debug_mode context.game_state.gold -= GOLD_COST_WALL;
+                                    if !context.metagame.debug_mode context.game_state.gold -= GOLD_COST_WALL;
                                     create_gold_particle(context.mouse_pos_in_world, -1 * GOLD_COST_WALL);
                                 }
                             }
@@ -1872,7 +1871,7 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
                 }
             }
 
-            if !panic_pause_is_active {
+            update_panic_pausable_things :: () {
                 // Update dwarves
                 update_dwarves :: () {
                     // PERF: just go backwards over array and do unordered removal
@@ -2156,7 +2155,7 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
                                 // It's possible for the tile the dwarf is mining to suddenly be changed, like into obsidian.
                                 // In this case, the dwarf should abandon the idea of mining its current tile.
                                 if tile_to_mine.health <= 0 || !is_tile_mineable(dwarf.tile_id_mining) {
-                                    if metagame.debug_mode print("INFO: Dwarf was mining tile % but suddenly it was no longer mineable.\n", dwarf.tile_id_mining);
+                                    if context.metagame.debug_mode print("INFO: Dwarf was mining tile % but suddenly it was no longer mineable.\n", dwarf.tile_id_mining);
                                     array_reset(*(dwarf.tile_ids_on_path));
                                     dwarf_transition_state(dwarf, .DECIDING);
                                 } else {
@@ -2305,7 +2304,7 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
                 update_dwarves();
 
                 // Update goblins
-                {
+                update_goblins :: () {
                     for *goblin: goblins {
                         goblin_center   := get_rect_center(get_world_rect_from_pos(goblin.pos));
                         goblin_tile_id  := get_tile_id_by_pos(goblin_center);
@@ -2525,9 +2524,10 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
                         }
                     }
                 }
+                update_goblins();
 
                 // Update bases
-                {
+                update_bases :: () {
                     #if DWARF_MINER_SPAWN_ENABLED {
                         for *base: bases {
                             if base.spawn_dwarf_cooldown_ms <= 0 {
@@ -2540,9 +2540,10 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
                         }
                     }
                 }
+                update_bases();
 
                 // Update liquid timers
-                should_spread_lava_this_frame  := context.game_state.lava_flow_cooldown_ms <= 0;
+                should_spread_lava_this_frame := context.game_state.lava_flow_cooldown_ms <= 0;
                 if should_spread_lava_this_frame {
                     context.game_state.lava_flow_cooldown_ms = LAVA_FLOW_COOLDOWN_MS;
                 } else {
@@ -2550,8 +2551,7 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
                 }
 
                 // Update tiles
-                UPDATE_TILES :: true;
-                #if UPDATE_TILES {
+                update_tiles :: (should_spread_lava_this_frame: bool) {
                     for *tile: context.tiles {
                         if #complete tile.type == {
                             case .UNTOUCHED_DIRT;
@@ -2617,10 +2617,10 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
                         }
                     }
                 }
+                UPDATE_TILES :: true;
+                #if UPDATE_TILES then update_tiles(should_spread_lava_this_frame);
 
-                // Update iron
-                UPDATE_IRON :: true;
-                #if UPDATE_IRON {
+                update_iron :: () {
                     if context.game_state.controls_state_this_frame.add_iron {
                         iron_rect := get_tile_rect_that_pos_is_within(get_world_width(), get_world_height(), TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, context.mouse_pos_in_world);
                         tile_pos  := Vector2.{ iron_rect.x, iron_rect.y };
@@ -2628,10 +2628,10 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
                         spawn_iron(tile_id);
                     }
                 }
+                update_iron();
 
                 // Update particles
-                UPDATE_PARTICLES :: true;
-                #if UPDATE_PARTICLES {
+                update_particles :: () {
                     particle_ids_to_kill_this_frame: [..] s32;
                     particle_ids_to_kill_this_frame.allocator = temp;
 
@@ -2682,10 +2682,14 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
 
                     for particle_ids_to_kill_this_frame kill_particle_by_id(it);
                 }
+                UPDATE_PARTICLES :: true;
+                #if UPDATE_PARTICLES update_particles();
             }
+            panic_pause_is_active := context.game_state.panic_pause_timer_ms > 0 && context.game_state.panic_pause_timer_ms >= PANIC_PAUSE_COOLDOWN_MS - PANIC_PAUSE_DURATION_MS;
+            if !panic_pause_is_active then update_panic_pausable_things();
 
             // Update alerts
-            {
+            update_alerts :: () {
                 alert_indices_to_remove_this_frame : [..] s64;
                 alert_indices_to_remove_this_frame.allocator = temp;
 
@@ -2712,6 +2716,7 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
                     array_unordered_remove_by_index(*alerts, it);
                 }
             }
+            update_alerts();
 
             // Update alert banner text
             if context.game_state.alert_banner_text_ms > 0 {
@@ -2721,7 +2726,9 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
                 context.game_state.alert_banner_text = "";
             }
         }
+        if context.metagame.state == .RUNNING then update_pausable_things();
     }
+    update();
 
     //
     // Draw
@@ -2935,7 +2942,7 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
                             DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_TREASURE, tile_dest, Vector2.{0,0}, 0.0, WHITE);
                         }
 
-                        if metagame.debug_mode {
+                        if context.metagame.debug_mode {
                             real_pos := Vector2.{ tile.pos.x + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, tile.pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 };
 
                             if tile.props & TileProperties.WATER_WARNING {
@@ -3048,7 +3055,7 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
             draw_hovered_tile :: () {
                 hovered_tile_rect := get_tile_rect_that_pos_is_within(get_world_width(), get_world_height(), TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, context.mouse_pos_in_world);
                 DrawRectangleRec(hovered_tile_rect, TRANSPARENT_WHITE);
-                if metagame.debug_mode {
+                if context.metagame.debug_mode {
                     found_tile, tile_id := find_tile_id_by_pos(get_rect_pos(hovered_tile_rect));
                     if found_tile {
                         tile_isnt_dirt, tile_index := table_find(*context.tile_ids_to_index, tile_id);
@@ -3209,7 +3216,7 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
 
             debug_text_y : s32 = 10;
             INCREMENT_Y :: 20;
-            if metagame.debug_mode {
+            if context.metagame.debug_mode {
                 DrawFPS(10, read_then_increment(*debug_text_y, INCREMENT_Y));
                 DrawText(tprint("dwarf count: %\0", dwarves.count).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 12, WHITE);
                 #if false {
@@ -3380,19 +3387,19 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
                             // TODO: isn't this really bad to mutate state in the draw part or whatever?
                             if context.game_state.controls_state_this_frame.select_is_pressed_once {
                                 has_control_mode := (
-                                    control.id == metagame.controls.select.id ||                 
-                                    control.id == metagame.controls.toggle_base_mode.id ||       
-                                    control.id == metagame.controls.toggle_dynamite_mode.id ||   
-                                    control.id == metagame.controls.toggle_obsidian_mode.id ||   
-                                    control.id == metagame.controls.toggle_wall_mode.id ||       
-                                    control.id == metagame.controls.toggle_remove_mode.id
+                                    control.id == context.metagame.controls.select.id ||                 
+                                    control.id == context.metagame.controls.toggle_base_mode.id ||       
+                                    control.id == context.metagame.controls.toggle_dynamite_mode.id ||   
+                                    control.id == context.metagame.controls.toggle_obsidian_mode.id ||   
+                                    control.id == context.metagame.controls.toggle_wall_mode.id ||       
+                                    control.id == context.metagame.controls.toggle_remove_mode.id
                                 );
 
                                 if has_control_mode {
                                     context.game_state.control_mode = get_control_mode_from_control(control);
                                 }
 
-                                if control.id ==metagame.controls.panic_pause.id {
+                                if control.id == context.metagame.controls.panic_pause.id {
                                     if context.game_state.panic_pause_timer_ms <= 0 {
                                         context.game_state.panic_pause_timer_ms = PANIC_PAUSE_COOLDOWN_MS;
                                     }
@@ -3400,7 +3407,7 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
                             }
 
                             if context.game_state.controls_state_this_frame.select_is_held_down {
-                                if control.id ==metagame.controls.fast_forward.id {
+                                if control.id == context.metagame.controls.fast_forward.id {
                                     context.game_state.controls_state_this_frame.fast_forward = true;
                                 }
                             }
@@ -3441,18 +3448,18 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
                         }
                     }
 
-                    draw_hud_control_icon(metagame.controls.toggle_remove_mode, TILEMAP_SOURCE_RECT_REMOVE);
-                    draw_hud_control_icon(metagame.controls.toggle_dynamite_mode, TILEMAP_SOURCE_RECT_DYNAMITE, GOLD_COST_DYNAMITE);
-                    draw_hud_control_icon(metagame.controls.toggle_base_mode, TILEMAP_SOURCE_RECT_BASE, GOLD_COST_BASE);
-                    draw_hud_control_icon(metagame.controls.toggle_wall_mode, TILEMAP_SOURCE_RECT_WALL, GOLD_COST_WALL);
-                    draw_hud_control_icon(metagame.controls.toggle_obsidian_mode, TILEMAP_SOURCE_RECT_OBSIDIAN, GOLD_COST_OBSIDIAN);
-                    draw_hud_control_icon(metagame.controls.panic_pause, TILEMAP_SOURCE_RECT_OBSIDIAN);
-                    draw_hud_control_icon(metagame.controls.fast_forward, TILEMAP_SOURCE_RECT_OBSIDIAN);
+                    draw_hud_control_icon(context.metagame.controls.toggle_remove_mode, TILEMAP_SOURCE_RECT_REMOVE);
+                    draw_hud_control_icon(context.metagame.controls.toggle_dynamite_mode, TILEMAP_SOURCE_RECT_DYNAMITE, GOLD_COST_DYNAMITE);
+                    draw_hud_control_icon(context.metagame.controls.toggle_base_mode, TILEMAP_SOURCE_RECT_BASE, GOLD_COST_BASE);
+                    draw_hud_control_icon(context.metagame.controls.toggle_wall_mode, TILEMAP_SOURCE_RECT_WALL, GOLD_COST_WALL);
+                    draw_hud_control_icon(context.metagame.controls.toggle_obsidian_mode, TILEMAP_SOURCE_RECT_OBSIDIAN, GOLD_COST_OBSIDIAN);
+                    draw_hud_control_icon(context.metagame.controls.panic_pause, TILEMAP_SOURCE_RECT_OBSIDIAN);
+                    draw_hud_control_icon(context.metagame.controls.fast_forward, TILEMAP_SOURCE_RECT_OBSIDIAN);
                 }
             }
 
             // Draw menus
-            if #complete metagame.state == {
+            if #complete context.metagame.state == {
                 case .RUNNING; // no op
 
                 case .PAUSED;
@@ -3460,7 +3467,7 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
                     PAUSED_FONT_SIZE :: 56;
                     DrawText(PAUSED_TEXT, xx (GetScreenWidth() * 0.5 - MeasureText(PAUSED_TEXT, PAUSED_FONT_SIZE) * 0.5), 20, PAUSED_FONT_SIZE, WHITE);
 
-                    if #complete metagame.pause_state == {
+                    if #complete context.metagame.pause_state == {
                         case .MENU;
                             // Button shared sizing stuff
                             pause_menu_button_width  := screen_width  * 0.15;
@@ -3496,7 +3503,7 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
 
                                 clicked := GuiButton(resume_button, "RESUME");
 
-                                if clicked then metagame.state = .RUNNING;
+                                if clicked then context.metagame.state = .RUNNING;
                             }
 
                             // Options button
@@ -3507,7 +3514,7 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
 
                                 clicked := GuiButton(options_button, "OPTIONS");
 
-                                if clicked then metagame.pause_state = .OPTIONS;
+                                if clicked then context.metagame.pause_state = .OPTIONS;
                             }
 
                             // Main menu button
@@ -3519,10 +3526,10 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
                                 clicked := GuiButton(main_menu_button, "MAIN MENU");
 
                                 if clicked {
-                                    metagame.state            = .RUNNING;
-                                    metagame.thing_running    = .MAIN_MENU;
-                                    metagame.main_menu_screen = .ROOT;
-                                    metagame.initialized      = false;
+                                    context.metagame.state            = .RUNNING;
+                                    context.metagame.thing_running    = .MAIN_MENU;
+                                    context.metagame.main_menu_screen = .ROOT;
+                                    context.metagame.initialized      = false;
                                 }
                             }
 
@@ -3534,7 +3541,7 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
 
                                 clicked := GuiButton(quit_button, "QUIT");
 
-                                if clicked then metagame.should_quit_game = true;
+                                if clicked then context.metagame.should_quit_game = true;
                             }
 
                         case .OPTIONS;
@@ -3617,18 +3624,18 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
                                     `options_row_y += `OPTIONS_Y_INCREMENT;
                                 }
 
-                                keybind_row(*(metagame.controls).toggle_base_mode);
-                                keybind_row(*(metagame.controls).toggle_dynamite_mode);
-                                keybind_row(*(metagame.controls).toggle_obsidian_mode);
-                                keybind_row(*(metagame.controls).toggle_wall_mode);
-                                keybind_row(*(metagame.controls).drag_cam);
-                                keybind_row(*(metagame.controls).move_camera_up);
-                                keybind_row(*(metagame.controls).move_camera_down);
-                                keybind_row(*(metagame.controls).move_camera_left);
-                                keybind_row(*(metagame.controls).move_camera_right);
-                                keybind_row(*(metagame.controls).toggle_remove_mode);
-                                keybind_row(*(metagame.controls).panic_pause);
-                                keybind_row(*(metagame.controls).fast_forward);
+                                keybind_row(*(context.metagame.controls).toggle_base_mode);
+                                keybind_row(*(context.metagame.controls).toggle_dynamite_mode);
+                                keybind_row(*(context.metagame.controls).toggle_obsidian_mode);
+                                keybind_row(*(context.metagame.controls).toggle_wall_mode);
+                                keybind_row(*(context.metagame.controls).drag_cam);
+                                keybind_row(*(context.metagame.controls).move_camera_up);
+                                keybind_row(*(context.metagame.controls).move_camera_down);
+                                keybind_row(*(context.metagame.controls).move_camera_left);
+                                keybind_row(*(context.metagame.controls).move_camera_right);
+                                keybind_row(*(context.metagame.controls).toggle_remove_mode);
+                                keybind_row(*(context.metagame.controls).panic_pause);
+                                keybind_row(*(context.metagame.controls).fast_forward);
                             }
                     }
 
@@ -3636,7 +3643,7 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
                     TEXT :: "GAME OVER";
                     FONT_SIZE :: 56;
                     DrawText(TEXT, xx (GetScreenWidth() * 0.5 - MeasureText(TEXT, FONT_SIZE) * 0.5), 20, FONT_SIZE, WHITE);
-                    if #complete metagame.game_over_state == {
+                    if #complete context.metagame.game_over_state == {
                         case .MENU;
                             // Button shared sizing stuff
                             game_over_menu_button_width  := screen_width  * 0.15;
@@ -3671,7 +3678,7 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
 
                                 clicked := GuiButton(look_around_button, "LOOK AROUND");
 
-                                if clicked metagame.game_over_state = .LOOK_AROUND;
+                                if clicked then context.metagame.game_over_state = .LOOK_AROUND;
                             }
 
                             // Restart button
@@ -3682,9 +3689,7 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
 
                                 clicked := GuiButton(restart_button, "RESTART");
 
-                                if clicked {
-                                    metagame = initialize_round();
-                                }
+                                if clicked then initialize_round();
                             }
 
                             // Main menu button
@@ -3708,7 +3713,7 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
 
                                 clicked := GuiButton(quit_button, "QUIT");
 
-                                if clicked metagame.should_quit_game = true;
+                                if clicked then context.metagame.should_quit_game = true;
                             }
                         
                         case .LOOK_AROUND; // Don't render anything
@@ -3731,8 +3736,6 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
         #if DRAW_UI then draw_ui();
     }
     draw();
-
-    return metagame;
 }
 
 create_alert :: (alert_type: AlertType, pos: Vector2) -> Alert {
@@ -4065,7 +4068,7 @@ initialize_round :: () -> Metagame {
     GAME_STARTING_GOLD_MEDIUM :: 150;
     GAME_STARTING_GOLD_EASY   :: 250;
 
-    if #complete metagame.level == {
+    if #complete context.metagame.level == {
         case .NORMAL;
             context.world_rows = WORLD_COLS_HUGE;
             context.world_cols = WORLD_ROWS_HUGE;
@@ -4225,19 +4228,19 @@ initialize_round :: () -> Metagame {
         alert_banner_text_ms       = 0,
     };
 
-    metagame.state            = .RUNNING;
-    metagame.thing_running    = .ROUND;
-    metagame.initialized      = true;
-    metagame.should_quit_game = false;
-    metagame.debug_mode       = false;
-    metagame.pause_state      = .MENU;
-    metagame.game_over_state  = .MENU;
-    metagame.main_menu_screen = .ROOT;
-    metagame.controls         = controls;
+    context.metagame.state            = .RUNNING;
+    context.metagame.thing_running    = .ROUND;
+    context.metagame.initialized      = true;
+    context.metagame.should_quit_game = false;
+    context.metagame.debug_mode       = false;
+    context.metagame.pause_state      = .MENU;
+    context.metagame.game_over_state  = .MENU;
+    context.metagame.main_menu_screen = .ROOT;
+    context.metagame.controls         = controls;
 
     GENERATE_CAVES_ENABLED :: true;
 
-    if #complete metagame.level == {
+    if #complete context.metagame.level == {
         case .NORMAL;
             // Initialize caves
             #if GENERATE_CAVES_ENABLED {
@@ -4346,8 +4349,6 @@ initialize_round :: () -> Metagame {
     context.camera.offset   = Vector2.{ GetScreenWidth() * 0.5, GetScreenHeight() * 0.5 };
     context.camera.rotation = 0.0;
     context.camera.zoom     = 2.0;
-
-    return metagame;
 }
 
 dwarf_transition_state :: (dwarf: *Dwarf, new_state: DwarfState) {
@@ -5128,7 +5129,7 @@ game_over_if_touching_home_base :: (tile_id: s32) {
 
         home_base_rect := Rectangle.{ base.pos.x, base.pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
         if CheckCollisionRecs(home_base_rect, kill_rect) {
-            metagame.state = .GAME_OVER;
+            context.metagame.state = .GAME_OVER;
         }
     }
 }
@@ -5205,7 +5206,7 @@ kill_goblin_by_id :: (goblin_id: s32) {
 kill_base_by_index :: (base_index: s64) {
     base_being_killed := bases[base_index];
     if base_being_killed.is_home_base {
-        metagame.state = .GAME_OVER;
+        context.metagame.state = .GAME_OVER;
     }
 
     base_id_being_swapped := bases[bases.count - 1].id;

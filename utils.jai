@@ -179,7 +179,7 @@ enum_count :: ($T: Type) -> int {
 assert_soft :: (condition: bool, format_string: string = "", args: .. Any) #expand {
     #if PAUSE_ON_PANIC {
         if !condition {
-            `metagame.state = .PAUSED;
+            context.metagame.state = .PAUSED;
             print(format_string, ..args);
         }
     } else {
