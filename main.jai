@@ -1875,6 +1875,7 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
             if !panic_pause_is_active {
                 // Update dwarves
                 {
+                    // PERF: just go backwards over array and do unordered removal
                     dwarf_ids_to_kill_this_frame : [..] s32;
 
                     for *dwarf, dwarf_index: dwarves {
@@ -1882,7 +1883,9 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
 
                         dwarf_center   := get_rect_center(get_world_rect_from_pos(dwarf.pos));
                         dwarf_tile_id  := get_tile_id_by_pos(dwarf_center);
-                        dwarf_tile_pos := get_tile_pos_by_id(dwarf_tile_id);
+                        dwarf_tile     := get_tile_by_id(dwarf_tile_id);
+
+
 
                         if #complete dwarf.state == {
                             // You've just landed on a tile, now figure out what to do next
@@ -1935,7 +1938,7 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
                                     set_tile_as_type(dwarf_tile_id, .HOLE, false, false);
                                     handle_encasement(dwarf_tile_id);
 
-                                    // TODO: animation I guess
+                                    // TODO: animation, I guess?
 
                                     is_dwarf_done_deciding = true;
                                     dwarf_can_remain_undecided = true;
@@ -2111,8 +2114,8 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
                                 }
 
                                 // Turn the dwarf sprite to face whatever way it should be
-                                if dwarf.is_facing_left  && target_tile_pos.x > dwarf_tile_pos.x then dwarf.is_facing_left = false;
-                                if !dwarf.is_facing_left && target_tile_pos.x < dwarf_tile_pos.x then dwarf.is_facing_left = true;
+                                if dwarf.is_facing_left  && target_tile_pos.x > dwarf_tile.pos.x then dwarf.is_facing_left = false;
+                                if !dwarf.is_facing_left && target_tile_pos.x < dwarf_tile.pos.x then dwarf.is_facing_left = true;
 
                                 // Calculate the squared distance (use squared distances so we can avoid a sqrtf).
                                 dx := target_tile_pos.x - dwarf.pos.x;
@@ -2200,10 +2203,7 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
                                                 if found {
                                                     // Teleport dwarf to the center of the tile he's standing on before changing his pathing.
                                                     // Without doing this, the dwarf can end up being misaligned.
-                                                    dwarf_center   := get_rect_center(get_world_rect_from_pos(dwarf.pos));
-                                                    dwarf_tile_id  := get_tile_id_by_pos(dwarf_center);
-                                                    dwarf_tile_pos := get_tile_pos_by_id(dwarf_tile_id);
-                                                    dwarf.pos = dwarf_tile_pos;
+                                                    dwarf.pos = dwarf_tile.pos;
 
                                                     tile_ids_to_new_treasure := get_tile_ids_from_pos_to_pos(get_tile_pos_by_id(dwarf.tile_id_mining), get_tile_pos_by_id(new_treasure_tile_id));
                                                     array_reset(*dwarf.tile_ids_on_path);
@@ -2228,8 +2228,8 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
                                     goblin_tile_id := get_tile_id_by_pos(goblin_center);
 
                                     // Turn the dwarf to face whichever way it should be.
-                                    if dwarf.is_facing_left  && goblin.pos.x > dwarf_tile_pos.x then dwarf.is_facing_left = false;
-                                    if !dwarf.is_facing_left && goblin.pos.x < dwarf_tile_pos.x then dwarf.is_facing_left = true;
+                                    if dwarf.is_facing_left  && goblin.pos.x > dwarf_tile.pos.x then dwarf.is_facing_left = false;
+                                    if !dwarf.is_facing_left && goblin.pos.x < dwarf_tile.pos.x then dwarf.is_facing_left = true;
 
                                     if is_tile_id_neighbor_of_tile_id_cardinal(dwarf_tile_id, goblin_tile_id) {
                                         assert_soft(dwarf.goblin_id_attacking == goblin.id, "Dwarf % thinks he's attacking goblin % but really found goblin %", dwarf.id, dwarf.goblin_id_attacking, goblin.id);
