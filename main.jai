@@ -1884,7 +1884,11 @@ update_and_draw_frame_round :: () {
                         dwarf_tile_id  := get_tile_id_by_pos(dwarf_center);
                         dwarf_tile     := get_tile_by_id(dwarf_tile_id);
 
-
+                        // Kill dwarf if touching liquid
+                        if is_tile_liquid(dwarf_tile) {
+                            array_add(*dwarf_ids_to_kill_this_frame, dwarf.id);
+                            is_dwarf_done_updating = true;
+                        }
 
                         if #complete dwarf.state == {
                             // You've just landed on a tile, now figure out what to do next
@@ -2564,7 +2568,7 @@ update_and_draw_frame_round :: () {
                             case .HOLE;
 
                             case .WATER_STILL; {
-                                inflict_liquid_consequences(tile.id);
+                                inflict_non_dwarf_liquid_consequences(tile.id);
 
                                 reset_animation := sprite_update(*tile.animated_sprite, context.dt_seconds);
 
@@ -2574,7 +2578,7 @@ update_and_draw_frame_round :: () {
                             }
 
                             case .WATER_FLOWING; {
-                                inflict_liquid_consequences(tile.id);
+                                inflict_non_dwarf_liquid_consequences(tile.id);
 
                                 tile.animated_sprite.rotation = determine_rotation_of_liquid_flowing_sprite(tile.id, .WATER);
 
@@ -2590,7 +2594,7 @@ update_and_draw_frame_round :: () {
                             }
 
                             case .LAVA_STILL; {
-                                inflict_liquid_consequences(tile.id);
+                                inflict_non_dwarf_liquid_consequences(tile.id);
 
                                 reset_animation := sprite_update(*tile.animated_sprite, context.dt_seconds);
                                 
@@ -2600,7 +2604,7 @@ update_and_draw_frame_round :: () {
                             }
 
                             case .LAVA_FLOWING; {
-                                inflict_liquid_consequences(tile.id);
+                                inflict_non_dwarf_liquid_consequences(tile.id);
 
                                 tile.animated_sprite.rotation = determine_rotation_of_liquid_flowing_sprite(tile.id, .LAVA);
 
@@ -3847,7 +3851,7 @@ draw_offscreen_notification :: (center_pos: Vector2, is_warning: bool, color: Co
     DrawRing(indicator_pos, r3, r3 + 2.0, 0, 360, 0, Color.{ color.r, color.g, color.b, a3 });
 }
 
-inflict_liquid_consequences :: (tile_id: s32) {
+inflict_non_dwarf_liquid_consequences :: (tile_id: s32) {
     game_over_if_touching_home_base(tile_id);
     destroy_any_dynamite_touching_tile_id(tile_id);
 }
@@ -4062,7 +4066,7 @@ get_world_height :: () -> int {
     return context.world_rows * TILEMAP_GENERAL_WORLD_HEIGHT;
 }
 
-initialize_round :: () -> Metagame {
+initialize_round :: () {
     GAME_TIME_REMAINING_MS    :: 900_000; // 15 minutes
     GAME_STARTING_GOLD_HARD   :: 0;
     GAME_STARTING_GOLD_MEDIUM :: 150;
@@ -5258,6 +5262,8 @@ get_tile_by_id :: (tile_id: s32) -> *Tile {
     return *context.tiles[tile_index];
 }
 
+// TODO: rename these as "by id" or something
+
 is_tile_fully_mined :: (tile_id: s32) -> bool {
     tile := get_tile_by_id(tile_id);
     if tile == null return false;
@@ -5269,7 +5275,6 @@ is_tile_cave :: (tile_id: s32) -> bool {
     if tile == null return false;
     return tile.type == .CAVE;
 }
-
 
 is_tile_iron :: (tile_id: s32) -> bool {
     tile := get_tile_by_id(tile_id);
@@ -5323,6 +5328,13 @@ is_tile_dirt :: (tile_id: s32) -> bool {
     tile := get_tile_by_id(tile_id);
     if tile == null return true;
     return tile.type == .UNTOUCHED_DIRT || tile.type == .TOUCHED_DIRT;
+}
+
+is_tile_liquid :: (tile: Tile) -> bool {
+    return (
+        tile.type == .LAVA_FLOWING  || tile.type == .LAVA_STILL ||
+        tile.type == .WATER_FLOWING || tile.type == .WATER_STILL
+    );
 }
 
 // Tile properties
