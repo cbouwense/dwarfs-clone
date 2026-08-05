@@ -1874,7 +1874,7 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
 
             if !panic_pause_is_active {
                 // Update dwarves
-                {
+                update_dwarves :: () {
                     // PERF: just go backwards over array and do unordered removal
                     dwarf_ids_to_kill_this_frame : [..] s32;
 
@@ -2302,6 +2302,7 @@ update_and_draw_frame_round :: () -> metagame: Metagame {
 
                     for dwarf_ids_to_kill_this_frame kill_dwarf_by_id(it);
                 }
+                update_dwarves();
 
                 // Update goblins
                 {
