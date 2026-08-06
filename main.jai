@@ -46,23 +46,23 @@ DWARF_MINER_SPAWN_MS :: 10000;
 DWARF_MINER_SPAWN_ENABLED :: true;
 DWARF_MINER_STARTING_HP :: 75;
 
-DWARF_MINER_ANIMATION_IDLE_FRAME_DURATION_MS :: 100;
-DWARF_MINER_ANIMATION_IDLE_START_FRAME       :: 0;
-DWARF_MINER_ANIMATION_IDLE_FRAME_COUNT       :: 8;
-DWARF_MINER_ANIMATION_WALK_FRAME_DURATION_MS :: 100;
-DWARF_MINER_ANIMATION_WALK_START_FRAME       :: 8;
-DWARF_MINER_ANIMATION_WALK_FRAME_COUNT       :: 8;
-DWARF_MINER_ANIMATION_MINE_DOWN_FRAME_DURATION_MS :: 100;
-DWARF_MINER_ANIMATION_MINE_DOWN_START_FRAME       :: 16;
+DWARF_MINER_ANIMATION_IDLE_START_FRAME            :: 1;
+DWARF_MINER_ANIMATION_IDLE_FRAME_COUNT            :: 8;
+DWARF_MINER_ANIMATION_IDLE_FRAME_DURATION_MS      :: 100;
+DWARF_MINER_ANIMATION_WALK_START_FRAME            :: 9;
+DWARF_MINER_ANIMATION_WALK_FRAME_COUNT            :: 8;
+DWARF_MINER_ANIMATION_WALK_FRAME_DURATION_MS      :: 100;
+DWARF_MINER_ANIMATION_MINE_DOWN_START_FRAME       :: 17;
 DWARF_MINER_ANIMATION_MINE_DOWN_FRAME_COUNT       :: 8;
-DWARF_MINER_ANIMATION_MINE_DOWN_FRAME_ACTION      :: 22;
-DWARF_MINER_ANIMATION_MINE_SIDE_FRAME_DURATION_MS :: 100;
-DWARF_MINER_ANIMATION_MINE_SIDE_START_FRAME       :: 24;
+DWARF_MINER_ANIMATION_MINE_DOWN_FRAME_ACTION      :: 23;
+DWARF_MINER_ANIMATION_MINE_DOWN_FRAME_DURATION_MS :: 100;
+DWARF_MINER_ANIMATION_MINE_SIDE_START_FRAME       :: 25;
 DWARF_MINER_ANIMATION_MINE_SIDE_FRAME_COUNT       :: 8;
-DWARF_MINER_ANIMATION_MINE_SIDE_FRAME_ACTION      :: 29;
-DWARF_MINER_ANIMATION_DIE_FRAME_DURATION_MS  :: 100;
-DWARF_MINER_ANIMATION_DIE_START_FRAME        :: 48;
-DWARF_MINER_ANIMATION_DIE_FRAME_COUNT        :: 6;
+DWARF_MINER_ANIMATION_MINE_SIDE_FRAME_ACTION      :: 30;
+DWARF_MINER_ANIMATION_MINE_SIDE_FRAME_DURATION_MS :: 100;
+DWARF_MINER_ANIMATION_DIE_START_FRAME             :: 49;
+DWARF_MINER_ANIMATION_DIE_FRAME_COUNT             :: 6;
+DWARF_MINER_ANIMATION_DIE_FRAME_DURATION_MS       :: 100;
 
 DWARF_WARRIOR_START_COUNT :: 1;
 DWARF_WARRIOR_DIG_COOLDOWN_MS    :: 2000;
@@ -72,6 +72,20 @@ DWARF_WARRIOR_DAMAGE_ATTACK_PER_SWING :: 50;
 DWARF_WARRIOR_HIT_CHANCE :: 0.80; // TODO: will have to be based on level
 DWARF_WARRIOR_SPAWN_ENABLED :: true;
 DWARF_WARRIOR_STARTING_HP :: 100;
+
+DWARF_WARRIOR_ANIMATION_IDLE_START_FRAME        :: 1;
+DWARF_WARRIOR_ANIMATION_IDLE_FRAME_COUNT        :: 5;
+DWARF_WARRIOR_ANIMATION_IDLE_FRAME_DURATION_MS  :: 100;
+DWARF_WARRIOR_ANIMATION_WALK_START_FRAME        :: 6;
+DWARF_WARRIOR_ANIMATION_WALK_FRAME_COUNT        :: 8;
+DWARF_WARRIOR_ANIMATION_WALK_FRAME_DURATION_MS  :: 100;
+DWARF_WARRIOR_ANIMATION_CHOP_START_FRAME        :: 14;
+DWARF_WARRIOR_ANIMATION_CHOP_FRAME_COUNT        :: 7;
+DWARF_WARRIOR_ANIMATION_CHOP_FRAME_ACTION       :: 17;
+DWARF_WARRIOR_ANIMATION_CHOP_FRAME_DURATION_MS  :: 100;
+DWARF_WARRIOR_ANIMATION_DIE_START_FRAME         :: 38;
+DWARF_WARRIOR_ANIMATION_DIE_FRAME_COUNT         :: 7;
+DWARF_WARRIOR_ANIMATION_DIE_FRAME_DURATION_MS   :: 100;
 
 GOBLIN_MOVE_SPEED :: 50;
 GOBLIN_ATTACK_COOLDOWN_MS :: 1000;
@@ -328,12 +342,21 @@ TILEMAP_DWARF_MINER_TILE_HEIGHT  :: 32;
 TILEMAP_DWARF_MINER_WORLD_WIDTH  :: TILEMAP_GENERAL_TILE_WIDTH  * DWARF_MINER_SCALE;
 TILEMAP_DWARF_MINER_WORLD_HEIGHT :: TILEMAP_GENERAL_TILE_HEIGHT * DWARF_MINER_SCALE;
 
+DWARF_WARRIOR_SCALE :: 1.3;
+TILEMAP_DWARF_WARRIOR_MAP_WIDTH    :: 2112;
+TILEMAP_DWARF_WARRIOR_MAP_HEIGHT   :: 32;
+TILEMAP_DWARF_WARRIOR_TILE_WIDTH   :: 32;
+TILEMAP_DWARF_WARRIOR_TILE_HEIGHT  :: 32;
+TILEMAP_DWARF_WARRIOR_WORLD_WIDTH  :: TILEMAP_GENERAL_TILE_WIDTH  * DWARF_WARRIOR_SCALE;
+TILEMAP_DWARF_WARRIOR_WORLD_HEIGHT :: TILEMAP_GENERAL_TILE_HEIGHT * DWARF_WARRIOR_SCALE;
+
 tilemap_texture_general : Texture;
 lava_flowing_texture    : Texture;
 water_flowing_texture   : Texture;
 water_still_texture     : Texture;
 dirt_texture            : Texture;
 dwarf_miner_texture     : Texture;
+dwarf_warrior_texture   : Texture;
 
 init_textures :: () {
     // TODO: have just one big happy atlas, maybe?
@@ -343,6 +366,7 @@ init_textures :: () {
     water_still_texture     = LoadTexture("data/water-still.png");
     dirt_texture            = LoadTexture("data/dirt.png");
     dwarf_miner_texture     = LoadTexture("data/dwarf-miner.png");
+    dwarf_warrior_texture   = LoadTexture("data/dwarf-warrior.png");
 
     // The plan is just to just render a big-ass quad and tile the dirt over it.
     SetTextureWrap(dirt_texture, .TEXTURE_WRAP_REPEAT);
@@ -584,12 +608,19 @@ DwarfType :: enum {
     WARRIOR;
 }
 
-DwarfAnimation :: enum {
-    IDLE :: 0;
-    WALK :: 1;
+DwarfAnimationMiner :: enum {
+    IDLE      :: 0;
+    WALK      :: 1;
     MINE_DOWN :: 2;
     MINE_SIDE :: 3;
-    DIE  :: 4;
+    DIE       :: 4;
+};
+
+DwarfAnimationWarrior :: enum {
+    IDLE :: 0;
+    WALK :: 1;
+    CHOP :: 2;
+    DIE  :: 3;
 };
 
 Dwarf :: struct {
@@ -599,7 +630,7 @@ Dwarf :: struct {
     kind = Dwarf;
 
     state               : DwarfState;
-    animations          : [5] AnimatedSprite;
+    animations          : [..] AnimatedSprite;
     did_anim_action     : bool;
     attack_cooldown_ms  : s32;
     tile_id_mining      : s32;
@@ -785,7 +816,7 @@ try_to_add_warning_and_alert_markers :: (tile_id: s32, cave_type: CaveType) {
     }
 }
 
-dwarf_maybe_set_active_animation :: (dwarf: *Dwarf, active_animation_index: DwarfAnimation) {
+dwarf_maybe_set_active_animation :: (dwarf: *Dwarf, active_animation_index: s64) {
     for dwarf.animations {
         // If there are any animations currently playing, let them finish before moving on
         if it_index != xx active_animation_index && it.active then return;
@@ -793,12 +824,19 @@ dwarf_maybe_set_active_animation :: (dwarf: *Dwarf, active_animation_index: Dwar
     dwarf_set_active_animation(dwarf, active_animation_index);
 }
     
-dwarf_set_active_animation :: (dwarf: *Dwarf, active_animation_index: DwarfAnimation) {
-    dwarf.animations[DwarfAnimation.IDLE].active = active_animation_index == DwarfAnimation.IDLE;
-    dwarf.animations[DwarfAnimation.WALK].active = active_animation_index == DwarfAnimation.WALK;
-    dwarf.animations[DwarfAnimation.MINE_DOWN].active = active_animation_index == DwarfAnimation.MINE_DOWN;
-    dwarf.animations[DwarfAnimation.MINE_SIDE].active = active_animation_index == DwarfAnimation.MINE_SIDE;
-    dwarf.animations[DwarfAnimation.DIE].active  = active_animation_index == DwarfAnimation.DIE;
+dwarf_set_active_animation :: (dwarf: *Dwarf, active_animation_index: s64) {
+    if dwarf.dwarf_type == .MINER {
+        dwarf.animations[DwarfAnimationMiner.IDLE].active      = active_animation_index == xx DwarfAnimationMiner.IDLE;
+        dwarf.animations[DwarfAnimationMiner.WALK].active      = active_animation_index == xx DwarfAnimationMiner.WALK;
+        dwarf.animations[DwarfAnimationMiner.MINE_DOWN].active = active_animation_index == xx DwarfAnimationMiner.MINE_DOWN;
+        dwarf.animations[DwarfAnimationMiner.MINE_SIDE].active = active_animation_index == xx DwarfAnimationMiner.MINE_SIDE;
+        dwarf.animations[DwarfAnimationMiner.DIE].active       = active_animation_index == xx DwarfAnimationMiner.DIE;
+    } else {
+        dwarf.animations[DwarfAnimationWarrior.IDLE].active = active_animation_index == xx DwarfAnimationWarrior.IDLE;
+        dwarf.animations[DwarfAnimationWarrior.WALK].active = active_animation_index == xx DwarfAnimationWarrior.WALK;
+        dwarf.animations[DwarfAnimationWarrior.CHOP].active = active_animation_index == xx DwarfAnimationWarrior.CHOP;
+        dwarf.animations[DwarfAnimationWarrior.DIE].active  = active_animation_index == xx DwarfAnimationWarrior.DIE;
+    }
 }
 
 update_trench_walls_if_necessary :: (tile: *Tile) {
@@ -1661,7 +1699,7 @@ update_and_draw_frame_round :: () {
 
                                     kill_particle_by_id(context.game_state.selected_dwarf_particle_id);
 
-                                    dwarves[selected_dwarf_index].state = .DECIDING;
+                                    dwarf_transition_state(*dwarves[selected_dwarf_index], .DECIDING);
                                     dwarves[selected_dwarf_index].ignore_goblins_for = 2;
 
                                     context.game_state.selected_dwarf_id = 0;
@@ -1689,7 +1727,7 @@ update_and_draw_frame_round :: () {
                                     dwarves[selected_dwarf_index].pos = get_rect_pos(tile_rect);
                                     
                                     // Stop the dwarf from moving so you can think while dragging a path
-                                    dwarves[selected_dwarf_index].state = .IDLE;
+                                    dwarf_transition_state(*dwarves[selected_dwarf_index], .IDLE);
 
                                     // Remove its current pathing
                                     array_reset(*(dwarves[selected_dwarf_index].tile_ids_on_path));
@@ -2233,14 +2271,21 @@ update_and_draw_frame_round :: () {
                                     dwarf_transition_state(dwarf, .DECIDING);
                                 } else {
                                     // TODO: probably want a function for this
-                                    anim_index   : DwarfAnimation;
+                                    anim_index   : s64;
                                     action_frame : int;
-                                    if dwarf.tile_id_mining == dwarf_tile_id + context.world_cols {
-                                        anim_index   = DwarfAnimation.MINE_DOWN;
-                                        action_frame = DWARF_MINER_ANIMATION_MINE_DOWN_FRAME_ACTION; 
-                                    } else {
-                                        anim_index   = DwarfAnimation.MINE_SIDE;
-                                        action_frame = DWARF_MINER_ANIMATION_MINE_SIDE_FRAME_ACTION; 
+
+                                    if #complete dwarf.dwarf_type == {
+                                        case .MINER;
+                                            if dwarf.tile_id_mining == dwarf_tile_id + context.world_cols {
+                                                anim_index   = xx DwarfAnimationMiner.MINE_DOWN;
+                                                action_frame = DWARF_MINER_ANIMATION_MINE_DOWN_FRAME_ACTION;
+                                            } else {
+                                                anim_index   = xx DwarfAnimationMiner.MINE_SIDE;
+                                                action_frame = DWARF_MINER_ANIMATION_MINE_SIDE_FRAME_ACTION;
+                                            }
+                                        case .WARRIOR;
+                                            anim_index   = xx DwarfAnimationWarrior.CHOP;
+                                            action_frame = DWARF_WARRIOR_ANIMATION_CHOP_FRAME_ACTION;
                                     }
 
                                     frame := sprite_animation_get_current_frame(dwarf.animations[anim_index]);
@@ -2307,15 +2352,23 @@ update_and_draw_frame_round :: () {
                                         assert_soft(dwarf.goblin_id_attacking == goblin.id, "Dwarf % thinks he's attacking goblin % but really found goblin %", dwarf.id, dwarf.goblin_id_attacking, goblin.id);
                                         
                                         // TODO: probably want a function for this
-                                        anim_index   : DwarfAnimation;
+                                        anim_index   : s64;
                                         action_frame : int;
-                                        if dwarf.tile_id_mining == dwarf_tile_id + context.world_cols {
-                                            anim_index   = DwarfAnimation.MINE_DOWN;
-                                            action_frame = DWARF_MINER_ANIMATION_MINE_DOWN_FRAME_ACTION; 
-                                        } else {
-                                            anim_index = DwarfAnimation.MINE_SIDE;
-                                            action_frame = DWARF_MINER_ANIMATION_MINE_SIDE_FRAME_ACTION; 
+
+                                        if #complete dwarf.dwarf_type == {
+                                            case .MINER;
+                                                if dwarf.tile_id_mining == dwarf_tile_id + context.world_cols {
+                                                    anim_index   = xx DwarfAnimationMiner.MINE_DOWN;
+                                                    action_frame = DWARF_MINER_ANIMATION_MINE_DOWN_FRAME_ACTION; 
+                                                } else {
+                                                    anim_index   = xx DwarfAnimationMiner.MINE_SIDE;
+                                                    action_frame = DWARF_MINER_ANIMATION_MINE_SIDE_FRAME_ACTION; 
+                                                }
+                                            case .WARRIOR;
+                                                anim_index   = xx DwarfAnimationWarrior.CHOP;
+                                                action_frame = DWARF_WARRIOR_ANIMATION_CHOP_FRAME_ACTION; 
                                         }
+
                                         frame := sprite_animation_get_current_frame(dwarf.animations[anim_index]);
 
                                         if frame == action_frame && !dwarf.did_anim_action {
@@ -3114,10 +3167,10 @@ update_and_draw_frame_round :: () {
                         sprite_draw(
                             anim,
                             dwarf.pos,
-                            xx TILEMAP_DWARF_MINER_WORLD_WIDTH,
-                            xx TILEMAP_DWARF_MINER_WORLD_HEIGHT,
-                            TILEMAP_DWARF_MINER_TILE_WIDTH,
-                            TILEMAP_DWARF_MINER_TILE_HEIGHT,
+                            xx ifx dwarf.dwarf_type == .MINER then TILEMAP_DWARF_MINER_WORLD_WIDTH  else TILEMAP_DWARF_WARRIOR_WORLD_WIDTH,
+                            xx ifx dwarf.dwarf_type == .MINER then TILEMAP_DWARF_MINER_WORLD_HEIGHT else TILEMAP_DWARF_WARRIOR_WORLD_HEIGHT,
+                            ifx dwarf.dwarf_type == .MINER then TILEMAP_DWARF_MINER_TILE_WIDTH  else TILEMAP_DWARF_WARRIOR_TILE_WIDTH,
+                            ifx dwarf.dwarf_type == .MINER then TILEMAP_DWARF_MINER_TILE_HEIGHT else TILEMAP_DWARF_WARRIOR_TILE_HEIGHT,
                             dwarf.is_facing_left,
                         );
                     }
@@ -4457,17 +4510,20 @@ dwarf_transition_state :: (dwarf: *Dwarf, new_state: DwarfState) {
     // TODO: MINE_SIDe
     if #complete new_state == {
         case .ATTACKING;
-            dwarf_set_active_animation(dwarf, .MINE_SIDE);
+            if #complete dwarf.dwarf_type == {
+                case .MINER;   dwarf_set_active_animation(dwarf, xx DwarfAnimationMiner.MINE_SIDE);
+                case .WARRIOR; dwarf_set_active_animation(dwarf, xx DwarfAnimationWarrior.CHOP);
+            }
         case .DECIDING;  
         case .IDLE;
-            dwarf_set_active_animation(dwarf, .IDLE);
+            dwarf_set_active_animation(dwarf, xx DwarfAnimationMiner.IDLE); // TODO: potential for bug!!!!!!
         case .MINING;
-            if dwarf.direction == .NORTH then dwarf_set_active_animation(dwarf, .MINE_SIDE);
-            if dwarf.direction == .SOUTH then dwarf_set_active_animation(dwarf, .MINE_DOWN);
-            if dwarf.direction == .EAST  then dwarf_set_active_animation(dwarf, .MINE_SIDE);
-            if dwarf.direction == .WEST  then dwarf_set_active_animation(dwarf, .MINE_SIDE);
+            if dwarf.direction == .NORTH then dwarf_set_active_animation(dwarf, xx DwarfAnimationMiner.MINE_SIDE);
+            if dwarf.direction == .SOUTH then dwarf_set_active_animation(dwarf, xx DwarfAnimationMiner.MINE_DOWN);
+            if dwarf.direction == .EAST  then dwarf_set_active_animation(dwarf, xx DwarfAnimationMiner.MINE_SIDE);
+            if dwarf.direction == .WEST  then dwarf_set_active_animation(dwarf, xx DwarfAnimationMiner.MINE_SIDE);
         case .MOVING;
-            dwarf_set_active_animation(dwarf, .WALK);
+            dwarf_set_active_animation(dwarf, xx DwarfAnimationMiner.WALK); // TODO: potential for bug!!!!!!
     }
 }
 
@@ -4776,7 +4832,7 @@ taunt_dwarf :: (dwarf_id: s32, taunter_tile_id: s32) {
     else assert(false);
 
     array_reset(*dwarves[dwarf_index].tile_ids_on_path);
-    dwarves[dwarf_index].state     = .ATTACKING;
+    dwarf_transition_state(*dwarves[dwarf_index], .ATTACKING);
     dwarves[dwarf_index].direction = direction_to_face_taunter;
 }
 
@@ -5079,41 +5135,71 @@ create_dwarf :: (pos: Vector2, dwarf_type: DwarfType) -> Dwarf {
     dwarf_id   := increment_then_read(*entity_id_counter);
     direction  := cast(Direction) cast(int) random_get_within_range(0, 3);
 
-    dwarf_miner_animated_sprite_base := AnimatedSprite.{
-        texture     = dwarf_miner_texture,
-        active      = false,
-        first_frame = 0,
-        color       = WHITE,
-        rotation    = 0.0,
+    dwarf_animated_sprite_base := AnimatedSprite.{
+        texture           = ifx dwarf_type == .MINER then dwarf_miner_texture else dwarf_warrior_texture,
+        active            = false,
+        first_frame       = 1,
+        color             = WHITE,
+        rotation          = 0.0,
         frame_count       = 8,
         frame_duration_ms = 100,
         timer_ms          = 0,
         loops             = true,
     };
 
-    dwarf_miner_animated_sprite_idle := dwarf_miner_animated_sprite_base;
+    // Miner
+    dwarf_miner_animated_sprite_idle := dwarf_animated_sprite_base;
     dwarf_miner_animated_sprite_idle.first_frame = DWARF_MINER_ANIMATION_IDLE_START_FRAME;
     dwarf_miner_animated_sprite_idle.active = true;
 
-    dwarf_miner_animated_sprite_walk := dwarf_miner_animated_sprite_base;
+    dwarf_miner_animated_sprite_walk := dwarf_animated_sprite_base;
     dwarf_miner_animated_sprite_walk.first_frame = DWARF_MINER_ANIMATION_WALK_START_FRAME;
 
-    dwarf_miner_animated_sprite_mine_down := dwarf_miner_animated_sprite_base;
+    dwarf_miner_animated_sprite_mine_down := dwarf_animated_sprite_base;
     dwarf_miner_animated_sprite_mine_down.first_frame = DWARF_MINER_ANIMATION_MINE_DOWN_START_FRAME;
 
-    dwarf_miner_animated_sprite_mine_side := dwarf_miner_animated_sprite_base;
+    dwarf_miner_animated_sprite_mine_side := dwarf_animated_sprite_base;
     dwarf_miner_animated_sprite_mine_side.first_frame = DWARF_MINER_ANIMATION_MINE_SIDE_START_FRAME;
 
-    dwarf_miner_animated_sprite_die := dwarf_miner_animated_sprite_base;
+    dwarf_miner_animated_sprite_die := dwarf_animated_sprite_base;
     dwarf_miner_animated_sprite_die.first_frame = DWARF_MINER_ANIMATION_DIE_START_FRAME;
 
-    animations := AnimatedSprite.[
+    // Warrior
+    dwarf_warrior_animated_sprite_idle := dwarf_animated_sprite_base;
+    dwarf_warrior_animated_sprite_idle.first_frame = DWARF_WARRIOR_ANIMATION_IDLE_START_FRAME;
+    dwarf_warrior_animated_sprite_idle.frame_count = DWARF_WARRIOR_ANIMATION_IDLE_FRAME_COUNT;
+    dwarf_warrior_animated_sprite_idle.active = true;
+
+    dwarf_warrior_animated_sprite_walk := dwarf_animated_sprite_base;
+    dwarf_warrior_animated_sprite_walk.first_frame = DWARF_WARRIOR_ANIMATION_WALK_START_FRAME;
+    dwarf_warrior_animated_sprite_walk.frame_count = DWARF_WARRIOR_ANIMATION_WALK_FRAME_COUNT;
+
+    dwarf_warrior_animated_sprite_chop := dwarf_animated_sprite_base;
+    dwarf_warrior_animated_sprite_chop.first_frame = DWARF_WARRIOR_ANIMATION_CHOP_START_FRAME;
+    dwarf_warrior_animated_sprite_chop.frame_count = DWARF_WARRIOR_ANIMATION_CHOP_FRAME_COUNT;
+
+    dwarf_warrior_animated_sprite_die := dwarf_animated_sprite_base;
+    dwarf_warrior_animated_sprite_die.first_frame = DWARF_WARRIOR_ANIMATION_DIE_START_FRAME;
+    dwarf_warrior_animated_sprite_die.frame_count = DWARF_WARRIOR_ANIMATION_DIE_FRAME_COUNT;
+
+    animations_miner := AnimatedSprite.[
         dwarf_miner_animated_sprite_idle,
         dwarf_miner_animated_sprite_walk,
         dwarf_miner_animated_sprite_mine_down,
         dwarf_miner_animated_sprite_mine_side,
         dwarf_miner_animated_sprite_die,
     ];
+
+    animations_warrior := AnimatedSprite.[
+        dwarf_warrior_animated_sprite_idle,
+        dwarf_warrior_animated_sprite_walk,
+        dwarf_warrior_animated_sprite_chop,
+        dwarf_warrior_animated_sprite_die,
+    ];
+
+    animations: [..] AnimatedSprite;
+    if dwarf_type == .MINER   then for animations_miner   array_add(*animations, it);
+    if dwarf_type == .WARRIOR then for animations_warrior array_add(*animations, it);
 
     dwarf := Dwarf.{
         id                    = dwarf_id,
@@ -5127,11 +5213,8 @@ create_dwarf :: (pos: Vector2, dwarf_type: DwarfType) -> Dwarf {
         goblin_id_attacking   = 0,
         attack_cooldown_ms    = dwarf_get_attack_cooldown_by_type(dwarf_type),
         is_facing_left        = false,
-        // direction intentionally not set
         // tile_ids_on_path intentionally not set
     };
-
-    dwarf_tile_id := get_tile_id_by_pos(pos);
 
     table_set(*dwarf_id_to_index, dwarf_id, dwarves.count);
     array_add(*dwarves, dwarf);
@@ -5316,12 +5399,6 @@ kill_base_by_id :: (base_id: s32) {
     kill_base_by_index(base_index);
 }
 
-// get_neighbor_tile_id_by_index :: (tile_id: s32, direction_index: s64) -> s32 {
-//     dx := get_tile_direction_id_deltas(direction_index)[0];
-//     dy := get_tile_direction_id_deltas(direction_index)[1];
-//     return tile_id + dx + dy;
-// }
-
 get_neighbor_tile_id_by_direction :: (tile_id: s32, direction: Direction) -> s32 {
     dx := get_tile_direction_id_deltas(direction)[0];
     dy := get_tile_direction_id_deltas(direction)[1];
@@ -5462,17 +5539,6 @@ is_tile_warning_lava :: (tile_id: s32) -> bool {
 
 is_tile_alert_lava :: (tile_id: s32) -> bool {
     return does_tile_have_property(tile_id, TileProperties.LAVA_ALERT);
-}
-
-does_tile_id_need_wall_sprites :: (tile_id: s32) -> bool {
-    return (
-        is_tile_cave(tile_id)          ||
-        is_tile_fully_mined(tile_id)   ||
-        is_tile_water_still(tile_id)   ||
-        is_tile_water_flowing(tile_id) ||
-        is_tile_lava_still(tile_id) ||
-        is_tile_lava_flowing(tile_id)
-    );
 }
 
 // TODO: entity kind, probably
@@ -5842,63 +5908,6 @@ are_all_neighbors_unable_to_be_spread_to :: (tile_id: s32) -> bool {
         !is_neighbor_east_spreadable &&
         !is_neighbor_west_spreadable
     );
-}
-
-are_all_neighbors_liquid :: (tile_id: s32) -> bool {
-    north_tile_id : s32 = tile_id - xx context.world_rows;
-    south_tile_id : s32 = tile_id + xx context.world_rows;
-    east_tile_id  : s32 = tile_id + 1;
-    west_tile_id  : s32 = tile_id - 1;
-
-    is_neighbor_north_water_still := is_tile_water_still(north_tile_id);
-    is_neighbor_south_water_still := is_tile_water_still(south_tile_id);
-    is_neighbor_east_water_still  := is_tile_water_still(east_tile_id);
-    is_neighbor_west_water_still  := is_tile_water_still(west_tile_id);
-
-    is_neighbor_north_water_flowing := is_tile_water_flowing(north_tile_id);
-    is_neighbor_south_water_flowing := is_tile_water_flowing(south_tile_id);
-    is_neighbor_east_water_flowing  := is_tile_water_flowing(east_tile_id);
-    is_neighbor_west_water_flowing  := is_tile_water_flowing(west_tile_id);
-
-    is_neighbor_north_lava_still := is_tile_lava_still(north_tile_id);
-    is_neighbor_south_lava_still := is_tile_lava_still(south_tile_id);
-    is_neighbor_east_lava_still  := is_tile_lava_still(east_tile_id);
-    is_neighbor_west_lava_still  := is_tile_lava_still(west_tile_id);
-
-    is_neighbor_north_lava_flowing := is_tile_lava_flowing(north_tile_id);
-    is_neighbor_south_lava_flowing := is_tile_lava_flowing(south_tile_id);
-    is_neighbor_east_lava_flowing  := is_tile_lava_flowing(east_tile_id);
-    is_neighbor_west_lava_flowing  := is_tile_lava_flowing(west_tile_id);
-
-    is_neighbor_north_liquid := (
-        is_neighbor_north_water_still   ||
-        is_neighbor_north_water_flowing ||
-        is_neighbor_north_lava_still    ||
-        is_neighbor_north_lava_flowing
-    );
-
-    is_neighbor_south_liquid := (
-        is_neighbor_south_water_still   ||
-        is_neighbor_south_water_flowing ||
-        is_neighbor_south_lava_still    ||
-        is_neighbor_south_lava_flowing
-    );
-
-    is_neighbor_east_liquid := (
-        is_neighbor_east_water_still   ||
-        is_neighbor_east_water_flowing ||
-        is_neighbor_east_lava_still    ||
-        is_neighbor_east_lava_flowing
-    );
-
-    is_neighbor_west_liquid := (
-        is_neighbor_west_water_still   ||
-        is_neighbor_west_water_flowing ||
-        is_neighbor_west_lava_still    ||
-        is_neighbor_west_lava_flowing
-    );
-
-    return is_neighbor_north_liquid && is_neighbor_south_liquid && is_neighbor_east_liquid && is_neighbor_west_liquid;
 }
 
 try_to_set_cardinal_neighbors_as_flowing_tile_type :: (tile_id: s32, as_type: TileType) -> (directions_flowed: [4] bool) {
@@ -6320,7 +6329,7 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
                 texture           = water_still_texture,
                 active            = true,
                 color             = WHITE,
-                first_frame       = 0, 
+                first_frame       = 1, 
                 frame_count       = WATER_STILL_FRAME_COUNT,
                 frame_duration_ms = WATER_STILL_FRAME_DURATION_MS,
                 timer_ms          = WATER_STILL_FRAME_COUNT * WATER_STILL_FRAME_DURATION_MS, // Start at the end so it resets immediately so water starts flowing instantly
@@ -6334,7 +6343,7 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
                 texture           = water_flowing_texture,
                 active            = true,
                 color             = WHITE,
-                first_frame       = 0,
+                first_frame       = 1,
                 frame_count       = WATER_FLOWING_FRAME_COUNT,
                 frame_duration_ms = WATER_FLOW_COOLDOWN_MS / WATER_FLOWING_FRAME_COUNT,
                 timer_ms          = 0,
@@ -6351,7 +6360,7 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
                 texture           = lava_flowing_texture,
                 active            = true,
                 color             = WHITE,
-                first_frame       = 0,
+                first_frame       = 1,
                 frame_count       = LAVA_FLOWING_FRAME_COUNT,
                 frame_duration_ms = LAVA_FLOW_COOLDOWN_MS / LAVA_FLOWING_FRAME_COUNT,
                 timer_ms          = 0,

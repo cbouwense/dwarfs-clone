@@ -1,7 +1,7 @@
 Sprite :: struct {
     texture     : Texture;
     active      : bool;
-    first_frame : int; // Starts from 0
+    first_frame : int; // 1-based (as opposed to 0-based)
     color       : Color;
     rotation    : float;
 }
@@ -35,7 +35,7 @@ sprite_draw :: (sprite: $T/Sprite, pos: Vector2, sprite_width: int, sprite_heigh
     assert(texture_map_tile_height > 0, "You probably want a positive height. If not, delete this assertion");
     if !sprite.active return;
 
-    frame        := sprite_animation_get_current_frame(sprite);
+    frame        := sprite_animation_get_current_frame(sprite) - 1;
     source_rect  := Rectangle.{xx (frame * texture_map_tile_width), 0.0, xx (ifx flip_vertically then -texture_map_tile_width else texture_map_tile_width), xx texture_map_tile_height};
     dest_rect    := Rectangle.{ pos.x + sprite_width * 0.5, pos.y + sprite_height * 0.5, xx sprite_width, xx sprite_height }; 
 
