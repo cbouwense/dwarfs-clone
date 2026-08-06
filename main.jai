@@ -334,7 +334,7 @@ TILEMAP_SOURCE_RECT_DIRT := Rectangle.{
     TILEMAP_GENERAL_TILE_HEIGHT,
 };
 
-DWARF_MINER_SCALE :: 1.1;
+DWARF_MINER_SCALE :: 1.0;
 TILEMAP_DWARF_MINER_MAP_WIDTH    :: 3071;
 TILEMAP_DWARF_MINER_MAP_HEIGHT   :: 192;
 TILEMAP_DWARF_MINER_TILE_WIDTH   :: 32;
@@ -342,7 +342,7 @@ TILEMAP_DWARF_MINER_TILE_HEIGHT  :: 32;
 TILEMAP_DWARF_MINER_WORLD_WIDTH  :: TILEMAP_GENERAL_TILE_WIDTH  * DWARF_MINER_SCALE;
 TILEMAP_DWARF_MINER_WORLD_HEIGHT :: TILEMAP_GENERAL_TILE_HEIGHT * DWARF_MINER_SCALE;
 
-DWARF_WARRIOR_SCALE :: 1.3;
+DWARF_WARRIOR_SCALE :: 1.0;
 TILEMAP_DWARF_WARRIOR_MAP_WIDTH    :: 2112;
 TILEMAP_DWARF_WARRIOR_MAP_HEIGHT   :: 32;
 TILEMAP_DWARF_WARRIOR_TILE_WIDTH   :: 32;
@@ -368,12 +368,7 @@ init_textures :: () {
     dwarf_miner_texture     = LoadTexture("data/dwarf-miner.png");
     dwarf_warrior_texture   = LoadTexture("data/dwarf-warrior.png");
 
-    // The plan is just to just render a big-ass quad and tile the dirt over it.
     SetTextureWrap(dirt_texture, .TEXTURE_WRAP_REPEAT);
-}
-
-init_sprites :: () {
-
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -745,7 +740,6 @@ main :: () {
     data_folder = join(base_path, "data");
 
     init_textures();
-    init_sprites();
 
     // Initialize font
     {
@@ -773,6 +767,24 @@ main :: () {
 
 // Functions
 
+does_tile_type_render_trenches :: (tile_type: TileType) -> bool {
+    if #complete tile_type == {
+        case .UNTOUCHED_DIRT; return false;
+        case .TOUCHED_DIRT;   return false;
+        case .IRON;           return false;
+        
+        case .WATER_STILL;    return true;
+        case .WATER_FLOWING;  return true;
+        case .LAVA_STILL;     return true;
+        case .LAVA_FLOWING;   return true;
+        case .OBSIDIAN;       return true;
+        case .WALL;           return true;
+        case .HOLE;           return true;
+        case .MINED;          return true;
+        case .CAVE;           return true;
+    }
+}
+
 update_trenches_if_necessary :: (tile_id: s32) {
     // PERF: this is too cute, flatten this
     for dir: DIRECTIONS_ALL {
@@ -793,7 +805,7 @@ update_trenches_if_necessary :: (tile_id: s32) {
 }
 
 try_to_add_warning_and_alert_markers :: (tile_id: s32, cave_type: CaveType) {
-    prop_alert   : TileProperties = ifx cave_type == .WATER then .WATER_ALERT else .LAVA_ALERT;
+    prop_alert   : TileProperties = ifx cave_type == .WATER then .WATER_ALERT   else .LAVA_ALERT;
     prop_warning : TileProperties = ifx cave_type == .WATER then .WATER_WARNING else .LAVA_WARNING;
 
     for direction: DIRECTIONS_COMPASS {
@@ -804,13 +816,16 @@ try_to_add_warning_and_alert_markers :: (tile_id: s32, cave_type: CaveType) {
         
         if is_cardinal_direction(direction) {
             if !is_tile_obsidian(neighbor_id_1) && !is_tile_hole(neighbor_id_1) {
+                if get_tile_by_id(neighbor_id_1) == null then set_tile_as_type(neighbor_id_1, .TOUCHED_DIRT, false, false);
                 set_tile_property(neighbor_id_1, prop_alert);
 
                 neighbor_id_2 := tile_id + (2 * dx) + (2* dy);
 
+                if get_tile_by_id(neighbor_id_2) == null then set_tile_as_type(neighbor_id_2, .TOUCHED_DIRT, false, false);
                 set_tile_property(neighbor_id_2, prop_warning);
             }
         } else {
+            if get_tile_by_id(neighbor_id_1) == null then set_tile_as_type(neighbor_id_1, .TOUCHED_DIRT, false, false);
             set_tile_property(neighbor_id_1, prop_warning);
         }
     }
@@ -1889,12 +1904,16 @@ update_and_draw_frame_round :: () {
 
                                     remove_warning_marker_on_tile_id :: (tile_id: s32) {
                                         tile := get_tile_by_id(tile_id);
+                                        if tile == null return;
+
                                         tile.props &= ~TileProperties.WATER_WARNING;
-                                        tile.props &= ~TileProperties.LAVA_WARNING;                    
+                                        tile.props &= ~TileProperties.LAVA_WARNING;
                                     }
 
                                     remove_alert_marker_on_tile_id :: (tile_id: s32) {
                                         tile := get_tile_by_id(tile_id);
+                                        if tile == null return;
+
                                         tile.props &= ~TileProperties.WATER_ALERT;
                                         tile.props &= ~TileProperties.LAVA_ALERT;
                                     }
@@ -3067,8 +3086,8 @@ update_and_draw_frame_round :: () {
                     }
 
                     #if DRAW_TRENCHES {
-                        if context.camera.zoom >= CAMERA_ZOOM_LOD_MIN {
-                            if tile.trench_directions_sides > 0 then draw_trench_sides(tile);
+                        if does_tile_type_render_trenches(tile.type) && context.camera.zoom >= CAMERA_ZOOM_LOD_MIN && tile.trench_directions_sides > 0 {
+                            draw_trench_sides(tile);
                         }
                     }
 
@@ -3120,6 +3139,7 @@ update_and_draw_frame_round :: () {
                 #if DRAW_TRENCHES {
                     if context.camera.zoom >= CAMERA_ZOOM_LOD_MIN {
                         for tile: context.tiles {
+                            if !does_tile_type_render_trenches(tile.type) continue;
                             if tile.pos.x < context.window_start.x || tile.pos.x > context.window_end.x continue;
                             if tile.pos.y < context.window_start.y || tile.pos.y > context.window_end.y continue;
 
@@ -4516,14 +4536,25 @@ dwarf_transition_state :: (dwarf: *Dwarf, new_state: DwarfState) {
             }
         case .DECIDING;  
         case .IDLE;
-            dwarf_set_active_animation(dwarf, xx DwarfAnimationMiner.IDLE); // TODO: potential for bug!!!!!!
+            if #complete dwarf.dwarf_type == {
+                case .MINER;   dwarf_set_active_animation(dwarf, xx DwarfAnimationMiner.IDLE);
+                case .WARRIOR; dwarf_set_active_animation(dwarf, xx DwarfAnimationWarrior.IDLE);
+            }
         case .MINING;
-            if dwarf.direction == .NORTH then dwarf_set_active_animation(dwarf, xx DwarfAnimationMiner.MINE_SIDE);
-            if dwarf.direction == .SOUTH then dwarf_set_active_animation(dwarf, xx DwarfAnimationMiner.MINE_DOWN);
-            if dwarf.direction == .EAST  then dwarf_set_active_animation(dwarf, xx DwarfAnimationMiner.MINE_SIDE);
-            if dwarf.direction == .WEST  then dwarf_set_active_animation(dwarf, xx DwarfAnimationMiner.MINE_SIDE);
+            if #complete dwarf.dwarf_type == {
+                case .MINER;
+                    if dwarf.direction == .NORTH then dwarf_set_active_animation(dwarf, xx DwarfAnimationMiner.MINE_SIDE);
+                    if dwarf.direction == .SOUTH then dwarf_set_active_animation(dwarf, xx DwarfAnimationMiner.MINE_DOWN);
+                    if dwarf.direction == .EAST  then dwarf_set_active_animation(dwarf, xx DwarfAnimationMiner.MINE_SIDE);
+                    if dwarf.direction == .WEST  then dwarf_set_active_animation(dwarf, xx DwarfAnimationMiner.MINE_SIDE);
+                case .WARRIOR;
+                    dwarf_set_active_animation(dwarf, xx DwarfAnimationWarrior.CHOP);
+            }
         case .MOVING;
-            dwarf_set_active_animation(dwarf, xx DwarfAnimationMiner.WALK); // TODO: potential for bug!!!!!!
+            if #complete dwarf.dwarf_type == {
+                case .MINER;   dwarf_set_active_animation(dwarf, xx DwarfAnimationMiner.WALK);
+                case .WARRIOR; dwarf_set_active_animation(dwarf, xx DwarfAnimationWarrior.WALK);   
+            }
     }
 }
 
@@ -6254,6 +6285,10 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
             props           = 0,
             health          = DIRT_HEALTH,       // TODO ?
             animated_sprite = AnimatedSprite.{}, // TODO ?
+            trench_directions_sides = 0,
+            trench_directions_corners_mostly_crust  = 0,
+            trench_directions_corners_mostly_dirt   = 0,
+            trench_directions_corners_special_crust = 0,
         };
 
         table_set(*context.tile_ids_to_index, tile_id, context.tiles.count);
@@ -6271,7 +6306,9 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
             array_unordered_remove_by_index(*context.tiles, tile_index);
             table_remove(*context.tile_ids_to_index, tile_id);
         }
-        case .TOUCHED_DIRT;
+        case .TOUCHED_DIRT; {
+
+        }
         case .CAVE; {
             update_trenches_if_necessary(tile_id);
         }

@@ -2,15 +2,15 @@
 # In progress
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- Art: Dwarf warrior spritesheet
+
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Bugs
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+- Trenches don't take non-trench tiles into account
 - Culling is one tile too aggressive
 - Water doesn't spread immediately
-- Fast forward stops working after letting go once
 - Dwarf warrior attacked a goblin diagonally when the goblin was attacking a base.
 - Dwarf warrior unable to path to a goblin when standing behind a miner who is attacking that goblin.
 - Dwarf didn't grab treasure in treasure cave with only 1 treasure
