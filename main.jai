@@ -874,22 +874,25 @@ update_trench_walls_if_necessary :: (tile: *Tile) {
     neighbor_east  := get_tile_by_id(neighbor_id_east);
     neighbor_west  := get_tile_by_id(neighbor_id_west);
 
-    if neighbor_north == null || !does_tile_type_render_trenches(neighbor_north.type) {
+    if !does_tile_render_trenches(neighbor_north) {
         tile.trench_directions_sides |= TrenchDirections.NORTH;
     } else {
         tile.trench_directions_sides &= ~TrenchDirections.NORTH;
     }
-    if neighbor_south == null || !does_tile_type_render_trenches(neighbor_south.type) {
+
+    if !does_tile_render_trenches(neighbor_south) {
         tile.trench_directions_sides |= TrenchDirections.SOUTH;
     } else {
         tile.trench_directions_sides &= ~TrenchDirections.SOUTH;
     }
-    if neighbor_east == null || !does_tile_type_render_trenches(neighbor_east.type) {
+
+    if !does_tile_render_trenches(neighbor_east) {
         tile.trench_directions_sides |= TrenchDirections.EAST;
     }  else {
         tile.trench_directions_sides &= ~TrenchDirections.EAST;
     }
-    if neighbor_west == null || !does_tile_type_render_trenches(neighbor_west.type) {
+
+    if !does_tile_render_trenches(neighbor_west) {
         tile.trench_directions_sides |= TrenchDirections.WEST;
     }  else {
         tile.trench_directions_sides &= ~TrenchDirections.WEST;
@@ -6356,9 +6359,10 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
             assert(tile_exists);
             array_unordered_remove_by_index(*context.tiles, tile_index);
             table_remove(*context.tile_ids_to_index, tile_id);
+            update_trenches_if_necessary(tile_id);
         }
+        
         case .TOUCHED_DIRT; {
-
         }
         case .CAVE; {
             update_trenches_if_necessary(tile_id);
