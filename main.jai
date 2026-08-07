@@ -686,38 +686,40 @@ data_folder: string;
 #add_context tiles: [..] Tile;
 #add_context tile_ids_to_index: Table(s32, s64);
 
+tiles_to_draw_this_frame : [..] Tile;
+
 entity_id_counter   : s32 = 0;
 control_id_counter  : s32 = 0;
 particle_id_counter : s32 = 0;
 
 bases             : [..] Base;
 base_id_to_index  : Table(s32, s64);
-bases_in_viewport : [..] Base;
+bases_to_draw_this_frame : [..] Base;
 
 dwarves             : [..] Dwarf;
 dwarf_id_to_index   : Table(s32, s64);
-dwarves_in_viewport : [..] Dwarf;
+dwarves_to_draw_this_frame : [..] Dwarf;
 
 goblins             : [..] Goblin;
 goblin_id_to_index  : Table(s32, s64);
-goblins_in_viewport : [..] Goblin;
+goblins_to_draw_this_frame : [..] Goblin;
 
 particles             : [..] Particle;
 particle_id_to_index  : Table(s32, s64);
-particles_in_viewport : [..] Particle;     
+particles_to_draw_this_frame : [..] Particle;     
 
 path_being_traced_1 : Path;
 path_being_traced_2 : Path;
 
 paths             : [..] Path;
-paths_in_viewport : [..] Path;
+paths_to_draw_this_frame : [..] Path;
 
 tile_ids_to_dwarfs  : Table(s32, *Dwarf);
 tile_ids_to_goblins : Table(s32, *Goblin);
 tile_ids_to_bases   : Table(s32, *Base);
 
 alerts             : [..] Alert;
-alerts_in_viewport : [..] Alert;
+alerts_to_draw_this_frame : [..] Alert;
 
 #insert #run generate_kind_enum_from_base_struct(Entity);
 
@@ -766,6 +768,11 @@ main :: () {
 }
 
 // Functions
+
+does_tile_render_trenches :: (tile: *Tile) -> bool {
+    if (tile == null) return false;
+    return does_tile_type_render_trenches(tile.type);
+}
 
 does_tile_type_render_trenches :: (tile_type: TileType) -> bool {
     if #complete tile_type == {
@@ -862,10 +869,31 @@ update_trench_walls_if_necessary :: (tile: *Tile) {
     neighbor_id_east  := tile.id + get_tile_direction_id_deltas(.EAST)[0]  + get_tile_direction_id_deltas(.EAST)[1];
     neighbor_id_west  := tile.id + get_tile_direction_id_deltas(.WEST)[0]  + get_tile_direction_id_deltas(.WEST)[1];
 
-    if is_tile_dirt(neighbor_id_north) then tile.trench_directions_sides |= TrenchDirections.NORTH; else tile.trench_directions_sides &= ~TrenchDirections.NORTH;
-    if is_tile_dirt(neighbor_id_south) then tile.trench_directions_sides |= TrenchDirections.SOUTH; else tile.trench_directions_sides &= ~TrenchDirections.SOUTH;
-    if is_tile_dirt(neighbor_id_east ) then tile.trench_directions_sides |= TrenchDirections.EAST;  else tile.trench_directions_sides &= ~TrenchDirections.EAST;
-    if is_tile_dirt(neighbor_id_west ) then tile.trench_directions_sides |= TrenchDirections.WEST;  else tile.trench_directions_sides &= ~TrenchDirections.WEST;
+    neighbor_north := get_tile_by_id(neighbor_id_north);
+    neighbor_south := get_tile_by_id(neighbor_id_south);
+    neighbor_east  := get_tile_by_id(neighbor_id_east);
+    neighbor_west  := get_tile_by_id(neighbor_id_west);
+
+    if neighbor_north == null || !does_tile_type_render_trenches(neighbor_north.type) {
+        tile.trench_directions_sides |= TrenchDirections.NORTH;
+    } else {
+        tile.trench_directions_sides &= ~TrenchDirections.NORTH;
+    }
+    if neighbor_south == null || !does_tile_type_render_trenches(neighbor_south.type) {
+        tile.trench_directions_sides |= TrenchDirections.SOUTH;
+    } else {
+        tile.trench_directions_sides &= ~TrenchDirections.SOUTH;
+    }
+    if neighbor_east == null || !does_tile_type_render_trenches(neighbor_east.type) {
+        tile.trench_directions_sides |= TrenchDirections.EAST;
+    }  else {
+        tile.trench_directions_sides &= ~TrenchDirections.EAST;
+    }
+    if neighbor_west == null || !does_tile_type_render_trenches(neighbor_west.type) {
+        tile.trench_directions_sides |= TrenchDirections.WEST;
+    }  else {
+        tile.trench_directions_sides &= ~TrenchDirections.WEST;
+    }
 }
 
 update_trench_corners_if_necessary :: (tile: *Tile) {
@@ -878,23 +906,22 @@ update_trench_corners_if_necessary :: (tile: *Tile) {
                 id_deltas_east       := get_tile_direction_id_deltas(.EAST);
                 id_deltas_north_east := get_tile_direction_id_deltas(.NORTH_EAST);
 
-                neighbor_id_north      := tile.id + id_deltas_north[0] + id_deltas_north[1];
-                neighbor_id_east       := tile.id + id_deltas_east[0] + id_deltas_east[1];
-                neighbor_id_north_east := tile.id + id_deltas_north_east[0] + id_deltas_north_east[1];
+                neighbor_north       := get_tile_by_id(tile.id + id_deltas_north[0] + id_deltas_north[1]);
+                neighbor_east        := get_tile_by_id(tile.id + id_deltas_east[0] + id_deltas_east[1]);
+                neighbor_north_east  := get_tile_by_id(tile.id + id_deltas_north_east[0] + id_deltas_north_east[1]);
 
                 tile.trench_directions_corners_mostly_crust  &= ~TrenchDirections.NORTH_EAST;
                 tile.trench_directions_corners_mostly_dirt   &= ~TrenchDirections.NORTH_EAST;
                 tile.trench_directions_corners_special_crust &= ~TrenchDirections.NORTH_EAST;
 
-                if is_tile_dirt(neighbor_id_north_east) {
-                    if is_tile_dirt(neighbor_id_north) && is_tile_dirt(neighbor_id_east) {
-                        tile.trench_directions_corners_mostly_dirt  |= TrenchDirections.NORTH_EAST;
-                    }
-                    else if !is_tile_dirt(neighbor_id_north) && !is_tile_dirt(neighbor_id_east) {
+                if !does_tile_render_trenches(neighbor_north_east) {
+                    if does_tile_render_trenches(neighbor_north) && does_tile_render_trenches(neighbor_east) {
                         tile.trench_directions_corners_mostly_crust |= TrenchDirections.NORTH_EAST;
+                    } else if !does_tile_render_trenches(neighbor_north) && !does_tile_render_trenches(neighbor_east) {
+                        tile.trench_directions_corners_mostly_dirt |= TrenchDirections.NORTH_EAST;
                     }
                 } else {
-                    if is_tile_dirt(neighbor_id_north) && is_tile_dirt(neighbor_id_east) {
+                    if !does_tile_render_trenches(neighbor_north) && !does_tile_render_trenches(neighbor_east) {
                         tile.trench_directions_corners_special_crust |= .NORTH_EAST;
                     }
                 }
@@ -903,23 +930,23 @@ update_trench_corners_if_necessary :: (tile: *Tile) {
                 id_deltas_west       := get_tile_direction_id_deltas(.WEST);
                 id_deltas_north_west := get_tile_direction_id_deltas(.NORTH_WEST);
 
-                neighbor_id_north      := tile.id + id_deltas_north[0] + id_deltas_north[1];
-                neighbor_id_west       := tile.id + id_deltas_west[0] + id_deltas_west[1];
-                neighbor_id_north_west := tile.id + id_deltas_north_west[0] + id_deltas_north_west[1];
+                neighbor_north       := get_tile_by_id(tile.id + id_deltas_north[0] + id_deltas_north[1]);
+                neighbor_west        := get_tile_by_id(tile.id + id_deltas_west[0] + id_deltas_west[1]);
+                neighbor_north_west  := get_tile_by_id(tile.id + id_deltas_north_west[0] + id_deltas_north_west[1]);
 
                 tile.trench_directions_corners_mostly_crust  &= ~TrenchDirections.NORTH_WEST;
                 tile.trench_directions_corners_mostly_dirt   &= ~TrenchDirections.NORTH_WEST;
                 tile.trench_directions_corners_special_crust &= ~TrenchDirections.NORTH_WEST;
 
-                if is_tile_dirt(neighbor_id_north_west) {
-                    if is_tile_dirt(neighbor_id_north) && is_tile_dirt(neighbor_id_west) {
-                        tile.trench_directions_corners_mostly_dirt  |=  TrenchDirections.NORTH_WEST;
+                if !does_tile_render_trenches(neighbor_north_west) {
+                    if does_tile_render_trenches(neighbor_north) && does_tile_render_trenches(neighbor_west) {
+                        tile.trench_directions_corners_mostly_crust |= TrenchDirections.NORTH_WEST;
                     }
-                    else if !is_tile_dirt(neighbor_id_north) && !is_tile_dirt(neighbor_id_west) {
-                        tile.trench_directions_corners_mostly_crust |=  TrenchDirections.NORTH_WEST;
+                    else if !does_tile_render_trenches(neighbor_north) && !does_tile_render_trenches(neighbor_west) {
+                        tile.trench_directions_corners_mostly_dirt |= TrenchDirections.NORTH_WEST;
                     }
                 } else {
-                    if is_tile_dirt(neighbor_id_north) && is_tile_dirt(neighbor_id_west) {
+                    if !does_tile_render_trenches(neighbor_north) && !does_tile_render_trenches(neighbor_west) {
                         tile.trench_directions_corners_special_crust |= .NORTH_WEST;
                     }
                 }
@@ -928,23 +955,23 @@ update_trench_corners_if_necessary :: (tile: *Tile) {
                 id_deltas_east       := get_tile_direction_id_deltas(.EAST);
                 id_deltas_south_east := get_tile_direction_id_deltas(.SOUTH_EAST);
 
-                neighbor_id_south      := tile.id + id_deltas_south[0] + id_deltas_south[1];
-                neighbor_id_east       := tile.id + id_deltas_east[0] + id_deltas_east[1];
-                neighbor_id_south_east := tile.id + id_deltas_south_east[0] + id_deltas_south_east[1];
+                neighbor_south      := get_tile_by_id(tile.id + id_deltas_south[0] + id_deltas_south[1]);
+                neighbor_east       := get_tile_by_id(tile.id + id_deltas_east[0] + id_deltas_east[1]);
+                neighbor_south_east := get_tile_by_id(tile.id + id_deltas_south_east[0] + id_deltas_south_east[1]);
 
                 tile.trench_directions_corners_mostly_dirt   &= ~TrenchDirections.SOUTH_EAST;
                 tile.trench_directions_corners_mostly_crust  &= ~TrenchDirections.SOUTH_EAST;
                 tile.trench_directions_corners_special_crust &= ~TrenchDirections.SOUTH_EAST;
 
-                if is_tile_dirt(neighbor_id_south_east) {
-                    if is_tile_dirt(neighbor_id_south) && is_tile_dirt(neighbor_id_east) {
-                        tile.trench_directions_corners_mostly_dirt |= TrenchDirections.SOUTH_EAST;
-                    }
-                    else if !is_tile_dirt(neighbor_id_south) && !is_tile_dirt(neighbor_id_east) {
+                if !does_tile_render_trenches(neighbor_south_east) {
+                    if does_tile_render_trenches(neighbor_south) && does_tile_render_trenches(neighbor_east) {
                         tile.trench_directions_corners_mostly_crust |= TrenchDirections.SOUTH_EAST;
                     }
+                    else if !does_tile_render_trenches(neighbor_south) && !does_tile_render_trenches(neighbor_east) {
+                        tile.trench_directions_corners_mostly_dirt |= TrenchDirections.SOUTH_EAST;
+                    }
                 } else {
-                    if is_tile_dirt(neighbor_id_south) && is_tile_dirt(neighbor_id_east) {
+                    if !does_tile_render_trenches(neighbor_south) && !does_tile_render_trenches(neighbor_east) {
                         tile.trench_directions_corners_special_crust |= .SOUTH_EAST;
                     }
                 }
@@ -953,23 +980,23 @@ update_trench_corners_if_necessary :: (tile: *Tile) {
                 id_deltas_west       := get_tile_direction_id_deltas(.WEST);
                 id_deltas_south_west := get_tile_direction_id_deltas(.SOUTH_WEST);
 
-                neighbor_id_south      := tile.id + id_deltas_south[0] + id_deltas_south[1];
-                neighbor_id_west       := tile.id + id_deltas_west[0] + id_deltas_west[1];
-                neighbor_id_south_west := tile.id + id_deltas_south_west[0] + id_deltas_south_west[1];
+                neighbor_south       := get_tile_by_id(tile.id + id_deltas_south[0] + id_deltas_south[1]);
+                neighbor_west        := get_tile_by_id(tile.id + id_deltas_west[0] + id_deltas_west[1]);
+                neighbor_south_west  := get_tile_by_id(tile.id + id_deltas_south_west[0] + id_deltas_south_west[1]);
 
                 tile.trench_directions_corners_mostly_dirt   &= ~TrenchDirections.SOUTH_WEST;
                 tile.trench_directions_corners_mostly_crust  &= ~TrenchDirections.SOUTH_WEST;
                 tile.trench_directions_corners_special_crust &= ~TrenchDirections.SOUTH_WEST;
 
-                if is_tile_dirt(neighbor_id_south_west) {
-                    if is_tile_dirt(neighbor_id_south) && is_tile_dirt(neighbor_id_west) {
-                        tile.trench_directions_corners_mostly_dirt |= TrenchDirections.SOUTH_WEST;
-                    }
-                    else if !is_tile_dirt(neighbor_id_south) && !is_tile_dirt(neighbor_id_west) {
+                if !does_tile_render_trenches(neighbor_south_west) {
+                    if does_tile_render_trenches(neighbor_south) && does_tile_render_trenches(neighbor_west) {
                         tile.trench_directions_corners_mostly_crust |= TrenchDirections.SOUTH_WEST;
                     }
+                    else if !does_tile_render_trenches(neighbor_south) && !does_tile_render_trenches(neighbor_west) {
+                        tile.trench_directions_corners_mostly_dirt |= TrenchDirections.SOUTH_WEST;
+                    }
                 } else {
-                    if is_tile_dirt(neighbor_id_south) && is_tile_dirt(neighbor_id_west) {
+                    if !does_tile_render_trenches(neighbor_south) && !does_tile_render_trenches(neighbor_west) {
                         tile.trench_directions_corners_special_crust |= .SOUTH_WEST;
                     }
                 }
@@ -987,8 +1014,8 @@ TRENCH_SIDES_SOURCE := Rectangle.{
 };
 
 draw_trench_sides :: (tile: Tile) {
-    dest := get_world_rect_from_pos(tile.pos);
-    rot  := 0.0;
+    dest   := get_world_rect_from_pos(tile.pos);
+    rot    := 0.0;
     origin := Vector2.{ TILEMAP_GENERAL_TILE_WIDTH * 0.5, TILEMAP_GENERAL_TILE_HEIGHT * 0.5 };
 
     if tile.trench_directions_sides & TrenchDirections.NORTH {
@@ -1988,7 +2015,7 @@ update_and_draw_frame_round :: () {
                         if context.game_state.controls_state_this_frame.select_is_held_down {
                             tile_id := get_tile_id_by_pos(context.mouse_pos_in_world);
 
-                            for path: paths_in_viewport {
+                            for path: paths_to_draw_this_frame {
                                 if tile_id == path.start_tile_id {
                                     array_unordered_remove_by_index(*paths, it_index);
                                 }
@@ -2893,7 +2920,7 @@ update_and_draw_frame_round :: () {
     // Draw
     //
     draw :: () {
-        derive_entities_in_viewport();
+        derive_things_to_draw();
 
         BeginDrawing();
         defer EndDrawing();
@@ -2932,70 +2959,96 @@ update_and_draw_frame_round :: () {
             draw_base_dirt_layer();
 
             // Draw tiles
-            DRAW_TRENCHES :: true;
             draw_tiles :: () {
-                for tile: context.tiles {
-                    tile_dest := get_world_rect_from_pos(tile.pos);
+                // Draw tiles base layer
+                draw_tiles_base_layer :: () {
+                    for tile: tiles_to_draw_this_frame {
+                        tile_dest := get_world_rect_from_pos(tile.pos);
 
-                    if tile.pos.x < context.window_start.x || tile.pos.x > context.window_end.x continue;
-                    if tile.pos.y < context.window_start.y || tile.pos.y > context.window_end.y continue;
+                        // Draw tile type
+                        if #complete tile.type == {
+                            case .UNTOUCHED_DIRT; // Nothing to draw, we tile dirt on one texture in the background
+                            // TODO: maybe draw cracks based on health
+                            case .TOUCHED_DIRT;   // Nothing to draw, we tile dirt on one texture in the background
+                            case .MINED; {
+                                // LOD
+                                // if context.camera.zoom < CAMERA_ZOOM_LOD_MIN {
+                                    source := Rectangle.{
+                                        xx (3 * TILEMAP_GENERAL_TILE_WIDTH),
+                                        1 * TILEMAP_GENERAL_TILE_HEIGHT,
+                                        TILEMAP_GENERAL_TILE_WIDTH,
+                                        TILEMAP_GENERAL_TILE_HEIGHT,
+                                    };
 
-                    // Draw tile type
-                    if #complete tile.type == {
-                        case .UNTOUCHED_DIRT; // Nothing to draw, we tile dirt on one texture in the background
-                        // TODO: maybe draw cracks based on health
-                        case .TOUCHED_DIRT;   // Nothing to draw, we tile dirt on one texture in the background
-                        case .MINED; {
-                            // LOD
-                            // if context.camera.zoom < CAMERA_ZOOM_LOD_MIN {
+                                    DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                // TODO
+                                // } else {
+                                //     sprite_draw(
+                                //         tile.animated_sprite,
+                                //         tile.pos,
+                                //         TILEMAP_GENERAL_WORLD_WIDTH,
+                                //         TILEMAP_GENERAL_WORLD_HEIGHT,
+                                //         TILEMAP_GENERAL_TILE_WIDTH,
+                                //         TILEMAP_GENERAL_TILE_HEIGHT,
+                                //         false,
+                                //     );
+                                // }
+                            }
+                            case .CAVE; {
+                                CAVE_SPRITE_SOURCE_ROW :: 2;
+                                CAVE_SPRITE_SOURCE_COL :: 9;
+
                                 source := Rectangle.{
-                                    xx (3 * TILEMAP_GENERAL_TILE_WIDTH),
-                                    1 * TILEMAP_GENERAL_TILE_HEIGHT,
+                                    xx (CAVE_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH),
+                                    xx (CAVE_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT),
                                     TILEMAP_GENERAL_TILE_WIDTH,
                                     TILEMAP_GENERAL_TILE_HEIGHT,
                                 };
 
                                 DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, WHITE);
-                            // TODO
-                            // } else {
-                            //     sprite_draw(
-                            //         tile.animated_sprite,
-                            //         tile.pos,
-                            //         TILEMAP_GENERAL_WORLD_WIDTH,
-                            //         TILEMAP_GENERAL_WORLD_HEIGHT,
-                            //         TILEMAP_GENERAL_TILE_WIDTH,
-                            //         TILEMAP_GENERAL_TILE_HEIGHT,
-                            //         false,
-                            //     );
-                            // }
-                        }
-                        case .CAVE; {
-                            CAVE_SPRITE_SOURCE_ROW :: 2;
-                            CAVE_SPRITE_SOURCE_COL :: 9;
+                            }
+                            case .WATER_STILL; {
+                                if context.camera.zoom < CAMERA_ZOOM_LOD_MIN {
+                                    WATER_LOW_LOD_SPRITE_SOURCE_ROW :: 3;
+                                    WATER_LOW_LOD_SPRITE_SOURCE_COL :: 9;
 
-                            source := Rectangle.{
-                                xx (CAVE_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH),
-                                xx (CAVE_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT),
-                                TILEMAP_GENERAL_TILE_WIDTH,
-                                TILEMAP_GENERAL_TILE_HEIGHT,
-                            };
+                                    source := Rectangle.{
+                                        xx (WATER_LOW_LOD_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH),
+                                        xx (WATER_LOW_LOD_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT),
+                                        TILEMAP_GENERAL_TILE_WIDTH,
+                                        TILEMAP_GENERAL_TILE_HEIGHT,
+                                    };
 
-                            DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, WHITE);
-                        }
-                        case .WATER_STILL; {
-                            if context.camera.zoom < CAMERA_ZOOM_LOD_MIN {
-                                WATER_LOW_LOD_SPRITE_SOURCE_ROW :: 3;
-                                WATER_LOW_LOD_SPRITE_SOURCE_COL :: 9;
+                                    DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                } else {
+                                    sprite_draw(
+                                        tile.animated_sprite,
+                                        tile.pos,
+                                        TILEMAP_GENERAL_WORLD_WIDTH,
+                                        TILEMAP_GENERAL_WORLD_HEIGHT,
+                                        TILEMAP_GENERAL_TILE_WIDTH,
+                                        TILEMAP_GENERAL_TILE_HEIGHT,
+                                        false,
+                                    );
+                                }
+                            }
+                            case .WATER_FLOWING; {
+                                // First, draw a fully mined tile underneath
+                                {
+                                    // TODO: retain what the texture was underneath
+                                    tile_column := tile.id % 3;
+                                    if context.camera.zoom < CAMERA_ZOOM_LOD_MIN tile_column = 3;
 
-                                source := Rectangle.{
-                                    xx (WATER_LOW_LOD_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH),
-                                    xx (WATER_LOW_LOD_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT),
-                                    TILEMAP_GENERAL_TILE_WIDTH,
-                                    TILEMAP_GENERAL_TILE_HEIGHT,
-                                };
+                                    source := Rectangle.{
+                                        xx (tile_column * TILEMAP_GENERAL_TILE_WIDTH),
+                                        1 * TILEMAP_GENERAL_TILE_HEIGHT,
+                                        TILEMAP_GENERAL_TILE_WIDTH,
+                                        TILEMAP_GENERAL_TILE_HEIGHT,
+                                    };
 
-                                DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, WHITE);
-                            } else {
+                                    DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                }
+                
                                 sprite_draw(
                                     tile.animated_sprite,
                                     tile.pos,
@@ -3006,142 +3059,113 @@ update_and_draw_frame_round :: () {
                                     false,
                                 );
                             }
-                        }
-                        case .WATER_FLOWING; {
-                            // First, draw a fully mined tile underneath
-                            {
-                                // TODO: retain what the texture was underneath
-                                tile_column := tile.id % 3;
-                                if context.camera.zoom < CAMERA_ZOOM_LOD_MIN tile_column = 3;
-
+                            case .LAVA_STILL; {
                                 source := Rectangle.{
-                                    xx (tile_column * TILEMAP_GENERAL_TILE_WIDTH),
-                                    1 * TILEMAP_GENERAL_TILE_HEIGHT,
+                                    LAVA_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
+                                    LAVA_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
                                     TILEMAP_GENERAL_TILE_WIDTH,
                                     TILEMAP_GENERAL_TILE_HEIGHT,
                                 };
 
                                 DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, WHITE);
                             }
-            
-                            sprite_draw(
-                                tile.animated_sprite,
-                                tile.pos,
-                                TILEMAP_GENERAL_WORLD_WIDTH,
-                                TILEMAP_GENERAL_WORLD_HEIGHT,
-                                TILEMAP_GENERAL_TILE_WIDTH,
-                                TILEMAP_GENERAL_TILE_HEIGHT,
-                                false,
-                            );
-                        }
-                        case .LAVA_STILL; {
-                            source := Rectangle.{
-                                LAVA_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
-                                LAVA_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
-                                TILEMAP_GENERAL_TILE_WIDTH,
-                                TILEMAP_GENERAL_TILE_HEIGHT,
-                            };
+                            case .LAVA_FLOWING; {
+                                // First, draw a fully mined tile underneath
+                                {
+                                    tile_column := tile.id % 3;
+                                    // LOD
+                                    if context.camera.zoom < CAMERA_ZOOM_LOD_MIN tile_column = 3;
 
-                            DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, WHITE);
-                        }
-                        case .LAVA_FLOWING; {
-                            // First, draw a fully mined tile underneath
-                            {
-                                tile_column := tile.id % 3;
-                                // LOD
-                                if context.camera.zoom < CAMERA_ZOOM_LOD_MIN tile_column = 3;
+                                    source := Rectangle.{
+                                        xx (tile_column * TILEMAP_GENERAL_TILE_WIDTH),
+                                        1 * TILEMAP_GENERAL_TILE_HEIGHT,
+                                        TILEMAP_GENERAL_TILE_WIDTH,
+                                        TILEMAP_GENERAL_TILE_HEIGHT,
+                                    };
 
-                                source := Rectangle.{
-                                    xx (tile_column * TILEMAP_GENERAL_TILE_WIDTH),
-                                    1 * TILEMAP_GENERAL_TILE_HEIGHT,
-                                    TILEMAP_GENERAL_TILE_WIDTH,
-                                    TILEMAP_GENERAL_TILE_HEIGHT,
-                                };
+                                    DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                }
 
-                                DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, WHITE);
-                            }
-
-                            sprite_draw(
-                                tile.animated_sprite,
-                                tile.pos,
-                                TILEMAP_GENERAL_WORLD_WIDTH,
-                                TILEMAP_GENERAL_WORLD_HEIGHT,
-                                TILEMAP_GENERAL_TILE_WIDTH,
-                                TILEMAP_GENERAL_TILE_HEIGHT,
-                                false,
-                            );
-                        }
-                        case .IRON; {
-                            DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_IRON, tile_dest, Vector2.{0,0}, 0.0, WHITE);
-                        }
-                        case .OBSIDIAN; {
-                            DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OBSIDIAN, tile_dest, Vector2.{0,0}, 0.0, WHITE);
-                        }
-                        case .WALL; {
-                            DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_WALL, tile_dest, Vector2.{0,0}, 0.0, WHITE);
-                        }
-                        case .HOLE; {
-                            DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOLE, tile_dest, Vector2.{0,0}, 0.0, WHITE);
-                        }
-                    }
-
-                    #if DRAW_TRENCHES {
-                        if does_tile_type_render_trenches(tile.type) && context.camera.zoom >= CAMERA_ZOOM_LOD_MIN && tile.trench_directions_sides > 0 {
-                            draw_trench_sides(tile);
-                        }
-                    }
-
-                    // Draw tile properties
-                    if tile.props > 0 {
-                        if tile.props & TileProperties.HAS_DYNAMITE {
-                            DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_DYNAMITE, tile_dest, Vector2.{0,0}, 0.0, WHITE);
-                        }
-
-                        if tile.props & TileProperties.HAS_TREASURE {
-                            DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_TREASURE, tile_dest, Vector2.{0,0}, 0.0, WHITE);
-                        }
-
-                        if context.metagame.debug_mode {
-                            real_pos := Vector2.{ tile.pos.x + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, tile.pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 };
-
-                            if tile.props & TileProperties.WATER_WARNING {
-                                DrawCircleV(real_pos, 4.0, WHITE);
-                                DrawCircleV(real_pos, 3.0, ORANGE);
-                            }
-
-                            if tile.props & TileProperties.LAVA_WARNING {
-                                DrawCircleV(real_pos, 4.0, WHITE);
-                                DrawCircleV(real_pos, 3.0, ORANGE);
-                            }
-
-                            if tile.props & TileProperties.WATER_ALERT {
-                                DrawCircleV(real_pos, 4.0, WHITE);
-                                DrawCircleV(real_pos, 3.0, RED);
-                            }
-
-                            if tile.props & TileProperties.LAVA_ALERT {
-                                DrawCircleV(real_pos, 4.0, WHITE);
-                                DrawCircleV(real_pos, 3.0, RED);
-                            }
-                        } else {
-                            // Draw encased tiles
-                            if tile.props & TileProperties.ENCASED {
-                                DrawRectangleV(
+                                sprite_draw(
+                                    tile.animated_sprite,
                                     tile.pos,
-                                    Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
-                                    TRANSPARENT_WHITE
+                                    TILEMAP_GENERAL_WORLD_WIDTH,
+                                    TILEMAP_GENERAL_WORLD_HEIGHT,
+                                    TILEMAP_GENERAL_TILE_WIDTH,
+                                    TILEMAP_GENERAL_TILE_HEIGHT,
+                                    false,
                                 );
+                            }
+                            case .IRON; // Iron is not on the base layer
+                            case .OBSIDIAN; {
+                                DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OBSIDIAN, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                            }
+                            case .WALL; {
+                                DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_WALL, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                            }
+                            case .HOLE; {
+                                DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOLE, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                            }
+                        }
+
+                        // Draw tile properties
+                        if tile.props > 0 {
+                            if tile.props & TileProperties.HAS_DYNAMITE {
+                                DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_DYNAMITE, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                            }
+
+                            if tile.props & TileProperties.HAS_TREASURE {
+                                DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_TREASURE, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                            }
+
+                            if context.metagame.debug_mode {
+                                real_pos := Vector2.{ tile.pos.x + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, tile.pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 };
+
+                                if tile.props & TileProperties.WATER_WARNING {
+                                    DrawCircleV(real_pos, 4.0, WHITE);
+                                    DrawCircleV(real_pos, 3.0, ORANGE);
+                                }
+
+                                if tile.props & TileProperties.LAVA_WARNING {
+                                    DrawCircleV(real_pos, 4.0, WHITE);
+                                    DrawCircleV(real_pos, 3.0, ORANGE);
+                                }
+
+                                if tile.props & TileProperties.WATER_ALERT {
+                                    DrawCircleV(real_pos, 4.0, WHITE);
+                                    DrawCircleV(real_pos, 3.0, RED);
+                                }
+
+                                if tile.props & TileProperties.LAVA_ALERT {
+                                    DrawCircleV(real_pos, 4.0, WHITE);
+                                    DrawCircleV(real_pos, 3.0, RED);
+                                }
+                            } else {
+                                // Draw encased tiles
+                                if tile.props & TileProperties.ENCASED {
+                                    DrawRectangleV(
+                                        tile.pos,
+                                        Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
+                                        TRANSPARENT_WHITE
+                                    );
+                                }
                             }
                         }
                     }
                 }
+                draw_tiles_base_layer();
                 
-                #if DRAW_TRENCHES {
+                DRAW_TRENCHES :: true;
+                #if DRAW_TRENCHES draw_trenches :: () {
                     if context.camera.zoom >= CAMERA_ZOOM_LOD_MIN {
-                        for tile: context.tiles {
+                        for tile: tiles_to_draw_this_frame {
                             if !does_tile_type_render_trenches(tile.type) continue;
-                            if tile.pos.x < context.window_start.x || tile.pos.x > context.window_end.x continue;
-                            if tile.pos.y < context.window_start.y || tile.pos.y > context.window_end.y continue;
+
+                            if tile.trench_directions_sides > 0 then draw_trench_sides(tile);
+                        }
+
+                        for tile: tiles_to_draw_this_frame {
+                            if !does_tile_type_render_trenches(tile.type) continue;
 
                             if tile.trench_directions_corners_mostly_crust  > 0 then draw_trench_corners_mostly_crust(tile);
                             if tile.trench_directions_corners_mostly_dirt   > 0 then draw_trench_corners_mostly_dirt(tile);
@@ -3149,13 +3173,38 @@ update_and_draw_frame_round :: () {
                         }
                     }
                 }
+                draw_trenches();
+
+                // Draw tiles top layer
+                draw_tiles_top_layer :: () {
+                    for tile: tiles_to_draw_this_frame {
+                        if #complete tile.type == {
+                            case .UNTOUCHED_DIRT;
+                            case .TOUCHED_DIRT;
+                            case .MINED;
+                            case .CAVE;
+                            case .WATER_STILL;
+                            case .WATER_FLOWING;
+                            case .LAVA_STILL;
+                            case .LAVA_FLOWING;
+                            case .OBSIDIAN;
+                            case .WALL;
+                            case .HOLE;
+                            case .IRON; {
+                                tile_dest := get_world_rect_from_pos(tile.pos);
+                                DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_IRON, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                            }
+                        }
+                    }
+                }
+                draw_tiles_top_layer();
             }
             DRAW_TILES :: true;
             #if DRAW_TILES then draw_tiles();
 
             // Draw bases
             draw_bases :: () {
-                for base: bases_in_viewport {
+                for base: bases_to_draw_this_frame {
                     dest := get_world_rect_from_pos(base.pos);
 
                     DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_BASE, dest, Vector2.{0,0}, 0.0, WHITE);
@@ -3171,13 +3220,13 @@ update_and_draw_frame_round :: () {
                     if path_being_traced_2.start_tile_id > 0 draw_path(path_being_traced_2);
                 }
 
-                for path: paths_in_viewport draw_path(path);
+                for path: paths_to_draw_this_frame draw_path(path);
             }
             draw_paths();
 
             // Draw dwarves
             draw_dwarves :: () {
-                for dwarf: dwarves_in_viewport {
+                for dwarf: dwarves_to_draw_this_frame {
                     // PERF: would it be faster to store the active index?
                     found := false;
                     for anim: dwarf.animations {
@@ -3201,7 +3250,7 @@ update_and_draw_frame_round :: () {
 
             // Draw goblins
             draw_goblins :: () {
-                for goblin: goblins_in_viewport {
+                for goblin: goblins_to_draw_this_frame {
                     dest := get_world_rect_from_pos(goblin.pos);
                     DrawRectangleV(
                         Vector2.{ dest.x, dest.y },
@@ -3234,6 +3283,7 @@ update_and_draw_frame_round :: () {
                             DrawText(tprint("trench_directions_sides: %\0", tile.trench_directions_sides).data, xx hovered_tile_rect.x, read_then_increment(*tile_y, TILE_DEBUG_INC), 12, WHITE);
                             DrawText(tprint("trench_directions_corners_mostly_crust: %\0", tile.trench_directions_corners_mostly_crust).data, xx hovered_tile_rect.x, read_then_increment(*tile_y, TILE_DEBUG_INC), 12, WHITE);
                             DrawText(tprint("trench_directions_corners_mostly_dirt: %\0", tile.trench_directions_corners_mostly_dirt).data, xx hovered_tile_rect.x, read_then_increment(*tile_y, TILE_DEBUG_INC), 12, WHITE);
+                            DrawText(tprint("trench_directions_corners_special_crust: %\0", tile.trench_directions_corners_special_crust).data, xx hovered_tile_rect.x, read_then_increment(*tile_y, TILE_DEBUG_INC), 12, WHITE);
                         }
                     }
                 }
@@ -3242,7 +3292,7 @@ update_and_draw_frame_round :: () {
 
             // Draw particles
             draw_particles :: () {
-                for particle: particles_in_viewport {
+                for particle: particles_to_draw_this_frame {
                     TEXT_SIZE     :: 20;
                     dest_text := get_world_rect_from_pos(particle.pos);
                     draw_outlined_text(tprint("%\0", particle.text).data, xx dest_text.x, xx dest_text.y, TEXT_SIZE, Color.{ particle.tint.r, particle.tint.g, particle.tint.b, xx (particle.opacity * 255) }, 1, BLACK);
@@ -4224,6 +4274,8 @@ get_world_height :: () -> int {
 }
 
 initialize_round :: () {
+    reset_memory();
+
     GAME_TIME_REMAINING_MS    :: 900_000; // 15 minutes
     GAME_STARTING_GOLD_HARD   :: 0;
     GAME_STARTING_GOLD_MEDIUM :: 150;
@@ -4249,14 +4301,15 @@ initialize_round :: () {
 
     // Set temp allocator for various things.
     {
-        dwarves_in_viewport.allocator = temp;
-        goblins_in_viewport.allocator = temp;
-        paths_in_viewport.allocator   = temp;
-        alerts_in_viewport.allocator  = temp;
-        bases_in_viewport.allocator   = temp;
-        tile_ids_to_dwarfs.allocator  = temp;
-        tile_ids_to_goblins.allocator = temp;
-        tile_ids_to_bases.allocator   = temp;
+        tiles_to_draw_this_frame.allocator   = temp;
+        dwarves_to_draw_this_frame.allocator = temp;
+        goblins_to_draw_this_frame.allocator = temp;
+        paths_to_draw_this_frame.allocator   = temp;
+        alerts_to_draw_this_frame.allocator  = temp;
+        bases_to_draw_this_frame.allocator   = temp;
+        tile_ids_to_dwarfs.allocator         = temp;
+        tile_ids_to_goblins.allocator        = temp;
+        tile_ids_to_bases.allocator          = temp;
     }
 
     // TODO: parametrize
@@ -4372,8 +4425,6 @@ initialize_round :: () {
         controls.fast_forward.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_S };
     }
 
-    reset_memory();
-
     // Initialize game
     context.game_state = GameState.{
         hovered_dwarf_index        = 0,
@@ -4403,6 +4454,26 @@ initialize_round :: () {
 
     if #complete context.metagame.level == {
         case .NORMAL;
+            // Initialize iron
+            GENERATE_IRON_ENABLED :: true;
+            #if GENERATE_IRON_ENABLED {
+                IRON_SPAWN_CHANCE_NUMERATOR   :: 5;
+                IRON_SPAWN_CHANCE_DENOMINATOR :: 1000;
+                IRON_VEIN_SIZE_MIN :: 8;
+                IRON_VEIN_SIZE_MAX :: 15;
+
+                for col: 0..context.world_cols-1 {
+                    for row: 0..context.world_rows-1 {
+                        tile_id := (row * context.world_cols) + col + 1;
+
+                        iron_spawn_dice_roll := cast(int) random_get_within_range(IRON_SPAWN_CHANCE_NUMERATOR, IRON_SPAWN_CHANCE_DENOMINATOR);
+                        if iron_spawn_dice_roll <= IRON_SPAWN_CHANCE_NUMERATOR {
+                            spawn_iron(xx tile_id);
+                        }
+                    }
+                }
+            }
+
             // Initialize caves
             #if GENERATE_CAVES_ENABLED {
                 CAVE_PERLIN_NOISE_FREQUENCY :: 256; // How many rows / columns
@@ -4426,26 +4497,6 @@ initialize_round :: () {
 
                         if tile_should_be_part_of_cave {
                             set_tile_as_type(xx tile_id, .CAVE, false, false);
-                        }
-                    }
-                }
-            }
-
-            // Initialize iron
-            GENERATE_IRON_ENABLED :: true;
-            #if GENERATE_IRON_ENABLED {
-                IRON_SPAWN_CHANCE_NUMERATOR   :: 5;
-                IRON_SPAWN_CHANCE_DENOMINATOR :: 1000;
-                IRON_VEIN_SIZE_MIN :: 8;
-                IRON_VEIN_SIZE_MAX :: 15;
-
-                for col: 0..context.world_cols-1 {
-                    for row: 0..context.world_rows-1 {
-                        tile_id := (row * context.world_cols) + col + 1;
-
-                        iron_spawn_dice_roll := cast(int) random_get_within_range(IRON_SPAWN_CHANCE_NUMERATOR, IRON_SPAWN_CHANCE_DENOMINATOR);
-                        if iron_spawn_dice_roll <= IRON_SPAWN_CHANCE_NUMERATOR {
-                            spawn_iron(xx tile_id);
                         }
                     }
                 }
@@ -6664,28 +6715,46 @@ detect_iron_tile_id_within_radius :: (
     return false, 0;
 }
 
-derive_entities_in_viewport :: () {
-    array_reset(*alerts_in_viewport);
-    array_reset(*bases_in_viewport);
-    array_reset(*dwarves_in_viewport);
-    array_reset(*goblins_in_viewport);
-    array_reset(*paths_in_viewport);
-    array_reset(*particles_in_viewport);
+derive_things_to_draw :: () {
+    array_reset(*tiles_to_draw_this_frame);
+    array_reset(*alerts_to_draw_this_frame);
+    array_reset(*bases_to_draw_this_frame);
+    array_reset(*dwarves_to_draw_this_frame);
+    array_reset(*goblins_to_draw_this_frame);
+    array_reset(*paths_to_draw_this_frame);
+    array_reset(*particles_to_draw_this_frame);
 
-    // Bases
-    for base: bases {
-        pos := base.pos;
+    derive_tiles_to_draw_this_frame :: () {
+        for tile: context.tiles {
+            pos := tile.pos;
 
-        if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < context.window_start.x continue;
-        if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > context.window_end.x   continue;
-        if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > context.window_end.y   continue;
-        if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < context.window_start.y continue;
+            if pos.x + TILEMAP_GENERAL_WORLD_WIDTH < context.window_start.x continue;
+            if pos.x - TILEMAP_GENERAL_WORLD_WIDTH > context.window_end.x continue;
+            
+            if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > context.window_end.y continue;
+            if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < context.window_start.y continue;
 
-        array_add(*bases_in_viewport, base);
+            array_add(*tiles_to_draw_this_frame, tile);
+        }
     }
+    derive_tiles_to_draw_this_frame();
+
+    derive_bases_to_draw_this_frame :: () {
+        for base: bases {
+            pos := base.pos;
+
+            if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < context.window_start.x continue;
+            if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > context.window_end.x   continue;
+            if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > context.window_end.y   continue;
+            if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < context.window_start.y continue;
+
+            array_add(*bases_to_draw_this_frame, base);
+        }
+    }
+    derive_bases_to_draw_this_frame();
 
     // Derive viewable dwarves
-    {
+    derive_dwarves_to_draw_this_frame :: () {
         for dwarf: dwarves {
             pos := dwarf.pos;
 
@@ -6695,12 +6764,13 @@ derive_entities_in_viewport :: () {
             if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > context.window_end.y continue;
             if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < context.window_start.y continue;
 
-            array_add(*dwarves_in_viewport, dwarf);
+            array_add(*dwarves_to_draw_this_frame, dwarf);
         }
     }
+    derive_dwarves_to_draw_this_frame();
 
     // Derive viewable goblins
-    {
+    derive_goblins_to_draw_this_frame :: () {
         for goblin: goblins {
             pos := goblin.pos;
 
@@ -6710,12 +6780,13 @@ derive_entities_in_viewport :: () {
             if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > context.window_end.y continue;
             if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < context.window_start.y continue;
 
-            array_add(*goblins_in_viewport, goblin);
+            array_add(*goblins_to_draw_this_frame, goblin);
         }
     }
+    derive_goblins_to_draw_this_frame();
 
     // Derive viewable paths
-    {
+    derive_paths_to_draw_this_frame :: () {
         for path: paths {
             start_tile_pos  := get_tile_pos_by_id(path.start_tile_id);
             end_tile_pos    := get_tile_pos_by_id(get_path_end_tile_id(path));
@@ -6740,12 +6811,13 @@ derive_entities_in_viewport :: () {
                 end_tile_pos.y    + TILEMAP_GENERAL_WORLD_WIDTH < context.window_start.y
             ) continue;
 
-            array_add(*paths_in_viewport, path);
+            array_add(*paths_to_draw_this_frame, path);
         }
     }
+    derive_paths_to_draw_this_frame();
 
     // Derive viewable particles
-    {
+    derive_particles_to_draw_this_frame :: () {
         for particle: particles {
             if particle.pos.x + TILEMAP_GENERAL_WORLD_WIDTH < context.window_start.x continue;
             if particle.pos.x - TILEMAP_GENERAL_WORLD_WIDTH > context.window_end.x continue;
@@ -6753,9 +6825,10 @@ derive_entities_in_viewport :: () {
             if particle.pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > context.window_end.y continue;
             if particle.pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < context.window_start.y continue;
 
-            array_add(*particles_in_viewport, particle);
+            array_add(*particles_to_draw_this_frame, particle);
         }
     }
+    derive_particles_to_draw_this_frame();
 }
 
 reveal_cave_if_necessary :: (tile_id: s32, grant_points: bool, grant_gold: bool) -> revealed_cave: bool, cave_type: CaveType {
