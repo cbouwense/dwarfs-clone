@@ -7,9 +7,8 @@
 # Bugs
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- Mined floors not rendering
-- Resetting game can crash
 - Water doesn't spread immediately
+- Resetting game can crash
 - Dwarf warrior attacked a goblin diagonally when the goblin was attacking a base.
 - Dwarf warrior unable to path to a goblin when standing behind a miner who is attacking that goblin.
 - Dwarf didn't grab treasure in treasure cave with only 1 treasure
@@ -40,7 +39,6 @@
 - deteriorating arrows
 - round loading screen
 - Camera restriction within world bounds
-- Water AnimatedSprite per world column for wave effect
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 #  Art
