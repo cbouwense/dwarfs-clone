@@ -95,6 +95,20 @@ GOBLIN_SPAWN_ENABLED :: true;
 GOBLIN_STARTING_HP :: 100;
 GOBLIN_LINE_OF_SIGHT_TILE_COUNT :: 15;
 
+GOBLIN_ANIMATION_IDLE_START_FRAME       :: 1;
+GOBLIN_ANIMATION_IDLE_FRAME_COUNT       :: 16;
+GOBLIN_ANIMATION_IDLE_FRAME_DURATION_MS :: 100;
+GOBLIN_ANIMATION_WALK_START_FRAME       :: 17;
+GOBLIN_ANIMATION_WALK_FRAME_COUNT       :: 16;
+GOBLIN_ANIMATION_WALK_FRAME_DURATION_MS :: 100;
+GOBLIN_ANIMATION_ATTACK_START_FRAME       :: 33;
+GOBLIN_ANIMATION_ATTACK_FRAME_COUNT       :: 13;
+GOBLIN_ANIMATION_ATTACK_FRAME_ACTION      :: 40;
+GOBLIN_ANIMATION_ATTACK_FRAME_DURATION_MS :: 100;
+GOBLIN_ANIMATION_DIE_START_FRAME        :: 65;
+GOBLIN_ANIMATION_DIE_FRAME_COUNT        :: 6;
+GOBLIN_ANIMATION_DIE_FRAME_DURATION_MS  :: 100;
+
 PARTICLE_FLOAT_SPEED :: -15.0;
 
 PARTICLE_GOLD_TIME_TO_LIVE_MS   :: 1000;
@@ -350,6 +364,14 @@ TILEMAP_DWARF_WARRIOR_TILE_HEIGHT  :: 32;
 TILEMAP_DWARF_WARRIOR_WORLD_WIDTH  :: TILEMAP_GENERAL_TILE_WIDTH  * DWARF_WARRIOR_SCALE;
 TILEMAP_DWARF_WARRIOR_WORLD_HEIGHT :: TILEMAP_GENERAL_TILE_HEIGHT * DWARF_WARRIOR_SCALE;
 
+GOBLIN_SCALE :: 1.0;
+TILEMAP_GOBLIN_MAP_WIDTH    :: 7680;
+TILEMAP_GOBLIN_MAP_HEIGHT   :: 64;
+TILEMAP_GOBLIN_TILE_WIDTH   :: 96;
+TILEMAP_GOBLIN_TILE_HEIGHT  :: 64;
+TILEMAP_GOBLIN_WORLD_WIDTH  :: TILEMAP_GENERAL_TILE_WIDTH  * GOBLIN_SCALE;
+TILEMAP_GOBLIN_WORLD_HEIGHT :: TILEMAP_GENERAL_TILE_HEIGHT * GOBLIN_SCALE;
+
 tilemap_texture_general : Texture;
 lava_flowing_texture    : Texture;
 water_flowing_texture   : Texture;
@@ -357,6 +379,7 @@ water_still_texture     : Texture;
 dirt_texture            : Texture;
 dwarf_miner_texture     : Texture;
 dwarf_warrior_texture   : Texture;
+goblin_texture          : Texture;
 
 init_textures :: () {
     // TODO: have just one big happy atlas, maybe?
@@ -367,6 +390,7 @@ init_textures :: () {
     dirt_texture            = LoadTexture("data/dirt.png");
     dwarf_miner_texture     = LoadTexture("data/dwarf-miner.png");
     dwarf_warrior_texture   = LoadTexture("data/dwarf-warrior.png");
+    goblin_texture          = LoadTexture("data/goblin.png");
 
     SetTextureWrap(dirt_texture, .TEXTURE_WRAP_REPEAT);
 }
@@ -585,6 +609,12 @@ Moveable :: struct {
     tile_ids_on_path : [..] s32;
 }
 
+Animated :: struct {
+    animations      : [..] AnimatedSprite;
+    did_anim_action : bool;
+    is_facing_left  : bool;
+}
+
 Base :: struct {
     #as using entity: Entity;
 
@@ -625,19 +655,17 @@ DwarfAnimationWarrior :: enum {
 Dwarf :: struct {
     #as using entity: Entity;
     using move: Moveable;
+    using anim: Animated;
 
     kind = Dwarf;
 
     state               : DwarfState;
-    animations          : [..] AnimatedSprite;
-    did_anim_action     : bool;
     attack_cooldown_ms  : s32;
     tile_id_mining      : s32;
     goblin_id_attacking : s32; // TODO: is this right? feels overly specific
     dwarf_type          : DwarfType;
     ignore_goblins_for  : int;
     is_moving_quickly   : bool;
-    is_facing_left      : bool;
 }
 
 GoblinState :: enum {
@@ -650,6 +678,7 @@ GoblinState :: enum {
 Goblin :: struct {
     #as using entity: Entity;
     using move: Moveable;
+    using anim: Animated;
 
     kind = Goblin;
 
@@ -2729,6 +2758,14 @@ update_and_draw_frame_round :: () {
                                 case .IDLE;
                             }
                         }
+
+                        // TODO: maintain active animation index so we don't need to search for it
+                        //
+                        // Update animations
+                        for *anim: goblin.animations {
+                            reset_anim := sprite_update(anim, context.dt_seconds);
+                            if reset_anim then goblin.did_anim_action = false;
+                        }
                     }
                 }
                 update_goblins();
@@ -3364,12 +3401,22 @@ update_and_draw_frame_round :: () {
             // Draw goblins
             draw_goblins :: () {
                 for goblin: goblins_to_draw_this_frame {
-                    dest := get_world_rect_from_pos(goblin.pos);
-                    DrawRectangleV(
-                        Vector2.{ dest.x, dest.y },
-                        Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
-                        LIME, // TODO: texture
-                    );
+                    found := false;
+                    for anim: goblin.animations {
+                        if !anim.active continue;
+                        found = true;
+
+                        sprite_draw(
+                            anim,
+                            goblin.pos,
+                            xx TILEMAP_GOBLIN_WORLD_WIDTH,
+                            xx TILEMAP_GOBLIN_WORLD_HEIGHT,
+                            TILEMAP_GOBLIN_TILE_WIDTH,
+                            TILEMAP_GOBLIN_TILE_HEIGHT,
+                            goblin.is_facing_left,
+                        );
+                    }
+                    assert_soft(found, "Goblin % had no animation active\n", goblin.id);
                 }
             }
             draw_goblins();
@@ -5543,6 +5590,43 @@ create_goblin :: (pos: Vector2) -> Goblin {
     goblin_id := increment_then_read(*entity_id_counter);
     // direction := cast(Direction) cast(int) random_get_within_range(0, 3);
 
+    goblin_animated_sprite_base := AnimatedSprite.{
+        texture           = goblin_texture,
+        active            = false,
+        first_frame       = 1,
+        color             = WHITE,
+        rotation          = 0.0,
+        frame_count       = 8,
+        frame_duration_ms = 100,
+        timer_ms          = 0,
+        loops             = true,
+    };
+
+    // Warrior
+    goblin_animated_sprite_idle := goblin_animated_sprite_base;
+    goblin_animated_sprite_idle.first_frame = GOBLIN_ANIMATION_IDLE_START_FRAME;
+    goblin_animated_sprite_idle.frame_count = GOBLIN_ANIMATION_IDLE_FRAME_COUNT;
+    goblin_animated_sprite_idle.active = true;
+
+    goblin_animated_sprite_walk := goblin_animated_sprite_base;
+    goblin_animated_sprite_walk.first_frame = GOBLIN_ANIMATION_WALK_START_FRAME;
+    goblin_animated_sprite_walk.frame_count = GOBLIN_ANIMATION_WALK_FRAME_COUNT;
+
+    goblin_animated_sprite_chop := goblin_animated_sprite_base;
+    goblin_animated_sprite_chop.first_frame = GOBLIN_ANIMATION_ATTACK_START_FRAME;
+    goblin_animated_sprite_chop.frame_count = GOBLIN_ANIMATION_ATTACK_FRAME_COUNT;
+
+    goblin_animated_sprite_die := goblin_animated_sprite_base;
+    goblin_animated_sprite_die.first_frame = GOBLIN_ANIMATION_DIE_START_FRAME;
+    goblin_animated_sprite_die.frame_count = GOBLIN_ANIMATION_DIE_FRAME_COUNT;
+
+    animations : [..] AnimatedSprite;
+    
+    array_add(*animations, goblin_animated_sprite_idle);
+    array_add(*animations, goblin_animated_sprite_walk);
+    array_add(*animations, goblin_animated_sprite_chop);
+    array_add(*animations, goblin_animated_sprite_die);
+
     goblin := Goblin.{
         id        = goblin_id,
         pos       = pos,
@@ -5550,6 +5634,7 @@ create_goblin :: (pos: Vector2) -> Goblin {
         state     = .DECIDING,
         direction = .NORTH,
         // tile_ids_on_path intentionally not set
+        animations = animations,
         attack_cooldown_ms = GOBLIN_ATTACK_COOLDOWN_MS,
     };
 
