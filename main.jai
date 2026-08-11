@@ -555,14 +555,18 @@ CaveType :: enum u8 {
 
 Particle :: struct {
     id                    : s32;
-    pos                   : Vector2;
-    vel                   : Vector2;
-    damp                  : float;
+    position              : Vector2;
+    velocity              : Vector2;
+    acceleration          : Vector2;
+    rotation              : float; // degrees
+    angular_velocity      : float; // degrees per second
+    size                  : float;
     text                  : string;
     tint                  : Color;
     fade                  : bool;
     opacity               : float;
     time_left_ms          : int;
+    time_left_max         : int;
     sprite_source_row     : int; // 0 indexed
     sprite_source_col     : int; // 0 indexed
     entity_id_to_follow   : s32;
@@ -2381,6 +2385,20 @@ update_and_draw_frame_round :: () {
                                         } else {
                                             // If the tile just needs to take some damage, well, then damage it ya fuckin jallopy
                                             tile_to_mine.health -= xx new_health;
+
+                                            // create some particles
+                                            direction_to_spawn_particles : Direction;
+                                            if dwarf.tile_id_mining == dwarf_tile_id - context.world_cols {
+                                                direction_to_spawn_particles = .NORTH;
+                                            } else if dwarf.tile_id_mining == dwarf_tile_id + context.world_cols {
+                                                direction_to_spawn_particles = .SOUTH;
+                                            } else if dwarf.tile_id_mining == dwarf_tile_id + 1 {
+                                                direction_to_spawn_particles = .EAST;
+                                            } else if dwarf.tile_id_mining == dwarf_tile_id - 1 {
+                                                direction_to_spawn_particles = .WEST;
+                                            }
+
+                                            create_mine_chip_particles(dwarf_center, 5, direction_to_spawn_particles);
                                         }
                                     }
                                 }
@@ -2834,12 +2852,11 @@ update_and_draw_frame_round :: () {
                             continue;
                         }
 
-                        // PERF: there's probably an intelligent way of doing this.
                         if particle.fade {
-                            if particle.time_left_ms > 1000 {
+                            if particle.time_left_ms > particle.time_left_max {
                                 particle.opacity = 1;
                             } else {
-                                particle.opacity = particle.time_left_ms * 0.001;
+                                particle.opacity = steepstep((cast(float32) particle.time_left_ms) / particle.time_left_max);
                             }
 
                             if particle.opacity < 0 particle.opacity = 0;
@@ -2847,26 +2864,25 @@ update_and_draw_frame_round :: () {
                             particle.opacity = 1;
                         }
 
-                        // TODO: this logic is a little fishy. It assumes that if there is an entity to follow then we wouldn't want
-                        // to also move the particle by its velocity. I guess we'll see ¯\_(ツ)_/¯
                         if particle.entity_id_to_follow > 0 {
                             found, entity := get_entity_by_id(particle.entity_kind_to_follow, particle.entity_id_to_follow);
                             if (found) {
-                                particle.pos.x = entity.pos.x;
-                                particle.pos.y = entity.pos.y - TILEMAP_GENERAL_WORLD_HEIGHT;
+                                particle.position.x = entity.pos.x;
+                                particle.position.y = entity.pos.y - TILEMAP_GENERAL_WORLD_HEIGHT;
                             } else {
                                 print("WARN: Particle % was trying to reference entity % (kind %) that it's supposed to follow, but didn't find it. Destroying particle.\n", particle.id, particle.entity_id_to_follow, particle.entity_kind_to_follow);
                                 array_add(*particle_ids_to_kill_this_frame, particle.id);
                             }
                         } else {
-                            particle.pos.x += particle.vel.x * context.dt_seconds_raw;
-                            particle.pos.y += particle.vel.y * context.dt_seconds_raw;
+                            particle.position.x += particle.velocity.x * context.dt_seconds;
+                            particle.position.y += particle.velocity.y * context.dt_seconds;
                             
-                            if particle.damp > 0 {
-                                particle.vel.x *= particle.damp;
-                                particle.vel.y *= particle.damp;
-                            }
+                            particle.velocity.x += particle.acceleration.x;
+                            particle.velocity.y += particle.acceleration.y;
                         }
+
+                        // Update particle rotation
+                        particle.rotation += particle.angular_velocity * context.dt_seconds;
                     }
 
                     for particle_ids_to_kill_this_frame kill_particle_by_id(it);
@@ -3388,27 +3404,51 @@ update_and_draw_frame_round :: () {
             draw_hovered_tile();
 
             // Draw particles
+            PARTICLE_TEXT_SIZE :: 20;
             draw_particles :: () {
                 for particle: particles_to_draw_this_frame {
-                    TEXT_SIZE     :: 20;
-                    dest_text := get_world_rect_from_pos(particle.pos);
-                    draw_outlined_text(tprint("%\0", particle.text).data, xx dest_text.x, xx dest_text.y, TEXT_SIZE, Color.{ particle.tint.r, particle.tint.g, particle.tint.b, xx (particle.opacity * 255) }, 1, BLACK);
+                    dest := get_world_rect_from_pos(particle.position);
+                    
+                    if particle.text {
+                        draw_outlined_text(
+                            tprint("%\0", particle.text).data,
+                            xx dest.x,
+                            xx dest.y,
+                            PARTICLE_TEXT_SIZE,
+                            Color.{ particle.tint.r, particle.tint.g, particle.tint.b, xx (particle.opacity * 255) },
+                            1,
+                            BLACK
+                        );
+                    }
 
                     if particle.sprite_source_col > -1 && particle.sprite_source_row > -1 {
-                        measured_text_size := poor_mans_measure_text(particle.text, TEXT_SIZE);
+                        // If there's no text, then this is just a zero vector.
+                        measured_text_size := poor_mans_measure_text(particle.text, PARTICLE_TEXT_SIZE);
+
+                        assert(particle.size > 0);
+
                         dest_sprite := Rectangle.{
-                            dest_text.x + measured_text_size.x,
-                            dest_text.y - measured_text_size.y * 0.25,
-                            dest_text.width,
-                            dest_text.height,
+                            dest.x + measured_text_size.x,
+                            dest.y - measured_text_size.y * 0.25,
+                            particle.size,
+                            particle.size,
                         };
+
                         source := Rectangle.{
                             xx (particle.sprite_source_col * TILEMAP_GENERAL_TILE_WIDTH),
                             xx (particle.sprite_source_row * TILEMAP_GENERAL_TILE_HEIGHT),
                             TILEMAP_GENERAL_TILE_WIDTH,
                             TILEMAP_GENERAL_TILE_HEIGHT,
                         };
-                        DrawTexturePro(tilemap_texture_general, source, dest_sprite, Vector2.{0,0}, 0.0, Color.{ WHITE.r, WHITE.g, WHITE.b, xx (particle.opacity * 255) });
+
+                        DrawTexturePro(
+                            tilemap_texture_general,
+                            source,
+                            dest_sprite,
+                            Vector2.{ particle.size * 0.5, particle.size * 0.5 },
+                            particle.rotation,
+                            Color.{ WHITE.r, WHITE.g, WHITE.b, xx (particle.opacity * 255) }
+                        );
                     }
                 }
             }
@@ -5058,13 +5098,15 @@ create_gold_particle :: (pos: Vector2, amount: int) -> Particle {
 
     particle := Particle.{
         id                = particle_id,
-        pos               = pos,
-        vel               = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
+        position          = pos,
+        velocity          = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
+        size              = TILEMAP_GENERAL_TILE_WIDTH,
         tint              = ifx amount < 0 then RED else GREEN,
         text              = sprint("%", amount),
         fade              = false,
         opacity           = 1,
         time_left_ms      = PARTICLE_GOLD_TIME_TO_LIVE_MS,
+        time_left_max     = PARTICLE_GOLD_TIME_TO_LIVE_MS,
         sprite_source_row = PARTICLE_GOLD_SPRITE_SOURCE_ROW,
         sprite_source_col = PARTICLE_GOLD_SPRITE_SOURCE_COL,
     };
@@ -5080,12 +5122,14 @@ create_dwarf_death_particle :: (pos: Vector2) -> Particle {
 
     particle := Particle.{
         id                = particle_id,
-        pos               = pos,
-        vel               = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
+        position          = pos,
+        velocity          = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
         tint              = WHITE,
+        size              = TILEMAP_GENERAL_WORLD_WIDTH,
         fade              = true,
         opacity           = 1,
         time_left_ms      = PARTICLE_DWARF_DEATH_TIME_TO_LIVE_MS,
+        time_left_max     = PARTICLE_DWARF_DEATH_TIME_TO_LIVE_MS,
         sprite_source_row = PARTICLE_DWARF_DEATH_SPRITE_SOURCE_ROW,
         sprite_source_col = PARTICLE_DWARF_DEATH_SPRITE_SOURCE_COL,
         // text
@@ -5102,12 +5146,14 @@ create_goblin_death_particle :: (pos: Vector2) -> Particle {
 
     particle := Particle.{
         id                = particle_id,
-        pos               = pos,
-        vel               = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
+        position          = pos,
+        velocity          = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
         tint              = WHITE,
+        size              = TILEMAP_GENERAL_WORLD_WIDTH,
         fade              = true,
         opacity           = 1,
         time_left_ms      = PARTICLE_GOBLIN_DEATH_TIME_TO_LIVE_MS,
+        time_left_max     = PARTICLE_GOBLIN_DEATH_TIME_TO_LIVE_MS,
         sprite_source_row = PARTICLE_GOBLIN_DEATH_SPRITE_SOURCE_ROW,
         sprite_source_col = PARTICLE_GOBLIN_DEATH_SPRITE_SOURCE_COL,
         // text
@@ -5124,12 +5170,14 @@ create_dwarf_aggro_particle :: (pos: Vector2, dwarf_id: s32) -> Particle {
 
     particle := Particle.{
         id                    = particle_id,
-        pos                   = pos,
-        vel                   = Vector2.{ 0.0, 0.0 },
+        position              = pos,
+        velocity              = Vector2.{ 0.0, 0.0 },
         tint                  = WHITE,
         fade                  = false,
+        size                  = TILEMAP_GENERAL_WORLD_WIDTH,
         opacity               = 1,
         time_left_ms          = PARTICLE_DWARF_AGGRO_TIME_TO_LIVE_MS,
+        time_left_max         = PARTICLE_DWARF_AGGRO_TIME_TO_LIVE_MS,
         sprite_source_row     = PARTICLE_DWARF_AGGRO_SPRITE_SOURCE_ROW,
         sprite_source_col     = PARTICLE_DWARF_AGGRO_SPRITE_SOURCE_COL,
         entity_id_to_follow   = dwarf_id,
@@ -5148,12 +5196,14 @@ create_dwarf_selected_particle :: (pos: Vector2, dwarf_id: s32) -> Particle {
 
     particle := Particle.{
         id                    = particle_id,
-        pos                   = pos,
-        vel                   = Vector2.{ 0.0, 0.0 },
+        position              = pos,
+        velocity              = Vector2.{ 0.0, 0.0 },
         tint                  = WHITE,
         fade                  = false,
+        size                  = TILEMAP_GENERAL_WORLD_WIDTH,
         opacity               = 1,
         time_left_ms          = PARTICLE_DWARF_SELECTED_TIME_TO_LIVE_MS, // This really should just be infinite
+        time_left_max         = PARTICLE_DWARF_SELECTED_TIME_TO_LIVE_MS, // This really should just be infinite
         sprite_source_row     = PARTICLE_DWARF_SELECTED_SPRITE_SOURCE_ROW,
         sprite_source_col     = PARTICLE_DWARF_SELECTED_SPRITE_SOURCE_COL,
         entity_id_to_follow   = dwarf_id,
@@ -5173,16 +5223,18 @@ create_damage_particles :: (pos: Vector2, amount: int, direction_stars_should_fl
         particle_id  := increment_then_read(*particle_id_counter);
 
         particle := Particle.{
-            id                    = particle_id,
-            pos                   = pos,
-            vel                   = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
-            text                  = sprint("%", amount),
-            tint                  = RED,
-            fade                  = true,
-            opacity               = 1,
-            time_left_ms          = PARTICLE_DAMAGE_TIME_TO_LIVE_MS,
-            sprite_source_row     = -1,
-            sprite_source_col     = -1,
+            id                = particle_id,
+            position          = pos,
+            velocity          = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
+            text              = sprint("%", amount),
+            tint              = RED,
+            size              = TILEMAP_GENERAL_WORLD_WIDTH,
+            fade              = true,
+            opacity           = 1,
+            time_left_ms      = PARTICLE_DAMAGE_TIME_TO_LIVE_MS,
+            time_left_max     = PARTICLE_DAMAGE_TIME_TO_LIVE_MS,
+            sprite_source_row = -1,
+            sprite_source_col = -1,
         };
 
         table_set(*particle_id_to_index, particle_id, particles.count);
@@ -5224,13 +5276,15 @@ create_damage_particles :: (pos: Vector2, amount: int, direction_stars_should_fl
 
         particle := Particle.{
             id                = particle_id,
-            pos               = pos,
-            vel               = velocity,
-            damp              = 0.95,
+            position          = pos,
+            velocity          = velocity,
+            acceleration      = Vector2.{ 0.95, 0.95 },
             tint              = WHITE,
             fade              = true,
+            size              = TILEMAP_GENERAL_WORLD_WIDTH,
             opacity           = 1,
             time_left_ms      = PARTICLE_DAMAGE_STAR_TIME_TO_LIVE_MS,
+            time_left_max     = PARTICLE_DAMAGE_STAR_TIME_TO_LIVE_MS,
             sprite_source_row = PARTICLE_DAMAGE_STAR_SPRITE_SOURCE_ROW,
             sprite_source_col = PARTICLE_DAMAGE_STAR_SPRITE_SOURCE_COL,
         };
@@ -5245,8 +5299,7 @@ create_damage_particles :: (pos: Vector2, amount: int, direction_stars_should_fl
 
         secondary_speed_modifier := random_get_within_range(-0.2, 0.2);
 
-        velocity     : Vector2;
-        acceleration : Vector2;
+        velocity : Vector2;
         if direction_stars_should_fly == {
             case .NORTH;
                 velocity = Vector2.{
@@ -5274,15 +5327,99 @@ create_damage_particles :: (pos: Vector2, amount: int, direction_stars_should_fl
 
         particle := Particle.{
             id                = particle_id,
-            pos               = pos,
-            vel               = velocity,
-            damp              = 0.95,
+            position          = pos,
+            velocity          = velocity,
+            acceleration      = Vector2.{ 0.95, 0.95 },
+            tint              = WHITE,
+            fade              = true,
+            size              = TILEMAP_GENERAL_WORLD_WIDTH,
+            opacity           = 1,
+            time_left_ms      = PARTICLE_DAMAGE_STAR_TIME_TO_LIVE_MS,
+            time_left_max     = PARTICLE_DAMAGE_STAR_TIME_TO_LIVE_MS,
+            sprite_source_row = PARTICLE_DAMAGE_STAR_SPRITE_SOURCE_ROW,
+            sprite_source_col = PARTICLE_DAMAGE_STAR_SPRITE_SOURCE_COL,
+        };
+
+        table_set(*particle_id_to_index, particle_id, particles.count);
+        array_add(*particles, particle);
+    }
+}
+
+create_mine_chip_particles :: (position: Vector2, amount: int, direction: Direction) {
+    for 1..amount {
+        particle_id := increment_then_read(*particle_id_counter);
+        print("spawning particle %\n", particle_id);
+
+        pos := position;
+        velocity : Vector2;
+
+        PARTICLE_CHIP_SPREAD_VELOCITY    :: 30;
+        PARTICLE_CHIP_SPLAT_VELOCITY_MIN :: 50;
+        PARTICLE_CHIP_SPLAT_VELOCITY_MAX :: 100;
+
+        if direction == {
+            case .NORTH; {
+                pos = Vector2.{
+                    position.x + random_get_within_range(-TILEMAP_GENERAL_TILE_HEIGHT * 0.25, TILEMAP_GENERAL_TILE_HEIGHT * 0.25),
+                    position.y - TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
+                };
+
+                velocity = Vector2.{
+                    random_get_within_range(-PARTICLE_CHIP_SPREAD_VELOCITY, PARTICLE_CHIP_SPREAD_VELOCITY),
+                    random_get_within_range(PARTICLE_CHIP_SPLAT_VELOCITY_MIN * 0.25, PARTICLE_CHIP_SPLAT_VELOCITY_MAX * 0.25),
+                };
+            }
+            case .SOUTH; {
+                pos = Vector2.{
+                    position.x + random_get_within_range(-TILEMAP_GENERAL_TILE_HEIGHT * 0.25, TILEMAP_GENERAL_TILE_HEIGHT * 0.25),
+                    position.y + TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
+                };
+
+                velocity = Vector2.{
+                    random_get_within_range(-PARTICLE_CHIP_SPREAD_VELOCITY, PARTICLE_CHIP_SPREAD_VELOCITY),
+                    random_get_within_range(-PARTICLE_CHIP_SPLAT_VELOCITY_MAX, -PARTICLE_CHIP_SPLAT_VELOCITY_MIN)
+                };
+            }
+            case .EAST;  {
+                pos = Vector2.{
+                    position.x + TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
+                    position.y + random_get_within_range(-TILEMAP_GENERAL_TILE_HEIGHT * 0.25, TILEMAP_GENERAL_TILE_HEIGHT * 0.25),
+                };
+
+                velocity = Vector2.{
+                    random_get_within_range(-PARTICLE_CHIP_SPLAT_VELOCITY_MAX, -PARTICLE_CHIP_SPLAT_VELOCITY_MIN),
+                    random_get_within_range(-PARTICLE_CHIP_SPREAD_VELOCITY, PARTICLE_CHIP_SPREAD_VELOCITY)
+                };
+            }
+            case .WEST;  {
+                pos = Vector2.{
+                    position.x - TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
+                    position.y + random_get_within_range(-TILEMAP_GENERAL_TILE_HEIGHT * 0.25, TILEMAP_GENERAL_TILE_HEIGHT * 0.25)
+                };
+
+                velocity = Vector2.{
+                    random_get_within_range(PARTICLE_CHIP_SPLAT_VELOCITY_MIN, PARTICLE_CHIP_SPLAT_VELOCITY_MAX),
+                    random_get_within_range(-PARTICLE_CHIP_SPREAD_VELOCITY, PARTICLE_CHIP_SPREAD_VELOCITY)
+                };
+            }
+            case; {
+                assert_soft(false, "When creating mine chip particles, got a weird direction for them to spawn at. Expected a cardinal direction, but got %\n", direction);
+            }
+        }
+
+        particle := Particle.{
+            id                = particle_id,
+            position          = pos,
+            velocity          = velocity,
+            angular_velocity  = random_get_within_range(-1000, 1000),
+            size              = 5.5,
             tint              = WHITE,
             fade              = true,
             opacity           = 1,
-            time_left_ms      = PARTICLE_DAMAGE_STAR_TIME_TO_LIVE_MS,
-            sprite_source_row = PARTICLE_DAMAGE_STAR_SPRITE_SOURCE_ROW,
-            sprite_source_col = PARTICLE_DAMAGE_STAR_SPRITE_SOURCE_COL,
+            time_left_ms      = 500,
+            time_left_max     = 500,
+            sprite_source_row = cast(int) random_get_within_range(4, 5.99),
+            sprite_source_col = 8,
         };
 
         table_set(*particle_id_to_index, particle_id, particles.count);
@@ -5295,11 +5432,12 @@ create_miss_particles :: (pos: Vector2) {
 
     particle := Particle.{
         id                    = particle_id,
-        pos                   = pos,
-        vel                   = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
+        position              = pos,
+        velocity              = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
         text                  = "Miss",
         tint                  = RED,
         fade                  = true,
+        size                  = TILEMAP_GENERAL_WORLD_WIDTH,
         opacity               = 1,
         time_left_ms          = PARTICLE_DAMAGE_TIME_TO_LIVE_MS,
         sprite_source_row     = -1,
@@ -6901,11 +7039,11 @@ derive_things_to_draw :: () {
     // Derive viewable particles
     derive_particles_to_draw_this_frame :: () {
         for particle: particles {
-            if particle.pos.x + TILEMAP_GENERAL_WORLD_WIDTH < context.window_start.x continue;
-            if particle.pos.x - TILEMAP_GENERAL_WORLD_WIDTH > context.window_end.x continue;
+            if particle.position.x + TILEMAP_GENERAL_WORLD_WIDTH < context.window_start.x continue;
+            if particle.position.x - TILEMAP_GENERAL_WORLD_WIDTH > context.window_end.x continue;
             
-            if particle.pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > context.window_end.y continue;
-            if particle.pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < context.window_start.y continue;
+            if particle.position.y - TILEMAP_GENERAL_WORLD_HEIGHT > context.window_end.y continue;
+            if particle.position.y + TILEMAP_GENERAL_WORLD_HEIGHT < context.window_start.y continue;
 
             array_add(*particles_to_draw_this_frame, particle);
         }
@@ -7098,6 +7236,11 @@ smootherstep :: (x: float) -> float {
     if x <= 0.0 return 0.0;
     if x >= 1.0 return 1.0;
     return (6 * x * x * x * x * x) - (15 * x * x * x * x) + (10 * x * x * x); 
+}
+
+steepstep :: (x: float) -> float {
+    if x >= 0.5 return 1.0;
+    return x;
 }
 
 set_tile_ids_to_entity :: (T: Type) #expand
