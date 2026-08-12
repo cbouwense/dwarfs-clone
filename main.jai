@@ -40,7 +40,7 @@ DWARF_MINER_START_COUNT :: 1;
 DWARF_MINER_DIG_COOLDOWN_MS    :: 1000;
 DWARF_MINER_ATTACK_COOLDOWN_MS :: 2000;
 DWARF_MINER_DAMAGE_DIG_PER_SWING    :: 50;
-DWARF_MINER_DAMAGE_ATTACK_PER_SWING :: 25;
+DWARF_MINER_DAMAGE_ATTACK_PER_SWING :: 10;
 DWARF_MINER_HIT_CHANCE :: 0.50; // TODO: will have to be based on level
 DWARF_MINER_SPAWN_MS :: 10000;
 DWARF_MINER_SPAWN_ENABLED :: true;
@@ -89,7 +89,7 @@ DWARF_WARRIOR_ANIMATION_DIE_FRAME_DURATION_MS   :: 100;
 
 GOBLIN_MOVE_SPEED :: 20;
 GOBLIN_ATTACK_COOLDOWN_MS :: 1000;
-GOBLIN_ATTACK_DAMAGE_PER_SWING :: 15;
+GOBLIN_ATTACK_DAMAGE_PER_SWING :: 25;
 GOBLIN_HIT_CHANCE :: 0.80; // TODO: will have to be based on level
 GOBLIN_SPAWN_ENABLED :: true;
 GOBLIN_STARTING_HP :: 100;
@@ -2686,63 +2686,67 @@ update_and_draw_frame_round :: () {
                                 case .ATTACKING;
                                     assert_soft(goblin.entity_id_attacking > 0, "Goblin % is in attack state but has no target\n", goblin.id);
 
-                                    if goblin.attack_cooldown_ms > 0 {
-                                        goblin.attack_cooldown_ms -= xx (context.dt_seconds * 1000);
+                                    // TODO: this blows, fix this!
+                                    //
+                                    // Make sure the entity is still alive, it's possible that other goblins have killed it this frame.
+                                    found: bool;
+                                    entity_index: s64;
+                                    entity: *Entity;
+                                    is_dwarf := false; // TODO: fix this!!!!!!!!!!!!!!!
+
+                                    set_entity_id_to_index(Dwarf);
+                                    found, entity_index = table_find(*entity_id_to_index, goblin.entity_id_attacking);
+                                    if found {
+                                        is_dwarf = true;
+                                        entity = *dwarves[entity_index];
                                     } else {
-                                        goblin.attack_cooldown_ms = GOBLIN_ATTACK_COOLDOWN_MS;
-
-                                        // TODO: this blows, fix this!
-                                        //
-                                        // Make sure the entity is still alive, it's possible that other goblins have killed it this frame.
-                                        found: bool;
-                                        entity_index: s64;
-                                        entity: *Entity;
-                                        is_dwarf := false; // TODO: fix this!!!!!!!!!!!!!!!
-
-                                        set_entity_id_to_index(Dwarf);
+                                        set_entity_id_to_index(Base);
                                         found, entity_index = table_find(*entity_id_to_index, goblin.entity_id_attacking);
                                         if found {
-                                            is_dwarf = true;
-                                            entity = *dwarves[entity_index];
-                                        } else {
-                                            set_entity_id_to_index(Base);
-                                            found, entity_index = table_find(*entity_id_to_index, goblin.entity_id_attacking);
-                                            if found {
-                                                entity = *bases[entity_index];
+                                            entity = *bases[entity_index];
 
-                                                // If this goblin is attacking the home base
-                                                if entity_index == 0 && context.game_state.home_base_under_attack_cooldown_ms <= 0 {
-                                                    create_alert(.BASE_UNDER_ATTACK, entity.pos);
-                                                    context.game_state.home_base_under_attack_cooldown_ms = HOME_BASE_UNDER_ATTACK_COOLDOWN_MS;
-                                                }
+                                            // If this goblin is attacking the home base
+                                            if entity_index == 0 && context.game_state.home_base_under_attack_cooldown_ms <= 0 {
+                                                create_alert(.BASE_UNDER_ATTACK, entity.pos);
+                                                context.game_state.home_base_under_attack_cooldown_ms = HOME_BASE_UNDER_ATTACK_COOLDOWN_MS;
+                                            }
+                                        }
+                                    }
+
+                                    if found {
+                                        assert_soft(goblin.entity_id_attacking == entity.id, "Goblin % thinks he's attacking entity % but really found entity %", goblin.id, goblin.entity_id_attacking, entity.id);
+
+                                        // Turn the goblin sprite to face whatever way it should be
+                                        if goblin.is_facing_left  && entity.pos.x > goblin_tile.pos.x then goblin.is_facing_left = false;
+                                        if !goblin.is_facing_left && entity.pos.x < goblin_tile.pos.x then goblin.is_facing_left = true;
+
+                                        stop_trying_to_attack := false;
+                                        // If attacking a dwarf, make sure it's still in reach
+                                        if is_dwarf {
+                                            detected, dwarf, direction := find_cardinal_neighbor_entity(goblin_tile_id, Dwarf);
+
+                                            if !detected {
+                                                goblin_transition_state(goblin, .DECIDING);
+                                                goblin.entity_id_attacking = 0;
+                                                stop_trying_to_attack = true;
                                             }
                                         }
 
-                                        if (found) {
-                                            assert_soft(goblin.entity_id_attacking == entity.id, "Goblin % thinks he's attacking entity % but really found entity %", goblin.id, goblin.entity_id_attacking, entity.id);
+                                        if !stop_trying_to_attack {
+                                            // TODO: probably want a function for this
+                                            anim_index   : s64 = xx GoblinAnimation.CHOP;
+                                            action_frame := GOBLIN_ANIMATION_ATTACK_FRAME_ACTION;
 
-                                            // Turn the goblin sprite to face whatever way it should be
-                                            if goblin.is_facing_left  && entity.pos.x > goblin_tile.pos.x then goblin.is_facing_left = false;
-                                            if !goblin.is_facing_left && entity.pos.x < goblin_tile.pos.x then goblin.is_facing_left = true;
+                                            frame := sprite_animation_get_current_frame(goblin.animations[anim_index]);
 
-                                            stop_trying_to_attack := false;
-                                            // If attacking a dwarf, make sure it's still in reach
-                                            if is_dwarf {
-                                                detected, dwarf, direction := find_cardinal_neighbor_entity(goblin_tile_id, Dwarf);
+                                            if frame == action_frame && !goblin.did_anim_action {
+                                                goblin.did_anim_action = true;
 
-                                                if !detected {
-                                                    goblin_transition_state(goblin, .DECIDING);
-                                                    goblin.entity_id_attacking = 0;
-                                                    stop_trying_to_attack = true;
-                                                }
-                                            }
-
-                                            if !stop_trying_to_attack {
+                                                // Hit check
                                                 rng := random_get_within_range(0, 1);
                                                 swing_connected := rng <= GOBLIN_HIT_CHANCE;
 
                                                 if swing_connected {
-                                                    
                                                     target_entity_center   := get_rect_center(get_world_rect_from_pos(entity.pos));
                                                     target_entity_tile_id  := get_tile_id_by_pos(target_entity_center);
 
@@ -2773,11 +2777,10 @@ update_and_draw_frame_round :: () {
                                                     create_miss_particles(entity.pos);
                                                 }
                                             }
-                                        } else {
-                                            goblin_transition_state(goblin, .DECIDING);
-                                            goblin.entity_id_attacking = 0;
                                         }
-
+                                    } else {
+                                        goblin_transition_state(goblin, .DECIDING);
+                                        goblin.entity_id_attacking = 0;
                                     }
                                 case .IDLE;
                             }
