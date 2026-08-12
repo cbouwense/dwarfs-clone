@@ -2,15 +2,14 @@
 # In progress
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- Sprites aren't all centered
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Bugs
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- Miss and hit particles are kinda fucked
+- Dwarves don't turn around after selecting to go another way
 - Mining particles don't appear when tile is destroyed
-- Gold particles are fucked up
+- Gold, miss, and hit particles are fucked up
 - Dwarf warrior unable to path outside of base
 - Water doesn't spread immediately
 - Resetting game can crash
@@ -41,6 +40,7 @@
 - High score / local persistence
 - deteriorating arrows
 - round loading screen
+- don't freeze game while loading
 - Camera restriction within world bounds
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -50,12 +50,11 @@
 - Art: Iron ore sprite
 - Art: Obsidian sprite
 - Art: Dynamite sprite
-- Art: Hole sprite
 - Art: Home base sprite
 - Art: Outpost base sprites
+- Art: Treasure sprites
 - Art: Better lava sprites / animations
 - Art: Better water sprites / animations
-- Art: Better treasure sprites
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Tutorial

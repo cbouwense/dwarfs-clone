@@ -302,8 +302,8 @@ TILEMAP_SOURCE_RECT_COIN :: Rectangle.{
     TILEMAP_GENERAL_TILE_HEIGHT,
 };
 
-HOLE_SPRITE_SOURCE_ROW :: 6.0;
-HOLE_SPRITE_SOURCE_COL :: 9.0;
+HOLE_SPRITE_SOURCE_ROW :: 3.0;
+HOLE_SPRITE_SOURCE_COL :: 5.0;
 
 TILEMAP_SOURCE_RECT_HOLE := Rectangle.{
     HOLE_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
@@ -312,12 +312,12 @@ TILEMAP_SOURCE_RECT_HOLE := Rectangle.{
     TILEMAP_GENERAL_TILE_HEIGHT,
 };
 
-WALL_SPRITE_SOURCE_ROW :: 4.0;
-WALL_SPRITE_SOURCE_COL :: 1.0;
+WALL_SPRITE_SOURCE_ROW :: 1.0;
+WALL_SPRITE_SOURCE_COL :: 4.0;
 
 TILEMAP_SOURCE_RECT_WALL := Rectangle.{
-    WALL_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_WIDTH,
-    WALL_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_HEIGHT,
+    WALL_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
+    WALL_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
     TILEMAP_GENERAL_TILE_WIDTH,
     TILEMAP_GENERAL_TILE_HEIGHT,
 };
@@ -3279,6 +3279,20 @@ update_and_draw_frame_round :: () {
                                     DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_WALL, tile_dest, Vector2.{0,0}, 0.0, WHITE);
                                 }
                                 case .HOLE; {
+                                    // First, draw a fully mined tile underneath
+                                    {
+                                        tile_column := tile.id % 3;
+    
+                                        source := Rectangle.{
+                                            xx (tile_column * TILEMAP_GENERAL_TILE_WIDTH),
+                                            1 * TILEMAP_GENERAL_TILE_HEIGHT,
+                                            TILEMAP_GENERAL_TILE_WIDTH,
+                                            TILEMAP_GENERAL_TILE_HEIGHT,
+                                        };
+
+                                        DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                    }
+                                    
                                     DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOLE, tile_dest, Vector2.{0,0}, 0.0, WHITE);
                                 }
                             }
