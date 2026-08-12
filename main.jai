@@ -54,13 +54,17 @@ DWARF_MINER_ANIMATION_WALK_FRAME_COUNT            :: 8;
 DWARF_MINER_ANIMATION_WALK_FRAME_DURATION_MS      :: 100;
 DWARF_MINER_ANIMATION_MINE_DOWN_START_FRAME       :: 17;
 DWARF_MINER_ANIMATION_MINE_DOWN_FRAME_COUNT       :: 8;
-DWARF_MINER_ANIMATION_MINE_DOWN_FRAME_ACTION      :: 23;
+DWARF_MINER_ANIMATION_MINE_DOWN_FRAME_ACTION      :: 22;
 DWARF_MINER_ANIMATION_MINE_DOWN_FRAME_DURATION_MS :: 100;
 DWARF_MINER_ANIMATION_MINE_SIDE_START_FRAME       :: 25;
 DWARF_MINER_ANIMATION_MINE_SIDE_FRAME_COUNT       :: 8;
 DWARF_MINER_ANIMATION_MINE_SIDE_FRAME_ACTION      :: 30;
 DWARF_MINER_ANIMATION_MINE_SIDE_FRAME_DURATION_MS :: 100;
-DWARF_MINER_ANIMATION_DIE_START_FRAME             :: 49;
+DWARF_MINER_ANIMATION_MINE_UP_START_FRAME         :: 33;
+DWARF_MINER_ANIMATION_MINE_UP_FRAME_COUNT         :: 8;
+DWARF_MINER_ANIMATION_MINE_UP_FRAME_ACTION        :: 38;
+DWARF_MINER_ANIMATION_MINE_UP_FRAME_DURATION_MS   :: 100;
+DWARF_MINER_ANIMATION_DIE_START_FRAME             :: 57;
 DWARF_MINER_ANIMATION_DIE_FRAME_COUNT             :: 6;
 DWARF_MINER_ANIMATION_DIE_FRAME_DURATION_MS       :: 100;
 
@@ -348,28 +352,28 @@ TILEMAP_SOURCE_RECT_DIRT := Rectangle.{
     TILEMAP_GENERAL_TILE_HEIGHT,
 };
 
-DWARF_MINER_SCALE :: 1.0;
-TILEMAP_DWARF_MINER_MAP_WIDTH    :: 3071;
-TILEMAP_DWARF_MINER_MAP_HEIGHT   :: 192;
-TILEMAP_DWARF_MINER_TILE_WIDTH   :: 32;
-TILEMAP_DWARF_MINER_TILE_HEIGHT  :: 32;
-TILEMAP_DWARF_MINER_WORLD_WIDTH  :: TILEMAP_GENERAL_WORLD_WIDTH  * DWARF_MINER_SCALE;
-TILEMAP_DWARF_MINER_WORLD_HEIGHT :: TILEMAP_GENERAL_WORLD_WIDTH * DWARF_MINER_SCALE;
+TILEMAP_DWARF_MINER_TILE_WIDTH     :: 96;
+TILEMAP_DWARF_MINER_TILE_HEIGHT    :: 64;
+TILEMAP_DWARF_MINER_TILE_PADDING_X :: 32;
+TILEMAP_DWARF_MINER_TILE_PADDING_Y :: 32;
+DWARF_MINER_SCALE_X                :: TILEMAP_DWARF_WARRIOR_TILE_WIDTH  / TILEMAP_GENERAL_TILE_WIDTH;
+DWARF_MINER_SCALE_Y                :: TILEMAP_DWARF_WARRIOR_TILE_HEIGHT / TILEMAP_GENERAL_TILE_HEIGHT;
+TILEMAP_DWARF_MINER_WORLD_WIDTH    :: TILEMAP_GENERAL_WORLD_WIDTH * DWARF_MINER_SCALE_X;
+TILEMAP_DWARF_MINER_WORLD_HEIGHT   :: TILEMAP_GENERAL_WORLD_WIDTH * DWARF_MINER_SCALE_Y;
 
-DWARF_WARRIOR_SCALE :: 1.0;
-TILEMAP_DWARF_WARRIOR_MAP_WIDTH    :: 2112;
-TILEMAP_DWARF_WARRIOR_MAP_HEIGHT   :: 32;
-TILEMAP_DWARF_WARRIOR_TILE_WIDTH   :: 32;
-TILEMAP_DWARF_WARRIOR_TILE_HEIGHT  :: 32;
-TILEMAP_DWARF_WARRIOR_WORLD_WIDTH  :: TILEMAP_GENERAL_WORLD_WIDTH  * DWARF_WARRIOR_SCALE;
-TILEMAP_DWARF_WARRIOR_WORLD_HEIGHT :: TILEMAP_GENERAL_WORLD_WIDTH * DWARF_WARRIOR_SCALE;
+TILEMAP_DWARF_WARRIOR_TILE_WIDTH     :: 96;
+TILEMAP_DWARF_WARRIOR_TILE_HEIGHT    :: 64;
+TILEMAP_DWARF_WARRIOR_TILE_PADDING_X :: 32;
+TILEMAP_DWARF_WARRIOR_TILE_PADDING_Y :: 32;
+DWARF_WARRIOR_SCALE_X                :: TILEMAP_DWARF_WARRIOR_TILE_WIDTH  / TILEMAP_GENERAL_TILE_WIDTH;
+DWARF_WARRIOR_SCALE_Y                :: TILEMAP_DWARF_WARRIOR_TILE_HEIGHT / TILEMAP_GENERAL_TILE_HEIGHT;
+TILEMAP_DWARF_WARRIOR_WORLD_WIDTH    :: TILEMAP_GENERAL_WORLD_WIDTH * DWARF_WARRIOR_SCALE_X;
+TILEMAP_DWARF_WARRIOR_WORLD_HEIGHT   :: TILEMAP_GENERAL_WORLD_WIDTH * DWARF_WARRIOR_SCALE_Y;
 
-TILEMAP_GOBLIN_MAP_WIDTH      :: 7680;
-TILEMAP_GOBLIN_MAP_HEIGHT     :: 64;
 TILEMAP_GOBLIN_TILE_WIDTH     :: 96;
 TILEMAP_GOBLIN_TILE_HEIGHT    :: 64;
-TILEMAP_GOBLIN_TILE_PADDING_X :: 64;
-TILEMAP_GOBLIN_TILE_PADDING_Y :: 64;
+TILEMAP_GOBLIN_TILE_PADDING_X :: 32;
+TILEMAP_GOBLIN_TILE_PADDING_Y :: 32;
 GOBLIN_SCALE_X                :: TILEMAP_GOBLIN_TILE_WIDTH  / TILEMAP_GENERAL_TILE_WIDTH;
 GOBLIN_SCALE_Y                :: TILEMAP_GOBLIN_TILE_HEIGHT / TILEMAP_GENERAL_TILE_HEIGHT;
 TILEMAP_GOBLIN_WORLD_WIDTH    :: TILEMAP_GENERAL_WORLD_WIDTH  * GOBLIN_SCALE_X;
@@ -645,7 +649,8 @@ DwarfAnimationMiner :: enum {
     WALK      :: 1;
     MINE_DOWN :: 2;
     MINE_SIDE :: 3;
-    DIE       :: 4;
+    MINE_UP   :: 4;
+    DIE       :: 5;
 };
 
 DwarfAnimationWarrior :: enum {
@@ -886,26 +891,11 @@ dwarf_maybe_set_active_animation :: (dwarf: *Dwarf, active_animation_index: s64)
         // If there are any animations currently playing, let them finish before moving on
         if it_index != xx active_animation_index && it.active then return;
     }
-    dwarf_set_active_animation(dwarf, active_animation_index);
-}
-    
-dwarf_set_active_animation :: (dwarf: *Dwarf, active_animation_index: s64) {
-    if dwarf.dwarf_type == .MINER {
-        dwarf.animations[DwarfAnimationMiner.IDLE].active      = active_animation_index == xx DwarfAnimationMiner.IDLE;
-        dwarf.animations[DwarfAnimationMiner.WALK].active      = active_animation_index == xx DwarfAnimationMiner.WALK;
-        dwarf.animations[DwarfAnimationMiner.MINE_DOWN].active = active_animation_index == xx DwarfAnimationMiner.MINE_DOWN;
-        dwarf.animations[DwarfAnimationMiner.MINE_SIDE].active = active_animation_index == xx DwarfAnimationMiner.MINE_SIDE;
-        dwarf.animations[DwarfAnimationMiner.DIE].active       = active_animation_index == xx DwarfAnimationMiner.DIE;
-    } else {
-        dwarf.animations[DwarfAnimationWarrior.IDLE].active = active_animation_index == xx DwarfAnimationWarrior.IDLE;
-        dwarf.animations[DwarfAnimationWarrior.WALK].active = active_animation_index == xx DwarfAnimationWarrior.WALK;
-        dwarf.animations[DwarfAnimationWarrior.CHOP].active = active_animation_index == xx DwarfAnimationWarrior.CHOP;
-        dwarf.animations[DwarfAnimationWarrior.DIE].active  = active_animation_index == xx DwarfAnimationWarrior.DIE;
-    }
+    entity_set_active_animation(dwarf, active_animation_index);
 }
 
-goblin_set_active_animation :: (goblin: *Goblin, active_animation_index: s64) {
-    for * anim: goblin.animations {
+entity_set_active_animation :: (entity: *$T/interface Moveable, active_animation_index: s64) {
+    for * anim: entity.animations {
         anim.active = active_animation_index == it_index;
     }
 }
@@ -2377,7 +2367,12 @@ update_and_draw_frame_round :: () {
                                             if dwarf.tile_id_mining == dwarf_tile_id + context.world_cols {
                                                 anim_index   = xx DwarfAnimationMiner.MINE_DOWN;
                                                 action_frame = DWARF_MINER_ANIMATION_MINE_DOWN_FRAME_ACTION;
-                                            } else {
+                                            } 
+                                            else if dwarf.tile_id_mining == dwarf_tile_id - context.world_cols {
+                                                anim_index   = xx DwarfAnimationMiner.MINE_UP;
+                                                action_frame = DWARF_MINER_ANIMATION_MINE_UP_FRAME_ACTION;
+                                            }
+                                            else {
                                                 anim_index   = xx DwarfAnimationMiner.MINE_SIDE;
                                                 action_frame = DWARF_MINER_ANIMATION_MINE_SIDE_FRAME_ACTION;
                                             }
@@ -2472,7 +2467,12 @@ update_and_draw_frame_round :: () {
                                                 if dwarf.tile_id_mining == dwarf_tile_id + context.world_cols {
                                                     anim_index   = xx DwarfAnimationMiner.MINE_DOWN;
                                                     action_frame = DWARF_MINER_ANIMATION_MINE_DOWN_FRAME_ACTION; 
-                                                } else {
+                                                }
+                                                else if dwarf.tile_id_mining == dwarf_tile_id - context.world_cols {
+                                                    anim_index   = xx DwarfAnimationMiner.MINE_UP;
+                                                    action_frame = DWARF_MINER_ANIMATION_MINE_UP_FRAME_ACTION;
+                                                }
+                                                else {
                                                     anim_index   = xx DwarfAnimationMiner.MINE_SIDE;
                                                     action_frame = DWARF_MINER_ANIMATION_MINE_SIDE_FRAME_ACTION; 
                                                 }
@@ -3410,9 +3410,14 @@ update_and_draw_frame_round :: () {
                         if !anim.active continue;
                         found = true;
 
+                        sprite_dest := Vector2.{
+                            dwarf.pos.x - TILEMAP_DWARF_MINER_TILE_PADDING_X,
+                            dwarf.pos.y - TILEMAP_DWARF_MINER_TILE_PADDING_Y,
+                        };
+
                         sprite_draw(
                             anim,
-                            dwarf.pos,
+                            sprite_dest,
                             xx ifx dwarf.dwarf_type == .MINER then TILEMAP_DWARF_MINER_WORLD_WIDTH  else TILEMAP_DWARF_WARRIOR_WORLD_WIDTH,
                             xx ifx dwarf.dwarf_type == .MINER then TILEMAP_DWARF_MINER_WORLD_HEIGHT else TILEMAP_DWARF_WARRIOR_WORLD_HEIGHT,
                             ifx dwarf.dwarf_type == .MINER then TILEMAP_DWARF_MINER_TILE_WIDTH  else TILEMAP_DWARF_WARRIOR_TILE_WIDTH,
@@ -3433,11 +3438,9 @@ update_and_draw_frame_round :: () {
                         if !anim.active continue;
                         found = true;
 
-                        DrawRectangle(xx goblin.pos.x, xx goblin.pos.y, TILEMAP_GOBLIN_WORLD_WIDTH, TILEMAP_GOBLIN_WORLD_HEIGHT, GREEN);
-
                         sprite_dest := Vector2.{
-                            goblin.pos.x - TILEMAP_GENERAL_WORLD_WIDTH,
-                            goblin.pos.y - TILEMAP_GENERAL_WORLD_HEIGHT,
+                            goblin.pos.x - TILEMAP_GOBLIN_TILE_PADDING_X,
+                            goblin.pos.y - TILEMAP_GOBLIN_TILE_PADDING_Y,
                         };
 
                         sprite_draw(
@@ -3485,7 +3488,7 @@ update_and_draw_frame_round :: () {
             draw_hovered_tile();
 
             // Draw particles
-            PARTICLE_TEXT_SIZE :: 20;
+            PARTICLE_TEXT_SIZE :: 10;
             draw_particles :: () {
                 for particle: particles_to_draw_this_frame {
                     dest := get_world_rect_from_pos(particle.position);
@@ -3494,11 +3497,11 @@ update_and_draw_frame_round :: () {
                         draw_outlined_text(
                             tprint("%\0", particle.text).data,
                             xx dest.x,
-                            xx dest.y,
+                            xx (dest.y - TILEMAP_GENERAL_WORLD_HEIGHT * 0.5),
                             PARTICLE_TEXT_SIZE,
                             Color.{ particle.tint.r, particle.tint.g, particle.tint.b, xx (particle.opacity * 255) },
                             1,
-                            BLACK
+                            Color.{ WHITE.r, WHITE.g, WHITE.b, xx (particle.opacity * 255) },
                         );
                     }
 
@@ -4800,29 +4803,34 @@ dwarf_transition_state :: (dwarf: *Dwarf, new_state: DwarfState) {
     if #complete new_state == {
         case .ATTACKING;
             if #complete dwarf.dwarf_type == {
-                case .MINER;   dwarf_set_active_animation(dwarf, xx DwarfAnimationMiner.MINE_SIDE);
-                case .WARRIOR; dwarf_set_active_animation(dwarf, xx DwarfAnimationWarrior.CHOP);
+                case .MINER;
+                    if dwarf.direction == .NORTH then entity_set_active_animation(dwarf, xx DwarfAnimationMiner.MINE_UP);
+                    if dwarf.direction == .SOUTH then entity_set_active_animation(dwarf, xx DwarfAnimationMiner.MINE_DOWN);
+                    if dwarf.direction == .EAST  then entity_set_active_animation(dwarf, xx DwarfAnimationMiner.MINE_SIDE);
+                    if dwarf.direction == .WEST  then entity_set_active_animation(dwarf, xx DwarfAnimationMiner.MINE_SIDE);
+                case .WARRIOR;
+                    entity_set_active_animation(dwarf, xx DwarfAnimationWarrior.CHOP);
             }
         case .DECIDING;  
         case .IDLE;
             if #complete dwarf.dwarf_type == {
-                case .MINER;   dwarf_set_active_animation(dwarf, xx DwarfAnimationMiner.IDLE);
-                case .WARRIOR; dwarf_set_active_animation(dwarf, xx DwarfAnimationWarrior.IDLE);
+                case .MINER;   entity_set_active_animation(dwarf, xx DwarfAnimationMiner.IDLE);
+                case .WARRIOR; entity_set_active_animation(dwarf, xx DwarfAnimationWarrior.IDLE);
             }
         case .MINING;
             if #complete dwarf.dwarf_type == {
                 case .MINER;
-                    if dwarf.direction == .NORTH then dwarf_set_active_animation(dwarf, xx DwarfAnimationMiner.MINE_SIDE);
-                    if dwarf.direction == .SOUTH then dwarf_set_active_animation(dwarf, xx DwarfAnimationMiner.MINE_DOWN);
-                    if dwarf.direction == .EAST  then dwarf_set_active_animation(dwarf, xx DwarfAnimationMiner.MINE_SIDE);
-                    if dwarf.direction == .WEST  then dwarf_set_active_animation(dwarf, xx DwarfAnimationMiner.MINE_SIDE);
+                    if dwarf.direction == .NORTH then entity_set_active_animation(dwarf, xx DwarfAnimationMiner.MINE_UP);
+                    if dwarf.direction == .SOUTH then entity_set_active_animation(dwarf, xx DwarfAnimationMiner.MINE_DOWN);
+                    if dwarf.direction == .EAST  then entity_set_active_animation(dwarf, xx DwarfAnimationMiner.MINE_SIDE);
+                    if dwarf.direction == .WEST  then entity_set_active_animation(dwarf, xx DwarfAnimationMiner.MINE_SIDE);
                 case .WARRIOR;
-                    dwarf_set_active_animation(dwarf, xx DwarfAnimationWarrior.CHOP);
+                    entity_set_active_animation(dwarf, xx DwarfAnimationWarrior.CHOP);
             }
         case .MOVING;
             if #complete dwarf.dwarf_type == {
-                case .MINER;   dwarf_set_active_animation(dwarf, xx DwarfAnimationMiner.WALK);
-                case .WARRIOR; dwarf_set_active_animation(dwarf, xx DwarfAnimationWarrior.WALK);   
+                case .MINER;   entity_set_active_animation(dwarf, xx DwarfAnimationMiner.WALK);
+                case .WARRIOR; entity_set_active_animation(dwarf, xx DwarfAnimationWarrior.WALK);   
             }
     }
 }
@@ -4840,10 +4848,10 @@ goblin_transition_state :: (goblin: *Goblin, new_state: GoblinState) {
 
     // What to do when entering these states
     if #complete new_state == {
-        case .IDLE;      goblin_set_active_animation(goblin, xx GoblinAnimation.IDLE);
+        case .IDLE;      entity_set_active_animation(goblin, xx GoblinAnimation.IDLE);
         case .DECIDING;        
-        case .MOVING;    goblin_set_active_animation(goblin, xx GoblinAnimation.WALK);
-        case .ATTACKING; goblin_set_active_animation(goblin, xx GoblinAnimation.CHOP);
+        case .MOVING;    entity_set_active_animation(goblin, xx GoblinAnimation.WALK);
+        case .ATTACKING; entity_set_active_animation(goblin, xx GoblinAnimation.CHOP);
     }
 }
 
@@ -5579,6 +5587,9 @@ create_dwarf :: (pos: Vector2, dwarf_type: DwarfType) -> Dwarf {
     dwarf_miner_animated_sprite_mine_side := dwarf_animated_sprite_base;
     dwarf_miner_animated_sprite_mine_side.first_frame = DWARF_MINER_ANIMATION_MINE_SIDE_START_FRAME;
 
+    dwarf_miner_animated_sprite_mine_up := dwarf_animated_sprite_base;
+    dwarf_miner_animated_sprite_mine_up.first_frame = DWARF_MINER_ANIMATION_MINE_UP_START_FRAME;
+
     dwarf_miner_animated_sprite_die := dwarf_animated_sprite_base;
     dwarf_miner_animated_sprite_die.first_frame = DWARF_MINER_ANIMATION_DIE_START_FRAME;
 
@@ -5605,6 +5616,7 @@ create_dwarf :: (pos: Vector2, dwarf_type: DwarfType) -> Dwarf {
         dwarf_miner_animated_sprite_walk,
         dwarf_miner_animated_sprite_mine_down,
         dwarf_miner_animated_sprite_mine_side,
+        dwarf_miner_animated_sprite_mine_up,
         dwarf_miner_animated_sprite_die,
     ];
 
