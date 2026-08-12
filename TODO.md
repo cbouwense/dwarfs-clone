@@ -8,6 +8,8 @@
 # Bugs
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+- Mining particles don't appear when tile is destroyed
+- Gold particles are fucked up
 - Dwarf warrior unable to path outside of base
 - Water doesn't spread immediately
 - Resetting game can crash
