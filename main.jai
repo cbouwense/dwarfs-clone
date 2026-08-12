@@ -671,6 +671,13 @@ Dwarf :: struct {
     is_moving_quickly   : bool;
 }
 
+GoblinAnimation :: enum {
+    IDLE :: 0;
+    WALK :: 1;
+    CHOP :: 2;
+    DIE  :: 3;
+};
+
 GoblinState :: enum {
     IDLE;
     DECIDING;
@@ -894,6 +901,12 @@ dwarf_set_active_animation :: (dwarf: *Dwarf, active_animation_index: s64) {
         dwarf.animations[DwarfAnimationWarrior.WALK].active = active_animation_index == xx DwarfAnimationWarrior.WALK;
         dwarf.animations[DwarfAnimationWarrior.CHOP].active = active_animation_index == xx DwarfAnimationWarrior.CHOP;
         dwarf.animations[DwarfAnimationWarrior.DIE].active  = active_animation_index == xx DwarfAnimationWarrior.DIE;
+    }
+}
+
+goblin_set_active_animation :: (goblin: *Goblin, active_animation_index: s64) {
+    for * anim: goblin.animations {
+        anim.active = active_animation_index == it_index;
     }
 }
 
@@ -2561,7 +2574,7 @@ update_and_draw_frame_round :: () {
 
                                         if detected {
                                             // TODO: set goblin direction
-                                            goblin.state = .ATTACKING;
+                                            goblin_transition_state(goblin, .ATTACKING);
                                             goblin.entity_id_attacking = dwarf.id;
 
                                             is_goblin_done_deciding = true;
@@ -2574,7 +2587,7 @@ update_and_draw_frame_round :: () {
 
                                         if detected {
                                             // TODO: set goblin direction
-                                            goblin.state = .ATTACKING;
+                                            goblin_transition_state(goblin, .ATTACKING);
                                             goblin.entity_id_attacking = base.id;
 
                                             is_goblin_done_deciding = true;
@@ -2627,11 +2640,11 @@ update_and_draw_frame_round :: () {
 
                                     if goblin.state == .DECIDING {
                                         if can_entity_make_progress(goblin) {
-                                            goblin.state = .MOVING;
+                                            goblin_transition_state(goblin, .MOVING);
                                         } else {
                                             result := try_to_set_goblin_random_new_target(goblin);
                                             if result == .DIRECTION_FOUND {
-                                                goblin.state = .MOVING;
+                                                goblin_transition_state(goblin, .MOVING);
                                             } else {
                                                 goblin_can_remain_undecided = true;
                                             }
@@ -2650,6 +2663,10 @@ update_and_draw_frame_round :: () {
 
                                     tile_id_next_in_goblin_path := goblin.tile_ids_on_path[0];
 
+                                    // Turn the goblin sprite to face whatever way it should be
+                                    if goblin.is_facing_left  && target_tile_pos.x > goblin_tile.pos.x then goblin.is_facing_left = false;
+                                    if !goblin.is_facing_left && target_tile_pos.x < goblin_tile.pos.x then goblin.is_facing_left = true;
+
                                     goblin_pretty_much_reached_target := values_are_close(goblin.pos, target_tile_pos, 1);
                                     if goblin_pretty_much_reached_target {
                                         // Teleport goblin to the target tile to remove any floating point weirdness.
@@ -2661,7 +2678,7 @@ update_and_draw_frame_round :: () {
                                         array_ordered_remove_by_index(*goblin.tile_ids_on_path, 0);
 
                                         // Figure out what to do next
-                                        goblin.state = .DECIDING;
+                                        goblin_transition_state(goblin, .DECIDING);
                                     } else {
                                         move_one_step_towards_its_next_target_cardinal(goblin, GOBLIN_MOVE_SPEED);
                                     }
@@ -2704,13 +2721,17 @@ update_and_draw_frame_round :: () {
                                         if (found) {
                                             assert_soft(goblin.entity_id_attacking == entity.id, "Goblin % thinks he's attacking entity % but really found entity %", goblin.id, goblin.entity_id_attacking, entity.id);
 
+                                            // Turn the goblin sprite to face whatever way it should be
+                                            if goblin.is_facing_left  && entity.pos.x > goblin_tile.pos.x then goblin.is_facing_left = false;
+                                            if !goblin.is_facing_left && entity.pos.x < goblin_tile.pos.x then goblin.is_facing_left = true;
+
                                             stop_trying_to_attack := false;
                                             // If attacking a dwarf, make sure it's still in reach
                                             if is_dwarf {
                                                 detected, dwarf, direction := find_cardinal_neighbor_entity(goblin_tile_id, Dwarf);
 
                                                 if !detected {
-                                                    goblin.state = .DECIDING;
+                                                    goblin_transition_state(goblin, .DECIDING);
                                                     goblin.entity_id_attacking = 0;
                                                     stop_trying_to_attack = true;
                                                 }
@@ -2745,7 +2766,7 @@ update_and_draw_frame_round :: () {
                                                         if is_dwarf kill_dwarf_by_id(entity.id);
                                                         else        kill_base_by_id(entity.id);
 
-                                                        goblin.state = .DECIDING;
+                                                        goblin_transition_state(goblin, .DECIDING);
                                                         goblin.entity_id_attacking = 0;
                                                     }
                                                 } else {
@@ -2753,7 +2774,7 @@ update_and_draw_frame_round :: () {
                                                 }
                                             }
                                         } else {
-                                            goblin.state = .DECIDING;
+                                            goblin_transition_state(goblin, .DECIDING);
                                             goblin.entity_id_attacking = 0;
                                         }
 
@@ -4800,6 +4821,26 @@ dwarf_transition_state :: (dwarf: *Dwarf, new_state: DwarfState) {
                 case .MINER;   dwarf_set_active_animation(dwarf, xx DwarfAnimationMiner.WALK);
                 case .WARRIOR; dwarf_set_active_animation(dwarf, xx DwarfAnimationWarrior.WALK);   
             }
+    }
+}
+
+goblin_transition_state :: (goblin: *Goblin, new_state: GoblinState) {
+    // What to do when exiting these states
+    if #complete goblin.state == {
+        case .IDLE;
+        case .DECIDING;
+        case .MOVING;
+        case .ATTACKING; goblin.entity_id_attacking = 0;
+    }
+
+    goblin.state = new_state;
+
+    // What to do when entering these states
+    if #complete new_state == {
+        case .IDLE;      goblin_set_active_animation(goblin, xx GoblinAnimation.IDLE);
+        case .DECIDING;        
+        case .MOVING;    goblin_set_active_animation(goblin, xx GoblinAnimation.WALK);
+        case .ATTACKING; goblin_set_active_animation(goblin, xx GoblinAnimation.CHOP);
     }
 }
 
