@@ -115,6 +115,24 @@ GOBLIN_ANIMATION_DIE_FRAME_DURATION_MS  :: 100;
 
 PARTICLE_FLOAT_SPEED :: -15.0;
 
+DWARF_DROP_SHADOW_CLOSE_SOURCE_COL :: 6;
+DWARF_DROP_SHADOW_CLOSE_SOURCE_ROW :: 4;
+DWARF_DROP_SHADOW_CLOSE_SOURCE_RECT :: Rectangle.{
+    DWARF_DROP_SHADOW_CLOSE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
+    DWARF_DROP_SHADOW_CLOSE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
+    TILEMAP_GENERAL_TILE_WIDTH,
+    TILEMAP_GENERAL_TILE_HEIGHT,
+};
+
+DWARF_DROP_SHADOW_FAR_SOURCE_COL :: 7;
+DWARF_DROP_SHADOW_FAR_SOURCE_ROW :: 4;
+DWARF_DROP_SHADOW_FAR_SOURCE_RECT :: Rectangle.{
+    DWARF_DROP_SHADOW_FAR_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
+    DWARF_DROP_SHADOW_FAR_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
+    TILEMAP_GENERAL_TILE_WIDTH,
+    TILEMAP_GENERAL_TILE_HEIGHT,
+};
+
 PARTICLE_GOLD_TIME_TO_LIVE_MS   :: 1000;
 PARTICLE_GOLD_SPRITE_SOURCE_ROW :: 0;
 PARTICLE_GOLD_SPRITE_SOURCE_COL :: 9;
@@ -355,7 +373,7 @@ TILEMAP_SOURCE_RECT_DIRT := Rectangle.{
 TILEMAP_DWARF_MINER_TILE_WIDTH     :: 96;
 TILEMAP_DWARF_MINER_TILE_HEIGHT    :: 64;
 TILEMAP_DWARF_MINER_TILE_PADDING_X :: 32;
-TILEMAP_DWARF_MINER_TILE_PADDING_Y :: 16;
+TILEMAP_DWARF_MINER_TILE_PADDING_Y :: 24;
 DWARF_MINER_SCALE_X                :: TILEMAP_DWARF_WARRIOR_TILE_WIDTH  / TILEMAP_GENERAL_TILE_WIDTH;
 DWARF_MINER_SCALE_Y                :: TILEMAP_DWARF_WARRIOR_TILE_HEIGHT / TILEMAP_GENERAL_TILE_HEIGHT;
 TILEMAP_DWARF_MINER_WORLD_WIDTH    :: TILEMAP_GENERAL_WORLD_WIDTH * DWARF_MINER_SCALE_X;
@@ -364,7 +382,7 @@ TILEMAP_DWARF_MINER_WORLD_HEIGHT   :: TILEMAP_GENERAL_WORLD_WIDTH * DWARF_MINER_
 TILEMAP_DWARF_WARRIOR_TILE_WIDTH     :: 96;
 TILEMAP_DWARF_WARRIOR_TILE_HEIGHT    :: 64;
 TILEMAP_DWARF_WARRIOR_TILE_PADDING_X :: 32;
-TILEMAP_DWARF_WARRIOR_TILE_PADDING_Y :: 16;
+TILEMAP_DWARF_WARRIOR_TILE_PADDING_Y :: 24;
 DWARF_WARRIOR_SCALE_X                :: TILEMAP_DWARF_WARRIOR_TILE_WIDTH  / TILEMAP_GENERAL_TILE_WIDTH;
 DWARF_WARRIOR_SCALE_Y                :: TILEMAP_DWARF_WARRIOR_TILE_HEIGHT / TILEMAP_GENERAL_TILE_HEIGHT;
 TILEMAP_DWARF_WARRIOR_WORLD_WIDTH    :: TILEMAP_GENERAL_WORLD_WIDTH * DWARF_WARRIOR_SCALE_X;
@@ -373,7 +391,7 @@ TILEMAP_DWARF_WARRIOR_WORLD_HEIGHT   :: TILEMAP_GENERAL_WORLD_WIDTH * DWARF_WARR
 TILEMAP_GOBLIN_TILE_WIDTH     :: 96;
 TILEMAP_GOBLIN_TILE_HEIGHT    :: 64;
 TILEMAP_GOBLIN_TILE_PADDING_X :: 32;
-TILEMAP_GOBLIN_TILE_PADDING_Y :: 16;
+TILEMAP_GOBLIN_TILE_PADDING_Y :: 24;
 GOBLIN_SCALE_X                :: TILEMAP_GOBLIN_TILE_WIDTH  / TILEMAP_GENERAL_TILE_WIDTH;
 GOBLIN_SCALE_Y                :: TILEMAP_GOBLIN_TILE_HEIGHT / TILEMAP_GENERAL_TILE_HEIGHT;
 TILEMAP_GOBLIN_WORLD_WIDTH    :: TILEMAP_GENERAL_WORLD_WIDTH  * GOBLIN_SCALE_X;
@@ -3048,8 +3066,7 @@ update_and_draw_frame_round :: () {
                     for tile: tiles_to_draw_this_frame {
                         tile_dest := get_world_rect_from_pos(tile.pos);
 
-                        // TODO: Very far distance
-
+                        // TODO: Very far distance?
                         // Far distance
                         if context.camera.zoom < CAMERA_ZOOM_LOD_MIN {
                             if #complete tile.type == {
@@ -3418,28 +3435,39 @@ update_and_draw_frame_round :: () {
             // Draw dwarves
             draw_dwarves :: () {
                 for dwarf: dwarves_to_draw_this_frame {
-                    // PERF: would it be faster to store the active index?
-                    found := false;
-                    for anim: dwarf.animations {
-                        if !anim.active continue;
-                        found = true;
-
-                        sprite_dest := Vector2.{
-                            dwarf.pos.x - TILEMAP_DWARF_MINER_TILE_PADDING_X,
-                            dwarf.pos.y - TILEMAP_DWARF_MINER_TILE_PADDING_Y,
-                        };
-
-                        sprite_draw(
-                            anim,
-                            sprite_dest,
-                            xx ifx dwarf.dwarf_type == .MINER then TILEMAP_DWARF_MINER_WORLD_WIDTH  else TILEMAP_DWARF_WARRIOR_WORLD_WIDTH,
-                            xx ifx dwarf.dwarf_type == .MINER then TILEMAP_DWARF_MINER_WORLD_HEIGHT else TILEMAP_DWARF_WARRIOR_WORLD_HEIGHT,
-                            ifx dwarf.dwarf_type == .MINER then TILEMAP_DWARF_MINER_TILE_WIDTH  else TILEMAP_DWARF_WARRIOR_TILE_WIDTH,
-                            ifx dwarf.dwarf_type == .MINER then TILEMAP_DWARF_MINER_TILE_HEIGHT else TILEMAP_DWARF_WARRIOR_TILE_HEIGHT,
-                            dwarf.is_facing_left,
-                        );
+                    // Far distance
+                    if context.camera.zoom < CAMERA_ZOOM_LOD_MIN {
+                        dest := get_world_rect_from_pos(dwarf.pos);
+                        DrawTexturePro(tilemap_texture_general, DWARF_DROP_SHADOW_FAR_SOURCE_RECT, dest, Vector2.{0,0}, 0.0, WHITE);
                     }
-                    assert_soft(found, "Dwarf % had no animation active\n", dwarf.id);
+                    // Close distance
+                    else {
+                        dest := get_world_rect_from_pos(dwarf.pos);
+                        DrawTexturePro(tilemap_texture_general, DWARF_DROP_SHADOW_CLOSE_SOURCE_RECT, dest, Vector2.{0,0}, 0.0, WHITE);
+
+                        // PERF: would it be faster to store the active index?
+                        found := false;
+                        for anim: dwarf.animations {
+                            if !anim.active continue;
+                            found = true;
+
+                            sprite_dest := Vector2.{
+                                dwarf.pos.x - TILEMAP_DWARF_MINER_TILE_PADDING_X,
+                                dwarf.pos.y - TILEMAP_DWARF_MINER_TILE_PADDING_Y,
+                            };
+
+                            sprite_draw( 
+                                anim,
+                                sprite_dest,
+                                xx ifx dwarf.dwarf_type == .MINER then TILEMAP_DWARF_MINER_WORLD_WIDTH  else TILEMAP_DWARF_WARRIOR_WORLD_WIDTH,
+                                xx ifx dwarf.dwarf_type == .MINER then TILEMAP_DWARF_MINER_WORLD_HEIGHT else TILEMAP_DWARF_WARRIOR_WORLD_HEIGHT,
+                                ifx dwarf.dwarf_type == .MINER then TILEMAP_DWARF_MINER_TILE_WIDTH  else TILEMAP_DWARF_WARRIOR_TILE_WIDTH,
+                                ifx dwarf.dwarf_type == .MINER then TILEMAP_DWARF_MINER_TILE_HEIGHT else TILEMAP_DWARF_WARRIOR_TILE_HEIGHT,
+                                dwarf.is_facing_left,
+                            );
+                        }
+                        assert_soft(found, "Dwarf % had no animation active\n", dwarf.id);
+                    }
                 }
             }
             draw_dwarves();
