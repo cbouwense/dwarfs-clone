@@ -27,7 +27,8 @@ window_height := 800;
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 CAMERA_MOVE_SPEED_BASE :: 4;
-CAMERA_ZOOM_LOD_MIN :: 0.3;
+CAMERA_ZOOM_LOD_CLOSE_MIN  :: 1.0;
+CAMERA_ZOOM_LOD_NORMAL_MIN :: 0.3;
 
 DIRT_HEALTH :: 100;
 IRON_HEALTH :: 200;
@@ -834,6 +835,21 @@ main :: () {
 }
 
 // Functions
+
+is_lod_close :: () -> bool {
+    return context.camera.zoom >= CAMERA_ZOOM_LOD_CLOSE_MIN;
+}
+
+is_lod_normal :: () -> bool {
+    return (
+        context.camera.zoom < CAMERA_ZOOM_LOD_CLOSE_MIN &&
+        context.camera.zoom >= CAMERA_ZOOM_LOD_NORMAL_MIN
+    );
+}
+
+is_lod_far :: () -> bool {
+    return context.camera.zoom < CAMERA_ZOOM_LOD_NORMAL_MIN;
+}
 
 does_tile_render_trenches :: (tile: *Tile) -> bool {
     if (tile == null) return false;
@@ -1682,6 +1698,8 @@ update_and_draw_frame_round :: () {
 
             // Update camera
             update_camera :: () {
+                defer print_vars(context.camera);
+
                 CAMERA_ZOOM_MULTIPLIER :: 1.2;
                 CAMERA_ZOOM_MIN_DEBUG  :: 0.01;
                 CAMERA_ZOOM_MAX        :: 13.0;
@@ -3042,7 +3060,7 @@ update_and_draw_frame_round :: () {
                     xx (TILEMAP_GENERAL_WORLD_HEIGHT * context.world_rows),
                 };
 
-                if context.camera.zoom >= CAMERA_ZOOM_LOD_MIN {
+                if is_lod_close() || is_lod_normal() {
                     // This accomplishes the tiling effect when we sample the source
                     // with such a big triangle.
                     source := Rectangle.{ 
@@ -3066,9 +3084,7 @@ update_and_draw_frame_round :: () {
                     for tile: tiles_to_draw_this_frame {
                         tile_dest := get_world_rect_from_pos(tile.pos);
 
-                        // TODO: Very far distance?
-                        // Far distance
-                        if context.camera.zoom < CAMERA_ZOOM_LOD_MIN {
+                        if is_lod_far() {
                             if #complete tile.type == {
                                 case .UNTOUCHED_DIRT; // Nothing to draw, we tile dirt on one texture in the background
                                 case .TOUCHED_DIRT;   // Nothing to draw, we tile dirt on one texture in the background
@@ -3152,8 +3168,7 @@ update_and_draw_frame_round :: () {
                                     // First, draw a fully mined tile underneath
                                     {
                                         tile_column := tile.id % 3;
-                                        // LOD
-                                        if context.camera.zoom < CAMERA_ZOOM_LOD_MIN tile_column = 3;
+                                        if is_lod_far() then tile_column = 3;
 
                                         source := Rectangle.{
                                             xx (tile_column * TILEMAP_GENERAL_TILE_WIDTH),
@@ -3186,8 +3201,8 @@ update_and_draw_frame_round :: () {
                                 }
                             }
                         }
-                        // Close distance
-                        else if context.camera.zoom >= CAMERA_ZOOM_LOD_MIN {
+                        // Normal / close distance
+                        else {
                             if #complete tile.type == {
                                 case .UNTOUCHED_DIRT; // Nothing to draw, we tile dirt on one texture in the background
                                 // TODO: maybe draw cracks based on health
@@ -3314,7 +3329,6 @@ update_and_draw_frame_round :: () {
                                 }
                             }
                         }
-                        // TODO: Very close distance
 
                         // Draw tile properties
                         if tile.props > 0 {
@@ -3351,6 +3365,7 @@ update_and_draw_frame_round :: () {
                             } else {
                                 // Draw encased tiles
                                 if tile.props & TileProperties.ENCASED {
+                                    // PERF: don't swap buffers here like this
                                     DrawRectangleV(
                                         tile.pos,
                                         Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
@@ -3365,7 +3380,7 @@ update_and_draw_frame_round :: () {
                 
                 DRAW_TRENCHES :: true;
                 #if DRAW_TRENCHES draw_trenches :: () {
-                    if context.camera.zoom >= CAMERA_ZOOM_LOD_MIN {
+                    if is_lod_close() || is_lod_normal() {
                         for tile: tiles_to_draw_this_frame {
                             if !does_tile_type_render_trenches(tile.type) continue;
 
@@ -3435,15 +3450,21 @@ update_and_draw_frame_round :: () {
             // Draw dwarves
             draw_dwarves :: () {
                 for dwarf: dwarves_to_draw_this_frame {
-                    // Far distance
-                    if context.camera.zoom < CAMERA_ZOOM_LOD_MIN {
+                    if is_lod_far() {
+                        // Draw drop shadow
                         dest := get_world_rect_from_pos(dwarf.pos);
                         DrawTexturePro(tilemap_texture_general, DWARF_DROP_SHADOW_FAR_SOURCE_RECT, dest, Vector2.{0,0}, 0.0, WHITE);
                     }
-                    // Close distance
+                    // Normal / close distance
                     else {
-                        dest := get_world_rect_from_pos(dwarf.pos);
-                        DrawTexturePro(tilemap_texture_general, DWARF_DROP_SHADOW_CLOSE_SOURCE_RECT, dest, Vector2.{0,0}, 0.0, WHITE);
+                        // Draw drop shadow
+                        if is_lod_normal() {
+                            dest := get_world_rect_from_pos(dwarf.pos);
+                            DrawTexturePro(tilemap_texture_general, DWARF_DROP_SHADOW_FAR_SOURCE_RECT, dest, Vector2.{0,0}, 0.0, WHITE);
+                        } else {
+                            dest := get_world_rect_from_pos(dwarf.pos);
+                            DrawTexturePro(tilemap_texture_general, DWARF_DROP_SHADOW_CLOSE_SOURCE_RECT, dest, Vector2.{0,0}, 0.0, WHITE);
+                        }
 
                         // PERF: would it be faster to store the active index?
                         found := false;
