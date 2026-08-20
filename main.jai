@@ -2434,7 +2434,6 @@ update_and_draw_frame_round :: () {
                                 // It's possible for the tile the dwarf is mining to suddenly be changed, like into obsidian.
                                 // In this case, the dwarf should abandon the idea of mining its current tile.
                                 if tile_to_mine.health <= 0 || !is_tile_mineable(dwarf.tile_id_mining) {
-                                    if context.metagame.debug_mode print("INFO: Dwarf was mining tile % but suddenly it was no longer mineable.\n", dwarf.tile_id_mining);
                                     array_reset(*(dwarf.tile_ids_on_path));
                                     dwarf_transition_state(dwarf, .DECIDING);
                                 } else {
@@ -2481,6 +2480,20 @@ update_and_draw_frame_round :: () {
                                     if frame == action_frame && !dwarf.did_anim_action {
                                         dwarf.did_anim_action = true;
 
+                                        // create some particles
+                                        direction_to_spawn_particles : Direction;
+                                        if dwarf.tile_id_mining == dwarf_tile_id - context.world_cols {
+                                            direction_to_spawn_particles = .NORTH;
+                                        } else if dwarf.tile_id_mining == dwarf_tile_id + context.world_cols {
+                                            direction_to_spawn_particles = .SOUTH;
+                                        } else if dwarf.tile_id_mining == dwarf_tile_id + 1 {
+                                            direction_to_spawn_particles = .EAST;
+                                        } else if dwarf.tile_id_mining == dwarf_tile_id - 1 {
+                                            direction_to_spawn_particles = .WEST;
+                                        }
+
+                                        create_mine_chip_particles(dwarf_center, 5, direction_to_spawn_particles);
+
                                         // Decrease the tile health by the dwarf mining damage
                                         dmg := dwarf_get_dig_damage(dwarf);
                                         new_health := tile_to_mine.health - dwarf_get_dig_damage(dwarf);
@@ -2519,21 +2532,7 @@ update_and_draw_frame_round :: () {
                                             dwarf_transition_state(dwarf, .DECIDING);
                                         } else {
                                             // If the tile just needs to take some damage, well, then damage it ya fuckin jallopy
-                                            tile_to_mine.health -= xx new_health;
-
-                                            // create some particles
-                                            direction_to_spawn_particles : Direction;
-                                            if dwarf.tile_id_mining == dwarf_tile_id - context.world_cols {
-                                                direction_to_spawn_particles = .NORTH;
-                                            } else if dwarf.tile_id_mining == dwarf_tile_id + context.world_cols {
-                                                direction_to_spawn_particles = .SOUTH;
-                                            } else if dwarf.tile_id_mining == dwarf_tile_id + 1 {
-                                                direction_to_spawn_particles = .EAST;
-                                            } else if dwarf.tile_id_mining == dwarf_tile_id - 1 {
-                                                direction_to_spawn_particles = .WEST;
-                                            }
-
-                                            create_mine_chip_particles(dwarf_center, 5, direction_to_spawn_particles);
+                                            tile_to_mine.health = xx new_health;
                                         }
                                     }
                                 }
