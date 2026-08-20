@@ -2165,397 +2165,288 @@ update_and_draw_frame_round :: () {
                             is_dwarf_done_updating = true;
                         }
 
-                        if #complete dwarf.state == {
-                            // You've just landed on a tile, now figure out what to do next
-                            case .DECIDING;
-                                is_dwarf_done_deciding := false;
+                        if !is_dwarf_done_updating {
+                            if #complete dwarf.state == {
+                                // You've just landed on a tile, now figure out what to do next
+                                case .DECIDING;
+                                    is_dwarf_done_deciding := false;
 
-                                // By default, we're going to expect that this dwarf decises what to do this frame
-                                // (i.e. moves out of the deciding state). However, there are some cases where a dwarf
-                                // can remain in the deciding state - like if he is somehow completely unable to move.
-                                dwarf_can_remain_undecided := false;
+                                    // By default, we're going to expect that this dwarf decises what to do this frame
+                                    // (i.e. moves out of the deciding state). However, there are some cases where a dwarf
+                                    // can remain in the deciding state - like if he is somehow completely unable to move.
+                                    dwarf_can_remain_undecided := false;
 
-                                // If you've touched treasure, pick it up
-                                if is_tile_treasure(dwarf_tile_id) {
-                                    // Credit the gold.
-                                    context.game_state.gold += GOLD_FROM_TREASURE;
-                                    create_gold_particle(dwarf_center, GOLD_FROM_TREASURE);
+                                    // If you've touched treasure, pick it up
+                                    if is_tile_treasure(dwarf_tile_id) {
+                                        // Credit the gold.
+                                        context.game_state.gold += GOLD_FROM_TREASURE;
+                                        create_gold_particle(dwarf_center, GOLD_FROM_TREASURE);
 
-                                    // Remove the treasure
-                                    tile := get_tile_by_id(dwarf_tile_id);
-                                    assert(tile != null);
-                                    tile.props &= ~TileProperties.HAS_TREASURE;
+                                        // Remove the treasure
+                                        tile := get_tile_by_id(dwarf_tile_id);
+                                        assert(tile != null);
+                                        tile.props &= ~TileProperties.HAS_TREASURE;
 
-                                    // Look for more treasure
-                                    found, new_treasure_tile_id := detect_treasure_tile_id_within_radius(dwarf_tile_id, 10);
-                                    if found {
-                                        tile_ids_to_new_treasure := get_tile_ids_from_pos_to_pos(get_tile_pos_by_id(dwarf_tile_id), get_tile_pos_by_id(new_treasure_tile_id));
-                                        tile_ids_to_new_treasure.count -= 1;
-                                        tile_ids_to_new_treasure.data  += 1;
+                                        // Look for more treasure
+                                        found, new_treasure_tile_id := detect_treasure_tile_id_within_radius(dwarf_tile_id, 10);
+                                        if found {
+                                            tile_ids_to_new_treasure := get_tile_ids_from_pos_to_pos(get_tile_pos_by_id(dwarf_tile_id), get_tile_pos_by_id(new_treasure_tile_id));
+                                            tile_ids_to_new_treasure.count -= 1;
+                                            tile_ids_to_new_treasure.data  += 1;
 
-                                        array_reset(*dwarf.tile_ids_on_path);
-                                        array_copy(*dwarf.tile_ids_on_path, tile_ids_to_new_treasure);
-                                        set_entity_direction_to_face_next_target(dwarf);
-
-                                        // Shouldn't this be moving?... or nothing?
-                                        dwarf_transition_state(dwarf, .DECIDING);
-                                    }
-                                }
-
-                                // If you've landed on dynamite, blow yourself up
-                                if is_tile_dynamite(dwarf_tile_id) {
-                                    // Mark this dwarf for death
-                                    array_add(*dwarf_ids_to_kill_this_frame, dwarf.id);
-
-                                    // Mark the dynamite as to be destroyed
-                                    tile := get_tile_by_id(dwarf_tile_id);
-                                    assert(tile != null);
-                                    tile.props &= ~TileProperties.HAS_DYNAMITE;
-
-                                    // Create a hole
-                                    set_tile_as_type(dwarf_tile_id, .HOLE, false, false);
-                                    handle_encasement(dwarf_tile_id);
-
-                                    // TODO: animation, I guess?
-
-                                    is_dwarf_done_deciding = true;
-                                    dwarf_can_remain_undecided = true;
-                                }
-
-                                // Regardless of the type of dwarf, if there's a goblin right on your ass, defend yourself unless you're
-                                // under strict orders to stand down.
-                                if !is_dwarf_done_deciding {
-                                    if dwarf.ignore_goblins_for == 0 {
-                                        detected, goblin, direction_of_goblin := detect_neighbor_cardinal(dwarf_tile_id, Goblin);
-                                        if detected {
-                                            create_dwarf_aggro_particle(dwarf.pos, dwarf.id);
-
-                                            dwarf.goblin_id_attacking = goblin.id;
-                                            dwarf.direction = direction_of_goblin;
-                                            dwarf_transition_state(dwarf, .ATTACKING);
-
-                                            is_dwarf_done_deciding = true;
-                                        }
-                                    } else {
-                                        dwarf.ignore_goblins_for -= 1;
-                                    }
-                                }
-
-                                // TODO: faster walk and mine speed when on a path, I think
-                                //
-                                // Check if the dwarf is on a path arrow. If he is, then his new mission is to follow it.
-                                if !is_dwarf_done_deciding {
-                                    for path: paths {
-                                        if dwarf_tile_id == path.start_tile_id {
-                                            tile_ids_on_path := get_tile_ids_on_path(path);
-
-                                            // Don't include the start tile, because then we softlock.
-                                            tile_ids_on_path.data  += 1;
-                                            tile_ids_on_path.count -= 1;
-
-                                            // TODO: extract this
-                                            array_reset(*(dwarf.tile_ids_on_path));
-                                            array_copy(*(dwarf.tile_ids_on_path), tile_ids_on_path);
+                                            array_reset(*dwarf.tile_ids_on_path);
+                                            array_copy(*dwarf.tile_ids_on_path, tile_ids_to_new_treasure);
                                             set_entity_direction_to_face_next_target(dwarf);
 
-                                            dwarf.is_moving_quickly = true;
-
-                                            is_dwarf_done_deciding = true;
-                                            break;
+                                            // Shouldn't this be moving?... or nothing?
+                                            dwarf_transition_state(dwarf, .DECIDING);
                                         }
                                     }
-                                }
 
-                                if !is_dwarf_done_deciding {
-                                    // PERF: is this too expensive to do every frame?
+                                    // If you've landed on dynamite, blow yourself up
+                                    if is_tile_dynamite(dwarf_tile_id) {
+                                        // Mark this dwarf for death
+                                        array_add(*dwarf_ids_to_kill_this_frame, dwarf.id);
+
+                                        // Mark the dynamite as to be destroyed
+                                        tile := get_tile_by_id(dwarf_tile_id);
+                                        assert(tile != null);
+                                        tile.props &= ~TileProperties.HAS_DYNAMITE;
+
+                                        // Create a hole
+                                        set_tile_as_type(dwarf_tile_id, .HOLE, false, false);
+                                        handle_encasement(dwarf_tile_id);
+
+                                        // TODO: animation, I guess?
+
+                                        is_dwarf_done_deciding = true;
+                                        dwarf_can_remain_undecided = true;
+                                    }
+
+                                    // Regardless of the type of dwarf, if there's a goblin right on your ass, defend yourself unless you're
+                                    // under strict orders to stand down.
+                                    if !is_dwarf_done_deciding {
+                                        if dwarf.ignore_goblins_for == 0 {
+                                            detected, goblin, direction_of_goblin := detect_neighbor_cardinal(dwarf_tile_id, Goblin);
+                                            if detected {
+                                                create_dwarf_aggro_particle(dwarf.pos, dwarf.id);
+
+                                                dwarf.goblin_id_attacking = goblin.id;
+                                                dwarf.direction = direction_of_goblin;
+                                                dwarf_transition_state(dwarf, .ATTACKING);
+
+                                                is_dwarf_done_deciding = true;
+                                            }
+                                        } else {
+                                            dwarf.ignore_goblins_for -= 1;
+                                        }
+                                    }
+
+                                    // TODO: faster walk and mine speed when on a path, I think
                                     //
-                                    // If the dwarf is a warrior, actively seek out goblins
-                                    if dwarf.dwarf_type == .WARRIOR {
-                                        dwarf_warrior_wander :: (dwarf: *Dwarf) {
-                                            dwarf_center  := get_rect_center(get_world_rect_from_pos(dwarf.pos));
-                                            dwarf_tile_id := get_tile_id_by_pos(dwarf_center);
+                                    // Check if the dwarf is on a path arrow. If he is, then his new mission is to follow it.
+                                    if !is_dwarf_done_deciding {
+                                        for path: paths {
+                                            if dwarf_tile_id == path.start_tile_id {
+                                                tile_ids_on_path := get_tile_ids_on_path(path);
 
-                                            on_top_of_base, base := table_find(*tile_ids_to_bases, dwarf_tile_id);
-                                            // If we're standing on a base right now, just keep walking in the direction you're currently going.
-                                            if on_top_of_base {
-                                                try_to_set_dwarf_target_to_one_block_in_the_direction_its_facing(dwarf);
-                                            } else {
-                                                base_neighbor_detected, base, base_direction := detect_neighbor_cardinal(dwarf_tile_id, Base);
+                                                // Don't include the start tile, because then we softlock.
+                                                tile_ids_on_path.data  += 1;
+                                                tile_ids_on_path.count -= 1;
 
-                                                // If we have a base within a cardinal direction, just keep walking in the direction you're currently going.
-                                                if base_neighbor_detected {
+                                                // TODO: extract this
+                                                array_reset(*(dwarf.tile_ids_on_path));
+                                                array_copy(*(dwarf.tile_ids_on_path), tile_ids_on_path);
+                                                set_entity_direction_to_face_next_target(dwarf);
+
+                                                dwarf.is_moving_quickly = true;
+
+                                                is_dwarf_done_deciding = true;
+                                                break;
+                                            }
+                                        }
+                                    }
+
+                                    if !is_dwarf_done_deciding {
+                                        // PERF: is this too expensive to do every frame?
+                                        //
+                                        // If the dwarf is a warrior, actively seek out goblins
+                                        if dwarf.dwarf_type == .WARRIOR {
+                                            dwarf_warrior_wander :: (dwarf: *Dwarf) {
+                                                dwarf_center  := get_rect_center(get_world_rect_from_pos(dwarf.pos));
+                                                dwarf_tile_id := get_tile_id_by_pos(dwarf_center);
+
+                                                on_top_of_base, base := table_find(*tile_ids_to_bases, dwarf_tile_id);
+                                                // If we're standing on a base right now, just keep walking in the direction you're currently going.
+                                                if on_top_of_base {
                                                     try_to_set_dwarf_target_to_one_block_in_the_direction_its_facing(dwarf);
                                                 } else {
-                                                    base_neighbor_detected, base, base_direction := detect_neighbor(dwarf_tile_id, Base);
+                                                    base_neighbor_detected, base, base_direction := detect_neighbor_cardinal(dwarf_tile_id, Base);
 
-                                                    // If we have a base within a diagonal direction, turn clockwise and then walk forward.
+                                                    // If we have a base within a cardinal direction, just keep walking in the direction you're currently going.
                                                     if base_neighbor_detected {
-                                                        dwarf.direction = get_next_direction_to_face_from_base_neighbor_direction(base_direction);
-                                                        result := try_to_set_dwarf_target_to_one_block_in_the_direction_its_facing(dwarf);
-                                                        if result == .NO_DIRECTION_FOUND {
-                                                            dwarf.direction = opposite_cardinal_direction(dwarf.direction);
-                                                            try_to_set_dwarf_target_to_one_block_in_the_direction_its_facing(dwarf);
-                                                        }
+                                                        try_to_set_dwarf_target_to_one_block_in_the_direction_its_facing(dwarf);
                                                     } else {
-                                                        // TODO: wander somewhat towards the nearest base
+                                                        base_neighbor_detected, base, base_direction := detect_neighbor(dwarf_tile_id, Base);
+
+                                                        // If we have a base within a diagonal direction, turn clockwise and then walk forward.
+                                                        if base_neighbor_detected {
+                                                            dwarf.direction = get_next_direction_to_face_from_base_neighbor_direction(base_direction);
+                                                            result := try_to_set_dwarf_target_to_one_block_in_the_direction_its_facing(dwarf);
+                                                            if result == .NO_DIRECTION_FOUND {
+                                                                dwarf.direction = opposite_cardinal_direction(dwarf.direction);
+                                                                try_to_set_dwarf_target_to_one_block_in_the_direction_its_facing(dwarf);
+                                                            }
+                                                        } else {
+                                                            // TODO: wander somewhat towards the nearest base
+                                                        }
                                                     }
                                                 }
                                             }
+
+                                            dealing_with_goblin := deal_with_nearby_goblins(dwarf);
+
+                                            if dealing_with_goblin == .NEARBY_GOBLIN_NOT_FOUND dwarf_warrior_wander(dwarf);
                                         }
 
-                                        dealing_with_goblin := deal_with_nearby_goblins(dwarf);
+                                        // If the dwarf has no targets, give him a new one
+                                        if dwarf.tile_ids_on_path.count == 0 {
+                                            dwarf.is_moving_quickly = false;
 
-                                        if dealing_with_goblin == .NEARBY_GOBLIN_NOT_FOUND dwarf_warrior_wander(dwarf);
-                                    }
+                                            result := try_to_set_dwarf_random_new_target(dwarf);
 
-                                    // If the dwarf has no targets, give him a new one
-                                    if dwarf.tile_ids_on_path.count == 0 {
-                                        dwarf.is_moving_quickly = false;
-
-                                        result := try_to_set_dwarf_random_new_target(dwarf);
-
-                                        // If there are no directions for this dwarf to go this frame,
-                                        // just do nothing and then check again the next frame.
-                                        if result == .NO_DIRECTION_FOUND {
-                                            dwarf_can_remain_undecided = true;
-                                            is_dwarf_done_deciding     = true;
-                                        }
-                                    }
-                                }
-
-                                if dwarf.tile_ids_on_path.count > 0 {
-                                    tile_id_next_in_dwarfs_path := dwarf.tile_ids_on_path[0];
-
-                                    // If it's walkable, proceed
-                                    if is_tile_id_walkable_for_entity(tile_id_next_in_dwarfs_path, dwarf.id) {
-                                        dwarf_transition_state(dwarf, .MOVING);
-                                    }
-                                    // If it's unmined, then they'll have to mine it
-                                    else {
-                                        if is_tile_mineable(tile_id_next_in_dwarfs_path) {
-                                            dwarf_transition_state(dwarf, .MINING);
-                                            dwarf.tile_id_mining = tile_id_next_in_dwarfs_path;
-
-                                            // Set up the world state to accomodate the fact that the dwarf is about to mine this tile.
-                                            // Plus, do some sanity checks to make sure that everything looks good.
-                                            {
-                                                // Add the tile the dwarf is about to mine to the global table of actively mined tiles and,
-                                                // in doing so, set its health.
-                                                new_health: s32;
-                                                if      is_tile_dirt(tile_id_next_in_dwarfs_path) new_health = xx DIRT_HEALTH;
-                                                else if is_tile_iron(tile_id_next_in_dwarfs_path) new_health = xx IRON_HEALTH;
-                                                else if is_tile_wall(tile_id_next_in_dwarfs_path) new_health = xx WALL_HEALTH;
-                                                else if (
-                                                    is_tile_water_still(dwarf.tile_id_mining) ||
-                                                    is_tile_water_flowing(dwarf.tile_id_mining) ||
-                                                    is_tile_lava_still(dwarf.tile_id_mining) ||
-                                                    is_tile_lava_flowing(dwarf.tile_id_mining)
-                                                ) {
-                                                    // If you try to mine liquid, you're fucking banned
-                                                    array_add(*dwarf_ids_to_kill_this_frame, dwarf.id);
-                                                    is_dwarf_done_deciding = true;
-                                                }
-                                                else {
-                                                    print_vars(get_tile_by_id(tile_id_next_in_dwarfs_path));
-                                                    assert_soft(false, "Dwarf % tryna mine some weird ass shit (tile id %)", dwarf.id, tile_id_next_in_dwarfs_path);
-                                                }
-
-                                                tile := get_tile_by_id(tile_id_next_in_dwarfs_path);
-                                                if tile then tile.health = xx new_health;
+                                            // If there are no directions for this dwarf to go this frame,
+                                            // just do nothing and then check again the next frame.
+                                            if result == .NO_DIRECTION_FOUND {
+                                                dwarf_can_remain_undecided = true;
+                                                is_dwarf_done_deciding     = true;
                                             }
                                         }
-                                        // If it's unmineable, first of all I'm pretty sure this shouldn't have been on their path,
-                                        // but second of all, they're going to have to figure something else out then because this
-                                        // is a dead end.
+                                    }
+
+                                    if dwarf.tile_ids_on_path.count > 0 {
+                                        tile_id_next_in_dwarfs_path := dwarf.tile_ids_on_path[0];
+
+                                        // If it's walkable, proceed
+                                        if is_tile_id_walkable_for_entity(tile_id_next_in_dwarfs_path, dwarf.id) {
+                                            dwarf_transition_state(dwarf, .MOVING);
+                                        }
+                                        // If it's unmined, then they'll have to mine it
                                         else {
-                                            try_to_set_dwarf_random_new_target(dwarf);
-                                            dwarf_can_remain_undecided = true;
-                                            dwarf.is_moving_quickly    = false;
-                                        }
-                                    }
-                                }
+                                            if is_tile_mineable(tile_id_next_in_dwarfs_path) {
+                                                dwarf_transition_state(dwarf, .MINING);
+                                                dwarf.tile_id_mining = tile_id_next_in_dwarfs_path;
 
-                                assert_soft(dwarf.state != .DECIDING || dwarf_can_remain_undecided, "Dwarf % got to end of DECIDING state without making a decision", dwarf.id);
+                                                // Set up the world state to accomodate the fact that the dwarf is about to mine this tile.
+                                                // Plus, do some sanity checks to make sure that everything looks good.
+                                                {
+                                                    // Add the tile the dwarf is about to mine to the global table of actively mined tiles and,
+                                                    // in doing so, set its health.
+                                                    new_health: s32;
+                                                    if      is_tile_dirt(tile_id_next_in_dwarfs_path) new_health = xx DIRT_HEALTH;
+                                                    else if is_tile_iron(tile_id_next_in_dwarfs_path) new_health = xx IRON_HEALTH;
+                                                    else if is_tile_wall(tile_id_next_in_dwarfs_path) new_health = xx WALL_HEALTH;
+                                                    else if (
+                                                        is_tile_water_still(dwarf.tile_id_mining) ||
+                                                        is_tile_water_flowing(dwarf.tile_id_mining) ||
+                                                        is_tile_lava_still(dwarf.tile_id_mining) ||
+                                                        is_tile_lava_flowing(dwarf.tile_id_mining)
+                                                    ) {
+                                                        // If you try to mine liquid, you're fucking banned
+                                                        array_add(*dwarf_ids_to_kill_this_frame, dwarf.id);
+                                                        is_dwarf_done_deciding = true;
+                                                    }
+                                                    else {
+                                                        print_vars(get_tile_by_id(tile_id_next_in_dwarfs_path));
+                                                        assert_soft(false, "Dwarf % tryna mine some weird ass shit (tile id %)", dwarf.id, tile_id_next_in_dwarfs_path);
+                                                    }
 
-                            case .MOVING;
-                                assert_soft(dwarf.tile_ids_on_path.count > 0, "Dwarf % wanted to move, but has nowhere to go", dwarf.id);
-
-                                target_tile_id  := dwarf.tile_ids_on_path[0];
-                                target_tile_pos := get_tile_pos_by_id(target_tile_id);
-
-                                assert_soft(dwarf.pos.x == target_tile_pos.x || dwarf.pos.y == target_tile_pos.y, "Dwarf % is going at an angle", dwarf.id);
-
-                                // TODO: #if DEBUG
-                                if !is_tile_id_walkable_for_entity(target_tile_id, dwarf.id) {
-                                    // print_vars(get_tile_by_id(target_tile_id));
-                                    // assert_soft(false, "Dwarf % is trying to move into the invalid tile %\n", dwarf.id, target_tile_id);
-                                }
-
-                                // Turn the dwarf sprite to face whatever way it should be
-                                if dwarf.is_facing_left  && target_tile_pos.x > dwarf_tile.pos.x then dwarf.is_facing_left = false;
-                                if !dwarf.is_facing_left && target_tile_pos.x < dwarf_tile.pos.x then dwarf.is_facing_left = true;
-
-                                // Calculate the squared distance (use squared distances so we can avoid a sqrtf).
-                                dx := target_tile_pos.x - dwarf.pos.x;
-                                dy := target_tile_pos.y - dwarf.pos.y;
-                                distance_squared := (dx * dx) + (dy * dy);
-
-                                // Calculate the squared step size
-                                speed := ifx dwarf.is_moving_quickly then DWARF_MOVE_SPEED_FAST else DWARF_MOVE_SPEED;
-                                step_size := speed * context.dt_seconds;
-                                step_size_squared := step_size * step_size;
-
-                                dwarf_pretty_much_reached_target := distance_squared <= step_size_squared;
-
-                                if dwarf_pretty_much_reached_target {
-                                    // Teleport dwarf to the target tile to remove any floating point weirdness.
-                                    dwarf.pos = target_tile_pos;
-
-                                    // Remove the target from the tile ids on path
-                                    array_ordered_remove_by_index(*(dwarf.tile_ids_on_path), 0);
-
-                                    // Figure out what to do next
-                                    dwarf_transition_state(dwarf, .DECIDING);
-                                } else {
-                                    move_one_step_towards_its_next_target_cardinal(dwarf, speed);
-
-                                    // Remain in the .MOVING state, since we didn't reach the target yet
-                                }
-
-                            case .MINING;
-                                assert(dwarf.tile_id_mining > 0, "Dwarf tryna mine but he got no gotdamn tile to mine!!!!!!!");
-
-                                tile_to_mine := get_tile_by_id(dwarf.tile_id_mining);
-                                if tile_to_mine == null {
-                                    set_tile_as_type(dwarf.tile_id_mining, .TOUCHED_DIRT, false, false);
-                                    tile_to_mine = get_tile_by_id(dwarf.tile_id_mining);
-                                }
-
-                                // It's possible for the tile the dwarf is mining to suddenly be changed, like into obsidian.
-                                // In this case, the dwarf should abandon the idea of mining its current tile.
-                                if tile_to_mine.health <= 0 || !is_tile_mineable(dwarf.tile_id_mining) {
-                                    array_reset(*(dwarf.tile_ids_on_path));
-                                    dwarf_transition_state(dwarf, .DECIDING);
-                                } else {
-                                    // TODO: probably want a function for this
-                                    anim_index   : s64;
-                                    action_frame : int;
-                                    
-                                    // Swing down
-                                    if dwarf.tile_id_mining == dwarf_tile_id + context.world_cols {
-                                        if #complete dwarf.dwarf_type == {
-                                            case .MINER;
-                                                anim_index   = xx DwarfAnimationMiner.MINE_DOWN;
-                                                action_frame = DWARF_MINER_ANIMATION_MINE_DOWN_FRAME_ACTION;
-                                            case .WARRIOR;
-                                                anim_index   = xx DwarfAnimationWarrior.CHOP_DOWN;
-                                                action_frame = DWARF_WARRIOR_ANIMATION_CHOP_DOWN_FRAME_ACTION;
-                                        }
-                                    }
-                                    // Swing up
-                                    else if dwarf.tile_id_mining == dwarf_tile_id - context.world_cols {
-                                        if #complete dwarf.dwarf_type == {
-                                            case .MINER;
-                                                anim_index   = xx DwarfAnimationMiner.MINE_UP;
-                                                action_frame = DWARF_MINER_ANIMATION_MINE_UP_FRAME_ACTION;
-                                            case .WARRIOR;
-                                                anim_index   = xx DwarfAnimationWarrior.CHOP_UP;
-                                                action_frame = DWARF_WARRIOR_ANIMATION_CHOP_UP_FRAME_ACTION;
-                                        }
-                                    }
-                                    // Swing to the side
-                                    else {
-                                        if #complete dwarf.dwarf_type == {
-                                            case .MINER;
-                                                anim_index   = xx DwarfAnimationMiner.MINE_SIDE;
-                                                action_frame = DWARF_MINER_ANIMATION_MINE_SIDE_FRAME_ACTION;
-                                            case .WARRIOR;
-                                                anim_index   = xx DwarfAnimationWarrior.CHOP_UP;
-                                                action_frame = DWARF_WARRIOR_ANIMATION_CHOP_UP_FRAME_ACTION;
-                                        }
-                                    }
-
-                                    frame := sprite_animation_get_current_frame(dwarf.animations[anim_index]);
-
-                                    if frame == action_frame && !dwarf.did_anim_action {
-                                        dwarf.did_anim_action = true;
-
-                                        // create some particles
-                                        direction_to_spawn_particles : Direction;
-                                        if dwarf.tile_id_mining == dwarf_tile_id - context.world_cols {
-                                            direction_to_spawn_particles = .NORTH;
-                                        } else if dwarf.tile_id_mining == dwarf_tile_id + context.world_cols {
-                                            direction_to_spawn_particles = .SOUTH;
-                                        } else if dwarf.tile_id_mining == dwarf_tile_id + 1 {
-                                            direction_to_spawn_particles = .EAST;
-                                        } else if dwarf.tile_id_mining == dwarf_tile_id - 1 {
-                                            direction_to_spawn_particles = .WEST;
-                                        }
-
-                                        create_mine_chip_particles(dwarf_center, 5, direction_to_spawn_particles);
-
-                                        // Decrease the tile health by the dwarf mining damage
-                                        dmg := dwarf_get_dig_damage(dwarf);
-                                        new_health := tile_to_mine.health - dwarf_get_dig_damage(dwarf);
-
-                                        if new_health <= 0 {
-                                            just_mined_iron := is_tile_iron(dwarf.tile_id_mining);
-                                            
-                                            set_tile_as_type(dwarf.tile_id_mining, .MINED, true, true);
-
-                                            if just_mined_iron && dwarf.dwarf_type == .MINER {
-                                                found_next_iron_in_deposit, next_iron_tile_id := detect_iron_tile_id_within_radius(dwarf_tile_id, 3);
-                                                if found_next_iron_in_deposit {
-                                                    tile_ids_to_next_iron_tile := get_tile_ids_from_pos_to_pos(get_tile_pos_by_id(dwarf_tile_id), get_tile_pos_by_id(next_iron_tile_id));
-                                                    array_reset(*dwarf.tile_ids_on_path);
-                                                    array_copy(*dwarf.tile_ids_on_path, tile_ids_to_next_iron_tile);
+                                                    tile := get_tile_by_id(tile_id_next_in_dwarfs_path);
+                                                    if tile then tile.health = xx new_health;
                                                 }
                                             }
-
-                                            // If we just cracked into a cave, we'll need to reveal the cave and do anything
-                                            // that cave type needs (e.g. spawn water, lava, monsters, etc.).
-                                            revealed_cave, cave_type := reveal_cave_if_necessary(dwarf.tile_id_mining, true, false);
-
-                                            if revealed_cave && cave_type == .TREASURE {
-                                                found, new_treasure_tile_id := detect_treasure_tile_id_within_radius(dwarf.tile_id_mining, 10);
-                                                if found {
-                                                    // Teleport dwarf to the center of the tile he's standing on before changing his pathing.
-                                                    // Without doing this, the dwarf can end up being misaligned.
-                                                    dwarf.pos = dwarf_tile.pos;
-
-                                                    tile_ids_to_new_treasure := get_tile_ids_from_pos_to_pos(get_tile_pos_by_id(dwarf.tile_id_mining), get_tile_pos_by_id(new_treasure_tile_id));
-                                                    array_reset(*dwarf.tile_ids_on_path);
-                                                    array_copy(*dwarf.tile_ids_on_path, tile_ids_to_new_treasure);
-                                                }
+                                            // If it's unmineable, first of all I'm pretty sure this shouldn't have been on their path,
+                                            // but second of all, they're going to have to figure something else out then because this
+                                            // is a dead end.
+                                            else {
+                                                try_to_set_dwarf_random_new_target(dwarf);
+                                                dwarf_can_remain_undecided = true;
+                                                dwarf.is_moving_quickly    = false;
                                             }
-
-                                            dwarf_transition_state(dwarf, .DECIDING);
-                                        } else {
-                                            // If the tile just needs to take some damage, well, then damage it ya fuckin jallopy
-                                            tile_to_mine.health = xx new_health;
                                         }
                                     }
-                                }
 
-                            case .ATTACKING;
-                                // Make sure the goblin is still alive, it's possible that other dwarves have killed it this frame.
-                                found, goblin_index := table_find(*goblin_id_to_index, dwarf.goblin_id_attacking);
-                                if found {
-                                    goblin         := *goblins[goblin_index];
-                                    goblin_center  := get_rect_center(get_world_rect_from_pos(goblin.pos));
-                                    goblin_tile_id := get_tile_id_by_pos(goblin_center);
+                                    assert_soft(dwarf.state != .DECIDING || dwarf_can_remain_undecided, "Dwarf % got to end of DECIDING state without making a decision", dwarf.id);
 
-                                    // Turn the dwarf to face whichever way it should be.
-                                    if dwarf.is_facing_left  && goblin.pos.x > dwarf_tile.pos.x then dwarf.is_facing_left = false;
-                                    if !dwarf.is_facing_left && goblin.pos.x < dwarf_tile.pos.x then dwarf.is_facing_left = true;
+                                case .MOVING;
+                                    assert_soft(dwarf.tile_ids_on_path.count > 0, "Dwarf % wanted to move, but has nowhere to go", dwarf.id);
 
-                                    if is_tile_id_neighbor_of_tile_id_cardinal(dwarf_tile_id, goblin_tile_id) {
-                                        assert_soft(dwarf.goblin_id_attacking == goblin.id, "Dwarf % thinks he's attacking goblin % but really found goblin %", dwarf.id, dwarf.goblin_id_attacking, goblin.id);
-                                        
+                                    target_tile_id  := dwarf.tile_ids_on_path[0];
+                                    target_tile_pos := get_tile_pos_by_id(target_tile_id);
+
+                                    assert_soft(dwarf.pos.x == target_tile_pos.x || dwarf.pos.y == target_tile_pos.y, "Dwarf % is going at an angle", dwarf.id);
+
+                                    // TODO: #if DEBUG
+                                    if !is_tile_id_walkable_for_entity(target_tile_id, dwarf.id) {
+                                        // print_vars(get_tile_by_id(target_tile_id));
+                                        // assert_soft(false, "Dwarf % is trying to move into the invalid tile %\n", dwarf.id, target_tile_id);
+                                    }
+
+                                    // Turn the dwarf sprite to face whatever way it should be
+                                    if dwarf.is_facing_left  && target_tile_pos.x > dwarf_tile.pos.x then dwarf.is_facing_left = false;
+                                    if !dwarf.is_facing_left && target_tile_pos.x < dwarf_tile.pos.x then dwarf.is_facing_left = true;
+
+                                    // Calculate the squared distance (use squared distances so we can avoid a sqrtf).
+                                    dx := target_tile_pos.x - dwarf.pos.x;
+                                    dy := target_tile_pos.y - dwarf.pos.y;
+                                    distance_squared := (dx * dx) + (dy * dy);
+
+                                    // Calculate the squared step size
+                                    speed := ifx dwarf.is_moving_quickly then DWARF_MOVE_SPEED_FAST else DWARF_MOVE_SPEED;
+                                    step_size := speed * context.dt_seconds;
+                                    step_size_squared := step_size * step_size;
+
+                                    dwarf_pretty_much_reached_target := distance_squared <= step_size_squared;
+
+                                    if dwarf_pretty_much_reached_target {
+                                        // Teleport dwarf to the target tile to remove any floating point weirdness.
+                                        dwarf.pos = target_tile_pos;
+
+                                        // Remove the target from the tile ids on path
+                                        array_ordered_remove_by_index(*(dwarf.tile_ids_on_path), 0);
+
+                                        // Figure out what to do next
+                                        dwarf_transition_state(dwarf, .DECIDING);
+                                    } else {
+                                        move_one_step_towards_its_next_target_cardinal(dwarf, speed);
+
+                                        // Remain in the .MOVING state, since we didn't reach the target yet
+                                    }
+
+                                case .MINING;
+                                    assert(dwarf.tile_id_mining > 0, "Dwarf tryna mine but he got no gotdamn tile to mine!!!!!!!");
+
+                                    tile_to_mine := get_tile_by_id(dwarf.tile_id_mining);
+                                    if tile_to_mine == null {
+                                        set_tile_as_type(dwarf.tile_id_mining, .TOUCHED_DIRT, false, false);
+                                        tile_to_mine = get_tile_by_id(dwarf.tile_id_mining);
+                                    }
+
+                                    // Turn the dwarf sprite to face whatever way it should be
+                                    if dwarf.is_facing_left  && tile_to_mine.pos.x > dwarf_tile.pos.x then dwarf.is_facing_left = false;
+                                    if !dwarf.is_facing_left && tile_to_mine.pos.x < dwarf_tile.pos.x then dwarf.is_facing_left = true;
+
+                                    // It's possible for the tile the dwarf is mining to suddenly be changed, like into obsidian.
+                                    // In this case, the dwarf should abandon the idea of mining its current tile.
+                                    if tile_to_mine.health <= 0 || !is_tile_mineable(dwarf.tile_id_mining) {
+                                        array_reset(*(dwarf.tile_ids_on_path));
+                                        dwarf_transition_state(dwarf, .DECIDING);
+                                    } else {
                                         // TODO: probably want a function for this
                                         anim_index   : s64;
                                         action_frame : int;
-
+                                        
+                                        // Swing down
                                         if dwarf.tile_id_mining == dwarf_tile_id + context.world_cols {
                                             if #complete dwarf.dwarf_type == {
                                                 case .MINER;
@@ -2566,6 +2457,7 @@ update_and_draw_frame_round :: () {
                                                     action_frame = DWARF_WARRIOR_ANIMATION_CHOP_DOWN_FRAME_ACTION;
                                             }
                                         }
+                                        // Swing up
                                         else if dwarf.tile_id_mining == dwarf_tile_id - context.world_cols {
                                             if #complete dwarf.dwarf_type == {
                                                 case .MINER;
@@ -2576,14 +2468,15 @@ update_and_draw_frame_round :: () {
                                                     action_frame = DWARF_WARRIOR_ANIMATION_CHOP_UP_FRAME_ACTION;
                                             }
                                         }
+                                        // Swing to the side
                                         else {
                                             if #complete dwarf.dwarf_type == {
                                                 case .MINER;
                                                     anim_index   = xx DwarfAnimationMiner.MINE_SIDE;
                                                     action_frame = DWARF_MINER_ANIMATION_MINE_SIDE_FRAME_ACTION;
                                                 case .WARRIOR;
-                                                    anim_index   = xx DwarfAnimationWarrior.CHOP_SIDE;
-                                                    action_frame = DWARF_WARRIOR_ANIMATION_CHOP_SIDE_FRAME_ACTION;
+                                                    anim_index   = xx DwarfAnimationWarrior.CHOP_UP;
+                                                    action_frame = DWARF_WARRIOR_ANIMATION_CHOP_UP_FRAME_ACTION;
                                             }
                                         }
 
@@ -2592,54 +2485,169 @@ update_and_draw_frame_round :: () {
                                         if frame == action_frame && !dwarf.did_anim_action {
                                             dwarf.did_anim_action = true;
 
-                                            // Hit check
-                                            rng := random_get_within_range(0, 1);
-                                            swing_connected := rng <= dwarf_get_hit_chance(dwarf);
+                                            // create some particles
+                                            direction_to_spawn_particles : Direction;
+                                            if dwarf.tile_id_mining == dwarf_tile_id - context.world_cols {
+                                                direction_to_spawn_particles = .NORTH;
+                                            } else if dwarf.tile_id_mining == dwarf_tile_id + context.world_cols {
+                                                direction_to_spawn_particles = .SOUTH;
+                                            } else if dwarf.tile_id_mining == dwarf_tile_id + 1 {
+                                                direction_to_spawn_particles = .EAST;
+                                            } else if dwarf.tile_id_mining == dwarf_tile_id - 1 {
+                                                direction_to_spawn_particles = .WEST;
+                                            }
 
-                                            if swing_connected {
-                                                damage := dwarf_get_attack_damage(dwarf);
+                                            create_mine_chip_particles(dwarf_center, 5, direction_to_spawn_particles);
 
-                                                // TODO: probably extract this
-                                                direction_stars_should_fly: Direction;
-                                                found_direction := false;
-                                                for DIRECTIONS_CARDINAL {
-                                                    neighbor_tile_id := get_neighbor_tile_id_by_direction(dwarf_tile_id, it);
-                                                    if neighbor_tile_id == goblin_tile_id {
-                                                        direction_stars_should_fly = it;
-                                                        found_direction = true;
-                                                        break;
+                                            // Decrease the tile health by the dwarf mining damage
+                                            dmg := dwarf_get_dig_damage(dwarf);
+                                            new_health := tile_to_mine.health - dwarf_get_dig_damage(dwarf);
+
+                                            if new_health <= 0 {
+                                                just_mined_iron := is_tile_iron(dwarf.tile_id_mining);
+                                                
+                                                set_tile_as_type(dwarf.tile_id_mining, .MINED, true, true);
+
+                                                if just_mined_iron && dwarf.dwarf_type == .MINER {
+                                                    found_next_iron_in_deposit, next_iron_tile_id := detect_iron_tile_id_within_radius(dwarf_tile_id, 3);
+                                                    if found_next_iron_in_deposit {
+                                                        tile_ids_to_next_iron_tile := get_tile_ids_from_pos_to_pos(get_tile_pos_by_id(dwarf_tile_id), get_tile_pos_by_id(next_iron_tile_id));
+                                                        array_reset(*dwarf.tile_ids_on_path);
+                                                        array_copy(*dwarf.tile_ids_on_path, tile_ids_to_next_iron_tile);
                                                     }
                                                 }
-                                                assert_soft(found_direction, "Was trying to figure out what direction the damage star should fly when dwarf % connected an attack on goblin %, but didn't detect the goblin as a cardinal neighbor of the dwarf\n", dwarf.id, goblin.id);
 
-                                                create_damage_particles(goblin.pos, damage, direction_stars_should_fly);
+                                                // If we just cracked into a cave, we'll need to reveal the cave and do anything
+                                                // that cave type needs (e.g. spawn water, lava, monsters, etc.).
+                                                revealed_cave, cave_type := reveal_cave_if_necessary(dwarf.tile_id_mining, true, false);
 
-                                                goblin.hp -= damage;
+                                                if revealed_cave && cave_type == .TREASURE {
+                                                    found, new_treasure_tile_id := detect_treasure_tile_id_within_radius(dwarf.tile_id_mining, 10);
+                                                    if found {
+                                                        // Teleport dwarf to the center of the tile he's standing on before changing his pathing.
+                                                        // Without doing this, the dwarf can end up being misaligned.
+                                                        dwarf.pos = dwarf_tile.pos;
 
-                                                if goblin.hp <= 0 {
-                                                    kill_goblin_by_id(goblin.id);
-
-                                                    dwarf_transition_state(dwarf, .DECIDING);
+                                                        tile_ids_to_new_treasure := get_tile_ids_from_pos_to_pos(get_tile_pos_by_id(dwarf.tile_id_mining), get_tile_pos_by_id(new_treasure_tile_id));
+                                                        array_reset(*dwarf.tile_ids_on_path);
+                                                        array_copy(*dwarf.tile_ids_on_path, tile_ids_to_new_treasure);
+                                                    }
                                                 }
+
+                                                dwarf_transition_state(dwarf, .DECIDING);
                                             } else {
-                                                create_miss_particles(goblin.pos);
+                                                // If the tile just needs to take some damage, well, then damage it ya fuckin jallopy
+                                                tile_to_mine.health = xx new_health;
                                             }
+                                        }
+                                    }
+
+                                case .ATTACKING;
+                                    // Make sure the goblin is still alive, it's possible that other dwarves have killed it this frame.
+                                    found, goblin_index := table_find(*goblin_id_to_index, dwarf.goblin_id_attacking);
+                                    if found {
+                                        goblin         := *goblins[goblin_index];
+                                        goblin_center  := get_rect_center(get_world_rect_from_pos(goblin.pos));
+                                        goblin_tile_id := get_tile_id_by_pos(goblin_center);
+
+                                        // Turn the dwarf to face whichever way it should be.
+                                        if dwarf.is_facing_left  && goblin.pos.x > dwarf_tile.pos.x then dwarf.is_facing_left = false;
+                                        if !dwarf.is_facing_left && goblin.pos.x < dwarf_tile.pos.x then dwarf.is_facing_left = true;
+
+                                        if is_tile_id_neighbor_of_tile_id_cardinal(dwarf_tile_id, goblin_tile_id) {
+                                            assert_soft(dwarf.goblin_id_attacking == goblin.id, "Dwarf % thinks he's attacking goblin % but really found goblin %", dwarf.id, dwarf.goblin_id_attacking, goblin.id);
+                                            
+                                            // TODO: probably want a function for this
+                                            anim_index   : s64;
+                                            action_frame : int;
+
+                                            if dwarf.tile_id_mining == dwarf_tile_id + context.world_cols {
+                                                if #complete dwarf.dwarf_type == {
+                                                    case .MINER;
+                                                        anim_index   = xx DwarfAnimationMiner.MINE_DOWN;
+                                                        action_frame = DWARF_MINER_ANIMATION_MINE_DOWN_FRAME_ACTION;
+                                                    case .WARRIOR;
+                                                        anim_index   = xx DwarfAnimationWarrior.CHOP_DOWN;
+                                                        action_frame = DWARF_WARRIOR_ANIMATION_CHOP_DOWN_FRAME_ACTION;
+                                                }
+                                            }
+                                            else if dwarf.tile_id_mining == dwarf_tile_id - context.world_cols {
+                                                if #complete dwarf.dwarf_type == {
+                                                    case .MINER;
+                                                        anim_index   = xx DwarfAnimationMiner.MINE_UP;
+                                                        action_frame = DWARF_MINER_ANIMATION_MINE_UP_FRAME_ACTION;
+                                                    case .WARRIOR;
+                                                        anim_index   = xx DwarfAnimationWarrior.CHOP_UP;
+                                                        action_frame = DWARF_WARRIOR_ANIMATION_CHOP_UP_FRAME_ACTION;
+                                                }
+                                            }
+                                            else {
+                                                if #complete dwarf.dwarf_type == {
+                                                    case .MINER;
+                                                        anim_index   = xx DwarfAnimationMiner.MINE_SIDE;
+                                                        action_frame = DWARF_MINER_ANIMATION_MINE_SIDE_FRAME_ACTION;
+                                                    case .WARRIOR;
+                                                        anim_index   = xx DwarfAnimationWarrior.CHOP_SIDE;
+                                                        action_frame = DWARF_WARRIOR_ANIMATION_CHOP_SIDE_FRAME_ACTION;
+                                                }
+                                            }
+
+                                            frame := sprite_animation_get_current_frame(dwarf.animations[anim_index]);
+
+                                            if frame == action_frame && !dwarf.did_anim_action {
+                                                dwarf.did_anim_action = true;
+
+                                                // Hit check
+                                                rng := random_get_within_range(0, 1);
+                                                swing_connected := rng <= dwarf_get_hit_chance(dwarf);
+
+                                                if swing_connected {
+                                                    damage := dwarf_get_attack_damage(dwarf);
+
+                                                    // TODO: probably extract this
+                                                    direction_stars_should_fly: Direction;
+                                                    found_direction := false;
+                                                    for DIRECTIONS_CARDINAL {
+                                                        neighbor_tile_id := get_neighbor_tile_id_by_direction(dwarf_tile_id, it);
+                                                        if neighbor_tile_id == goblin_tile_id {
+                                                            direction_stars_should_fly = it;
+                                                            found_direction = true;
+                                                            break;
+                                                        }
+                                                    }
+                                                    assert_soft(found_direction, "Was trying to figure out what direction the damage star should fly when dwarf % connected an attack on goblin %, but didn't detect the goblin as a cardinal neighbor of the dwarf\n", dwarf.id, goblin.id);
+
+                                                    create_damage_particles(goblin.pos, damage, direction_stars_should_fly);
+
+                                                    goblin.hp -= damage;
+
+                                                    if goblin.hp <= 0 {
+                                                        kill_goblin_by_id(goblin.id);
+
+                                                        dwarf_transition_state(dwarf, .DECIDING);
+                                                    }
+                                                } else {
+                                                    create_miss_particles(goblin.pos);
+                                                }
+                                            }
+                                        } else {
+                                            dwarf_transition_state(dwarf, .DECIDING);
                                         }
                                     } else {
                                         dwarf_transition_state(dwarf, .DECIDING);
                                     }
-                                } else {
-                                    dwarf_transition_state(dwarf, .DECIDING);
-                                }
-                            case .IDLE;
+                                case .IDLE;
+                            }
                         }
 
-                        // TODO: maintain active animation index so we don't need to search for it
-                        //
-                        // Update animations
-                        for *anim: dwarf.animations {
-                            reset_anim := sprite_update(anim, context.dt_seconds);
-                            if reset_anim then dwarf.did_anim_action = false;
+                        if !is_dwarf_done_updating {
+                            // TODO: maintain active animation index so we don't need to search for it
+                            //
+                            // Update animations
+                            for *anim: dwarf.animations {
+                                reset_anim := sprite_update(anim, context.dt_seconds);
+                                if reset_anim then dwarf.did_anim_action = false;
+                            }
                         }
                     }
 

@@ -7,9 +7,9 @@
 # Bugs
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+- Dwarf miners can get stuck mining downwards when auto mining iron
 - Aggro logic is fucked up. Dwarves don't seem to wait where they should when goblins coming to them.
 - Dwarf warrior mined iron and pathed to treasure
-- Dwarves don't turn around after selecting to go another way
 - Gold, miss, and hit particles are fucked up
 - Dwarf warrior unable to path outside of base
 - Water doesn't spread immediately
