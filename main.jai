@@ -84,10 +84,18 @@ DWARF_WARRIOR_ANIMATION_IDLE_FRAME_DURATION_MS  :: 100;
 DWARF_WARRIOR_ANIMATION_WALK_START_FRAME        :: 6;
 DWARF_WARRIOR_ANIMATION_WALK_FRAME_COUNT        :: 8;
 DWARF_WARRIOR_ANIMATION_WALK_FRAME_DURATION_MS  :: 100;
-DWARF_WARRIOR_ANIMATION_CHOP_START_FRAME        :: 14;
-DWARF_WARRIOR_ANIMATION_CHOP_FRAME_COUNT        :: 7;
-DWARF_WARRIOR_ANIMATION_CHOP_FRAME_ACTION       :: 17;
-DWARF_WARRIOR_ANIMATION_CHOP_FRAME_DURATION_MS  :: 100;
+DWARF_WARRIOR_ANIMATION_CHOP_DOWN_START_FRAME       :: 14;
+DWARF_WARRIOR_ANIMATION_CHOP_DOWN_FRAME_COUNT       :: 7;
+DWARF_WARRIOR_ANIMATION_CHOP_DOWN_FRAME_ACTION      :: 17;
+DWARF_WARRIOR_ANIMATION_CHOP_DOWN_FRAME_DURATION_MS :: 100;
+DWARF_WARRIOR_ANIMATION_CHOP_SIDE_START_FRAME       :: 21;
+DWARF_WARRIOR_ANIMATION_CHOP_SIDE_FRAME_COUNT       :: 7;
+DWARF_WARRIOR_ANIMATION_CHOP_SIDE_FRAME_ACTION      :: 24;
+DWARF_WARRIOR_ANIMATION_CHOP_SIDE_FRAME_DURATION_MS :: 100;
+DWARF_WARRIOR_ANIMATION_CHOP_UP_START_FRAME         :: 28;
+DWARF_WARRIOR_ANIMATION_CHOP_UP_FRAME_COUNT         :: 7;
+DWARF_WARRIOR_ANIMATION_CHOP_UP_FRAME_ACTION        :: 31;
+DWARF_WARRIOR_ANIMATION_CHOP_UP_FRAME_DURATION_MS   :: 100;
 DWARF_WARRIOR_ANIMATION_DIE_START_FRAME         :: 38;
 DWARF_WARRIOR_ANIMATION_DIE_FRAME_COUNT         :: 7;
 DWARF_WARRIOR_ANIMATION_DIE_FRAME_DURATION_MS   :: 100;
@@ -116,20 +124,56 @@ GOBLIN_ANIMATION_DIE_FRAME_DURATION_MS  :: 100;
 
 PARTICLE_FLOAT_SPEED :: -15.0;
 
-DWARF_DROP_SHADOW_CLOSE_SOURCE_COL :: 6;
-DWARF_DROP_SHADOW_CLOSE_SOURCE_ROW :: 4;
-DWARF_DROP_SHADOW_CLOSE_SOURCE_RECT :: Rectangle.{
-    DWARF_DROP_SHADOW_CLOSE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
-    DWARF_DROP_SHADOW_CLOSE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
+DWARF_MINER_DROP_SHADOW_CLOSE_SOURCE_COL :: 6;
+DWARF_MINER_DROP_SHADOW_CLOSE_SOURCE_ROW :: 4;
+DWARF_MINER_DROP_SHADOW_CLOSE_SOURCE_RECT :: Rectangle.{
+    DWARF_MINER_DROP_SHADOW_CLOSE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
+    DWARF_MINER_DROP_SHADOW_CLOSE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
     TILEMAP_GENERAL_TILE_WIDTH,
     TILEMAP_GENERAL_TILE_HEIGHT,
 };
 
-DWARF_DROP_SHADOW_FAR_SOURCE_COL :: 7;
-DWARF_DROP_SHADOW_FAR_SOURCE_ROW :: 4;
-DWARF_DROP_SHADOW_FAR_SOURCE_RECT :: Rectangle.{
-    DWARF_DROP_SHADOW_FAR_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
-    DWARF_DROP_SHADOW_FAR_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
+DWARF_MINER_DROP_SHADOW_FAR_SOURCE_COL :: 7;
+DWARF_MINER_DROP_SHADOW_FAR_SOURCE_ROW :: 4;
+DWARF_MINER_DROP_SHADOW_FAR_SOURCE_RECT :: Rectangle.{
+    DWARF_MINER_DROP_SHADOW_FAR_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
+    DWARF_MINER_DROP_SHADOW_FAR_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
+    TILEMAP_GENERAL_TILE_WIDTH,
+    TILEMAP_GENERAL_TILE_HEIGHT,
+};
+
+DWARF_WARRIOR_DROP_SHADOW_CLOSE_SOURCE_COL :: 6;
+DWARF_WARRIOR_DROP_SHADOW_CLOSE_SOURCE_ROW :: 3;
+DWARF_WARRIOR_DROP_SHADOW_CLOSE_SOURCE_RECT :: Rectangle.{
+    DWARF_WARRIOR_DROP_SHADOW_CLOSE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
+    DWARF_WARRIOR_DROP_SHADOW_CLOSE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
+    TILEMAP_GENERAL_TILE_WIDTH,
+    TILEMAP_GENERAL_TILE_HEIGHT,
+};
+
+DWARF_WARRIOR_DROP_SHADOW_FAR_SOURCE_COL :: 7;
+DWARF_WARRIOR_DROP_SHADOW_FAR_SOURCE_ROW :: 3;
+DWARF_WARRIOR_DROP_SHADOW_FAR_SOURCE_RECT :: Rectangle.{
+    DWARF_WARRIOR_DROP_SHADOW_FAR_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
+    DWARF_WARRIOR_DROP_SHADOW_FAR_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
+    TILEMAP_GENERAL_TILE_WIDTH,
+    TILEMAP_GENERAL_TILE_HEIGHT,
+};
+
+GOBLIN_DROP_SHADOW_CLOSE_SOURCE_COL :: 6;
+GOBLIN_DROP_SHADOW_CLOSE_SOURCE_ROW :: 5;
+GOBLIN_DROP_SHADOW_CLOSE_SOURCE_RECT :: Rectangle.{
+    GOBLIN_DROP_SHADOW_CLOSE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
+    GOBLIN_DROP_SHADOW_CLOSE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
+    TILEMAP_GENERAL_TILE_WIDTH,
+    TILEMAP_GENERAL_TILE_HEIGHT,
+};
+
+GOBLIN_DROP_SHADOW_FAR_SOURCE_COL :: 7;
+GOBLIN_DROP_SHADOW_FAR_SOURCE_ROW :: 5;
+GOBLIN_DROP_SHADOW_FAR_SOURCE_RECT :: Rectangle.{
+    GOBLIN_DROP_SHADOW_FAR_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
+    GOBLIN_DROP_SHADOW_FAR_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
     TILEMAP_GENERAL_TILE_WIDTH,
     TILEMAP_GENERAL_TILE_HEIGHT,
 };
@@ -673,10 +717,12 @@ DwarfAnimationMiner :: enum {
 };
 
 DwarfAnimationWarrior :: enum {
-    IDLE :: 0;
-    WALK :: 1;
-    CHOP :: 2;
-    DIE  :: 3;
+    IDLE      :: 0;
+    WALK      :: 1;
+    CHOP_DOWN :: 2;
+    CHOP_SIDE :: 3;
+    CHOP_UP   :: 4;
+    DIE       :: 5;
 };
 
 Dwarf :: struct {
@@ -1698,8 +1744,6 @@ update_and_draw_frame_round :: () {
 
             // Update camera
             update_camera :: () {
-                defer print_vars(context.camera);
-
                 CAMERA_ZOOM_MULTIPLIER :: 1.2;
                 CAMERA_ZOOM_MIN_DEBUG  :: 0.01;
                 CAMERA_ZOOM_MAX        :: 13.0;
@@ -2397,24 +2441,39 @@ update_and_draw_frame_round :: () {
                                     // TODO: probably want a function for this
                                     anim_index   : s64;
                                     action_frame : int;
-
-                                    if #complete dwarf.dwarf_type == {
-                                        case .MINER;
-                                            if dwarf.tile_id_mining == dwarf_tile_id + context.world_cols {
+                                    
+                                    // Swing down
+                                    if dwarf.tile_id_mining == dwarf_tile_id + context.world_cols {
+                                        if #complete dwarf.dwarf_type == {
+                                            case .MINER;
                                                 anim_index   = xx DwarfAnimationMiner.MINE_DOWN;
                                                 action_frame = DWARF_MINER_ANIMATION_MINE_DOWN_FRAME_ACTION;
-                                            } 
-                                            else if dwarf.tile_id_mining == dwarf_tile_id - context.world_cols {
+                                            case .WARRIOR;
+                                                anim_index   = xx DwarfAnimationWarrior.CHOP_DOWN;
+                                                action_frame = DWARF_WARRIOR_ANIMATION_CHOP_DOWN_FRAME_ACTION;
+                                        }
+                                    }
+                                    // Swing up
+                                    else if dwarf.tile_id_mining == dwarf_tile_id - context.world_cols {
+                                        if #complete dwarf.dwarf_type == {
+                                            case .MINER;
                                                 anim_index   = xx DwarfAnimationMiner.MINE_UP;
                                                 action_frame = DWARF_MINER_ANIMATION_MINE_UP_FRAME_ACTION;
-                                            }
-                                            else {
+                                            case .WARRIOR;
+                                                anim_index   = xx DwarfAnimationWarrior.CHOP_UP;
+                                                action_frame = DWARF_WARRIOR_ANIMATION_CHOP_UP_FRAME_ACTION;
+                                        }
+                                    }
+                                    // Swing to the side
+                                    else {
+                                        if #complete dwarf.dwarf_type == {
+                                            case .MINER;
                                                 anim_index   = xx DwarfAnimationMiner.MINE_SIDE;
                                                 action_frame = DWARF_MINER_ANIMATION_MINE_SIDE_FRAME_ACTION;
-                                            }
-                                        case .WARRIOR;
-                                            anim_index   = xx DwarfAnimationWarrior.CHOP;
-                                            action_frame = DWARF_WARRIOR_ANIMATION_CHOP_FRAME_ACTION;
+                                            case .WARRIOR;
+                                                anim_index   = xx DwarfAnimationWarrior.CHOP_UP;
+                                                action_frame = DWARF_WARRIOR_ANIMATION_CHOP_UP_FRAME_ACTION;
+                                        }
                                     }
 
                                     frame := sprite_animation_get_current_frame(dwarf.animations[anim_index]);
@@ -2498,23 +2557,35 @@ update_and_draw_frame_round :: () {
                                         anim_index   : s64;
                                         action_frame : int;
 
-                                        if #complete dwarf.dwarf_type == {
-                                            case .MINER;
-                                                if dwarf.tile_id_mining == dwarf_tile_id + context.world_cols {
+                                        if dwarf.tile_id_mining == dwarf_tile_id + context.world_cols {
+                                            if #complete dwarf.dwarf_type == {
+                                                case .MINER;
                                                     anim_index   = xx DwarfAnimationMiner.MINE_DOWN;
-                                                    action_frame = DWARF_MINER_ANIMATION_MINE_DOWN_FRAME_ACTION; 
-                                                }
-                                                else if dwarf.tile_id_mining == dwarf_tile_id - context.world_cols {
+                                                    action_frame = DWARF_MINER_ANIMATION_MINE_DOWN_FRAME_ACTION;
+                                                case .WARRIOR;
+                                                    anim_index   = xx DwarfAnimationWarrior.CHOP_DOWN;
+                                                    action_frame = DWARF_WARRIOR_ANIMATION_CHOP_DOWN_FRAME_ACTION;
+                                            }
+                                        }
+                                        else if dwarf.tile_id_mining == dwarf_tile_id - context.world_cols {
+                                            if #complete dwarf.dwarf_type == {
+                                                case .MINER;
                                                     anim_index   = xx DwarfAnimationMiner.MINE_UP;
                                                     action_frame = DWARF_MINER_ANIMATION_MINE_UP_FRAME_ACTION;
-                                                }
-                                                else {
+                                                case .WARRIOR;
+                                                    anim_index   = xx DwarfAnimationWarrior.CHOP_UP;
+                                                    action_frame = DWARF_WARRIOR_ANIMATION_CHOP_UP_FRAME_ACTION;
+                                            }
+                                        }
+                                        else {
+                                            if #complete dwarf.dwarf_type == {
+                                                case .MINER;
                                                     anim_index   = xx DwarfAnimationMiner.MINE_SIDE;
-                                                    action_frame = DWARF_MINER_ANIMATION_MINE_SIDE_FRAME_ACTION; 
-                                                }
-                                            case .WARRIOR;
-                                                anim_index   = xx DwarfAnimationWarrior.CHOP;
-                                                action_frame = DWARF_WARRIOR_ANIMATION_CHOP_FRAME_ACTION; 
+                                                    action_frame = DWARF_MINER_ANIMATION_MINE_SIDE_FRAME_ACTION;
+                                                case .WARRIOR;
+                                                    anim_index   = xx DwarfAnimationWarrior.CHOP_SIDE;
+                                                    action_frame = DWARF_WARRIOR_ANIMATION_CHOP_SIDE_FRAME_ACTION;
+                                            }
                                         }
 
                                         frame := sprite_animation_get_current_frame(dwarf.animations[anim_index]);
@@ -3447,25 +3518,77 @@ update_and_draw_frame_round :: () {
             }
             draw_paths();
 
+            // Draw the little rings / circles below units that make them visually contrasted relative to their surroundings.
+            // This has to be drawn separately from the unit drawing loops like "draw_dwarves" and "draw_goblins" because of
+            // z-ordering. Namely, the rings must be below all units to look correct. Even though logically units can only be
+            // on one tile at a time, their sprites do overlap while going between tiles.
+            draw_dropshadows :: () {
+                source_rect: Rectangle;
+
+                for dwarf: dwarves_to_draw_this_frame {
+                    if is_lod_far() {
+                        if #complete dwarf.dwarf_type == {
+                            case .MINER;   source_rect = DWARF_MINER_DROP_SHADOW_FAR_SOURCE_RECT;
+                            case .WARRIOR; source_rect = DWARF_WARRIOR_DROP_SHADOW_FAR_SOURCE_RECT;
+                        }
+                        dest := get_world_rect_from_pos(dwarf.pos);
+
+                        DrawTexturePro(tilemap_texture_general, source_rect, dest, Vector2.{0,0}, 0.0, WHITE);
+                    }
+                    else if is_lod_normal() || is_lod_close() {
+                        if is_lod_normal() {
+                            if #complete dwarf.dwarf_type == {
+                                case .MINER;   source_rect = DWARF_MINER_DROP_SHADOW_FAR_SOURCE_RECT;
+                                case .WARRIOR; source_rect = DWARF_WARRIOR_DROP_SHADOW_FAR_SOURCE_RECT;
+                            }
+                            dest := get_world_rect_from_pos(dwarf.pos);
+                            DrawTexturePro(tilemap_texture_general, source_rect, dest, Vector2.{0,0}, 0.0, WHITE);
+                        } else {
+                            if #complete dwarf.dwarf_type == {
+                                case .MINER;   source_rect = DWARF_MINER_DROP_SHADOW_CLOSE_SOURCE_RECT;
+                                case .WARRIOR; source_rect = DWARF_WARRIOR_DROP_SHADOW_CLOSE_SOURCE_RECT;
+                            }
+                            dest := get_world_rect_from_pos(dwarf.pos);
+                            DrawTexturePro(tilemap_texture_general, source_rect, dest, Vector2.{0,0}, 0.0, WHITE);
+                        }
+                    }
+                    else {
+                        assert(false, "Weird lod");
+                    }
+                }
+
+                for goblin: goblins_to_draw_this_frame {
+                    if is_lod_far() {
+                        source_rect := GOBLIN_DROP_SHADOW_FAR_SOURCE_RECT;
+                        dest_rect   := get_world_rect_from_pos(goblin.pos);
+
+                        DrawTexturePro(tilemap_texture_general, source_rect, dest_rect, Vector2.{0,0}, 0.0, WHITE);
+                    }
+                    else if is_lod_normal() {
+                        source_rect := GOBLIN_DROP_SHADOW_FAR_SOURCE_RECT;
+                        dest_rect   := get_world_rect_from_pos(goblin.pos);
+
+                        DrawTexturePro(tilemap_texture_general, source_rect, dest_rect, Vector2.{0,0}, 0.0, WHITE);
+                    }
+                    else if is_lod_close() {
+                        source_rect := GOBLIN_DROP_SHADOW_CLOSE_SOURCE_RECT;
+                        dest_rect   := get_world_rect_from_pos(goblin.pos);
+                        
+                        DrawTexturePro(tilemap_texture_general, source_rect, dest_rect, Vector2.{0,0}, 0.0, WHITE);
+                    }
+                    else {
+                        assert(false, "Got weird lod");
+                    }
+                }
+            }
+            draw_dropshadows();
+
             // Draw dwarves
             draw_dwarves :: () {
                 for dwarf: dwarves_to_draw_this_frame {
-                    if is_lod_far() {
-                        // Draw drop shadow
-                        dest := get_world_rect_from_pos(dwarf.pos);
-                        DrawTexturePro(tilemap_texture_general, DWARF_DROP_SHADOW_FAR_SOURCE_RECT, dest, Vector2.{0,0}, 0.0, WHITE);
-                    }
-                    // Normal / close distance
-                    else {
-                        // Draw drop shadow
-                        if is_lod_normal() {
-                            dest := get_world_rect_from_pos(dwarf.pos);
-                            DrawTexturePro(tilemap_texture_general, DWARF_DROP_SHADOW_FAR_SOURCE_RECT, dest, Vector2.{0,0}, 0.0, WHITE);
-                        } else {
-                            dest := get_world_rect_from_pos(dwarf.pos);
-                            DrawTexturePro(tilemap_texture_general, DWARF_DROP_SHADOW_CLOSE_SOURCE_RECT, dest, Vector2.{0,0}, 0.0, WHITE);
-                        }
+                    source_rect : Rectangle;
 
+                    if is_lod_normal() || is_lod_close() {
                         // PERF: would it be faster to store the active index?
                         found := false;
                         for anim: dwarf.animations {
@@ -4259,6 +4382,7 @@ create_alert :: (alert_type: AlertType, pos: Vector2) -> Alert {
             context.game_state.alert_banner_text = "A dwarf has disturbed a spider queen!";
             color = RED;
     }
+
     context.game_state.alert_banner_text_ms    = ALERT_BANNER_TEXT_MS;
     context.game_state.alert_banner_text_color = color;
         
@@ -4862,7 +4986,6 @@ dwarf_transition_state :: (dwarf: *Dwarf, new_state: DwarfState) {
     dwarf.state = new_state;
 
     // What to do when entering these states
-    // TODO: MINE_SIDe
     if #complete new_state == {
         case .ATTACKING;
             if #complete dwarf.dwarf_type == {
@@ -4872,14 +4995,20 @@ dwarf_transition_state :: (dwarf: *Dwarf, new_state: DwarfState) {
                     if dwarf.direction == .EAST  then entity_set_active_animation(dwarf, xx DwarfAnimationMiner.MINE_SIDE);
                     if dwarf.direction == .WEST  then entity_set_active_animation(dwarf, xx DwarfAnimationMiner.MINE_SIDE);
                 case .WARRIOR;
-                    entity_set_active_animation(dwarf, xx DwarfAnimationWarrior.CHOP);
+                    if dwarf.direction == .NORTH then entity_set_active_animation(dwarf, xx DwarfAnimationWarrior.CHOP_UP);
+                    if dwarf.direction == .SOUTH then entity_set_active_animation(dwarf, xx DwarfAnimationWarrior.CHOP_DOWN);
+                    if dwarf.direction == .EAST  then entity_set_active_animation(dwarf, xx DwarfAnimationWarrior.CHOP_SIDE);
+                    if dwarf.direction == .WEST  then entity_set_active_animation(dwarf, xx DwarfAnimationWarrior.CHOP_SIDE);
             }
-        case .DECIDING;  
+
+        case .DECIDING;
+
         case .IDLE;
             if #complete dwarf.dwarf_type == {
                 case .MINER;   entity_set_active_animation(dwarf, xx DwarfAnimationMiner.IDLE);
                 case .WARRIOR; entity_set_active_animation(dwarf, xx DwarfAnimationWarrior.IDLE);
             }
+
         case .MINING;
             if #complete dwarf.dwarf_type == {
                 case .MINER;
@@ -4888,8 +5017,12 @@ dwarf_transition_state :: (dwarf: *Dwarf, new_state: DwarfState) {
                     if dwarf.direction == .EAST  then entity_set_active_animation(dwarf, xx DwarfAnimationMiner.MINE_SIDE);
                     if dwarf.direction == .WEST  then entity_set_active_animation(dwarf, xx DwarfAnimationMiner.MINE_SIDE);
                 case .WARRIOR;
-                    entity_set_active_animation(dwarf, xx DwarfAnimationWarrior.CHOP);
+                    if dwarf.direction == .NORTH then entity_set_active_animation(dwarf, xx DwarfAnimationWarrior.CHOP_UP);
+                    if dwarf.direction == .SOUTH then entity_set_active_animation(dwarf, xx DwarfAnimationWarrior.CHOP_DOWN);
+                    if dwarf.direction == .EAST  then entity_set_active_animation(dwarf, xx DwarfAnimationWarrior.CHOP_SIDE);
+                    if dwarf.direction == .WEST  then entity_set_active_animation(dwarf, xx DwarfAnimationWarrior.CHOP_SIDE);
             }
+
         case .MOVING;
             if #complete dwarf.dwarf_type == {
                 case .MINER;   entity_set_active_animation(dwarf, xx DwarfAnimationMiner.WALK);
@@ -5666,9 +5799,17 @@ create_dwarf :: (pos: Vector2, dwarf_type: DwarfType) -> Dwarf {
     dwarf_warrior_animated_sprite_walk.first_frame = DWARF_WARRIOR_ANIMATION_WALK_START_FRAME;
     dwarf_warrior_animated_sprite_walk.frame_count = DWARF_WARRIOR_ANIMATION_WALK_FRAME_COUNT;
 
-    dwarf_warrior_animated_sprite_chop := dwarf_animated_sprite_base;
-    dwarf_warrior_animated_sprite_chop.first_frame = DWARF_WARRIOR_ANIMATION_CHOP_START_FRAME;
-    dwarf_warrior_animated_sprite_chop.frame_count = DWARF_WARRIOR_ANIMATION_CHOP_FRAME_COUNT;
+    dwarf_warrior_animated_sprite_chop_down := dwarf_animated_sprite_base;
+    dwarf_warrior_animated_sprite_chop_down.first_frame = DWARF_WARRIOR_ANIMATION_CHOP_DOWN_START_FRAME;
+    dwarf_warrior_animated_sprite_chop_down.frame_count = DWARF_WARRIOR_ANIMATION_CHOP_DOWN_FRAME_COUNT;
+
+    dwarf_warrior_animated_sprite_chop_side := dwarf_animated_sprite_base;
+    dwarf_warrior_animated_sprite_chop_side.first_frame = DWARF_WARRIOR_ANIMATION_CHOP_SIDE_START_FRAME;
+    dwarf_warrior_animated_sprite_chop_side.frame_count = DWARF_WARRIOR_ANIMATION_CHOP_SIDE_FRAME_COUNT;
+
+    dwarf_warrior_animated_sprite_chop_up := dwarf_animated_sprite_base;
+    dwarf_warrior_animated_sprite_chop_up.first_frame = DWARF_WARRIOR_ANIMATION_CHOP_UP_START_FRAME;
+    dwarf_warrior_animated_sprite_chop_up.frame_count = DWARF_WARRIOR_ANIMATION_CHOP_UP_FRAME_COUNT;
 
     dwarf_warrior_animated_sprite_die := dwarf_animated_sprite_base;
     dwarf_warrior_animated_sprite_die.first_frame = DWARF_WARRIOR_ANIMATION_DIE_START_FRAME;
@@ -5686,7 +5827,9 @@ create_dwarf :: (pos: Vector2, dwarf_type: DwarfType) -> Dwarf {
     animations_warrior := AnimatedSprite.[
         dwarf_warrior_animated_sprite_idle,
         dwarf_warrior_animated_sprite_walk,
-        dwarf_warrior_animated_sprite_chop,
+        dwarf_warrior_animated_sprite_chop_down,
+        dwarf_warrior_animated_sprite_chop_side,
+        dwarf_warrior_animated_sprite_chop_up,
         dwarf_warrior_animated_sprite_die,
     ];
 

@@ -2,14 +2,16 @@
 # In progress
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- Unit type drop shadows
+
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Bugs
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- Dwarves don't turn around after selecting to go another way
+- Aggro logic is fucked up. Dwarves don't seem to wait where they should when goblins coming to them.
+- Dwarf warrior mined iron and pathed to treasure
 - Mining particles don't appear when tile is destroyed
+- Dwarves don't turn around after selecting to go another way
 - Gold, miss, and hit particles are fucked up
 - Dwarf warrior unable to path outside of base
 - Water doesn't spread immediately
