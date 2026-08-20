@@ -3684,13 +3684,14 @@ update_and_draw_frame_round :: () {
             PARTICLE_TEXT_SIZE :: 10;
             draw_particles :: () {
                 for particle: particles_to_draw_this_frame {
-                    dest := get_world_rect_from_pos(particle.position);
-                    
+                    // If the particle has text then we want to draw the text left-aligned first. Later, if it has a sprite,
+                    // we'll draw that sprite to the right of the text. Examples include getting gold "+1 <gold sprite>" or
+                    // the text "Missed" on swinging against an enemy.
                     if particle.text {
                         draw_outlined_text(
                             tprint("%\0", particle.text).data,
-                            xx dest.x,
-                            xx (dest.y - TILEMAP_GENERAL_WORLD_HEIGHT * 0.5),
+                            xx particle.position.x,
+                            xx particle.position.y,
                             PARTICLE_TEXT_SIZE,
                             Color.{ particle.tint.r, particle.tint.g, particle.tint.b, xx (particle.opacity * 255) },
                             1,
@@ -3702,11 +3703,13 @@ update_and_draw_frame_round :: () {
                         // If there's no text, then this is just a zero vector.
                         measured_text_size := poor_mans_measure_text(particle.text, PARTICLE_TEXT_SIZE);
 
+                        if particle.text.count > 0 then print_vars(measured_text_size);
+
                         assert(particle.size > 0);
 
                         dest_sprite := Rectangle.{
-                            dest.x + measured_text_size.x,
-                            dest.y - measured_text_size.y * 0.25,
+                            particle.position.x + measured_text_size.x,
+                            particle.position.y,
                             particle.size,
                             particle.size,
                         };
@@ -4480,8 +4483,7 @@ inflict_non_dwarf_liquid_consequences :: (tile_id: s32) {
 
 poor_mans_measure_text :: (text: string, font_size: int) -> Vector2 {
     if text.count == 0 return Vector2.{ 0, 0 };
-    if text.count == 1 return Vector2.{ font_size * 0.25, xx font_size };
-    return Vector2.{ text.count * font_size * 0.5, xx font_size };
+    return Vector2.{ xx (text.count * font_size), xx font_size };
 }
 
 get_previous_tile_id :: (entity: Goblin) -> s32 {
