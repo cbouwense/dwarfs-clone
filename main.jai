@@ -178,7 +178,10 @@ GOBLIN_DROP_SHADOW_FAR_SOURCE_RECT :: Rectangle.{
     TILEMAP_GENERAL_TILE_HEIGHT,
 };
 
-PARTICLE_GOLD_TIME_TO_LIVE_MS   :: 1000;
+NUMBER_ONE_SOURCE_ROW :: 9;
+NUMBER_ONE_SOURCE_COL :: 0;
+
+PARTICLE_GOLD_TIME_TO_LIVE_MS   :: 1500;
 PARTICLE_GOLD_SPRITE_SOURCE_ROW :: 0;
 PARTICLE_GOLD_SPRITE_SOURCE_COL :: 9;
 
@@ -442,6 +445,8 @@ GOBLIN_SCALE_Y                :: TILEMAP_GOBLIN_TILE_HEIGHT / TILEMAP_GENERAL_TI
 TILEMAP_GOBLIN_WORLD_WIDTH    :: TILEMAP_GENERAL_WORLD_WIDTH  * GOBLIN_SCALE_X;
 TILEMAP_GOBLIN_WORLD_HEIGHT   :: TILEMAP_GENERAL_WORLD_HEIGHT * GOBLIN_SCALE_Y;
 
+PARTICLE_TEXT_SIZE :: 20;
+
 tilemap_texture_general : Texture;
 lava_flowing_texture    : Texture;
 water_flowing_texture   : Texture;
@@ -655,7 +660,6 @@ Particle :: struct {
     rotation              : float; // degrees
     angular_velocity      : float; // degrees per second
     size                  : float;
-    text                  : string;
     tint                  : Color;
     fade                  : bool;
     opacity               : float;
@@ -1969,12 +1973,26 @@ update_and_draw_frame_round :: () {
                                 if path_being_traced_1.start_tile_id > 0 array_add(*paths, path_being_traced_1);
                                 if path_being_traced_2.start_tile_id > 0 array_add(*paths, path_being_traced_2);
 
-                                // Debit the gold cost.
+                                // Debit the gold cost and draw particle
                                 {
                                     gold_cost := get_path_cost(path_being_traced_1) + get_path_cost(path_being_traced_2);
 
-                                    if !context.metagame.debug_mode context.game_state.gold -= gold_cost;
-                                    if gold_cost > 0 create_gold_particle(context.mouse_pos_in_world, -1 * gold_cost);
+                                    if !context.metagame.debug_mode {
+                                        context.game_state.gold -= gold_cost;
+                                    }
+
+                                    if gold_cost > 0 {
+                                        tile_rect := get_tile_rect_that_pos_is_within(
+                                            get_world_width(),
+                                            get_world_height(),
+                                            TILEMAP_GENERAL_WORLD_WIDTH,
+                                            TILEMAP_GENERAL_WORLD_HEIGHT,
+                                            context.mouse_pos_in_world
+                                        );
+                                        tile_pos := Vector2.{ tile_rect.x + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, tile_rect.y };
+
+                                        create_gold_particle(tile_pos, -1 * gold_cost);
+                                    }
                                 }
                             }
                         }
@@ -3681,34 +3699,43 @@ update_and_draw_frame_round :: () {
             draw_hovered_tile();
 
             // Draw particles
-            PARTICLE_TEXT_SIZE :: 10;
             draw_particles :: () {
                 for particle: particles_to_draw_this_frame {
-                    // If the particle has text then we want to draw the text left-aligned first. Later, if it has a sprite,
-                    // we'll draw that sprite to the right of the text. Examples include getting gold "+1 <gold sprite>" or
-                    // the text "Missed" on swinging against an enemy.
                     if particle.text {
-                        draw_outlined_text(
-                            tprint("%\0", particle.text).data,
-                            xx particle.position.x,
-                            xx particle.position.y,
-                            PARTICLE_TEXT_SIZE,
-                            Color.{ particle.tint.r, particle.tint.g, particle.tint.b, xx (particle.opacity * 255) },
-                            1,
-                            Color.{ WHITE.r, WHITE.g, WHITE.b, xx (particle.opacity * 255) },
+                        source := Rectangle.{
+                            xx (NUMBER_ONE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH),
+                            xx (NUMBER_ONE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT),
+                            TILEMAP_GENERAL_TILE_WIDTH,
+                            TILEMAP_GENERAL_TILE_HEIGHT,
+                        };
+
+                        dest_sprite := Rectangle.{
+                            particle.position.x,
+                            particle.position.y,
+                            particle.size,
+                            particle.size,
+                        };
+
+                        DrawTexturePro(
+                            tilemap_texture_general,
+                            source,
+                            dest_sprite,
+                            Vector2.{ particle.size * 0.5, particle.size * 0.5 },
+                            particle.rotation,
+                            Color.{ GREEN.r, GREEN.g, GREEN.b, xx (particle.opacity * 255) }
                         );
                     }
 
                     if particle.sprite_source_col > -1 && particle.sprite_source_row > -1 {
                         // If there's no text, then this is just a zero vector.
-                        measured_text_size := poor_mans_measure_text(particle.text, PARTICLE_TEXT_SIZE);
+                        measured_text_size := MeasureText(to_c_string(particle.text), PARTICLE_TEXT_SIZE);
 
                         if particle.text.count > 0 then print_vars(measured_text_size);
 
                         assert(particle.size > 0);
 
                         dest_sprite := Rectangle.{
-                            particle.position.x + measured_text_size.x,
+                            particle.position.x + measured_text_size,
                             particle.position.y,
                             particle.size,
                             particle.size,
@@ -3721,14 +3748,14 @@ update_and_draw_frame_round :: () {
                             TILEMAP_GENERAL_TILE_HEIGHT,
                         };
 
-                        DrawTexturePro(
-                            tilemap_texture_general,
-                            source,
-                            dest_sprite,
-                            Vector2.{ particle.size * 0.5, particle.size * 0.5 },
-                            particle.rotation,
-                            Color.{ WHITE.r, WHITE.g, WHITE.b, xx (particle.opacity * 255) }
-                        );
+                        // DrawTexturePro(
+                        //     tilemap_texture_general,
+                        //     source,
+                        //     dest_sprite,
+                        //     Vector2.{ particle.size * 0.5, particle.size * 0.5 },
+                        //     particle.rotation,
+                        //     Color.{ WHITE.r, WHITE.g, WHITE.b, xx (particle.opacity * 255) }
+                        // );
                     }
                 }
             }
@@ -5409,15 +5436,17 @@ set_entity_direction_to_face_next_target :: (entity: *$T/interface Moveable) {
 
 create_gold_particle :: (pos: Vector2, amount: int) -> Particle {
     particle_id  := increment_then_read(*particle_id_counter);
+    amount_text  := ifx amount < 0 then sprint("-%", amount) else sprint("+%", amount); 
 
     particle := Particle.{
         id                = particle_id,
         position          = pos,
         velocity          = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
-        size              = TILEMAP_GENERAL_TILE_WIDTH,
+        size              = TILEMAP_GENERAL_TILE_WIDTH * 0.5,
         tint              = ifx amount < 0 then RED else GREEN,
-        text              = sprint("%", amount),
-        fade              = false,
+        text              = amount_text,
+        text_width        = xx MeasureText(to_c_string(amount_text), PARTICLE_TEXT_SIZE),
+        fade              = true,
         opacity           = 1,
         time_left_ms      = PARTICLE_GOLD_TIME_TO_LIVE_MS,
         time_left_max     = PARTICLE_GOLD_TIME_TO_LIVE_MS,
