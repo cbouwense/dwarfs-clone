@@ -674,6 +674,7 @@ Particle :: struct {
     time_left_max         : int;
     entity_id_to_follow   : s32;
     entity_kind_to_follow : EntityKind;
+    step_function         : #type (x: float) -> float;
 }
 
 Entity :: struct {
@@ -3057,7 +3058,7 @@ update_and_draw_frame_round :: () {
                             if particle.time_left_ms > particle.time_left_max {
                                 particle.opacity = 1;
                             } else {
-                                particle.opacity = steepstep((cast(float32) particle.time_left_ms) / particle.time_left_max);
+                                particle.opacity = particle.step_function((cast(float32) particle.time_left_ms) / particle.time_left_max);
                             }
 
                             if particle.opacity < 0 particle.opacity = 0;
@@ -5455,16 +5456,25 @@ create_gold_particle :: (pos: Vector2, amount: int) -> Particle {
         array_add(*gold_particle_sprites, digit_sprite);
     }
 
+    coin_sprite := ParticleSprite.{
+        texture            = tilemap_texture_general,
+        texture_source_row = 0,
+        texture_source_col = 9,
+        tint               = WHITE,
+    };
+    array_add(*gold_particle_sprites, coin_sprite);
+
     particle := Particle.{
         id                = particle_id,
         position          = pos,
         velocity          = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
-        size              = TILEMAP_GENERAL_TILE_WIDTH * 0.5,
+        size              = TILEMAP_GENERAL_WORLD_WIDTH * 0.5,
         fade              = true,
         opacity           = 1,
         sprites           = gold_particle_sprites,
         time_left_ms      = PARTICLE_GOLD_TIME_TO_LIVE_MS,
         time_left_max     = PARTICLE_GOLD_TIME_TO_LIVE_MS,
+        step_function     = steepstep,
     };
 
     table_set(*particle_id_to_index, particle_id, particles.count);
@@ -5490,12 +5500,13 @@ create_dwarf_death_particle :: (pos: Vector2) -> Particle {
         id                = particle_id,
         position          = pos,
         velocity          = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
-        size              = TILEMAP_GENERAL_WORLD_WIDTH,
+        size              = TILEMAP_GENERAL_WORLD_WIDTH * 0.5,
         fade              = true,
         opacity           = 1,
         sprites           = particle_sprites,
         time_left_ms      = PARTICLE_DWARF_DEATH_TIME_TO_LIVE_MS,
         time_left_max     = PARTICLE_DWARF_DEATH_TIME_TO_LIVE_MS,
+        step_function     = steepstep,
     };
 
     table_set(*particle_id_to_index, particle_id, particles.count);
@@ -5521,12 +5532,13 @@ create_goblin_death_particle :: (pos: Vector2) -> Particle {
         id                = particle_id,
         position          = pos,
         velocity          = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
-        size              = TILEMAP_GENERAL_WORLD_WIDTH,
+        size              = TILEMAP_GENERAL_WORLD_WIDTH * 0.5,
         fade              = true,
         opacity           = 1,
         time_left_ms      = PARTICLE_GOBLIN_DEATH_TIME_TO_LIVE_MS,
         time_left_max     = PARTICLE_GOBLIN_DEATH_TIME_TO_LIVE_MS,
         sprites           = particle_sprites,
+        step_function     = steepstep,
     };
 
     table_set(*particle_id_to_index, particle_id, particles.count);
@@ -5553,7 +5565,7 @@ create_dwarf_aggro_particle :: (pos: Vector2, dwarf_id: s32) -> Particle {
         position              = pos,
         velocity              = Vector2.{ 0.0, 0.0 },
         fade                  = false,
-        size                  = TILEMAP_GENERAL_WORLD_WIDTH,
+        size                  = TILEMAP_GENERAL_WORLD_WIDTH * 0.5,
         opacity               = 1,
         time_left_ms          = PARTICLE_DWARF_AGGRO_TIME_TO_LIVE_MS,
         time_left_max         = PARTICLE_DWARF_AGGRO_TIME_TO_LIVE_MS,
@@ -5586,7 +5598,7 @@ create_dwarf_selected_particle :: (pos: Vector2, dwarf_id: s32) -> Particle {
         position              = pos,
         velocity              = Vector2.{ 0.0, 0.0 },
         fade                  = false,
-        size                  = TILEMAP_GENERAL_WORLD_WIDTH,
+        size                  = TILEMAP_GENERAL_WORLD_WIDTH * 0.5,
         opacity               = 1,
         time_left_ms          = PARTICLE_DWARF_SELECTED_TIME_TO_LIVE_MS, // This really should just be infinite
         time_left_max         = PARTICLE_DWARF_SELECTED_TIME_TO_LIVE_MS, // This really should just be infinite
@@ -5631,12 +5643,13 @@ create_damage_particles :: (pos: Vector2, amount: int, direction_stars_should_fl
             id            = particle_id,
             position      = pos,
             velocity      = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
-            size          = TILEMAP_GENERAL_WORLD_WIDTH,
+            size          = TILEMAP_GENERAL_WORLD_WIDTH * 0.5,
             fade          = true,
             opacity       = 1,
             time_left_ms  = PARTICLE_DAMAGE_TIME_TO_LIVE_MS,
             time_left_max = PARTICLE_DAMAGE_TIME_TO_LIVE_MS,
             sprites       = particle_sprites,
+            step_function = smootherstep,
         };
 
         table_set(*particle_id_to_index, particle_id, particles.count);
@@ -5692,11 +5705,12 @@ create_damage_particles :: (pos: Vector2, amount: int, direction_stars_should_fl
             velocity      = velocity,
             acceleration  = Vector2.{ 0.95, 0.95 },
             fade          = true,
-            size          = TILEMAP_GENERAL_WORLD_WIDTH,
+            size          = TILEMAP_GENERAL_WORLD_WIDTH * 0.5,
             opacity       = 1,
             time_left_ms  = PARTICLE_DAMAGE_STAR_TIME_TO_LIVE_MS,
             time_left_max = PARTICLE_DAMAGE_STAR_TIME_TO_LIVE_MS,
             sprites       = particle_sprites,
+            step_function = steepstep,
         };
 
         table_set(*particle_id_to_index, particle_id, particles.count);
@@ -5751,11 +5765,12 @@ create_damage_particles :: (pos: Vector2, amount: int, direction_stars_should_fl
             velocity      = velocity,
             acceleration  = Vector2.{ 0.95, 0.95 },
             fade          = true,
-            size          = TILEMAP_GENERAL_WORLD_WIDTH,
+            size          = TILEMAP_GENERAL_WORLD_WIDTH * 0.5,
             opacity       = 1,
             time_left_ms  = PARTICLE_DAMAGE_STAR_TIME_TO_LIVE_MS,
             time_left_max = PARTICLE_DAMAGE_STAR_TIME_TO_LIVE_MS,
             sprites       = particle_sprites,
+            step_function = steepstep,
         };
 
         table_set(*particle_id_to_index, particle_id, particles.count);
@@ -5845,6 +5860,7 @@ create_mine_chip_particles :: (position: Vector2, amount: int, direction: Direct
             time_left_ms     = 500,
             time_left_max    = 500,
             sprites          = particle_sprites,
+            step_function    = steepstep,
         };
 
         table_set(*particle_id_to_index, particle_id, particles.count);
@@ -5883,14 +5899,15 @@ create_miss_particles :: (pos: Vector2) {
     array_add(*particle_sprites, particle_sprite_s);
 
     particle := Particle.{
-        id           = particle_id,
-        position     = pos,
-        velocity     = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
-        fade         = true,
-        size         = TILEMAP_GENERAL_WORLD_WIDTH,
-        opacity      = 1,
-        time_left_ms = PARTICLE_DAMAGE_TIME_TO_LIVE_MS,
-        sprites      = particle_sprites,
+        id            = particle_id,
+        position      = pos,
+        velocity      = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
+        fade          = true,
+        size          = TILEMAP_GENERAL_WORLD_WIDTH * 0.5,
+        opacity       = 1,
+        time_left_ms  = PARTICLE_DAMAGE_TIME_TO_LIVE_MS,
+        sprites       = particle_sprites,
+        step_function = smootherstep,
     };
 
     table_set(*particle_id_to_index, particle_id, particles.count);
