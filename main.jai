@@ -652,21 +652,26 @@ CaveType :: enum u8 {
     SPIDER_QUEEN;
 }
 
+ParticleSprite :: struct {
+    texture            : Texture;
+    texture_source_row : int;
+    texture_source_col : int;
+    tint               : Color;
+}
+
 Particle :: struct {
     id                    : s32;
+    sprites               : [..] ParticleSprite;
     position              : Vector2;
     velocity              : Vector2;
     acceleration          : Vector2;
     rotation              : float; // degrees
     angular_velocity      : float; // degrees per second
     size                  : float;
-    tint                  : Color;
     fade                  : bool;
     opacity               : float;
     time_left_ms          : int;
     time_left_max         : int;
-    sprite_source_row     : int; // 0 indexed
-    sprite_source_col     : int; // 0 indexed
     entity_id_to_follow   : s32;
     entity_kind_to_follow : EntityKind;
 }
@@ -3701,61 +3706,33 @@ update_and_draw_frame_round :: () {
             // Draw particles
             draw_particles :: () {
                 for particle: particles_to_draw_this_frame {
-                    if particle.text {
-                        source := Rectangle.{
-                            xx (NUMBER_ONE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH),
-                            xx (NUMBER_ONE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT),
-                            TILEMAP_GENERAL_TILE_WIDTH,
-                            TILEMAP_GENERAL_TILE_HEIGHT,
-                        };
+                    assert(particle.size > 0);
 
+                    particle_dest_x_modifier : s32 = 0;
+
+                    for particle_sprite: particle.sprites {
                         dest_sprite := Rectangle.{
-                            particle.position.x,
+                            particle.position.x + read_then_increment(*particle_dest_x_modifier, xx particle.size),
                             particle.position.y,
                             particle.size,
                             particle.size,
                         };
 
+                        source := Rectangle.{
+                            xx (particle_sprite.texture_source_col * TILEMAP_GENERAL_TILE_WIDTH),
+                            xx (particle_sprite.texture_source_row * TILEMAP_GENERAL_TILE_HEIGHT),
+                            TILEMAP_GENERAL_TILE_WIDTH,
+                            TILEMAP_GENERAL_TILE_HEIGHT,
+                        };
+
                         DrawTexturePro(
-                            tilemap_texture_general,
+                            particle_sprite.texture,
                             source,
                             dest_sprite,
                             Vector2.{ particle.size * 0.5, particle.size * 0.5 },
                             particle.rotation,
-                            Color.{ GREEN.r, GREEN.g, GREEN.b, xx (particle.opacity * 255) }
+                            Color.{ particle_sprite.tint.r, particle_sprite.tint.g, particle_sprite.tint.b, xx (particle.opacity * 255) }
                         );
-                    }
-
-                    if particle.sprite_source_col > -1 && particle.sprite_source_row > -1 {
-                        // If there's no text, then this is just a zero vector.
-                        measured_text_size := MeasureText(to_c_string(particle.text), PARTICLE_TEXT_SIZE);
-
-                        if particle.text.count > 0 then print_vars(measured_text_size);
-
-                        assert(particle.size > 0);
-
-                        dest_sprite := Rectangle.{
-                            particle.position.x + measured_text_size,
-                            particle.position.y,
-                            particle.size,
-                            particle.size,
-                        };
-
-                        source := Rectangle.{
-                            xx (particle.sprite_source_col * TILEMAP_GENERAL_TILE_WIDTH),
-                            xx (particle.sprite_source_row * TILEMAP_GENERAL_TILE_HEIGHT),
-                            TILEMAP_GENERAL_TILE_WIDTH,
-                            TILEMAP_GENERAL_TILE_HEIGHT,
-                        };
-
-                        // DrawTexturePro(
-                        //     tilemap_texture_general,
-                        //     source,
-                        //     dest_sprite,
-                        //     Vector2.{ particle.size * 0.5, particle.size * 0.5 },
-                        //     particle.rotation,
-                        //     Color.{ WHITE.r, WHITE.g, WHITE.b, xx (particle.opacity * 255) }
-                        // );
                     }
                 }
             }
@@ -5435,23 +5412,59 @@ set_entity_direction_to_face_next_target :: (entity: *$T/interface Moveable) {
 }
 
 create_gold_particle :: (pos: Vector2, amount: int) -> Particle {
-    particle_id  := increment_then_read(*particle_id_counter);
-    amount_text  := ifx amount < 0 then sprint("-%", amount) else sprint("+%", amount); 
+    particle_id := increment_then_read(*particle_id_counter);
+
+    gold_particle_sprites : [..] ParticleSprite;
+
+    tint := ifx amount > 0 then GREEN else RED;
+
+    plus_or_minus_sprite := ifx amount > 0
+        // plus sign 
+        then ParticleSprite.{
+            texture            = tilemap_texture_general,
+            texture_source_row = 8,
+            texture_source_col = 0,
+            tint               = tint,
+        }
+        // minus sign
+        else ParticleSprite.{
+            texture            = tilemap_texture_general,
+            texture_source_row = 8,
+            texture_source_col = 1,
+            tint               = tint,
+        };
+
+    array_add(*gold_particle_sprites, plus_or_minus_sprite);
+    
+    // TODO: DRY up
+    // PERF: I feel like using strings here is a terrible idea and I can probably just do some
+    // clever math to get the digits.
+    amount_as_string := tprint("%", amount);
+    assert(amount_as_string.count > 0);
+    while amount_as_string.count > 0 {
+        digit := slice(amount_as_string, 0, 1);
+        advance(*amount_as_string);
+        
+        digit_sprite := ParticleSprite.{
+            texture            = tilemap_texture_general,
+            texture_source_row = 9,
+            texture_source_col = string_to_int(digit),
+            tint               = tint,
+        };
+
+        array_add(*gold_particle_sprites, digit_sprite);
+    }
 
     particle := Particle.{
         id                = particle_id,
         position          = pos,
         velocity          = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
         size              = TILEMAP_GENERAL_TILE_WIDTH * 0.5,
-        tint              = ifx amount < 0 then RED else GREEN,
-        text              = amount_text,
-        text_width        = xx MeasureText(to_c_string(amount_text), PARTICLE_TEXT_SIZE),
         fade              = true,
         opacity           = 1,
+        sprites           = gold_particle_sprites,
         time_left_ms      = PARTICLE_GOLD_TIME_TO_LIVE_MS,
         time_left_max     = PARTICLE_GOLD_TIME_TO_LIVE_MS,
-        sprite_source_row = PARTICLE_GOLD_SPRITE_SOURCE_ROW,
-        sprite_source_col = PARTICLE_GOLD_SPRITE_SOURCE_COL,
     };
 
     table_set(*particle_id_to_index, particle_id, particles.count);
@@ -5463,19 +5476,26 @@ create_gold_particle :: (pos: Vector2, amount: int) -> Particle {
 create_dwarf_death_particle :: (pos: Vector2) -> Particle {
     particle_id  := increment_then_read(*particle_id_counter);
 
+    particle_sprite := ParticleSprite.{
+        texture            = tilemap_texture_general,
+        texture_source_row = PARTICLE_DWARF_DEATH_SPRITE_SOURCE_ROW,
+        texture_source_col = PARTICLE_DWARF_DEATH_SPRITE_SOURCE_COL,
+        tint               = WHITE,
+    };
+
+    particle_sprites : [..] ParticleSprite;
+    array_add(*particle_sprites, particle_sprite);
+
     particle := Particle.{
         id                = particle_id,
         position          = pos,
         velocity          = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
-        tint              = WHITE,
         size              = TILEMAP_GENERAL_WORLD_WIDTH,
         fade              = true,
         opacity           = 1,
+        sprites           = particle_sprites,
         time_left_ms      = PARTICLE_DWARF_DEATH_TIME_TO_LIVE_MS,
         time_left_max     = PARTICLE_DWARF_DEATH_TIME_TO_LIVE_MS,
-        sprite_source_row = PARTICLE_DWARF_DEATH_SPRITE_SOURCE_ROW,
-        sprite_source_col = PARTICLE_DWARF_DEATH_SPRITE_SOURCE_COL,
-        // text
     };
 
     table_set(*particle_id_to_index, particle_id, particles.count);
@@ -5487,19 +5507,26 @@ create_dwarf_death_particle :: (pos: Vector2) -> Particle {
 create_goblin_death_particle :: (pos: Vector2) -> Particle {
     particle_id  := increment_then_read(*particle_id_counter);
 
+    particle_sprite := ParticleSprite.{
+        texture            = tilemap_texture_general,
+        texture_source_row = PARTICLE_GOBLIN_DEATH_SPRITE_SOURCE_ROW,
+        texture_source_col = PARTICLE_GOBLIN_DEATH_SPRITE_SOURCE_COL,
+        tint               = WHITE,
+    };
+
+    particle_sprites : [..] ParticleSprite;
+    array_add(*particle_sprites, particle_sprite);
+
     particle := Particle.{
         id                = particle_id,
         position          = pos,
         velocity          = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
-        tint              = WHITE,
         size              = TILEMAP_GENERAL_WORLD_WIDTH,
         fade              = true,
         opacity           = 1,
         time_left_ms      = PARTICLE_GOBLIN_DEATH_TIME_TO_LIVE_MS,
         time_left_max     = PARTICLE_GOBLIN_DEATH_TIME_TO_LIVE_MS,
-        sprite_source_row = PARTICLE_GOBLIN_DEATH_SPRITE_SOURCE_ROW,
-        sprite_source_col = PARTICLE_GOBLIN_DEATH_SPRITE_SOURCE_COL,
-        // text
+        sprites           = particle_sprites,
     };
 
     table_set(*particle_id_to_index, particle_id, particles.count);
@@ -5511,21 +5538,28 @@ create_goblin_death_particle :: (pos: Vector2) -> Particle {
 create_dwarf_aggro_particle :: (pos: Vector2, dwarf_id: s32) -> Particle {
     particle_id  := increment_then_read(*particle_id_counter);
 
+    particle_sprite := ParticleSprite.{
+        texture            = tilemap_texture_general,
+        texture_source_row = PARTICLE_DWARF_AGGRO_SPRITE_SOURCE_ROW,
+        texture_source_col = PARTICLE_DWARF_AGGRO_SPRITE_SOURCE_COL,
+        tint               = WHITE,
+    };
+
+    particle_sprites : [..] ParticleSprite;
+    array_add(*particle_sprites, particle_sprite);
+
     particle := Particle.{
         id                    = particle_id,
         position              = pos,
         velocity              = Vector2.{ 0.0, 0.0 },
-        tint                  = WHITE,
         fade                  = false,
         size                  = TILEMAP_GENERAL_WORLD_WIDTH,
         opacity               = 1,
         time_left_ms          = PARTICLE_DWARF_AGGRO_TIME_TO_LIVE_MS,
         time_left_max         = PARTICLE_DWARF_AGGRO_TIME_TO_LIVE_MS,
-        sprite_source_row     = PARTICLE_DWARF_AGGRO_SPRITE_SOURCE_ROW,
-        sprite_source_col     = PARTICLE_DWARF_AGGRO_SPRITE_SOURCE_COL,
+        sprites               = particle_sprites,
         entity_id_to_follow   = dwarf_id,
         entity_kind_to_follow = .Dwarf,
-        // text
     };
 
     table_set(*particle_id_to_index, particle_id, particles.count);
@@ -5537,21 +5571,28 @@ create_dwarf_aggro_particle :: (pos: Vector2, dwarf_id: s32) -> Particle {
 create_dwarf_selected_particle :: (pos: Vector2, dwarf_id: s32) -> Particle {
     particle_id  := increment_then_read(*particle_id_counter);
 
+    particle_sprite := ParticleSprite.{
+        texture            = tilemap_texture_general,
+        texture_source_row = PARTICLE_DWARF_SELECTED_SPRITE_SOURCE_ROW,
+        texture_source_col = PARTICLE_DWARF_SELECTED_SPRITE_SOURCE_COL,
+        tint               = WHITE,
+    };
+
+    particle_sprites : [..] ParticleSprite;
+    array_add(*particle_sprites, particle_sprite);
+
     particle := Particle.{
         id                    = particle_id,
         position              = pos,
         velocity              = Vector2.{ 0.0, 0.0 },
-        tint                  = WHITE,
         fade                  = false,
         size                  = TILEMAP_GENERAL_WORLD_WIDTH,
         opacity               = 1,
         time_left_ms          = PARTICLE_DWARF_SELECTED_TIME_TO_LIVE_MS, // This really should just be infinite
         time_left_max         = PARTICLE_DWARF_SELECTED_TIME_TO_LIVE_MS, // This really should just be infinite
-        sprite_source_row     = PARTICLE_DWARF_SELECTED_SPRITE_SOURCE_ROW,
-        sprite_source_col     = PARTICLE_DWARF_SELECTED_SPRITE_SOURCE_COL,
+        sprites               = particle_sprites,
         entity_id_to_follow   = dwarf_id,
         entity_kind_to_follow = .Dwarf,
-        // text
     };
 
     table_set(*particle_id_to_index, particle_id, particles.count);
@@ -5565,19 +5606,37 @@ create_damage_particles :: (pos: Vector2, amount: int, direction_stars_should_fl
     {
         particle_id  := increment_then_read(*particle_id_counter);
 
+        particle_sprites : [..] ParticleSprite;
+
+        // TODO: DRY up
+        // PERF: I feel like using strings here is a terrible idea and I can probably just do some
+        // clever math to get the digits.
+        amount_as_string := tprint("%", amount);
+        assert(amount_as_string.count > 0);
+        while amount_as_string.count > 0 {
+            digit := slice(amount_as_string, 0, 1);
+            advance(*amount_as_string);
+            
+            digit_sprite := ParticleSprite.{
+                texture            = tilemap_texture_general,
+                texture_source_row = 9,
+                texture_source_col = string_to_int(digit),
+                tint               = RED,
+            };
+
+            array_add(*particle_sprites, digit_sprite);
+        }
+
         particle := Particle.{
-            id                = particle_id,
-            position          = pos,
-            velocity          = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
-            text              = sprint("%", amount),
-            tint              = RED,
-            size              = TILEMAP_GENERAL_WORLD_WIDTH,
-            fade              = true,
-            opacity           = 1,
-            time_left_ms      = PARTICLE_DAMAGE_TIME_TO_LIVE_MS,
-            time_left_max     = PARTICLE_DAMAGE_TIME_TO_LIVE_MS,
-            sprite_source_row = -1,
-            sprite_source_col = -1,
+            id            = particle_id,
+            position      = pos,
+            velocity      = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
+            size          = TILEMAP_GENERAL_WORLD_WIDTH,
+            fade          = true,
+            opacity       = 1,
+            time_left_ms  = PARTICLE_DAMAGE_TIME_TO_LIVE_MS,
+            time_left_max = PARTICLE_DAMAGE_TIME_TO_LIVE_MS,
+            sprites       = particle_sprites,
         };
 
         table_set(*particle_id_to_index, particle_id, particles.count);
@@ -5587,6 +5646,16 @@ create_damage_particles :: (pos: Vector2, amount: int, direction_stars_should_fl
     // Damage star 1
     {
         particle_id  := increment_then_read(*particle_id_counter);
+
+        particle_sprite := ParticleSprite.{
+            texture            = tilemap_texture_general,
+            texture_source_row = PARTICLE_DAMAGE_STAR_SPRITE_SOURCE_ROW,
+            texture_source_col = PARTICLE_DAMAGE_STAR_SPRITE_SOURCE_COL,
+            tint               = WHITE,
+        };
+
+        particle_sprites : [..] ParticleSprite;
+        array_add(*particle_sprites, particle_sprite);
 
         secondary_speed_modifier := random_get_within_range(-0.1, 0.1);
 
@@ -5618,18 +5687,16 @@ create_damage_particles :: (pos: Vector2, amount: int, direction_stars_should_fl
         }
 
         particle := Particle.{
-            id                = particle_id,
-            position          = pos,
-            velocity          = velocity,
-            acceleration      = Vector2.{ 0.95, 0.95 },
-            tint              = WHITE,
-            fade              = true,
-            size              = TILEMAP_GENERAL_WORLD_WIDTH,
-            opacity           = 1,
-            time_left_ms      = PARTICLE_DAMAGE_STAR_TIME_TO_LIVE_MS,
-            time_left_max     = PARTICLE_DAMAGE_STAR_TIME_TO_LIVE_MS,
-            sprite_source_row = PARTICLE_DAMAGE_STAR_SPRITE_SOURCE_ROW,
-            sprite_source_col = PARTICLE_DAMAGE_STAR_SPRITE_SOURCE_COL,
+            id            = particle_id,
+            position      = pos,
+            velocity      = velocity,
+            acceleration  = Vector2.{ 0.95, 0.95 },
+            fade          = true,
+            size          = TILEMAP_GENERAL_WORLD_WIDTH,
+            opacity       = 1,
+            time_left_ms  = PARTICLE_DAMAGE_STAR_TIME_TO_LIVE_MS,
+            time_left_max = PARTICLE_DAMAGE_STAR_TIME_TO_LIVE_MS,
+            sprites       = particle_sprites,
         };
 
         table_set(*particle_id_to_index, particle_id, particles.count);
@@ -5639,6 +5706,16 @@ create_damage_particles :: (pos: Vector2, amount: int, direction_stars_should_fl
     // Damage star 2
     {
         particle_id  := increment_then_read(*particle_id_counter);
+
+        particle_sprite := ParticleSprite.{
+            texture            = tilemap_texture_general,
+            texture_source_row = PARTICLE_DAMAGE_STAR_SPRITE_SOURCE_ROW,
+            texture_source_col = PARTICLE_DAMAGE_STAR_SPRITE_SOURCE_COL,
+            tint               = WHITE,
+        };
+
+        particle_sprites : [..] ParticleSprite;
+        array_add(*particle_sprites, particle_sprite);
 
         secondary_speed_modifier := random_get_within_range(-0.2, 0.2);
 
@@ -5669,18 +5746,16 @@ create_damage_particles :: (pos: Vector2, amount: int, direction_stars_should_fl
         }
 
         particle := Particle.{
-            id                = particle_id,
-            position          = pos,
-            velocity          = velocity,
-            acceleration      = Vector2.{ 0.95, 0.95 },
-            tint              = WHITE,
-            fade              = true,
-            size              = TILEMAP_GENERAL_WORLD_WIDTH,
-            opacity           = 1,
-            time_left_ms      = PARTICLE_DAMAGE_STAR_TIME_TO_LIVE_MS,
-            time_left_max     = PARTICLE_DAMAGE_STAR_TIME_TO_LIVE_MS,
-            sprite_source_row = PARTICLE_DAMAGE_STAR_SPRITE_SOURCE_ROW,
-            sprite_source_col = PARTICLE_DAMAGE_STAR_SPRITE_SOURCE_COL,
+            id            = particle_id,
+            position      = pos,
+            velocity      = velocity,
+            acceleration  = Vector2.{ 0.95, 0.95 },
+            fade          = true,
+            size          = TILEMAP_GENERAL_WORLD_WIDTH,
+            opacity       = 1,
+            time_left_ms  = PARTICLE_DAMAGE_STAR_TIME_TO_LIVE_MS,
+            time_left_max = PARTICLE_DAMAGE_STAR_TIME_TO_LIVE_MS,
+            sprites       = particle_sprites,
         };
 
         table_set(*particle_id_to_index, particle_id, particles.count);
@@ -5691,7 +5766,16 @@ create_damage_particles :: (pos: Vector2, amount: int, direction_stars_should_fl
 create_mine_chip_particles :: (position: Vector2, amount: int, direction: Direction) {
     for 1..amount {
         particle_id := increment_then_read(*particle_id_counter);
-        print("spawning particle %\n", particle_id);
+
+        particle_sprite := ParticleSprite.{
+            texture            = tilemap_texture_general,
+            texture_source_row = cast(int) random_get_within_range(4, 5.99),
+            texture_source_col = 8,
+            tint               = WHITE,
+        };
+
+        particle_sprites : [..] ParticleSprite;
+        array_add(*particle_sprites, particle_sprite);
 
         pos := position;
         velocity : Vector2;
@@ -5751,18 +5835,16 @@ create_mine_chip_particles :: (position: Vector2, amount: int, direction: Direct
         }
 
         particle := Particle.{
-            id                = particle_id,
-            position          = pos,
-            velocity          = velocity,
-            angular_velocity  = random_get_within_range(-1000, 1000),
-            size              = 5.5,
-            tint              = WHITE,
-            fade              = true,
-            opacity           = 1,
-            time_left_ms      = 500,
-            time_left_max     = 500,
-            sprite_source_row = cast(int) random_get_within_range(4, 5.99),
-            sprite_source_col = 8,
+            id               = particle_id,
+            position         = pos,
+            velocity         = velocity,
+            angular_velocity = random_get_within_range(-1000, 1000),
+            size             = 5.5,
+            fade             = true,
+            opacity          = 1,
+            time_left_ms     = 500,
+            time_left_max    = 500,
+            sprites          = particle_sprites,
         };
 
         table_set(*particle_id_to_index, particle_id, particles.count);
@@ -5773,18 +5855,42 @@ create_mine_chip_particles :: (position: Vector2, amount: int, direction: Direct
 create_miss_particles :: (pos: Vector2) {
     particle_id  := increment_then_read(*particle_id_counter);
 
+    particle_sprite_m := ParticleSprite.{
+        texture            = tilemap_texture_general,
+        texture_source_row = 8,
+        texture_source_col = 2,
+        tint               = RED,
+    };
+
+    particle_sprite_i := ParticleSprite.{
+        texture            = tilemap_texture_general,
+        texture_source_row = 8,
+        texture_source_col = 3,
+        tint               = RED,
+    };
+
+    particle_sprite_s := ParticleSprite.{
+        texture            = tilemap_texture_general,
+        texture_source_row = 8,
+        texture_source_col = 4,
+        tint               = RED,
+    };
+
+    particle_sprites : [..] ParticleSprite;
+    array_add(*particle_sprites, particle_sprite_m);
+    array_add(*particle_sprites, particle_sprite_i);
+    array_add(*particle_sprites, particle_sprite_s);
+    array_add(*particle_sprites, particle_sprite_s);
+
     particle := Particle.{
-        id                    = particle_id,
-        position              = pos,
-        velocity              = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
-        text                  = "Miss",
-        tint                  = RED,
-        fade                  = true,
-        size                  = TILEMAP_GENERAL_WORLD_WIDTH,
-        opacity               = 1,
-        time_left_ms          = PARTICLE_DAMAGE_TIME_TO_LIVE_MS,
-        sprite_source_row     = -1,
-        sprite_source_col     = -1,
+        id           = particle_id,
+        position     = pos,
+        velocity     = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
+        fade         = true,
+        size         = TILEMAP_GENERAL_WORLD_WIDTH,
+        opacity      = 1,
+        time_left_ms = PARTICLE_DAMAGE_TIME_TO_LIVE_MS,
+        sprites      = particle_sprites,
     };
 
     table_set(*particle_id_to_index, particle_id, particles.count);
