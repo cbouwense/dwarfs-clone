@@ -2651,7 +2651,7 @@ update_and_draw_frame_round :: () {
                                                         dwarf_transition_state(dwarf, .DECIDING);
                                                     }
                                                 } else {
-                                                    create_miss_particles(goblin.pos);
+                                                    create_miss_particle(Vector2.{ goblin.pos.x, goblin.pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 });
                                                 }
                                             }
                                         } else {
@@ -2912,7 +2912,7 @@ update_and_draw_frame_round :: () {
                                                         goblin.entity_id_attacking = 0;
                                                     }
                                                 } else {
-                                                    create_miss_particles(entity.pos);
+                                                    create_miss_particle(Vector2.{ entity.pos.x, entity.pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 });
                                                 }
                                             }
                                         }
@@ -3713,7 +3713,7 @@ update_and_draw_frame_round :: () {
 
                     for particle_sprite: particle.sprites {
                         dest_sprite := Rectangle.{
-                            particle.position.x + read_then_increment(*particle_dest_x_modifier, xx particle.size),
+                            particle.position.x + read_then_increment(*particle_dest_x_modifier, xx (particle.size * 0.75)),
                             particle.position.y,
                             particle.size,
                             particle.size,
@@ -5412,49 +5412,14 @@ set_entity_direction_to_face_next_target :: (entity: *$T/interface Moveable) {
     else assert(false);
 }
 
+PARTICLE_SIZE :: TILEMAP_GENERAL_WORLD_WIDTH * 0.4;
+
 create_gold_particle :: (pos: Vector2, amount: int) -> Particle {
     particle_id := increment_then_read(*particle_id_counter);
 
     gold_particle_sprites : [..] ParticleSprite;
-
-    tint := ifx amount > 0 then GREEN else RED;
-
-    plus_or_minus_sprite := ifx amount > 0
-        // plus sign 
-        then ParticleSprite.{
-            texture            = tilemap_texture_general,
-            texture_source_row = 8,
-            texture_source_col = 0,
-            tint               = tint,
-        }
-        // minus sign
-        else ParticleSprite.{
-            texture            = tilemap_texture_general,
-            texture_source_row = 8,
-            texture_source_col = 1,
-            tint               = tint,
-        };
-
-    array_add(*gold_particle_sprites, plus_or_minus_sprite);
     
-    // TODO: DRY up
-    // PERF: I feel like using strings here is a terrible idea and I can probably just do some
-    // clever math to get the digits.
-    amount_as_string := tprint("%", amount);
-    assert(amount_as_string.count > 0);
-    while amount_as_string.count > 0 {
-        digit := slice(amount_as_string, 0, 1);
-        advance(*amount_as_string);
-        
-        digit_sprite := ParticleSprite.{
-            texture            = tilemap_texture_general,
-            texture_source_row = 9,
-            texture_source_col = string_to_int(digit),
-            tint               = tint,
-        };
-
-        array_add(*gold_particle_sprites, digit_sprite);
-    }
+    add_number_to_particle_sprites(*gold_particle_sprites, amount, true);
 
     coin_sprite := ParticleSprite.{
         texture            = tilemap_texture_general,
@@ -5468,7 +5433,7 @@ create_gold_particle :: (pos: Vector2, amount: int) -> Particle {
         id                = particle_id,
         position          = pos,
         velocity          = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
-        size              = TILEMAP_GENERAL_WORLD_WIDTH * 0.5,
+        size              = PARTICLE_SIZE,
         fade              = true,
         opacity           = 1,
         sprites           = gold_particle_sprites,
@@ -5500,7 +5465,7 @@ create_dwarf_death_particle :: (pos: Vector2) -> Particle {
         id                = particle_id,
         position          = pos,
         velocity          = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
-        size              = TILEMAP_GENERAL_WORLD_WIDTH * 0.5,
+        size              = PARTICLE_SIZE,
         fade              = true,
         opacity           = 1,
         sprites           = particle_sprites,
@@ -5532,7 +5497,7 @@ create_goblin_death_particle :: (pos: Vector2) -> Particle {
         id                = particle_id,
         position          = pos,
         velocity          = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
-        size              = TILEMAP_GENERAL_WORLD_WIDTH * 0.5,
+        size              = PARTICLE_SIZE,
         fade              = true,
         opacity           = 1,
         time_left_ms      = PARTICLE_GOBLIN_DEATH_TIME_TO_LIVE_MS,
@@ -5565,7 +5530,7 @@ create_dwarf_aggro_particle :: (pos: Vector2, dwarf_id: s32) -> Particle {
         position              = pos,
         velocity              = Vector2.{ 0.0, 0.0 },
         fade                  = false,
-        size                  = TILEMAP_GENERAL_WORLD_WIDTH * 0.5,
+        size                  = PARTICLE_SIZE,
         opacity               = 1,
         time_left_ms          = PARTICLE_DWARF_AGGRO_TIME_TO_LIVE_MS,
         time_left_max         = PARTICLE_DWARF_AGGRO_TIME_TO_LIVE_MS,
@@ -5598,7 +5563,7 @@ create_dwarf_selected_particle :: (pos: Vector2, dwarf_id: s32) -> Particle {
         position              = pos,
         velocity              = Vector2.{ 0.0, 0.0 },
         fade                  = false,
-        size                  = TILEMAP_GENERAL_WORLD_WIDTH * 0.5,
+        size                  = PARTICLE_SIZE,
         opacity               = 1,
         time_left_ms          = PARTICLE_DWARF_SELECTED_TIME_TO_LIVE_MS, // This really should just be infinite
         time_left_max         = PARTICLE_DWARF_SELECTED_TIME_TO_LIVE_MS, // This really should just be infinite
@@ -5613,6 +5578,48 @@ create_dwarf_selected_particle :: (pos: Vector2, dwarf_id: s32) -> Particle {
     return particle;
 }
 
+add_number_to_particle_sprites :: (particle_sprites: * [..] ParticleSprite, number: int, is_positive_connotation: bool, include_plus_or_minus: bool = true) {
+    tint := ifx is_positive_connotation then GREEN else RED;
+    
+    if include_plus_or_minus {
+        plus_or_minus_sprite := ifx is_positive_connotation
+            // plus sign 
+            then ParticleSprite.{
+                texture            = tilemap_texture_general,
+                texture_source_row = 8,
+                texture_source_col = 0,
+                tint               = tint,
+            }
+            // minus sign
+            else ParticleSprite.{
+                texture            = tilemap_texture_general,
+                texture_source_row = 8,
+                texture_source_col = 1,
+                tint               = tint,
+            };
+
+        array_add(particle_sprites, plus_or_minus_sprite);
+    }
+
+    // PERF: I feel like using strings here is a terrible idea and I can probably just do some
+    // clever math to get the digits.
+    number_as_string := tprint("%", number);
+    assert(number_as_string.count > 0);
+    while number_as_string.count > 0 {
+        digit := slice(number_as_string, 0, 1);
+        advance(*number_as_string);
+        
+        digit_sprite := ParticleSprite.{
+            texture            = tilemap_texture_general,
+            texture_source_row = 9,
+            texture_source_col = string_to_int(digit),
+            tint               = tint,
+        };
+
+        array_add(particle_sprites, digit_sprite);
+    }
+}
+
 create_damage_particles :: (pos: Vector2, amount: int, direction_stars_should_fly: Direction) {
     // Damage text
     {
@@ -5620,30 +5627,13 @@ create_damage_particles :: (pos: Vector2, amount: int, direction_stars_should_fl
 
         particle_sprites : [..] ParticleSprite;
 
-        // TODO: DRY up
-        // PERF: I feel like using strings here is a terrible idea and I can probably just do some
-        // clever math to get the digits.
-        amount_as_string := tprint("%", amount);
-        assert(amount_as_string.count > 0);
-        while amount_as_string.count > 0 {
-            digit := slice(amount_as_string, 0, 1);
-            advance(*amount_as_string);
-            
-            digit_sprite := ParticleSprite.{
-                texture            = tilemap_texture_general,
-                texture_source_row = 9,
-                texture_source_col = string_to_int(digit),
-                tint               = RED,
-            };
-
-            array_add(*particle_sprites, digit_sprite);
-        }
+        add_number_to_particle_sprites(*particle_sprites, amount, false);
 
         particle := Particle.{
             id            = particle_id,
-            position      = pos,
+            position      = Vector2.{ pos.x, pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 },
             velocity      = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
-            size          = TILEMAP_GENERAL_WORLD_WIDTH * 0.5,
+            size          = PARTICLE_SIZE,
             fade          = true,
             opacity       = 1,
             time_left_ms  = PARTICLE_DAMAGE_TIME_TO_LIVE_MS,
@@ -5705,7 +5695,7 @@ create_damage_particles :: (pos: Vector2, amount: int, direction_stars_should_fl
             velocity      = velocity,
             acceleration  = Vector2.{ 0.95, 0.95 },
             fade          = true,
-            size          = TILEMAP_GENERAL_WORLD_WIDTH * 0.5,
+            size          = PARTICLE_SIZE,
             opacity       = 1,
             time_left_ms  = PARTICLE_DAMAGE_STAR_TIME_TO_LIVE_MS,
             time_left_max = PARTICLE_DAMAGE_STAR_TIME_TO_LIVE_MS,
@@ -5765,7 +5755,7 @@ create_damage_particles :: (pos: Vector2, amount: int, direction_stars_should_fl
             velocity      = velocity,
             acceleration  = Vector2.{ 0.95, 0.95 },
             fade          = true,
-            size          = TILEMAP_GENERAL_WORLD_WIDTH * 0.5,
+            size          = PARTICLE_SIZE,
             opacity       = 1,
             time_left_ms  = PARTICLE_DAMAGE_STAR_TIME_TO_LIVE_MS,
             time_left_max = PARTICLE_DAMAGE_STAR_TIME_TO_LIVE_MS,
@@ -5868,7 +5858,7 @@ create_mine_chip_particles :: (position: Vector2, amount: int, direction: Direct
     }
 }
 
-create_miss_particles :: (pos: Vector2) {
+create_miss_particle :: (pos: Vector2) {
     particle_id  := increment_then_read(*particle_id_counter);
 
     particle_sprite_m := ParticleSprite.{
@@ -5903,7 +5893,7 @@ create_miss_particles :: (pos: Vector2) {
         position      = pos,
         velocity      = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
         fade          = true,
-        size          = TILEMAP_GENERAL_WORLD_WIDTH * 0.5,
+        size          = PARTICLE_SIZE,
         opacity       = 1,
         time_left_ms  = PARTICLE_DAMAGE_TIME_TO_LIVE_MS,
         sprites       = particle_sprites,
