@@ -2,7 +2,7 @@
 # In progress
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- Gold, miss, and hit particles are fucked up
+- Death particles, aggro particles, and hit star particles need TLC
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Bugs
@@ -25,7 +25,6 @@
 - In addition to control modes, allow users to hold down controls
 - Death poof particles
 - Control mode placement validity / onion skin
-- dwarf level ups
 - base canons
 - base spawn diggers control
 - base spawn warriors control

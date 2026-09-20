@@ -1997,7 +1997,7 @@ update_and_draw_frame_round :: () {
                                         );
                                         tile_pos := Vector2.{ tile_rect.x + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, tile_rect.y };
 
-                                        create_gold_particle(tile_pos, -1 * gold_cost);
+                                        create_gold_particle(tile_pos, -1 * gold_cost, false);
                                     }
                                 }
                             }
@@ -2020,7 +2020,7 @@ update_and_draw_frame_round :: () {
 
                                     // Debit the gold cost.
                                     if !context.metagame.debug_mode context.game_state.gold -= GOLD_COST_BASE;
-                                    create_gold_particle(base_pos, -1 * GOLD_COST_BASE);
+                                    create_gold_particle(base_pos, -1 * GOLD_COST_BASE, false);
 
                                     // Reset control mode.
                                     context.game_state.control_mode = .NORMAL;
@@ -2041,7 +2041,7 @@ update_and_draw_frame_round :: () {
 
                                     // Debit the gold cost.
                                     if !context.metagame.debug_mode context.game_state.gold -= GOLD_COST_DYNAMITE;
-                                    create_gold_particle(context.mouse_pos_in_world, -1 * GOLD_COST_DYNAMITE);
+                                    create_gold_particle(context.mouse_pos_in_world, -1 * GOLD_COST_DYNAMITE, false);
 
                                     // Reset control mode.
                                     context.game_state.control_mode = .NORMAL;
@@ -2126,7 +2126,7 @@ update_and_draw_frame_round :: () {
 
                                     // Debit the gold cost.
                                     if !context.metagame.debug_mode then context.game_state.gold -= GOLD_COST_OBSIDIAN;
-                                    create_gold_particle(context.mouse_pos_in_world, -1 * GOLD_COST_OBSIDIAN);
+                                    create_gold_particle(context.mouse_pos_in_world, -1 * GOLD_COST_OBSIDIAN, false);
                                 }
                             }
                         }
@@ -2153,7 +2153,7 @@ update_and_draw_frame_round :: () {
 
                                     // Debit the gold cost.
                                     if !context.metagame.debug_mode context.game_state.gold -= GOLD_COST_WALL;
-                                    create_gold_particle(context.mouse_pos_in_world, -1 * GOLD_COST_WALL);
+                                    create_gold_particle(context.mouse_pos_in_world, -1 * GOLD_COST_WALL, false);
                                 }
                             }
                         }
@@ -2204,7 +2204,7 @@ update_and_draw_frame_round :: () {
                                     if is_tile_treasure(dwarf_tile_id) {
                                         // Credit the gold.
                                         context.game_state.gold += GOLD_FROM_TREASURE;
-                                        create_gold_particle(dwarf_center, GOLD_FROM_TREASURE);
+                                        create_gold_particle(dwarf_center, GOLD_FROM_TREASURE, true);
 
                                         // Remove the treasure
                                         tile := get_tile_by_id(dwarf_tile_id);
@@ -3693,11 +3693,6 @@ update_and_draw_frame_round :: () {
                             DrawText(tprint("type: %\0", tile.type).data, xx hovered_tile_rect.x, read_then_increment(*tile_y, TILE_DEBUG_INC), 12, WHITE);
                             DrawText(tprint("props: %\0", tile.props).data, xx hovered_tile_rect.x, read_then_increment(*tile_y, TILE_DEBUG_INC), 12, WHITE);
                             DrawText(tprint("health: %\0", tile.health).data, xx hovered_tile_rect.x, read_then_increment(*tile_y, TILE_DEBUG_INC), 12, WHITE);
-                            DrawText(tprint("animated_sprite: %\0", tile.animated_sprite).data, xx hovered_tile_rect.x, read_then_increment(*tile_y, TILE_DEBUG_INC), 12, WHITE);
-                            DrawText(tprint("trench_directions_sides: %\0", tile.trench_directions_sides).data, xx hovered_tile_rect.x, read_then_increment(*tile_y, TILE_DEBUG_INC), 12, WHITE);
-                            DrawText(tprint("trench_directions_corners_mostly_crust: %\0", tile.trench_directions_corners_mostly_crust).data, xx hovered_tile_rect.x, read_then_increment(*tile_y, TILE_DEBUG_INC), 12, WHITE);
-                            DrawText(tprint("trench_directions_corners_mostly_dirt: %\0", tile.trench_directions_corners_mostly_dirt).data, xx hovered_tile_rect.x, read_then_increment(*tile_y, TILE_DEBUG_INC), 12, WHITE);
-                            DrawText(tprint("trench_directions_corners_special_crust: %\0", tile.trench_directions_corners_special_crust).data, xx hovered_tile_rect.x, read_then_increment(*tile_y, TILE_DEBUG_INC), 12, WHITE);
                         }
                     }
                 }
@@ -3706,36 +3701,7 @@ update_and_draw_frame_round :: () {
 
             // Draw particles
             draw_particles :: () {
-                for particle: particles_to_draw_this_frame {
-                    assert(particle.size > 0);
-
-                    particle_dest_x_modifier : s32 = 0;
-
-                    for particle_sprite: particle.sprites {
-                        dest_sprite := Rectangle.{
-                            particle.position.x + read_then_increment(*particle_dest_x_modifier, xx (particle.size * 0.75)),
-                            particle.position.y,
-                            particle.size,
-                            particle.size,
-                        };
-
-                        source := Rectangle.{
-                            xx (particle_sprite.texture_source_col * TILEMAP_GENERAL_TILE_WIDTH),
-                            xx (particle_sprite.texture_source_row * TILEMAP_GENERAL_TILE_HEIGHT),
-                            TILEMAP_GENERAL_TILE_WIDTH,
-                            TILEMAP_GENERAL_TILE_HEIGHT,
-                        };
-
-                        DrawTexturePro(
-                            particle_sprite.texture,
-                            source,
-                            dest_sprite,
-                            Vector2.{ particle.size * 0.5, particle.size * 0.5 },
-                            particle.rotation,
-                            Color.{ particle_sprite.tint.r, particle_sprite.tint.g, particle_sprite.tint.b, xx (particle.opacity * 255) }
-                        );
-                    }
-                }
+                for particles_to_draw_this_frame draw_particle(it);
             }
             DRAW_PARTICLES :: true;
             #if DRAW_PARTICLES then draw_particles();
@@ -3822,29 +3788,10 @@ update_and_draw_frame_round :: () {
 
             // Draw path being drawn cost
             if context.game_state.controls_state_this_frame.drawing_path {
-                TEXT_SIZE :: 24;
-
                 gold_cost := get_path_cost(path_being_traced_1) + get_path_cost(path_being_traced_2);
-                measured_text_size := poor_mans_measure_text(tprint("%", gold_cost), TEXT_SIZE);
+                pos := Vector2.{ context.mouse_pos_in_ui.x, context.mouse_pos_in_ui.y - PARTICLE_SIZE_IN_UI };
 
-                text_x := context.mouse_pos_in_ui.x;
-                text_y := context.mouse_pos_in_ui.y - measured_text_size.y;
-
-                draw_outlined_text(tprint("%\0", gold_cost).data, xx text_x, xx text_y, TEXT_SIZE, RED, 1, WHITE);
-
-                dest_sprite := Rectangle.{
-                    text_x + measured_text_size.x,
-                    text_y - measured_text_size.y,
-                    TILEMAP_GENERAL_WORLD_WIDTH,
-                    TILEMAP_GENERAL_WORLD_HEIGHT,
-                };
-                source := Rectangle.{
-                    xx (PARTICLE_GOLD_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH),
-                    xx (PARTICLE_GOLD_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT),
-                    TILEMAP_GENERAL_TILE_WIDTH,
-                    TILEMAP_GENERAL_TILE_HEIGHT,
-                };
-                DrawTexturePro(tilemap_texture_general, source, dest_sprite, Vector2.{0,0}, 0.0, WHITE);
+                draw_path_cost_particle(pos, gold_cost);
             }
 
             debug_text_y : s32 = 10;
@@ -4369,6 +4316,37 @@ update_and_draw_frame_round :: () {
         #if DRAW_UI then draw_ui();
     }
     draw();
+}
+
+draw_particle :: (particle: Particle) {
+    assert(particle.size > 0);
+
+    particle_dest_x_modifier : s32 = 0;
+
+    for particle_sprite: particle.sprites {
+        dest_sprite := Rectangle.{
+            particle.position.x + read_then_increment(*particle_dest_x_modifier, xx (particle.size * 0.75)),
+            particle.position.y,
+            particle.size,
+            particle.size,
+        };
+
+        source := Rectangle.{
+            xx (particle_sprite.texture_source_col * TILEMAP_GENERAL_TILE_WIDTH),
+            xx (particle_sprite.texture_source_row * TILEMAP_GENERAL_TILE_HEIGHT),
+            TILEMAP_GENERAL_TILE_WIDTH,
+            TILEMAP_GENERAL_TILE_HEIGHT,
+        };
+
+        DrawTexturePro(
+            particle_sprite.texture,
+            source,
+            dest_sprite,
+            Vector2.{ particle.size * 0.5, particle.size * 0.5 },
+            particle.rotation,
+            Color.{ particle_sprite.tint.r, particle_sprite.tint.g, particle_sprite.tint.b, xx (particle.opacity * 255) }
+        );
+    }
 }
 
 create_alert :: (alert_type: AlertType, pos: Vector2) -> Alert {
@@ -5412,14 +5390,43 @@ set_entity_direction_to_face_next_target :: (entity: *$T/interface Moveable) {
     else assert(false);
 }
 
-PARTICLE_SIZE :: TILEMAP_GENERAL_WORLD_WIDTH * 0.4;
+PARTICLE_SIZE_IN_WORLD :: 14;
+PARTICLE_SIZE_IN_UI    :: 36;
 
-create_gold_particle :: (pos: Vector2, amount: int) -> Particle {
+draw_path_cost_particle :: (pos: Vector2, amount: int) {
+    gold_particle_sprites : [..] ParticleSprite;
+    
+    add_number_to_particle_sprites(*gold_particle_sprites, amount, false);
+
+    coin_sprite := ParticleSprite.{
+        texture            = tilemap_texture_general,
+        texture_source_row = 0,
+        texture_source_col = 9,
+        tint               = WHITE,
+    };
+    array_add(*gold_particle_sprites, coin_sprite);
+
+    particle := Particle.{
+        position          = pos,
+        velocity          = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
+        size              = PARTICLE_SIZE_IN_UI,
+        fade              = true,
+        opacity           = 1,
+        sprites           = gold_particle_sprites,
+        time_left_ms      = PARTICLE_GOLD_TIME_TO_LIVE_MS,
+        time_left_max     = PARTICLE_GOLD_TIME_TO_LIVE_MS,
+        step_function     = steepstep,
+    };
+
+    draw_particle(particle);
+}
+
+create_gold_particle :: (pos: Vector2, amount: int, is_positive_connotation: bool) -> Particle {
     particle_id := increment_then_read(*particle_id_counter);
 
     gold_particle_sprites : [..] ParticleSprite;
     
-    add_number_to_particle_sprites(*gold_particle_sprites, amount, true);
+    add_number_to_particle_sprites(*gold_particle_sprites, amount, is_positive_connotation);
 
     coin_sprite := ParticleSprite.{
         texture            = tilemap_texture_general,
@@ -5433,7 +5440,7 @@ create_gold_particle :: (pos: Vector2, amount: int) -> Particle {
         id                = particle_id,
         position          = pos,
         velocity          = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
-        size              = PARTICLE_SIZE,
+        size              = PARTICLE_SIZE_IN_WORLD,
         fade              = true,
         opacity           = 1,
         sprites           = gold_particle_sprites,
@@ -5465,7 +5472,7 @@ create_dwarf_death_particle :: (pos: Vector2) -> Particle {
         id                = particle_id,
         position          = pos,
         velocity          = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
-        size              = PARTICLE_SIZE,
+        size              = PARTICLE_SIZE_IN_WORLD,
         fade              = true,
         opacity           = 1,
         sprites           = particle_sprites,
@@ -5497,7 +5504,7 @@ create_goblin_death_particle :: (pos: Vector2) -> Particle {
         id                = particle_id,
         position          = pos,
         velocity          = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
-        size              = PARTICLE_SIZE,
+        size              = PARTICLE_SIZE_IN_WORLD,
         fade              = true,
         opacity           = 1,
         time_left_ms      = PARTICLE_GOBLIN_DEATH_TIME_TO_LIVE_MS,
@@ -5530,7 +5537,7 @@ create_dwarf_aggro_particle :: (pos: Vector2, dwarf_id: s32) -> Particle {
         position              = pos,
         velocity              = Vector2.{ 0.0, 0.0 },
         fade                  = false,
-        size                  = PARTICLE_SIZE,
+        size                  = PARTICLE_SIZE_IN_WORLD,
         opacity               = 1,
         time_left_ms          = PARTICLE_DWARF_AGGRO_TIME_TO_LIVE_MS,
         time_left_max         = PARTICLE_DWARF_AGGRO_TIME_TO_LIVE_MS,
@@ -5563,7 +5570,7 @@ create_dwarf_selected_particle :: (pos: Vector2, dwarf_id: s32) -> Particle {
         position              = pos,
         velocity              = Vector2.{ 0.0, 0.0 },
         fade                  = false,
-        size                  = PARTICLE_SIZE,
+        size                  = PARTICLE_SIZE_IN_WORLD,
         opacity               = 1,
         time_left_ms          = PARTICLE_DWARF_SELECTED_TIME_TO_LIVE_MS, // This really should just be infinite
         time_left_max         = PARTICLE_DWARF_SELECTED_TIME_TO_LIVE_MS, // This really should just be infinite
@@ -5605,10 +5612,13 @@ add_number_to_particle_sprites :: (particle_sprites: * [..] ParticleSprite, numb
     // clever math to get the digits.
     number_as_string := tprint("%", number);
     assert(number_as_string.count > 0);
+    print_vars(number, number_as_string);
     while number_as_string.count > 0 {
         digit := slice(number_as_string, 0, 1);
         advance(*number_as_string);
         
+        if !is_digit(digit[0]) continue;
+
         digit_sprite := ParticleSprite.{
             texture            = tilemap_texture_general,
             texture_source_row = 9,
@@ -5633,7 +5643,7 @@ create_damage_particles :: (pos: Vector2, amount: int, direction_stars_should_fl
             id            = particle_id,
             position      = Vector2.{ pos.x, pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 },
             velocity      = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
-            size          = PARTICLE_SIZE,
+            size          = PARTICLE_SIZE_IN_WORLD,
             fade          = true,
             opacity       = 1,
             time_left_ms  = PARTICLE_DAMAGE_TIME_TO_LIVE_MS,
@@ -5695,7 +5705,7 @@ create_damage_particles :: (pos: Vector2, amount: int, direction_stars_should_fl
             velocity      = velocity,
             acceleration  = Vector2.{ 0.95, 0.95 },
             fade          = true,
-            size          = PARTICLE_SIZE,
+            size          = PARTICLE_SIZE_IN_WORLD,
             opacity       = 1,
             time_left_ms  = PARTICLE_DAMAGE_STAR_TIME_TO_LIVE_MS,
             time_left_max = PARTICLE_DAMAGE_STAR_TIME_TO_LIVE_MS,
@@ -5755,7 +5765,7 @@ create_damage_particles :: (pos: Vector2, amount: int, direction_stars_should_fl
             velocity      = velocity,
             acceleration  = Vector2.{ 0.95, 0.95 },
             fade          = true,
-            size          = PARTICLE_SIZE,
+            size          = PARTICLE_SIZE_IN_WORLD,
             opacity       = 1,
             time_left_ms  = PARTICLE_DAMAGE_STAR_TIME_TO_LIVE_MS,
             time_left_max = PARTICLE_DAMAGE_STAR_TIME_TO_LIVE_MS,
@@ -5893,7 +5903,7 @@ create_miss_particle :: (pos: Vector2) {
         position      = pos,
         velocity      = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
         fade          = true,
-        size          = PARTICLE_SIZE,
+        size          = PARTICLE_SIZE_IN_WORLD * 0.67,
         opacity       = 1,
         time_left_ms  = PARTICLE_DAMAGE_TIME_TO_LIVE_MS,
         sprites       = particle_sprites,
@@ -7111,7 +7121,7 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
             if tile_was_iron {
                 if grant_gold {
                     context.game_state.gold += GOLD_FROM_MINE_IRON;
-                    create_gold_particle(tile.pos, GOLD_FROM_MINE_IRON);
+                    create_gold_particle(tile.pos, GOLD_FROM_MINE_IRON, true);
                 }
 
                 if grant_points then context.game_state.points += POINTS_FROM_MINE_IRON;
@@ -7120,7 +7130,7 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
             if tile_was_dirt {
                 if grant_gold {
                     context.game_state.gold += GOLD_FROM_MINE_DIRT;
-                    create_gold_particle(tile.pos, GOLD_FROM_MINE_DIRT);
+                    create_gold_particle(tile.pos, GOLD_FROM_MINE_DIRT, true);
                 }
 
                 if grant_points then context.game_state.points += POINTS_FROM_MINE_DIRT;
