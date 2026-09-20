@@ -2,18 +2,18 @@
 # In progress
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- Death particles, aggro particles, and hit star particles need TLC
+- You can place down paths after during game over
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Bugs
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 - Dwarf miners can get stuck mining downwards when auto mining iron
+- Dwarf miners can get stuck mining in the same spot after successfully mining iron
 - Aggro logic is fucked up. Dwarves don't seem to wait where they should when goblins coming to them.
 - Dwarf warrior mined iron and pathed to treasure
 - Dwarf warrior unable to path outside of base
 - Water doesn't spread immediately
-- Resetting game can crash
 - Dwarf warrior attacked a goblin diagonally when the goblin was attacking a base.
 - Dwarf warrior unable to path to a goblin when standing behind a miner who is attacking that goblin.
 - Dwarf didn't grab treasure in treasure cave with only 1 treasure
@@ -22,6 +22,7 @@
 # Core gameplay
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+- Death particles, aggro particles, and hit star particles need TLC
 - In addition to control modes, allow users to hold down controls
 - Death poof particles
 - Control mode placement validity / onion skin

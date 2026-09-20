@@ -4659,6 +4659,9 @@ reset_memory :: () {
 
     array_reset(*particles);
     table_reset(*particle_id_to_index);
+    
+    array_reset(*context.tiles);
+    table_reset(*context.tile_ids_to_index);
 
     entity_id_counter   = 0;
     control_id_counter  = 0;
