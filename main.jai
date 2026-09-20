@@ -892,6 +892,16 @@ main :: () {
 
 // Functions
 
+get_direction_of_cardinal_neighbor :: (my_id: s32, neighbor_id: s32) -> Direction {
+    if neighbor_id == my_id - context.world_cols return .NORTH;
+    if neighbor_id == my_id + context.world_cols return .SOUTH;
+    if neighbor_id == my_id + 1                  return .EAST;
+    if neighbor_id == my_id - 1                  return .WEST;
+    
+    assert_soft(false, "Tried finding the direction of a supposed cardinal neighbor (tile id %) from the standing point of tile id %, but couldn't.");
+    return .CENTER; // Unreachable 
+}
+
 is_lod_close :: () -> bool {
     return context.camera.zoom >= CAMERA_ZOOM_LOD_CLOSE_MIN;
 }
@@ -2196,7 +2206,7 @@ update_and_draw_frame_round :: () {
                                 case .DECIDING;
                                     is_dwarf_done_deciding := false;
 
-                                    // By default, we're going to expect that this dwarf decises what to do this frame
+                                    // By default, we're going to expect that this dwarf decides what to do this frame
                                     // (i.e. moves out of the deciding state). However, there are some cases where a dwarf
                                     // can remain in the deciding state - like if he is somehow completely unable to move.
                                     dwarf_can_remain_undecided := false;
@@ -2351,6 +2361,9 @@ update_and_draw_frame_round :: () {
 
                                     if dwarf.tile_ids_on_path.count > 0 {
                                         tile_id_next_in_dwarfs_path := dwarf.tile_ids_on_path[0];
+
+                                        // Set dwarf to face the direction of the new target
+                                        dwarf.direction = get_direction_of_cardinal_neighbor(dwarf_tile_id, tile_id_next_in_dwarfs_path);
 
                                         // If it's walkable, proceed
                                         if is_tile_id_walkable_for_entity(tile_id_next_in_dwarfs_path, dwarf.id) {
@@ -3800,8 +3813,7 @@ update_and_draw_frame_round :: () {
             if context.metagame.debug_mode {
                 DrawFPS(10, read_then_increment(*debug_text_y, INCREMENT_Y));
                 DrawText(tprint("dwarf count: %\0", dwarves.count).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 12, WHITE);
-                #if false {
-
+                {
                     debug_struct_runtime :: (thing: Any, name_prefix: string, render_struct_name_prefix: bool) #expand {
                         if thing.type.type != .STRUCT return;
                         tis := cast(*Type_Info_Struct) thing.type;
@@ -3863,9 +3875,9 @@ update_and_draw_frame_round :: () {
                         
                     }
 
-                    debug_with_raylib_draw_text(#code context.game_state.*);
-                    debug_with_raylib_draw_text(#code context.game_state.controls_state_this_frame);
-                    debug_with_raylib_draw_text(#code context.camera.*);
+                    // debug_with_raylib_draw_text(#code context.game_state.*);
+                    // debug_with_raylib_draw_text(#code context.game_state.controls_state_this_frame);
+                    // debug_with_raylib_draw_text(#code context.camera.*);
 
                     debug_text_y = 0;
                     for dwarves {
@@ -7612,7 +7624,7 @@ reveal_cave_if_necessary :: (tile_id: s32, grant_points: bool, grant_gold: bool)
 }
 
 get_rect_center :: (rect: Rectangle) -> Vector2 {
-    return Vector2.{ rect.x + rect.width/2, rect.y + rect.height/2 };
+    return Vector2.{ rect.x + rect.width * 0.5, rect.y + rect.height * 0.5 };
 }
 
 get_tile_rect_that_pos_is_within :: (world_width: int, world_height: int, tile_width: int, tile_height: int, pos_in_world: Vector2) -> Rectangle {
