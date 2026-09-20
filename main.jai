@@ -1827,7 +1827,7 @@ update_and_draw_frame_round :: () {
             }
         }
 
-        // Update pausable things
+        // Update things which, when paused, stop updating.
         update_pausable_things :: () {
             // Update user action
             {
@@ -2170,6 +2170,7 @@ update_and_draw_frame_round :: () {
                 }
             }
 
+            // Update things which, during a panic pause, stop updating.
             update_panic_pausable_things :: () {
                 // Update dwarves
                 update_dwarves :: () {
@@ -3787,7 +3788,7 @@ update_and_draw_frame_round :: () {
             }
 
             // Draw path being drawn cost
-            if context.game_state.controls_state_this_frame.drawing_path {
+            if context.game_state.controls_state_this_frame.drawing_path && context.metagame.state.RUNNING {
                 gold_cost := get_path_cost(path_being_traced_1) + get_path_cost(path_being_traced_2);
                 pos := Vector2.{ context.mouse_pos_in_ui.x, context.mouse_pos_in_ui.y - PARTICLE_SIZE_IN_UI };
 
