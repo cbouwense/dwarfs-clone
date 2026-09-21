@@ -2533,41 +2533,47 @@ update_and_draw_frame_round :: () {
                                             create_mine_chip_particles(dwarf_center, 5, direction_to_spawn_particles);
 
                                             // Decrease the tile health by the dwarf mining damage
-                                            dmg := dwarf_get_dig_damage(dwarf);
                                             new_health := tile_to_mine.health - dwarf_get_dig_damage(dwarf);
 
                                             if new_health <= 0 {
                                                 just_mined_iron := is_tile_iron(dwarf.tile_id_mining);
                                                 
-                                                set_tile_as_type(dwarf.tile_id_mining, .MINED, true, true);
-
-                                                if just_mined_iron && dwarf.dwarf_type == .MINER {
-                                                    found_next_iron_in_deposit, _, tile_ids_to_next_iron_tile := detect_tile_within_radius(dwarf_tile_id, 3, is_tile_iron);
-                                                    if found_next_iron_in_deposit {
-                                                        array_reset(*dwarf.tile_ids_on_path);
-                                                        array_copy(*dwarf.tile_ids_on_path, tile_ids_to_next_iron_tile);
-                                                    }
-                                                }
+                                                should_get_gold_from_mining_tile   := dwarf.dwarf_type == .MINER;
+                                                should_get_points_from_mining_tile := dwarf.dwarf_type == .MINER;
+                                                set_tile_as_type(dwarf.tile_id_mining, .MINED, should_get_points_from_mining_tile, should_get_gold_from_mining_tile);
 
                                                 // If we just cracked into a cave, we'll need to reveal the cave and do anything
                                                 // that cave type needs (e.g. spawn water, lava, monsters, etc.).
                                                 revealed_cave, cave_type := reveal_cave_if_necessary(dwarf.tile_id_mining, true, false);
 
-                                                if revealed_cave && cave_type == .TREASURE {
-                                                    found, _, tile_ids_to_next_treasure_tile := detect_tile_within_radius(dwarf.tile_id_mining, 10, is_tile_treasure);
-                                                    if found {
-                                                        // Teleport dwarf to the center of the tile he's standing on before changing his pathing.
-                                                        // Without doing this, the dwarf can end up being misaligned.
-                                                        dwarf.pos = dwarf_tile.pos;
+                                                // Dwarf miners have some follow up tasks they have to do in certain scenarios, like finding
+                                                // the next tile in an iron deposit or finding and picking up all of the treasure in a treasure
+                                                // cave.
+                                                if dwarf.dwarf_type == .MINER {
+                                                    if just_mined_iron {
+                                                        found_next_iron_in_deposit, _, tile_ids_to_next_iron_tile := detect_tile_within_radius(dwarf_tile_id, 3, is_tile_iron);
+                                                        if found_next_iron_in_deposit {
+                                                            array_reset(*dwarf.tile_ids_on_path);
+                                                            array_copy(*dwarf.tile_ids_on_path, tile_ids_to_next_iron_tile);
+                                                        }
+                                                    }
 
-                                                        array_reset(*dwarf.tile_ids_on_path);
-                                                        array_copy(*dwarf.tile_ids_on_path, tile_ids_to_next_treasure_tile);
+                                                    if revealed_cave && cave_type == .TREASURE {
+                                                        found, _, tile_ids_to_next_treasure_tile := detect_tile_within_radius(dwarf.tile_id_mining, 10, is_tile_treasure);
+                                                        if found {
+                                                            // Teleport dwarf to the center of the tile he's standing on before changing his pathing.
+                                                            // Without doing this, the dwarf can end up being misaligned.
+                                                            dwarf.pos = dwarf_tile.pos;
+
+                                                            array_reset(*dwarf.tile_ids_on_path);
+                                                            array_copy(*dwarf.tile_ids_on_path, tile_ids_to_next_treasure_tile);
+                                                        }
                                                     }
                                                 }
 
                                                 dwarf_transition_state(dwarf, .DECIDING);
                                             } else {
-                                                // If the tile just needs to take some damage, well, then damage it ya fuckin jallopy
+                                                // If the tile just needs to take some damage, well, then damage it ya fuckin jallopy.
                                                 tile_to_mine.health = xx new_health;
                                             }
                                         }

@@ -8,8 +8,8 @@
 # Bugs
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+- Dwarf warriors can't mine east or west.
 - Aggro logic is fucked up. Dwarves don't seem to wait where they should when goblins coming to them.
-- Dwarf warrior mined iron and pathed to treasure
 - Dwarf warrior unable to path outside of base
 - Water doesn't spread immediately
 - Dwarf warrior attacked a goblin diagonally when the goblin was attacking a base.
