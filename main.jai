@@ -510,7 +510,6 @@ mouse_drag_began_at_pos : Vector2;
 mouse_pos_when_path_creation_started : Vector2;
 
 GameState :: struct {
-    hovered_dwarf_index        : int;
     selected_dwarf_id          : s32;
     selected_dwarf_particle_id : s32;
     water_flow_cooldown_ms     : int;
@@ -898,7 +897,7 @@ get_direction_of_cardinal_neighbor :: (my_id: s32, neighbor_id: s32) -> Directio
     if neighbor_id == my_id + 1                  return .EAST;
     if neighbor_id == my_id - 1                  return .WEST;
     
-    assert_soft(false, "Tried finding the direction of a supposed cardinal neighbor (tile id %) from the standing point of tile id %, but couldn't.");
+    assert_soft(false, "Tried finding the direction of a supposed cardinal neighbor (tile id %) from the standing point of tile id %, but couldn't.", neighbor_id, my_id);
     return .CENTER; // Unreachable 
 }
 
@@ -4843,7 +4842,6 @@ initialize_round :: () {
 
     // Initialize game
     context.game_state = GameState.{
-        hovered_dwarf_index        = 0,
         selected_dwarf_id          = 0,
         selected_dwarf_particle_id = 0,
         water_flow_cooldown_ms     = WATER_FLOW_COOLDOWN_MS,
@@ -5628,7 +5626,6 @@ add_number_to_particle_sprites :: (particle_sprites: * [..] ParticleSprite, numb
     // clever math to get the digits.
     number_as_string := tprint("%", number);
     assert(number_as_string.count > 0);
-    print_vars(number, number_as_string);
     while number_as_string.count > 0 {
         digit := slice(number_as_string, 0, 1);
         advance(*number_as_string);
