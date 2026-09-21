@@ -891,6 +891,49 @@ main :: () {
 
 // Functions
 
+did_dwarf_do_action_this_animation_frame :: (dwarf: Dwarf) -> bool {
+    anim_index   : s64;
+    action_frame : int;
+
+    dwarf_center  := get_rect_center(get_world_rect_from_pos(dwarf.pos));
+    dwarf_tile_id := get_tile_id_by_pos(dwarf_center);
+
+    if dwarf.tile_id_mining == dwarf_tile_id + context.world_cols {
+        if #complete dwarf.dwarf_type == {
+            case .MINER;
+                anim_index   = xx DwarfAnimationMiner.MINE_DOWN;
+                action_frame = DWARF_MINER_ANIMATION_MINE_DOWN_FRAME_ACTION;
+            case .WARRIOR;
+                anim_index   = xx DwarfAnimationWarrior.CHOP_DOWN;
+                action_frame = DWARF_WARRIOR_ANIMATION_CHOP_DOWN_FRAME_ACTION;
+        }
+    }
+    else if dwarf.tile_id_mining == dwarf_tile_id - context.world_cols {
+        if #complete dwarf.dwarf_type == {
+            case .MINER;
+                anim_index   = xx DwarfAnimationMiner.MINE_UP;
+                action_frame = DWARF_MINER_ANIMATION_MINE_UP_FRAME_ACTION;
+            case .WARRIOR;
+                anim_index   = xx DwarfAnimationWarrior.CHOP_UP;
+                action_frame = DWARF_WARRIOR_ANIMATION_CHOP_UP_FRAME_ACTION;
+        }
+    }
+    else {
+        if #complete dwarf.dwarf_type == {
+            case .MINER;
+                anim_index   = xx DwarfAnimationMiner.MINE_SIDE;
+                action_frame = DWARF_MINER_ANIMATION_MINE_SIDE_FRAME_ACTION;
+            case .WARRIOR;
+                anim_index   = xx DwarfAnimationWarrior.CHOP_SIDE;
+                action_frame = DWARF_WARRIOR_ANIMATION_CHOP_SIDE_FRAME_ACTION;
+        }
+    }
+
+    frame := sprite_animation_get_current_frame(dwarf.animations[anim_index]);
+
+    return frame == action_frame && !dwarf.did_anim_action;
+}
+
 get_direction_of_cardinal_neighbor :: (my_id: s32, neighbor_id: s32) -> Direction {
     if neighbor_id == my_id - context.world_cols return .NORTH;
     if neighbor_id == my_id + context.world_cols return .SOUTH;
@@ -2475,47 +2518,7 @@ update_and_draw_frame_round :: () {
                                         array_reset(*(dwarf.tile_ids_on_path));
                                         dwarf_transition_state(dwarf, .DECIDING);
                                     } else {
-                                        // TODO: probably want a function for this
-                                        anim_index   : s64;
-                                        action_frame : int;
-                                        
-                                        // Swing down
-                                        if dwarf.tile_id_mining == dwarf_tile_id + context.world_cols {
-                                            if #complete dwarf.dwarf_type == {
-                                                case .MINER;
-                                                    anim_index   = xx DwarfAnimationMiner.MINE_DOWN;
-                                                    action_frame = DWARF_MINER_ANIMATION_MINE_DOWN_FRAME_ACTION;
-                                                case .WARRIOR;
-                                                    anim_index   = xx DwarfAnimationWarrior.CHOP_DOWN;
-                                                    action_frame = DWARF_WARRIOR_ANIMATION_CHOP_DOWN_FRAME_ACTION;
-                                            }
-                                        }
-                                        // Swing up
-                                        else if dwarf.tile_id_mining == dwarf_tile_id - context.world_cols {
-                                            if #complete dwarf.dwarf_type == {
-                                                case .MINER;
-                                                    anim_index   = xx DwarfAnimationMiner.MINE_UP;
-                                                    action_frame = DWARF_MINER_ANIMATION_MINE_UP_FRAME_ACTION;
-                                                case .WARRIOR;
-                                                    anim_index   = xx DwarfAnimationWarrior.CHOP_UP;
-                                                    action_frame = DWARF_WARRIOR_ANIMATION_CHOP_UP_FRAME_ACTION;
-                                            }
-                                        }
-                                        // Swing to the side
-                                        else {
-                                            if #complete dwarf.dwarf_type == {
-                                                case .MINER;
-                                                    anim_index   = xx DwarfAnimationMiner.MINE_SIDE;
-                                                    action_frame = DWARF_MINER_ANIMATION_MINE_SIDE_FRAME_ACTION;
-                                                case .WARRIOR;
-                                                    anim_index   = xx DwarfAnimationWarrior.CHOP_UP;
-                                                    action_frame = DWARF_WARRIOR_ANIMATION_CHOP_UP_FRAME_ACTION;
-                                            }
-                                        }
-
-                                        frame := sprite_animation_get_current_frame(dwarf.animations[anim_index]);
-
-                                        if frame == action_frame && !dwarf.did_anim_action {
+                                        if did_dwarf_do_action_this_animation_frame(dwarf) {
                                             dwarf.did_anim_action = true;
 
                                             // create some particles
@@ -2593,45 +2596,8 @@ update_and_draw_frame_round :: () {
 
                                         if is_tile_id_neighbor_of_tile_id_cardinal(dwarf_tile_id, goblin_tile_id) {
                                             assert_soft(dwarf.goblin_id_attacking == goblin.id, "Dwarf % thinks he's attacking goblin % but really found goblin %", dwarf.id, dwarf.goblin_id_attacking, goblin.id);
-                                            
-                                            // TODO: probably want a function for this
-                                            anim_index   : s64;
-                                            action_frame : int;
 
-                                            if dwarf.tile_id_mining == dwarf_tile_id + context.world_cols {
-                                                if #complete dwarf.dwarf_type == {
-                                                    case .MINER;
-                                                        anim_index   = xx DwarfAnimationMiner.MINE_DOWN;
-                                                        action_frame = DWARF_MINER_ANIMATION_MINE_DOWN_FRAME_ACTION;
-                                                    case .WARRIOR;
-                                                        anim_index   = xx DwarfAnimationWarrior.CHOP_DOWN;
-                                                        action_frame = DWARF_WARRIOR_ANIMATION_CHOP_DOWN_FRAME_ACTION;
-                                                }
-                                            }
-                                            else if dwarf.tile_id_mining == dwarf_tile_id - context.world_cols {
-                                                if #complete dwarf.dwarf_type == {
-                                                    case .MINER;
-                                                        anim_index   = xx DwarfAnimationMiner.MINE_UP;
-                                                        action_frame = DWARF_MINER_ANIMATION_MINE_UP_FRAME_ACTION;
-                                                    case .WARRIOR;
-                                                        anim_index   = xx DwarfAnimationWarrior.CHOP_UP;
-                                                        action_frame = DWARF_WARRIOR_ANIMATION_CHOP_UP_FRAME_ACTION;
-                                                }
-                                            }
-                                            else {
-                                                if #complete dwarf.dwarf_type == {
-                                                    case .MINER;
-                                                        anim_index   = xx DwarfAnimationMiner.MINE_SIDE;
-                                                        action_frame = DWARF_MINER_ANIMATION_MINE_SIDE_FRAME_ACTION;
-                                                    case .WARRIOR;
-                                                        anim_index   = xx DwarfAnimationWarrior.CHOP_SIDE;
-                                                        action_frame = DWARF_WARRIOR_ANIMATION_CHOP_SIDE_FRAME_ACTION;
-                                                }
-                                            }
-
-                                            frame := sprite_animation_get_current_frame(dwarf.animations[anim_index]);
-
-                                            if frame == action_frame && !dwarf.did_anim_action {
+                                            if did_dwarf_do_action_this_animation_frame(dwarf) {
                                                 dwarf.did_anim_action = true;
 
                                                 // Hit check
@@ -2660,7 +2626,6 @@ update_and_draw_frame_round :: () {
 
                                                     if goblin.hp <= 0 {
                                                         kill_goblin_by_id(goblin.id);
-
                                                         dwarf_transition_state(dwarf, .DECIDING);
                                                     }
                                                 } else {
