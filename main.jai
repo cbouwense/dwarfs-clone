@@ -2546,9 +2546,8 @@ update_and_draw_frame_round :: () {
                                                 set_tile_as_type(dwarf.tile_id_mining, .MINED, true, true);
 
                                                 if just_mined_iron && dwarf.dwarf_type == .MINER {
-                                                    found_next_iron_in_deposit, next_iron_tile_id := detect_iron_tile_id_within_radius(dwarf_tile_id, 3);
+                                                    found_next_iron_in_deposit, _, tile_ids_to_next_iron_tile := detect_iron_tile_id_within_radius(dwarf_tile_id, 3);
                                                     if found_next_iron_in_deposit {
-                                                        tile_ids_to_next_iron_tile := get_tile_ids_from_pos_to_pos(get_tile_pos_by_id(dwarf_tile_id), get_tile_pos_by_id(next_iron_tile_id));
                                                         array_reset(*dwarf.tile_ids_on_path);
                                                         array_copy(*dwarf.tile_ids_on_path, tile_ids_to_next_iron_tile);
                                                     }
@@ -3656,6 +3655,8 @@ update_and_draw_frame_round :: () {
                         }
                         assert_soft(found, "Dwarf % had no animation active\n", dwarf.id);
                     }
+
+                    if context.metagame.debug_mode then draw_path_from_all_tile_ids(dwarf.tile_ids_on_path);
                 }
             }
             draw_dwarves();
@@ -3703,14 +3704,15 @@ update_and_draw_frame_round :: () {
                             TILE_DEBUG_INC :: 15;
 
                             DrawText(tprint("id: %\0", tile.id).data, xx hovered_tile_rect.x, read_then_increment(*tile_y, TILE_DEBUG_INC), 12, WHITE);
-                            DrawText(tprint("type: %\0", tile.type).data, xx hovered_tile_rect.x, read_then_increment(*tile_y, TILE_DEBUG_INC), 12, WHITE);
-                            DrawText(tprint("props: %\0", tile.props).data, xx hovered_tile_rect.x, read_then_increment(*tile_y, TILE_DEBUG_INC), 12, WHITE);
-                            DrawText(tprint("health: %\0", tile.health).data, xx hovered_tile_rect.x, read_then_increment(*tile_y, TILE_DEBUG_INC), 12, WHITE);
+                            // DrawText(tprint("type: %\0", tile.type).data, xx hovered_tile_rect.x, read_then_increment(*tile_y, TILE_DEBUG_INC), 12, WHITE);
+                            // DrawText(tprint("props: %\0", tile.props).data, xx hovered_tile_rect.x, read_then_increment(*tile_y, TILE_DEBUG_INC), 12, WHITE);
+                            // DrawText(tprint("health: %\0", tile.health).data, xx hovered_tile_rect.x, read_then_increment(*tile_y, TILE_DEBUG_INC), 12, WHITE);
                         }
                     }
                 }
             }
             draw_hovered_tile();
+
 
             // Draw particles
             draw_particles :: () {
@@ -3878,10 +3880,13 @@ update_and_draw_frame_round :: () {
                     // debug_with_raylib_draw_text(#code context.game_state.controls_state_this_frame);
                     // debug_with_raylib_draw_text(#code context.camera.*);
 
+                    // Draw hovered dwarf
                     debug_text_y = 0;
                     for dwarves {
                         if CheckCollisionPointRec(context.mouse_pos_in_world, Rectangle.{ it.pos.x, it.pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT }) {
                             // TODO: parametrize debug_with_draw_text positions
+                            //
+                            // Draw basic info
                             DrawText(tprint("id: %\0", it.id).data,                                 xx (context.mouse_pos_in_ui.x + 20), xx (context.mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                             DrawText(tprint("pos: %\0", it.pos).data,                               xx (context.mouse_pos_in_ui.x + 20), xx (context.mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
                             DrawText(tprint("state: %\0", it.state).data,                           xx (context.mouse_pos_in_ui.x + 20), xx (context.mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
@@ -6854,6 +6859,16 @@ draw_path :: (path: Path) {
     );
 }
 
+draw_path_from_all_tile_ids :: (tile_ids: [] s32) {
+    for tile_id: tile_ids {
+        tile_pos    := get_tile_pos_by_id(tile_id);
+        tile_rect   := get_world_rect_from_pos(tile_pos);
+        tile_center := get_rect_center(tile_rect);
+
+        DrawCircle(xx tile_center.x, xx tile_center.y, 3.0, PINK);
+    }
+}
+
 get_paths :: (from_pos: Vector2, to_pos: Vector2) -> (path_1: Path, path_2: Path) {
     new_target_tile_rect := get_tile_rect_that_pos_is_within(get_world_width(), get_world_height(), TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, to_pos);
     new_target_tile_pos  := Vector2.{ new_target_tile_rect.x, new_target_tile_rect.y };
@@ -7426,7 +7441,7 @@ find_line_of_sight_entity :: (tile_id: s32, $T: Type, line_of_sight_tile_count: 
 detect_iron_tile_id_within_radius :: (
     starting_tile_id: s32,
     radius: s32
-) -> found: bool, tile_id: s32 {
+) -> found: bool, tile_id: s32, path: [] s32 {
     max_tile_id := context.world_cols * context.world_rows;
 
     ids_to_process: [..] s32;
@@ -7434,6 +7449,9 @@ detect_iron_tile_id_within_radius :: (
 
     ids_processed_set: Table(s32, s32);
     ids_processed_set.allocator = temp;
+
+    // Key is the current node, and the value is the predecessor.
+    predecessors: Table(s32, s32);
 
     array_add(*ids_to_process, starting_tile_id);
 
@@ -7445,25 +7463,66 @@ detect_iron_tile_id_within_radius :: (
         if table_contains(*ids_processed_set, id) continue;
         if id <= 0 continue;
         if id > max_tile_id continue;
-        if id == starting_tile_id - (context.world_rows * (radius + 1)) continue; // north
-        if id == starting_tile_id + (context.world_rows * (radius + 1)) continue; // south
-        if id == starting_tile_id + (radius + 1)                continue; // east
-        if id == starting_tile_id - (radius + 1)                continue; // west
+        if id == starting_tile_id - (context.world_cols * (radius + 1)) continue; // north outside radius
+        if id == starting_tile_id + (context.world_cols * (radius + 1)) continue; // south outside radius
+        if id == starting_tile_id + (radius + 1) continue; // east outside radius
+        if id == starting_tile_id - (radius + 1) continue; // west outside radius
 
         // If iron is found, return
-        if is_tile_iron(id) return true, id;
+        if is_tile_iron(id) {
+            // Reconstruct the reverse path (from the target to the starting id).
+            // We only have a table of predecessors, so we have to start with a
+            // reverse path like this, but we easily reverse it to get the actual path.
 
-        // Mark it as processed
+            reverse_path : [..] s32;
+            reverse_path.allocator = temp;
+
+            final_path : [..] s32;
+            final_path.allocator = temp;
+
+            // Start from the id of iron we found.
+            current_node_id := id;
+            
+            table_print(predecessors);
+
+            // Build the reverse path backwards by walking through the predecessor tree
+            // until we no longer find any predecessors.
+            while current_node_id != starting_tile_id {
+                array_add(*reverse_path, current_node_id);
+                next_predecessor_found, next_predecessor := table_find(*predecessors, current_node_id);
+                assert(next_predecessor_found);
+                current_node_id = next_predecessor;
+            }
+
+            // Now reverse the reverse path to get the final path
+            for 0..reverse_path.count-1 array_add(*final_path, reverse_path[reverse_path.count-1 - it]);
+
+            return true, id, final_path;
+        }
+
+        // If not iron, mark it as processed
         table_set(*ids_processed_set, id, 1738);
 
+        neighbor_id_north := id - xx context.world_cols;
+        neighbor_id_south := id + xx context.world_cols;
+        neighbor_id_east  := id + 1;
+        neighbor_id_west  := id - 1;
+
         // Add neighbors as needing to be processed
-        array_add(*ids_to_process, id - xx context.world_rows);
-        array_add(*ids_to_process, id + xx context.world_rows);
-        array_add(*ids_to_process, id + 1);
-        array_add(*ids_to_process, id - 1);
+        array_add(*ids_to_process, neighbor_id_north);
+        array_add(*ids_to_process, neighbor_id_south);
+        array_add(*ids_to_process, neighbor_id_east);
+        array_add(*ids_to_process, neighbor_id_west);
+
+        // Add it to the predecessors table so we can reconstruct the path
+        // if we eventually do find it.
+        if !table_contains(*ids_processed_set, neighbor_id_north) then table_set(*predecessors, neighbor_id_north, id);
+        if !table_contains(*ids_processed_set, neighbor_id_south) then table_set(*predecessors, neighbor_id_south, id);
+        if !table_contains(*ids_processed_set, neighbor_id_east)  then table_set(*predecessors, neighbor_id_east, id);
+        if !table_contains(*ids_processed_set, neighbor_id_west)  then table_set(*predecessors, neighbor_id_west, id);
     }
 
-    return false, 0;
+    return false, 0, .[];
 }
 
 derive_things_to_draw :: () {
