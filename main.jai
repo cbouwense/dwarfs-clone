@@ -2222,12 +2222,8 @@ update_and_draw_frame_round :: () {
                                         tile.props &= ~TileProperties.HAS_TREASURE;
 
                                         // Look for more treasure
-                                        found, new_treasure_tile_id := detect_treasure_tile_id_within_radius(dwarf_tile_id, 10);
+                                        found, _, tile_ids_to_new_treasure := detect_tile_within_radius(dwarf_tile_id, 10, is_tile_treasure);
                                         if found {
-                                            tile_ids_to_new_treasure := get_tile_ids_from_pos_to_pos(get_tile_pos_by_id(dwarf_tile_id), get_tile_pos_by_id(new_treasure_tile_id));
-                                            tile_ids_to_new_treasure.count -= 1;
-                                            tile_ids_to_new_treasure.data  += 1;
-
                                             array_reset(*dwarf.tile_ids_on_path);
                                             array_copy(*dwarf.tile_ids_on_path, tile_ids_to_new_treasure);
                                             set_entity_direction_to_face_next_target(dwarf);
@@ -2546,7 +2542,7 @@ update_and_draw_frame_round :: () {
                                                 set_tile_as_type(dwarf.tile_id_mining, .MINED, true, true);
 
                                                 if just_mined_iron && dwarf.dwarf_type == .MINER {
-                                                    found_next_iron_in_deposit, _, tile_ids_to_next_iron_tile := detect_iron_tile_id_within_radius(dwarf_tile_id, 3);
+                                                    found_next_iron_in_deposit, _, tile_ids_to_next_iron_tile := detect_tile_within_radius(dwarf_tile_id, 3, is_tile_iron);
                                                     if found_next_iron_in_deposit {
                                                         array_reset(*dwarf.tile_ids_on_path);
                                                         array_copy(*dwarf.tile_ids_on_path, tile_ids_to_next_iron_tile);
@@ -2558,15 +2554,14 @@ update_and_draw_frame_round :: () {
                                                 revealed_cave, cave_type := reveal_cave_if_necessary(dwarf.tile_id_mining, true, false);
 
                                                 if revealed_cave && cave_type == .TREASURE {
-                                                    found, new_treasure_tile_id := detect_treasure_tile_id_within_radius(dwarf.tile_id_mining, 10);
+                                                    found, _, tile_ids_to_next_treasure_tile := detect_tile_within_radius(dwarf.tile_id_mining, 10, is_tile_treasure);
                                                     if found {
                                                         // Teleport dwarf to the center of the tile he's standing on before changing his pathing.
                                                         // Without doing this, the dwarf can end up being misaligned.
                                                         dwarf.pos = dwarf_tile.pos;
 
-                                                        tile_ids_to_new_treasure := get_tile_ids_from_pos_to_pos(get_tile_pos_by_id(dwarf.tile_id_mining), get_tile_pos_by_id(new_treasure_tile_id));
                                                         array_reset(*dwarf.tile_ids_on_path);
-                                                        array_copy(*dwarf.tile_ids_on_path, tile_ids_to_new_treasure);
+                                                        array_copy(*dwarf.tile_ids_on_path, tile_ids_to_next_treasure_tile);
                                                     }
                                                 }
 
@@ -6977,66 +6972,6 @@ are_tile_ids_on_same_world_row :: (tile_id_a: s32, tile_id_b: s32) -> (same: boo
     return same, direction;
 }
 
-get_tile_ids_from_pos_to_pos :: (from_pos: Vector2, to_pos: Vector2) -> (path_1_tile_ids: [..] s32, path_2_tile_ids: [..] s32) {
-    path_1_tile_ids: [..] s32;
-    path_1_tile_ids.allocator = temp;
-
-    path_2_tile_ids: [..] s32;
-    path_2_tile_ids.allocator = temp;
-
-    target_rect := get_tile_rect_that_pos_is_within(get_world_width(), get_world_height(), TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, to_pos);
-    from_rect   := get_tile_rect_that_pos_is_within(get_world_width(), get_world_height(), TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, from_pos);
-
-    dx := target_rect.x - from_rect.x;
-    dy := target_rect.y - from_rect.y;
-
-    // Determine the step directions in world units
-    step_x := ifx dx > 0 then TILEMAP_GENERAL_WORLD_WIDTH  else -TILEMAP_GENERAL_WORLD_WIDTH;
-    step_y := ifx dy > 0 then TILEMAP_GENERAL_WORLD_HEIGHT else -TILEMAP_GENERAL_WORLD_HEIGHT;
-
-    // Calculate the number of discrete tile steps required 
-    // (+ 0.5 prevents float truncation issues if tile widths aren't perfect integers)
-    //
-    // TODO: do we really need that 0.5 shit?
-    steps_x := cast(int)(abs(dx) / TILEMAP_GENERAL_WORLD_WIDTH + 0.5);
-    steps_y := cast(int)(abs(dy) / TILEMAP_GENERAL_WORLD_HEIGHT + 0.5);
-
-    x_is_larger := abs(dx) > abs(dy);
-
-    // Start traversing from the origin of the initial tile
-    current_pos := Vector2.{from_rect.x, from_rect.y};
-
-    // 1. Add the starting tile
-    array_add(*path_1_tile_ids, get_tile_id_by_pos(current_pos));
-
-    // 2. Traverse the grid, maintaining L-shaped path
-    if x_is_larger {
-        // Move along X axis first
-        for 1..steps_x {
-            current_pos.x += step_x;
-            array_add(*path_1_tile_ids, get_tile_id_by_pos(current_pos));
-        }
-        // Then move along Y axis
-        for 1..steps_y {
-            current_pos.y += step_y;
-            array_add(*path_2_tile_ids, get_tile_id_by_pos(current_pos));
-        }
-    } else {
-        // Move along Y axis first
-        for 1..steps_y {
-            current_pos.y += step_y;
-            array_add(*path_1_tile_ids, get_tile_id_by_pos(current_pos));
-        }
-        // Then move along X axis
-        for 1..steps_x {
-            current_pos.x += step_x;
-            array_add(*path_2_tile_ids, get_tile_id_by_pos(current_pos));
-        }
-    }
-
-    return path_1_tile_ids, path_2_tile_ids;
-}
-
 get_direction_of_vector :: (start_pos: Vector2, end_pos: Vector2) -> Direction {
     if      start_pos.x == end_pos.x && start_pos.y > end_pos.y  return .NORTH;
     else if start_pos.x == end_pos.x && start_pos.y < end_pos.y  return .SOUTH;
@@ -7279,51 +7214,6 @@ spawn_iron :: (starting_tile_id: s32) {
     }
 }
 
-// TODO: probably want to DRY up these detector functions
-detect_treasure_tile_id_within_radius :: (
-    starting_tile_id: s32,
-    radius: s32
-) -> found: bool, tile_id: s32 {
-    max_tile_id := context.world_cols * context.world_rows;
-
-    ids_to_process: [..] s32;
-    ids_to_process.allocator = temp;
-
-    ids_processed_set: Table(s32, s32);
-    ids_processed_set.allocator = temp;
-
-    array_add(*ids_to_process, starting_tile_id);
-
-    while ids_to_process.count > 0 {
-        // Get the next id to process
-        id := pop_front(*ids_to_process);
-
-        // Make sure the id is valid and hasn't already been processed
-        if table_contains(*ids_processed_set, id) continue;
-        if id <= 0 continue;
-        if id > max_tile_id continue;
-        if !is_tile_fully_mined(id) continue;
-        if id == starting_tile_id - (context.world_rows * (radius + 1)) continue; // north
-        if id == starting_tile_id + (context.world_rows * (radius + 1)) continue; // south
-        if id == starting_tile_id + (radius + 1)                continue; // east
-        if id == starting_tile_id - (radius + 1)                continue; // west
-
-        // If treasure is found, return
-        if is_tile_treasure(id) return true, id;
-
-        // Mark it as processed
-        table_set(*ids_processed_set, id, 1738);
-
-        // Add neighbors as needing to be processed
-        array_add(*ids_to_process, id - xx context.world_rows);
-        array_add(*ids_to_process, id + xx context.world_rows);
-        array_add(*ids_to_process, id + 1);
-        array_add(*ids_to_process, id - 1);
-    }
-
-    return false, 0;
-}
-
 detect_entity_within_radius :: ($T: Type, starting_tile_id: s32, max_depth: s32) -> found: bool, entity: T, tile_id_path_to_dwarf: [..] s32
 #modify { return uses_entity_with_as(cast(*Type_Info) T, Entity); }
 {
@@ -7437,10 +7327,10 @@ find_line_of_sight_entity :: (tile_id: s32, $T: Type, line_of_sight_tile_count: 
     return false, null, s32.[];
 }
 
-// TODO: probably want to DRY up these detector functions 
-detect_iron_tile_id_within_radius :: (
+detect_tile_within_radius :: (
     starting_tile_id: s32,
-    radius: s32
+    max_radius: s32,
+    fn_that_determines_if_we_found_the_tile: (s32) -> bool
 ) -> found: bool, tile_id: s32, path: [] s32 {
     max_tile_id := context.world_cols * context.world_rows;
 
@@ -7463,13 +7353,14 @@ detect_iron_tile_id_within_radius :: (
         if table_contains(*ids_processed_set, id) continue;
         if id <= 0 continue;
         if id > max_tile_id continue;
-        if id == starting_tile_id - (context.world_cols * (radius + 1)) continue; // north outside radius
-        if id == starting_tile_id + (context.world_cols * (radius + 1)) continue; // south outside radius
-        if id == starting_tile_id + (radius + 1) continue; // east outside radius
-        if id == starting_tile_id - (radius + 1) continue; // west outside radius
+        if get_steps_between_tiles(id, starting_tile_id) > max_radius continue;
+        // if id == starting_tile_id - (context.world_cols * (max_radius + 1)) continue; // north outside radius
+        // if id == starting_tile_id + (context.world_cols * (max_radius + 1)) continue; // south outside radius
+        // if id == starting_tile_id + (max_radius + 1) continue; // east outside radius
+        // if id == starting_tile_id - (max_radius + 1) continue; // west outside radius
 
-        // If iron is found, return
-        if is_tile_iron(id) {
+        // If thing is found, return
+        if fn_that_determines_if_we_found_the_tile(id) {
             // Reconstruct the reverse path (from the target to the starting id).
             // We only have a table of predecessors, so we have to start with a
             // reverse path like this, but we easily reverse it to get the actual path.
@@ -7482,8 +7373,6 @@ detect_iron_tile_id_within_radius :: (
 
             // Start from the id of iron we found.
             current_node_id := id;
-            
-            table_print(predecessors);
 
             // Build the reverse path backwards by walking through the predecessor tree
             // until we no longer find any predecessors.
@@ -7495,12 +7384,14 @@ detect_iron_tile_id_within_radius :: (
             }
 
             // Now reverse the reverse path to get the final path
-            for 0..reverse_path.count-1 array_add(*final_path, reverse_path[reverse_path.count-1 - it]);
+            for 0..reverse_path.count-1 {
+                array_add(*final_path, reverse_path[reverse_path.count-1 - it]);
+            }
 
             return true, id, final_path;
         }
 
-        // If not iron, mark it as processed
+        // If not the thing, mark it as processed
         table_set(*ids_processed_set, id, 1738);
 
         neighbor_id_north := id - xx context.world_cols;
@@ -7523,6 +7414,17 @@ detect_iron_tile_id_within_radius :: (
     }
 
     return false, 0, .[];
+}
+
+// Determines how far away tiles are:
+// identical tile ids ---------> 0
+// cardinal neighbor tile ids -> 1
+// diagonal neighbor tile ids -> 2
+// etc.
+get_steps_between_tiles :: (tile_id_a: s32, tile_id_b: s32) -> int {
+    row_steps := abs(tile_id_b - tile_id_a) / context.world_rows;
+    col_steps := abs(tile_id_b - tile_id_a) / context.world_cols;
+    return row_steps + col_steps; 
 }
 
 derive_things_to_draw :: () {
