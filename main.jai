@@ -4629,14 +4629,24 @@ get_next_direction_to_face_from_base_neighbor_direction :: (direction: Direction
 }
 
 reset_memory :: () {
+    data_folder = "";
+
+    path_being_traced_1 = Path.{};
+    path_being_traced_2 = Path.{};
+
+    array_reset(*alerts);
+
     array_reset(*bases);
     table_reset(*base_id_to_index);
+    table_reset(*tile_ids_to_bases);
 
     array_reset(*dwarves);
     table_reset(*dwarf_id_to_index);
+    table_reset(*tile_ids_to_dwarfs);
 
     array_reset(*goblins);
     table_reset(*goblin_id_to_index);
+    table_reset(*tile_ids_to_goblins);
 
     array_reset(*paths);
 

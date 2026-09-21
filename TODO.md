@@ -2,14 +2,13 @@
 # In progress
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-
+- Dwarf warrior patrolling pathing is a bit weird outside of base
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Bugs
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 - Aggro logic is fucked up. Dwarves don't seem to wait where they should when goblins coming to them.
-- Dwarf warrior unable to path outside of base
 - Water doesn't spread immediately
 - Dwarf warrior attacked a goblin diagonally when the goblin was attacking a base.
 - Dwarf warrior unable to path to a goblin when standing behind a miner who is attacking that goblin.
