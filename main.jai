@@ -378,12 +378,22 @@ TILEMAP_SOURCE_RECT_HOLE := Rectangle.{
     TILEMAP_GENERAL_TILE_HEIGHT,
 };
 
-OUTPOST_FLOOR_SPRITE_SOURCE_ROW :: 3.0;
-OUTPOST_FLOOR_SPRITE_SOURCE_COL :: 9.0;
+OUTPOST_FLOOR_SPRITE_SOURCE_ROW :: 4.0;
+OUTPOST_FLOOR_SPRITE_SOURCE_COL :: 0.0;
 
 TILEMAP_SOURCE_RECT_OUTPOST_FLOOR := Rectangle.{
     OUTPOST_FLOOR_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
     OUTPOST_FLOOR_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
+    TILEMAP_GENERAL_TILE_WIDTH,
+    TILEMAP_GENERAL_TILE_HEIGHT,
+};
+
+OUTPOST_FLOOR_SPRITE_SOURCE_ROW_FAR_LOD :: 6.0;
+OUTPOST_FLOOR_SPRITE_SOURCE_COL_FAR_LOD :: 8.0;
+
+TILEMAP_SOURCE_RECT_OUTPOST_FLOOR_FAR_LOD := Rectangle.{
+    OUTPOST_FLOOR_SPRITE_SOURCE_COL_FAR_LOD * TILEMAP_GENERAL_TILE_WIDTH,
+    OUTPOST_FLOOR_SPRITE_SOURCE_ROW_FAR_LOD * TILEMAP_GENERAL_TILE_HEIGHT,
     TILEMAP_GENERAL_TILE_WIDTH,
     TILEMAP_GENERAL_TILE_HEIGHT,
 };
@@ -3284,7 +3294,7 @@ update_and_draw_frame_round :: () {
                                     DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOLE, tile_dest, Vector2.{0,0}, 0.0, WHITE);
                                 }
                                 case .OUTPOST_FLOOR; {
-                                    DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTPOST_FLOOR, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                    DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTPOST_FLOOR_FAR_LOD, tile_dest, Vector2.{0,0}, 0.0, WHITE);
                                 }
                             }
                         }
