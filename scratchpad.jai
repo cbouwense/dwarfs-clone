@@ -5,8 +5,6 @@
 #import "String";
 
 main :: () {
-    str := tprint("%", 123);
-    substr := slice(str, 0, 1);
-    advance(str, 3);
-    print_vars(str, substr);
+    for 1..5 print("%", it_index);
 }
+get_rect_center(get_world_rect_from_pos

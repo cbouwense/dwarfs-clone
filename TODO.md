@@ -16,15 +16,16 @@
 # Core gameplay
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+- Don't let outposts be created on top of caves
 - Dwarf warrior patrolling
 - Death particles, aggro particles, and hit star particles need TLC
 - In addition to control modes, allow users to hold down controls
 - Death poof particles
 - Control mode placement validity / onion skin
-- base canons
-- base spawn diggers control
-- base spawn warriors control
-- base building time
+- outpost canons
+- outpost spawn diggers control
+- outpost spawn warriors control
+- outpost building time
 - options menu
     - apply changes
     - restore defaults

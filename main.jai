@@ -378,6 +378,16 @@ TILEMAP_SOURCE_RECT_HOLE := Rectangle.{
     TILEMAP_GENERAL_TILE_HEIGHT,
 };
 
+OUTPOST_FLOOR_SPRITE_SOURCE_ROW :: 3.0;
+OUTPOST_FLOOR_SPRITE_SOURCE_COL :: 9.0;
+
+TILEMAP_SOURCE_RECT_OUTPOST_FLOOR := Rectangle.{
+    OUTPOST_FLOOR_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
+    OUTPOST_FLOOR_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
+    TILEMAP_GENERAL_TILE_WIDTH,
+    TILEMAP_GENERAL_TILE_HEIGHT,
+};
+
 WALL_SPRITE_SOURCE_ROW :: 1.0;
 WALL_SPRITE_SOURCE_COL :: 4.0;
 
@@ -604,6 +614,7 @@ TileType :: enum u8 {
     OBSIDIAN;
     WALL;
     HOLE;
+    OUTPOST_FLOOR;
 }
 
 TileProperties :: enum_flags u8 {
@@ -651,36 +662,11 @@ CaveType :: enum u8 {
     SPIDER_QUEEN;
 }
 
-ParticleSprite :: struct {
-    texture            : Texture;
-    texture_source_row : int;
-    texture_source_col : int;
-    tint               : Color;
-}
-
-Particle :: struct {
-    id                    : s32;
-    sprites               : [..] ParticleSprite;
-    position              : Vector2;
-    velocity              : Vector2;
-    acceleration          : Vector2;
-    rotation              : float; // degrees
-    angular_velocity      : float; // degrees per second
-    size                  : float;
-    fade                  : bool;
-    opacity               : float;
-    time_left_ms          : int;
-    time_left_max         : int;
-    entity_id_to_follow   : s32;
-    entity_kind_to_follow : EntityKind;
-    step_function         : #type (x: float) -> float;
-}
-
 Entity :: struct {
     id   : s32;
     pos  : Vector2;
     hp   : s32;
-    kind : Type;
+    type : Type;
 }
 
 Moveable :: struct {
@@ -696,7 +682,7 @@ Animated :: struct {
 
 Outpost :: struct {
     #as using entity: Entity;
-    kind = Outpost;
+    type = Outpost;
 
     spawn_dwarf_cooldown_ms : s32;
     is_home_base : bool;
@@ -735,7 +721,8 @@ DwarfAnimationWarrior :: enum {
 
 Dwarf :: struct {
     #as using entity: Entity;
-    kind = Dwarf;
+    type = Dwarf;
+
     using move: Moveable;
     using anim: Animated;
 
@@ -764,7 +751,8 @@ GoblinState :: enum {
 
 Goblin :: struct {
     #as using entity: Entity;
-    kind = Goblin;
+    type = Goblin;
+
     using move: Moveable;
     using anim: Animated;
 
@@ -773,10 +761,40 @@ Goblin :: struct {
     entity_id_attacking : s32;
 }
 
+// EntityKind :: 
+// Looking for the definition of EntityKind? It's generated from this.
+// Keep in mind that this line has to be below all subclasses of Entity.
+#insert #run generate_kind_enum_from_base_struct(Entity);
+
 Path :: struct {
     start_tile_id : s32;
     direction     : Direction;
     tile_count    : int;
+}
+
+ParticleSprite :: struct {
+    texture            : Texture;
+    texture_source_row : int;
+    texture_source_col : int;
+    tint               : Color;
+}
+
+Particle :: struct {
+    id                    : s32;
+    sprites               : [..] ParticleSprite;
+    position              : Vector2;
+    velocity              : Vector2;
+    acceleration          : Vector2;
+    rotation              : float; // degrees
+    angular_velocity      : float; // degrees per second
+    size                  : float;
+    fade                  : bool;
+    opacity               : float;
+    time_left_ms          : int;
+    time_left_max         : int;
+    entity_id_to_follow   : s32;
+    entity_kind_to_follow : EntityKind;
+    step_function         : #type (x: float) -> float;
 }
 
 NOTIFICATION_RADIUS :: TILEMAP_GENERAL_WORLD_WIDTH;
@@ -812,36 +830,34 @@ entity_id_counter   : s32 = 0;
 control_id_counter  : s32 = 0;
 particle_id_counter : s32 = 0;
 
-outposts             : [..] Outpost;
-outpost_id_to_index  : Table(s32, s64);
+outposts : [..] Outpost;
+outpost_id_to_index : Table(s32, s64);
 outposts_to_draw_this_frame : [..] Outpost;
 
-dwarves             : [..] Dwarf;
-dwarf_id_to_index   : Table(s32, s64);
+dwarves : [..] Dwarf;
+dwarf_id_to_index : Table(s32, s64);
 dwarves_to_draw_this_frame : [..] Dwarf;
 
-goblins             : [..] Goblin;
-goblin_id_to_index  : Table(s32, s64);
+goblins : [..] Goblin;
+goblin_id_to_index : Table(s32, s64);
 goblins_to_draw_this_frame : [..] Goblin;
 
-particles             : [..] Particle;
-particle_id_to_index  : Table(s32, s64);
+particles : [..] Particle;
+particle_id_to_index : Table(s32, s64);
 particles_to_draw_this_frame : [..] Particle;     
 
 path_being_traced_1 : Path;
 path_being_traced_2 : Path;
 
-paths             : [..] Path;
+paths : [..] Path;
 paths_to_draw_this_frame : [..] Path;
 
-tile_ids_to_dwarfs  : Table(s32, *Dwarf);
-tile_ids_to_goblins : Table(s32, *Goblin);
-tile_ids_to_outposts   : Table(s32, *Outpost);
+tile_ids_to_dwarfs   : Table(s32, *Dwarf);
+tile_ids_to_goblins  : Table(s32, *Goblin);
+tile_ids_to_outposts : Table(s32, *Outpost);
 
 alerts             : [..] Alert;
 alerts_to_draw_this_frame : [..] Alert;
-
-#insert #run generate_kind_enum_from_base_struct(Entity);
 
 // TODO: remember screen dimension preferences
 INITIAL_SCREEN_WIDTH  :: 1600;
@@ -889,12 +905,23 @@ main :: () {
 
 // Functions
 
+get_entity_tile_id :: (entity: Entity) -> s32 {
+    entity_kind := get_entity_kind_from_type(entity.type);
+    if #complete entity_kind == {
+        case .Outpost;
+            return get_tile_id_by_pos(entity.pos);
+        case .Dwarf; #through;
+        case .Goblin;
+            entity_center := get_rect_center(get_world_rect_from_pos(entity.pos));
+            return get_tile_id_by_pos(entity_center);
+    }
+}
+
 did_dwarf_do_action_this_animation_frame :: (dwarf: Dwarf) -> bool {
     anim_index   : s64;
     action_frame : int;
 
-    dwarf_center  := get_rect_center(get_world_rect_from_pos(dwarf.pos));
-    dwarf_tile_id := get_tile_id_by_pos(dwarf_center);
+    dwarf_tile_id := get_entity_tile_id(dwarf);
 
     if dwarf.tile_id_mining == dwarf_tile_id + context.world_cols {
         if #complete dwarf.dwarf_type == {
@@ -977,6 +1004,7 @@ does_tile_type_render_trenches :: (tile_type: TileType) -> bool {
         case .HOLE;           return true;
         case .MINED;          return true;
         case .CAVE;           return true;
+        case .OUTPOST_FLOOR;  return true;
     }
 }
 
@@ -1658,8 +1686,7 @@ update_and_draw_frame_round :: () {
 
         // PERF: caching this might not even be faster
         for *outpost: outposts {
-            outpost_center  := get_rect_center(get_world_rect_from_pos(outpost.pos));
-            outpost_tile_id := get_tile_id_by_pos(outpost_center);
+            outpost_tile_id := get_entity_tile_id(outpost);
             table_set(*tile_ids_to_outposts, outpost_tile_id, outpost);
         }
     }
@@ -2344,8 +2371,7 @@ update_and_draw_frame_round :: () {
                                         // If the dwarf is a warrior, actively seek out goblins
                                         if dwarf.dwarf_type == .WARRIOR {
                                             dwarf_warrior_wander :: (dwarf: *Dwarf) {
-                                                dwarf_center  := get_rect_center(get_world_rect_from_pos(dwarf.pos));
-                                                dwarf_tile_id := get_tile_id_by_pos(dwarf_center);
+                                                dwarf_tile_id := get_entity_tile_id(dwarf);
 
                                                 on_top_of_outpost, outpost := table_find(*tile_ids_to_outposts, dwarf_tile_id);
                                                 // If we're standing on a outpost right now, just keep walking in the direction you're currently going.
@@ -2565,9 +2591,8 @@ update_and_draw_frame_round :: () {
                                     // Make sure the goblin is still alive, it's possible that other dwarves have killed it this frame.
                                     found, goblin_index := table_find(*goblin_id_to_index, dwarf.goblin_id_attacking);
                                     if found {
-                                        goblin         := *goblins[goblin_index];
-                                        goblin_center  := get_rect_center(get_world_rect_from_pos(goblin.pos));
-                                        goblin_tile_id := get_tile_id_by_pos(goblin_center);
+                                        goblin := *goblins[goblin_index];
+                                        goblin_tile_id := get_entity_tile_id(goblin);
 
                                         // Turn the dwarf to face whichever way it should be.
                                         if dwarf.is_facing_left  && goblin.pos.x > dwarf_tile.pos.x then dwarf.is_facing_left = false;
@@ -2645,8 +2670,7 @@ update_and_draw_frame_round :: () {
 
                         is_goblin_done_updating := false;
 
-                        goblin_center  := get_rect_center(get_world_rect_from_pos(goblin.pos));
-                        goblin_tile_id := get_tile_id_by_pos(goblin_center);
+                        goblin_tile_id := get_entity_tile_id(goblin);
                         goblin_tile    := get_tile_by_id(goblin_tile_id);
 
                         // Kill goblin if touching liquid
@@ -2843,8 +2867,7 @@ update_and_draw_frame_round :: () {
                                                 swing_connected := rng <= GOBLIN_HIT_CHANCE;
 
                                                 if swing_connected {
-                                                    target_entity_center   := get_rect_center(get_world_rect_from_pos(entity.pos));
-                                                    target_entity_tile_id  := get_tile_id_by_pos(target_entity_center);
+                                                    target_entity_tile_id := get_entity_tile_id(entity);
 
                                                     direction_stars_should_fly: Direction;
                                                     found_direction := false;
@@ -2929,6 +2952,7 @@ update_and_draw_frame_round :: () {
                             case .OBSIDIAN;
                             case .WALL;
                             case .HOLE;
+                            case .OUTPOST_FLOOR; // TODO: home base spreading, maybe?
 
                             case .WATER_STILL; {
                                 inflict_non_dwarf_liquid_consequences(tile.id);
@@ -3259,6 +3283,9 @@ update_and_draw_frame_round :: () {
                                 case .HOLE; {
                                     DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOLE, tile_dest, Vector2.{0,0}, 0.0, WHITE);
                                 }
+                                case .OUTPOST_FLOOR; {
+                                    DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTPOST_FLOOR, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                }
                             }
                         }
                         // Normal / close distance
@@ -3387,6 +3414,9 @@ update_and_draw_frame_round :: () {
                                     
                                     DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOLE, tile_dest, Vector2.{0,0}, 0.0, WHITE);
                                 }
+                                case .OUTPOST_FLOOR; {
+                                    DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTPOST_FLOOR, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                }
                             }
                         }
 
@@ -3473,6 +3503,7 @@ update_and_draw_frame_round :: () {
                             case .OBSIDIAN;
                             case .WALL;
                             case .HOLE;
+                            case .OUTPOST_FLOOR;
                             case .IRON; {
                                 tile_dest := get_world_rect_from_pos(tile.pos);
                                 DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_IRON, tile_dest, Vector2.{0,0}, 0.0, WHITE);
@@ -3680,8 +3711,7 @@ update_and_draw_frame_round :: () {
             for dwarf: dwarves {
                 // Draw warnings onscreen
                 draw_warnings_onscreen :: (dwarf: Dwarf) {
-                    dwarf_center  := get_rect_center(get_world_rect_from_pos(dwarf.pos));
-                    dwarf_tile_id := get_tile_id_by_pos(dwarf_center);
+                    dwarf_tile_id := get_entity_tile_id(dwarf);
 
                     dest     := get_world_rect_from_pos(dwarf.pos);
                     dest_pos := Vector2.{ dest.x, dest.y };
@@ -4503,8 +4533,7 @@ DealWithNearbyGoblinResult :: enum {
 
 deal_with_nearby_goblins :: (dwarf: *Dwarf) -> DealWithNearbyGoblinResult {
     // TODO: assert dwarf is directly on tile, I think
-    dwarf_center  := get_rect_center(get_world_rect_from_pos(dwarf.pos));
-    dwarf_tile_id := get_tile_id_by_pos(dwarf_center);
+    dwarf_tile_id := get_entity_tile_id(dwarf);
     detected, goblin, tile_ids_to_goblin_target := detect_entity_within_radius(Goblin, dwarf_tile_id, 3);
     
     if detected {
@@ -5307,8 +5336,7 @@ taunt_dwarf :: (dwarf_id: s32, taunter_tile_id: s32) {
     found, dwarf_index := table_find(*dwarf_id_to_index, dwarf_id);
     assert(found);
     
-    dwarf_center  := get_rect_center(get_world_rect_from_pos(dwarves[dwarf_index].pos));
-    dwarf_tile_id := get_tile_id_by_pos(dwarf_center);
+    dwarf_tile_id := get_entity_tile_id(dwarves[dwarf_index]);
     direction_to_face_taunter : Direction;
     if      taunter_tile_id == dwarf_tile_id - xx context.world_rows direction_to_face_taunter = .NORTH;
     else if taunter_tile_id == dwarf_tile_id + xx context.world_rows direction_to_face_taunter = .SOUTH;
@@ -6060,7 +6088,6 @@ create_outpost :: (pos: Vector2, is_home_base: bool) -> Outpost {
 
     outpost_tile_id := get_tile_id_by_pos(outpost.pos);
 
-    table_set(*outpost_id_to_index, outpost_id, outposts.count);
     array_add(*outposts, outpost);
 
     // Give a little breathing room with caves for the home base
@@ -6084,14 +6111,26 @@ create_outpost :: (pos: Vector2, is_home_base: bool) -> Outpost {
         }
     }
 
-    // TODO: outposts are 3x3, so we need to fix this
-    //
-    // Carve out some tiles around the outpost (including the outpost tiles itself)
-    for DIRECTIONS_ALL {
-        tile_id := get_neighbor_tile_id_by_direction(outpost_tile_id, it);
-        set_tile_as_type(tile_id, .MINED, false, false);
-        reveal_cave_if_necessary(tile_id, false, false);
+    // Dig out the tiles around the outpost (including the outpost tiles itself).
+    // The outpost's canonical tile is the top left one, and its pos is the top
+    // left of that tile. So, we step one tile northwest of that tile, and carve
+    // out a 5 x 5 grid. The outpost takes up the center 3 x 3, and the 5 x 5 gives
+    // it a little breathing room for dwarves to walk around.
+    most_north_west_tile_id_to_carve_for_outpost := get_neighbor_tile_id_by_direction(outpost_tile_id, .NORTH_WEST);
+    for col: 0..4 {
+        for row: 0..4 {
+            tile_id := most_north_west_tile_id_to_carve_for_outpost + col + row * context.world_cols;
+            set_tile_as_type(xx tile_id, .OUTPOST_FLOOR, false, false);
+        }
     }
+
+    for col: 0..2 {
+        for row: 0..2 {
+            tile_id := outpost_tile_id + col + row * context.world_cols;
+        }
+    }
+
+    table_set(*outpost_id_to_index, outpost_id, outposts.count);
 
     return outpost;
 }
@@ -6290,6 +6329,12 @@ is_tile_hole :: (tile_id: s32) -> bool {
     return tile.type == .HOLE;
 }
 
+is_tile_outpost_floor :: (tile_id: s32) -> bool {
+    tile := get_tile_by_id(tile_id);
+    if tile == null return false;
+    return tile.type == .OUTPOST_FLOOR;
+}
+
 is_tile_dirt :: (tile_id: s32) -> bool {
     tile := get_tile_by_id(tile_id);
     if tile == null return true;
@@ -6372,6 +6417,7 @@ is_tile_id_walkable_for_entity :: (tile_id: s32, entity_id: s32) -> bool {
     if found_goblin && goblin.id != entity_id return false;
 
     return (
+        is_tile_outpost_floor(tile_id) ||
         is_tile_fully_mined(tile_id)   ||
         is_tile_water_still(tile_id)   ||
         is_tile_water_flowing(tile_id) ||
@@ -6422,6 +6468,7 @@ get_neighbor_tile_ids_of_type :: (tile_id: s32, tile_type: TileType) -> [..] s32
             case .OBSIDIAN;       should_add_neighbor_to_list = is_tile_obsidian(neighbor_id);
             case .WALL;           should_add_neighbor_to_list = is_tile_wall(neighbor_id);
             case .HOLE;           should_add_neighbor_to_list = is_tile_hole(neighbor_id);
+            case .OUTPOST_FLOOR;  should_add_neighbor_to_list = is_tile_outpost_floor(neighbor_id);
         }
 
         if should_add_neighbor_to_list array_add(*neighbor_tile_ids, neighbor_id);
@@ -6765,9 +6812,9 @@ try_to_set_cardinal_neighbors_as_flowing_tile_type :: (tile_id: s32, as_type: Ti
     return directions_flowed;
 }
 
-get_world_rect_from_pos :: inline (pos: Vector2) -> Rectangle {
+get_world_rect_from_pos :: inline (pos: Vector2, size: int = 1) -> Rectangle {
     return Rectangle.{
-        pos.x, pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT,
+        pos.x, pos.y, xx (TILEMAP_GENERAL_WORLD_WIDTH * size), xx (TILEMAP_GENERAL_WORLD_HEIGHT * size),
     };
 }
 
@@ -7031,9 +7078,6 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
             table_remove(*context.tile_ids_to_index, tile_id);
             update_trenches_if_necessary(tile_id);
         }
-
-        case .TOUCHED_DIRT; {
-        }
         case .CAVE; {
             update_trenches_if_necessary(tile_id);
         }
@@ -7115,18 +7159,16 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
 
             try_to_add_warning_and_alert_markers(tile_id, .LAVA);
         }
-        case .OBSIDIAN; {
-
-        }
         case .WALL; {
             update_trenches_if_necessary(tile_id);
         }
-        case .HOLE; {
-
+        case .OUTPOST_FLOOR; {
+            update_trenches_if_necessary(tile_id);
         }
-        case .IRON; {
-
-        }
+        case .OBSIDIAN;
+        case .HOLE;
+        case .IRON;
+        case .TOUCHED_DIRT;
     }
 }
 
@@ -7696,9 +7738,9 @@ set_tile_ids_to_entity :: (T: Type) #expand
 // #modify { return uses_entity_with_as(cast(*Type_Info) T, Entity); }
 {
     `tile_ids_to_entity : Table(s32, *T);
-    #if      T == Dwarf  `tile_ids_to_entity = tile_ids_to_dwarfs;
-    else #if T == Goblin `tile_ids_to_entity = tile_ids_to_goblins;
-    else #if T == Outpost   `tile_ids_to_entity = tile_ids_to_outposts;
+    #if      T == Dwarf   `tile_ids_to_entity = tile_ids_to_dwarfs;
+    else #if T == Goblin  `tile_ids_to_entity = tile_ids_to_goblins;
+    else #if T == Outpost `tile_ids_to_entity = tile_ids_to_outposts;
     else assert(false); // TODO: what if we didn't need this somehow
 }
 
@@ -7706,17 +7748,20 @@ set_entity_id_to_index :: ($T: Type) #expand
 #modify { return uses_entity_with_as(cast(*Type_Info) T, Entity); }
 {
     `entity_id_to_index : Table(s32, s64);
-    #if      T == Dwarf  `entity_id_to_index = dwarf_id_to_index;
-    else #if T == Goblin `entity_id_to_index = goblin_id_to_index;
-    else #if T == Outpost   `entity_id_to_index = outpost_id_to_index;
+    #if      T == Dwarf   `entity_id_to_index = dwarf_id_to_index;
+    else #if T == Goblin  `entity_id_to_index = goblin_id_to_index;
+    else #if T == Outpost `entity_id_to_index = outpost_id_to_index;
     else assert(false); // TODO: what if we didn't need this somehow
 }
 
-get_entity_kind_to_type :: (entity_kind: EntityKind) -> Type {
-    if #complete entity_kind == {
-        case .Outpost;   return Outpost;
-        case .Dwarf;  return Dwarf;
-        case .Goblin; return Goblin;
+get_entity_kind_from_type :: (entity_type: Type) -> EntityKind {
+    if entity_type == {
+        case Outpost; return .Outpost;
+        case Dwarf;   return .Dwarf;
+        case Goblin;  return .Goblin;
+        case;
+            assert_soft(false, "Missed entity type, probably");
+            return .Dwarf;
     }
 }
 
@@ -7724,9 +7769,9 @@ get_entity_by_id :: (entity_kind: EntityKind, id: s32) -> (found: bool, entity: 
 {
     entity_id_to_index : Table(s32, s64);
     if #complete entity_kind == {
-        case .Outpost;   entity_id_to_index = outpost_id_to_index;
-        case .Dwarf;  entity_id_to_index = dwarf_id_to_index;
-        case .Goblin; entity_id_to_index = goblin_id_to_index;
+        case .Outpost; entity_id_to_index = outpost_id_to_index;
+        case .Dwarf;   entity_id_to_index = dwarf_id_to_index;
+        case .Goblin;  entity_id_to_index = goblin_id_to_index;
     }
 
     found, index := table_find(*entity_id_to_index, id);
@@ -7741,8 +7786,8 @@ get_entity_by_id :: (entity_kind: EntityKind, id: s32) -> (found: bool, entity: 
 get_entity_by_index :: (entity_kind: EntityKind, index: s64) -> *Entity
 {
     if #complete entity_kind == {
-        case .Outpost;   return *(outposts[index]);
-        case .Dwarf;  return *(dwarves[index]);
-        case .Goblin; return *(goblins[index]);
+        case .Outpost; return *(outposts[index]);
+        case .Dwarf;   return *(dwarves[index]);
+        case .Goblin;  return *(goblins[index]);
     }
 }
