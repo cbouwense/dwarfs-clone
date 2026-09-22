@@ -2,7 +2,7 @@
 # In progress
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- Dwarf warrior patrolling pathing is a bit weird outside of base
+- Make bases 3 x 3 tiles
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Bugs
@@ -10,13 +10,13 @@
 
 - Aggro logic is fucked up. Dwarves don't seem to wait where they should when goblins coming to them.
 - Water doesn't spread immediately
-- Dwarf warrior attacked a goblin diagonally when the goblin was attacking a base.
 - Dwarf warrior unable to path to a goblin when standing behind a miner who is attacking that goblin.
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Core gameplay
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+- Dwarf warrior patrolling
 - Death particles, aggro particles, and hit star particles need TLC
 - In addition to control modes, allow users to hold down controls
 - Death poof particles
@@ -29,7 +29,6 @@
     - apply changes
     - restore defaults
     - persist preferences
-- proper game over menu
 - shaman
 - spider queen
 - Screen resolution

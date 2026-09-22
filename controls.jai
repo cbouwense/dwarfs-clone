@@ -6,7 +6,7 @@ Bind :: struct {
 
 ControlMode :: enum {
     NORMAL :: 0;
-    ADD_BASE;
+    ADD_OUTPOST;
     ADD_DYNAMITE;
     ADD_OBSIDIAN;
     ADD_WALL;
@@ -25,7 +25,7 @@ Control :: struct {
 Controls :: struct {
     select                        : Control;
     clear_selection               : Control;
-    toggle_base_mode              : Control;
+    toggle_outpost_mode           : Control;
     add_iron                      : Control;
     select_as_place_miner_dwarf   : Control;
     select_as_place_warrior_dwarf : Control;

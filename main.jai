@@ -268,7 +268,7 @@ POINTS_FROM_MINE_DIRT :: 1;
 POINTS_FROM_MINE_IRON :: 50;
 POINTS_FROM_TREASURE  :: 75;
 
-GOLD_COST_BASE      :: 250;
+GOLD_COST_OUTPOST      :: 250;
 GOLD_COST_DYNAMITE  :: 50;
 GOLD_COST_OBSIDIAN  :: 75;
 GOLD_COST_PATH_STEP :: 5;
@@ -334,7 +334,7 @@ Metagame :: struct {
 // Textures
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-TILEMAP_SOURCE_RECT_BASE := Rectangle.{
+TILEMAP_SOURCE_RECT_OUTPOST := Rectangle.{
     0, 0,
     TILEMAP_GENERAL_TILE_WIDTH,
     TILEMAP_GENERAL_TILE_HEIGHT,
@@ -478,7 +478,7 @@ ControlsState :: struct {
     select_is_pressed_once        : bool;
     select_is_held_down           : bool;
     selection_cleared             : bool;
-    toggle_base_mode              : bool;
+    toggle_outpost_mode              : bool;
     toggle_dynamite_mode          : bool;
     toggle_obsidian_mode          : bool;
     toggle_wall_mode              : bool;
@@ -694,10 +694,9 @@ Animated :: struct {
     is_facing_left  : bool;
 }
 
-Base :: struct {
+Outpost :: struct {
     #as using entity: Entity;
-
-    kind = Base;
+    kind = Outpost;
 
     spawn_dwarf_cooldown_ms : s32;
     is_home_base : bool;
@@ -736,10 +735,9 @@ DwarfAnimationWarrior :: enum {
 
 Dwarf :: struct {
     #as using entity: Entity;
+    kind = Dwarf;
     using move: Moveable;
     using anim: Animated;
-
-    kind = Dwarf;
 
     state               : DwarfState;
     attack_cooldown_ms  : s32;
@@ -766,10 +764,9 @@ GoblinState :: enum {
 
 Goblin :: struct {
     #as using entity: Entity;
+    kind = Goblin;
     using move: Moveable;
     using anim: Animated;
-
-    kind = Goblin;
 
     state               : GoblinState;
     attack_cooldown_ms  : s32;
@@ -790,7 +787,8 @@ AlertType :: enum {
     LAVA;
     GOBLINS;
     TREASURE;
-    BASE_UNDER_ATTACK;
+    HOME_BASE_UNDER_ATTACK;
+    OUTPOST_UNDER_ATTACK;
     SHAMAN;
     SPIDER_QUEEN;
 }
@@ -814,9 +812,9 @@ entity_id_counter   : s32 = 0;
 control_id_counter  : s32 = 0;
 particle_id_counter : s32 = 0;
 
-bases             : [..] Base;
-base_id_to_index  : Table(s32, s64);
-bases_to_draw_this_frame : [..] Base;
+outposts             : [..] Outpost;
+outpost_id_to_index  : Table(s32, s64);
+outposts_to_draw_this_frame : [..] Outpost;
 
 dwarves             : [..] Dwarf;
 dwarf_id_to_index   : Table(s32, s64);
@@ -838,7 +836,7 @@ paths_to_draw_this_frame : [..] Path;
 
 tile_ids_to_dwarfs  : Table(s32, *Dwarf);
 tile_ids_to_goblins : Table(s32, *Goblin);
-tile_ids_to_bases   : Table(s32, *Base);
+tile_ids_to_outposts   : Table(s32, *Outpost);
 
 alerts             : [..] Alert;
 alerts_to_draw_this_frame : [..] Alert;
@@ -1579,7 +1577,7 @@ update_and_draw_frame_round :: () {
     // PERF: can this be keep_memory?
     table_reset(*tile_ids_to_dwarfs);
     table_reset(*tile_ids_to_goblins);
-    table_reset(*tile_ids_to_bases);
+    table_reset(*tile_ids_to_outposts);
     reset_temporary_storage();
 
     DT_MULTIPLIER_FAST_FORWARD :: 5;
@@ -1659,10 +1657,10 @@ update_and_draw_frame_round :: () {
         }
 
         // PERF: caching this might not even be faster
-        for *base: bases {
-            base_center  := get_rect_center(get_world_rect_from_pos(base.pos));
-            base_tile_id := get_tile_id_by_pos(base_center);
-            table_set(*tile_ids_to_bases, base_tile_id, base);
+        for *outpost: outposts {
+            outpost_center  := get_rect_center(get_world_rect_from_pos(outpost.pos));
+            outpost_tile_id := get_tile_id_by_pos(outpost_center);
+            table_set(*tile_ids_to_outposts, outpost_tile_id, outpost);
         }
     }
 
@@ -1687,7 +1685,7 @@ update_and_draw_frame_round :: () {
                             // Set any binds currently being set to not being set
                             for *context.metagame.controls.select.binds                        it.is_being_rebound = false;
                             for *context.metagame.controls.clear_selection.binds               it.is_being_rebound = false;
-                            for *context.metagame.controls.toggle_base_mode.binds              it.is_being_rebound = false;
+                            for *context.metagame.controls.toggle_outpost_mode.binds              it.is_being_rebound = false;
                             for *context.metagame.controls.add_iron.binds                      it.is_being_rebound = false;
                             for *context.metagame.controls.select_as_place_miner_dwarf.binds   it.is_being_rebound = false;
                             for *context.metagame.controls.select_as_place_warrior_dwarf.binds it.is_being_rebound = false;
@@ -1725,7 +1723,7 @@ update_and_draw_frame_round :: () {
             context.game_state.controls_state_this_frame.select_is_pressed_once        = control_is_pressed(context.metagame.controls.select);
             context.game_state.controls_state_this_frame.select_is_held_down           = control_is_down(context.metagame.controls.select);
             context.game_state.controls_state_this_frame.selection_cleared             = control_is_pressed(context.metagame.controls.clear_selection);
-            context.game_state.controls_state_this_frame.toggle_base_mode              = control_is_pressed(context.metagame.controls.toggle_base_mode);
+            context.game_state.controls_state_this_frame.toggle_outpost_mode           = control_is_pressed(context.metagame.controls.toggle_outpost_mode);
             context.game_state.controls_state_this_frame.toggle_dynamite_mode          = control_is_pressed(context.metagame.controls.toggle_dynamite_mode);
             context.game_state.controls_state_this_frame.toggle_obsidian_mode          = control_is_pressed(context.metagame.controls.toggle_obsidian_mode);
             context.game_state.controls_state_this_frame.toggle_wall_mode              = control_is_pressed(context.metagame.controls.toggle_wall_mode);
@@ -1767,8 +1765,8 @@ update_and_draw_frame_round :: () {
                 context.game_state.control_mode = .NORMAL;
             }
 
-            if context.game_state.controls_state_this_frame.toggle_base_mode {
-                context.game_state.control_mode = ifx context.game_state.control_mode == .ADD_BASE then .NORMAL else .ADD_BASE;
+            if context.game_state.controls_state_this_frame.toggle_outpost_mode {
+                context.game_state.control_mode = ifx context.game_state.control_mode == .ADD_OUTPOST then .NORMAL else .ADD_OUTPOST;
             }
 
             if context.game_state.controls_state_this_frame.toggle_dynamite_mode {
@@ -2054,25 +2052,25 @@ update_and_draw_frame_round :: () {
                                 }
                             }
                         }
-                    case .ADD_BASE;
+                    case .ADD_OUTPOST;
                         // TODO: check if placement is valid
                         if context.game_state.controls_state_this_frame.select_is_pressed_once {
-                            if context.metagame.debug_mode || context.game_state.gold >= GOLD_COST_BASE {
+                            if context.metagame.debug_mode || context.game_state.gold >= GOLD_COST_OUTPOST {
                                 tile_id         := get_tile_id_by_pos(context.mouse_pos_in_world);
                                 tile_is_mined   := is_tile_fully_mined(tile_id);
                                 tile_is_encased := is_tile_encased(tile_id);
 
                                 if context.metagame.debug_mode || (tile_is_mined && !tile_is_encased) {
-                                    // Add base.
-                                    base_rect := get_tile_rect_that_pos_is_within(get_world_width(), get_world_height(), TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, context.mouse_pos_in_world);
-                                    base_pos  := Vector2.{ base_rect.x, base_rect.y };
-                                    base_tile_id := get_tile_id_by_pos(base_pos);
+                                    // Add outpost.
+                                    outpost_rect := get_tile_rect_that_pos_is_within(get_world_width(), get_world_height(), TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, context.mouse_pos_in_world);
+                                    outpost_pos  := Vector2.{ outpost_rect.x, outpost_rect.y };
+                                    outpost_tile_id := get_tile_id_by_pos(outpost_pos);
 
-                                    create_base(base_pos, false);
+                                    create_outpost(outpost_pos, false);
 
                                     // Debit the gold cost.
-                                    if !context.metagame.debug_mode context.game_state.gold -= GOLD_COST_BASE;
-                                    create_gold_particle(base_pos, -1 * GOLD_COST_BASE, false);
+                                    if !context.metagame.debug_mode context.game_state.gold -= GOLD_COST_OUTPOST;
+                                    create_gold_particle(outpost_pos, -1 * GOLD_COST_OUTPOST, false);
 
                                     // Reset control mode.
                                     context.game_state.control_mode = .NORMAL;
@@ -2187,14 +2185,14 @@ update_and_draw_frame_round :: () {
                             if context.metagame.debug_mode || context.game_state.gold >= GOLD_COST_WALL {
                                 // Try to turn the selected tile into a wall
                                 tile_id := get_tile_id_by_pos(context.mouse_pos_in_world);
-                                tile_is_fully_mined   := is_tile_fully_mined(tile_id);
-                                tile_has_base_on_it   := table_contains(*tile_ids_to_bases, tile_id);
-                                tile_has_dwarf_on_it  := table_contains(*tile_ids_to_dwarfs, tile_id);
-                                tile_has_goblin_on_it := table_contains(*tile_ids_to_goblins, tile_id);
+                                tile_is_fully_mined    := is_tile_fully_mined(tile_id);
+                                tile_has_outpost_on_it := table_contains(*tile_ids_to_outposts, tile_id);
+                                tile_has_dwarf_on_it   := table_contains(*tile_ids_to_dwarfs, tile_id);
+                                tile_has_goblin_on_it  := table_contains(*tile_ids_to_goblins, tile_id);
 
                                 can_place_wall_on_desired_tile := (
                                     tile_is_fully_mined   &&
-                                    !tile_has_base_on_it  &&
+                                    !tile_has_outpost_on_it  &&
                                     !tile_has_dwarf_on_it &&
                                     !tile_has_goblin_on_it
                                 );
@@ -2349,31 +2347,12 @@ update_and_draw_frame_round :: () {
                                                 dwarf_center  := get_rect_center(get_world_rect_from_pos(dwarf.pos));
                                                 dwarf_tile_id := get_tile_id_by_pos(dwarf_center);
 
-                                                on_top_of_base, base := table_find(*tile_ids_to_bases, dwarf_tile_id);
-                                                // If we're standing on a base right now, just keep walking in the direction you're currently going.
-                                                if on_top_of_base {
+                                                on_top_of_outpost, outpost := table_find(*tile_ids_to_outposts, dwarf_tile_id);
+                                                // If we're standing on a outpost right now, just keep walking in the direction you're currently going.
+                                                if on_top_of_outpost {
                                                     try_to_set_dwarf_target_to_one_block_in_the_direction_its_facing(dwarf);
                                                 } else {
-                                                    base_neighbor_detected, base, base_direction := detect_neighbor_cardinal(dwarf_tile_id, Base);
-
-                                                    // If we have a base within a cardinal direction, just keep walking in the direction you're currently going.
-                                                    if base_neighbor_detected {
-                                                        try_to_set_dwarf_target_to_one_block_in_the_direction_its_facing(dwarf);
-                                                    } else {
-                                                        base_neighbor_detected, base, base_direction := detect_neighbor(dwarf_tile_id, Base);
-
-                                                        // If we have a base within a diagonal direction, turn clockwise and then walk forward.
-                                                        if base_neighbor_detected {
-                                                            dwarf.direction = get_next_direction_to_face_from_base_neighbor_direction(base_direction);
-                                                            result := try_to_set_dwarf_target_to_one_block_in_the_direction_its_facing(dwarf);
-                                                            if result == .NO_DIRECTION_FOUND {
-                                                                dwarf.direction = opposite_cardinal_direction(dwarf.direction);
-                                                                try_to_set_dwarf_target_to_one_block_in_the_direction_its_facing(dwarf);
-                                                            }
-                                                        } else {
-                                                            // TODO: wander somewhat towards the nearest base
-                                                        }
-                                                    }
+                                                    // TODO
                                                 }
                                             }
 
@@ -2697,14 +2676,14 @@ update_and_draw_frame_round :: () {
                                         }
                                     }
 
-                                    // If there are any cardinal neighbor bases, turn and fight them.
+                                    // If there are any cardinal neighbor outposts, turn and fight them.
                                     if !is_goblin_done_deciding {
-                                        detected, base := find_cardinal_neighbor_entity(goblin_tile_id, Base);
+                                        detected, outpost := find_cardinal_neighbor_entity(goblin_tile_id, Outpost);
 
                                         if detected {
                                             // TODO: set goblin direction
                                             goblin_transition_state(goblin, .ATTACKING);
-                                            goblin.entity_id_attacking = base.id;
+                                            goblin.entity_id_attacking = outpost.id;
 
                                             is_goblin_done_deciding = true;
                                         }
@@ -2732,9 +2711,9 @@ update_and_draw_frame_round :: () {
                                         }
                                     }
 
-                                    // If there are any bases within line of sight, move towards the tile they're spotted on.
+                                    // If there are any outposts within line of sight, move towards the tile they're spotted on.
                                     if !is_goblin_done_deciding {
-                                        detected, _, tile_ids_path := find_line_of_sight_entity(goblin_tile_id, Base, GOBLIN_LINE_OF_SIGHT_TILE_COUNT);
+                                        detected, _, tile_ids_path := find_line_of_sight_entity(goblin_tile_id, Outpost, GOBLIN_LINE_OF_SIGHT_TILE_COUNT);
                                         
                                         if detected {
                                             set_tile_ids_on_path(goblin, *tile_ids_path);
@@ -2742,12 +2721,12 @@ update_and_draw_frame_round :: () {
                                         }
                                     }
 
-                                    // If there are any bases within 10 tiles, move towards them.
+                                    // If there are any outposts within 10 tiles, move towards them.
                                     if !is_goblin_done_deciding {
-                                        detected, base, tile_ids_path := detect_entity_within_radius(Base, goblin_tile_id, 10);
+                                        detected, outpost, tile_ids_path := detect_entity_within_radius(Outpost, goblin_tile_id, 10);
 
                                         if detected {
-                                            if goblin_tile_id != get_tile_id_by_pos(base.pos) {
+                                            if goblin_tile_id != get_tile_id_by_pos(outpost.pos) {
                                                 set_tile_ids_on_path(goblin, *tile_ids_path);
                                             }
                                             is_goblin_done_deciding = true;
@@ -2816,16 +2795,17 @@ update_and_draw_frame_round :: () {
                                         is_dwarf = true;
                                         entity = *dwarves[entity_index];
                                     } else {
-                                        set_entity_id_to_index(Base);
+                                        set_entity_id_to_index(Outpost);
                                         found, entity_index = table_find(*entity_id_to_index, goblin.entity_id_attacking);
                                         if found {
-                                            entity = *bases[entity_index];
+                                            entity = *outposts[entity_index];
 
                                             // If this goblin is attacking the home base
                                             if entity_index == 0 && context.game_state.home_base_under_attack_cooldown_ms <= 0 {
-                                                create_alert(.BASE_UNDER_ATTACK, entity.pos);
+                                                create_alert(.HOME_BASE_UNDER_ATTACK, entity.pos);
                                                 context.game_state.home_base_under_attack_cooldown_ms = HOME_BASE_UNDER_ATTACK_COOLDOWN_MS;
                                             }
+                                            // TODO: create alert for generic outpost under attack?
                                         }
                                     }
 
@@ -2884,7 +2864,7 @@ update_and_draw_frame_round :: () {
 
                                                     if entity.hp <= 0 {
                                                         if is_dwarf kill_dwarf_by_id(entity.id);
-                                                        else        kill_base_by_id(entity.id);
+                                                        else        kill_outpost_by_id(entity.id);
 
                                                         goblin_transition_state(goblin, .DECIDING);
                                                         goblin.entity_id_attacking = 0;
@@ -2913,21 +2893,21 @@ update_and_draw_frame_round :: () {
                 }
                 update_goblins();
 
-                // Update bases
-                update_bases :: () {
+                // Update outposts
+                update_outposts :: () {
                     #if DWARF_MINER_SPAWN_ENABLED {
-                        for *base: bases {
-                            if base.spawn_dwarf_cooldown_ms <= 0 {
-                                create_dwarf(Vector2.{ base.pos.x, base.pos.y }, .MINER);
+                        for *outpost: outposts {
+                            if outpost.spawn_dwarf_cooldown_ms <= 0 {
+                                create_dwarf(Vector2.{ outpost.pos.x, outpost.pos.y }, .MINER);
 
-                                base.spawn_dwarf_cooldown_ms = DWARF_MINER_SPAWN_MS;
+                                outpost.spawn_dwarf_cooldown_ms = DWARF_MINER_SPAWN_MS;
                             } else {
-                                base.spawn_dwarf_cooldown_ms -= xx (context.dt_seconds * 1000);
+                                outpost.spawn_dwarf_cooldown_ms -= xx (context.dt_seconds * 1000);
                             }
                         }
                     }
                 }
-                update_bases();
+                update_outposts();
 
                 // Update liquid timers
                 should_spread_lava_this_frame := context.game_state.lava_flow_cooldown_ms <= 0;
@@ -3505,16 +3485,18 @@ update_and_draw_frame_round :: () {
             DRAW_TILES :: true;
             #if DRAW_TILES then draw_tiles();
 
-            // Draw bases
-            draw_bases :: () {
-                for base: bases_to_draw_this_frame {
-                    dest := get_world_rect_from_pos(base.pos);
+            // Draw outposts
+            draw_outposts :: () {
+                for outpost: outposts_to_draw_this_frame {
+                    dest := Rectangle.{
+                        outpost.pos.x, outpost.pos.y, TILEMAP_GENERAL_WORLD_WIDTH * 3, TILEMAP_GENERAL_WORLD_HEIGHT * 3,
+                    };
 
-                    DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_BASE, dest, Vector2.{0,0}, 0.0, WHITE);
+                    DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTPOST, dest, Vector2.{0,0}, 0.0, WHITE);
                 }
             }
-            DRAW_BASES :: true;
-            #if DRAW_BASES then draw_bases();
+            DRAW_OUTPOSTS :: true;
+            #if DRAW_OUTPOSTS then draw_outposts();
 
             // Draw paths
             draw_paths :: () {
@@ -3951,7 +3933,7 @@ update_and_draw_frame_round :: () {
                             if context.game_state.controls_state_this_frame.select_is_pressed_once {
                                 has_control_mode := (
                                     control.id == context.metagame.controls.select.id ||                 
-                                    control.id == context.metagame.controls.toggle_base_mode.id ||       
+                                    control.id == context.metagame.controls.toggle_outpost_mode.id ||       
                                     control.id == context.metagame.controls.toggle_dynamite_mode.id ||   
                                     control.id == context.metagame.controls.toggle_obsidian_mode.id ||   
                                     control.id == context.metagame.controls.toggle_wall_mode.id ||       
@@ -4013,7 +3995,7 @@ update_and_draw_frame_round :: () {
 
                     draw_hud_control_icon(context.metagame.controls.toggle_remove_mode, TILEMAP_SOURCE_RECT_REMOVE);
                     draw_hud_control_icon(context.metagame.controls.toggle_dynamite_mode, TILEMAP_SOURCE_RECT_DYNAMITE, GOLD_COST_DYNAMITE);
-                    draw_hud_control_icon(context.metagame.controls.toggle_base_mode, TILEMAP_SOURCE_RECT_BASE, GOLD_COST_BASE);
+                    draw_hud_control_icon(context.metagame.controls.toggle_outpost_mode, TILEMAP_SOURCE_RECT_OUTPOST, GOLD_COST_OUTPOST);
                     draw_hud_control_icon(context.metagame.controls.toggle_wall_mode, TILEMAP_SOURCE_RECT_WALL, GOLD_COST_WALL);
                     draw_hud_control_icon(context.metagame.controls.toggle_obsidian_mode, TILEMAP_SOURCE_RECT_OBSIDIAN, GOLD_COST_OBSIDIAN);
                     draw_hud_control_icon(context.metagame.controls.panic_pause, TILEMAP_SOURCE_RECT_OBSIDIAN);
@@ -4187,7 +4169,7 @@ update_and_draw_frame_round :: () {
                                     `options_row_y += `OPTIONS_Y_INCREMENT;
                                 }
 
-                                keybind_row(*(context.metagame.controls).toggle_base_mode);
+                                keybind_row(*(context.metagame.controls).toggle_outpost_mode);
                                 keybind_row(*(context.metagame.controls).toggle_dynamite_mode);
                                 keybind_row(*(context.metagame.controls).toggle_obsidian_mode);
                                 keybind_row(*(context.metagame.controls).toggle_wall_mode);
@@ -4288,7 +4270,7 @@ update_and_draw_frame_round :: () {
 
             if #complete context.game_state.control_mode == {
                 case .NORMAL;       // no op
-                case .ADD_BASE;     DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_BASE, cursor_mode_icon_rect, Vector2.{0,0}, 0.0, WHITE);
+                case .ADD_OUTPOST;     DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTPOST, cursor_mode_icon_rect, Vector2.{0,0}, 0.0, WHITE);
                 case .ADD_DYNAMITE; DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_DYNAMITE, cursor_mode_icon_rect, Vector2.{0,0}, 0.0, WHITE);
                 case .ADD_OBSIDIAN; DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OBSIDIAN, cursor_mode_icon_rect, Vector2.{0,0}, 0.0, WHITE);
                 case .ADD_WALL;     DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_WALL, cursor_mode_icon_rect, Vector2.{0,0}, 0.0, WHITE);
@@ -4348,8 +4330,11 @@ create_alert :: (alert_type: AlertType, pos: Vector2) -> Alert {
         case .TREASURE; 
             context.game_state.alert_banner_text = "A dwarf revealed a treasure cave!";
             color = GREEN;
-        case .BASE_UNDER_ATTACK;
-            context.game_state.alert_banner_text = "Your base is under attack!";
+        case .HOME_BASE_UNDER_ATTACK;
+            context.game_state.alert_banner_text = "Your home base is under attack!";
+            color = RED;
+        case .OUTPOST_UNDER_ATTACK;
+            context.game_state.alert_banner_text = "An outpost is under attack!";
             color = RED;
         case .SHAMAN;
             context.game_state.alert_banner_text = "A dwarf has disturbed a shaman!";
@@ -4636,9 +4621,9 @@ reset_memory :: () {
 
     array_reset(*alerts);
 
-    array_reset(*bases);
-    table_reset(*base_id_to_index);
-    table_reset(*tile_ids_to_bases);
+    array_reset(*outposts);
+    table_reset(*outpost_id_to_index);
+    table_reset(*tile_ids_to_outposts);
 
     array_reset(*dwarves);
     table_reset(*dwarf_id_to_index);
@@ -4702,10 +4687,10 @@ initialize_round :: () {
         goblins_to_draw_this_frame.allocator = temp;
         paths_to_draw_this_frame.allocator   = temp;
         alerts_to_draw_this_frame.allocator  = temp;
-        bases_to_draw_this_frame.allocator   = temp;
+        outposts_to_draw_this_frame.allocator   = temp;
         tile_ids_to_dwarfs.allocator         = temp;
         tile_ids_to_goblins.allocator        = temp;
-        tile_ids_to_bases.allocator          = temp;
+        tile_ids_to_outposts.allocator          = temp;
     }
 
     // TODO: parametrize
@@ -4724,13 +4709,13 @@ initialize_round :: () {
         controls.clear_selection.rebindable_by_user = true;
         controls.clear_selection.binds[0] = Bind.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_RIGHT };
 
-        controls.toggle_base_mode.id   = read_then_increment(*control_id_counter);
-        controls.toggle_base_mode.name = "Build base mode";
+        controls.toggle_outpost_mode.id   = read_then_increment(*control_id_counter);
+        controls.toggle_outpost_mode.name = "Build outpost mode";
         // TODO: This text needs to change dynamically ("Cost: % (Next will cost %)")
-        controls.toggle_base_mode.tooltip_text = "Bases increase your max amount of warriors, and allow you to spawn additional miners. Must be built on a path. Cost more each time you build one.";
-        controls.toggle_base_mode.control_mode = .ADD_BASE;
-        controls.toggle_base_mode.rebindable_by_user = true;
-        controls.toggle_base_mode.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_B };
+        controls.toggle_outpost_mode.tooltip_text = "Outposts increase your max amount of warriors, and allow you to spawn additional miners. Must be built on a path. Cost more each time you build one.";
+        controls.toggle_outpost_mode.control_mode = .ADD_OUTPOST;
+        controls.toggle_outpost_mode.rebindable_by_user = true;
+        controls.toggle_outpost_mode.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_B };
 
         controls.add_iron.id   = read_then_increment(*control_id_counter);
         controls.add_iron.name = "DEBUG: Add iron deposit";
@@ -4897,24 +4882,20 @@ initialize_round :: () {
                 }
             }
 
-            // Initialize bases
-            GENERATE_BASE_ENABLED :: true;
-            #if GENERATE_BASE_ENABLED {
-                home_base := create_base(
-                    Vector2.{
-                        context.world_cols * TILEMAP_GENERAL_WORLD_WIDTH  * 0.5,
-                        context.world_rows * TILEMAP_GENERAL_WORLD_HEIGHT * 0.5,
-                    },
-                    true,
-                );
-            }
+            home_base := create_outpost(
+                Vector2.{
+                    context.world_cols * TILEMAP_GENERAL_WORLD_WIDTH  * 0.5,
+                    context.world_rows * TILEMAP_GENERAL_WORLD_HEIGHT * 0.5,
+                },
+                true,
+            );
 
             // Initialize dwarves
             GENERATE_DWARVES_ENABLED :: true;
             #if GENERATE_DWARVES_ENABLED {
                 dx, dy : float;
                 neighbor_pos: Vector2;
-                assert(bases.count > 0);
+                assert(outposts.count > 0);
 
                 for 1..DWARF_MINER_START_COUNT {
                     // Initialize miner dwarves
@@ -4936,14 +4917,7 @@ initialize_round :: () {
             }
 
             // Initialize camera
-            #if GENERATE_BASE_ENABLED {
-                context.camera.target   = bases[0].pos;
-            } else {
-                context.camera.target   = Vector2.{
-                    context.world_cols * TILEMAP_GENERAL_WORLD_WIDTH  / 2,
-                    context.world_rows * TILEMAP_GENERAL_WORLD_HEIGHT / 2,
-                };
-            }
+            context.camera.target = outposts[0].pos;
 
         case .TUTORIAL_CONTROLS;
             // Initialize camera
@@ -5284,7 +5258,7 @@ set_goblin_direction_to_face_next_target :: (goblin: *Goblin) {
     else assert(false);
 }
 
-detect_neighbor :: (tile_id: s32, $T: Type) -> base_neighbor_detected: bool, entity: *T, direction: Direction
+detect_neighbor :: (tile_id: s32, $T: Type) -> neighbor_detected: bool, entity: *T, direction: Direction
 #modify { return uses_entity_with_as(cast(*Type_Info) T, Entity); }
 {
     for DIRECTIONS_COMPASS {
@@ -5313,8 +5287,8 @@ detect_neighbor_cardinal :: (tile_id: s32, $T: Type) -> neighbor_detected: bool,
 
         set_tile_ids_to_entity(T);
 
-        found, base := table_find(*tile_ids_to_entity, neighbor_id);
-        if (found) return true, base, it;
+        found, neighbor := table_find(*tile_ids_to_entity, neighbor_id);
+        if (found) return true, neighbor, it;
     }
 
     return false, null, .CENTER;
@@ -6073,21 +6047,21 @@ create_goblin :: (pos: Vector2) -> Goblin {
     return goblin;
 }
 
-create_base :: (pos: Vector2, is_home_base: bool) -> Base {
-    base_id := increment_then_read(*entity_id_counter);
+create_outpost :: (pos: Vector2, is_home_base: bool) -> Outpost {
+    outpost_id := increment_then_read(*entity_id_counter);
 
-    base := Base.{
-        id  = base_id,
+    outpost := Outpost.{
+        id  = outpost_id,
         pos = pos,
         spawn_dwarf_cooldown_ms = DWARF_MINER_SPAWN_MS,
         is_home_base = is_home_base,
         hp = 1000
     };
 
-    base_tile_id := get_tile_id_by_pos(base.pos);
+    outpost_tile_id := get_tile_id_by_pos(outpost.pos);
 
-    table_set(*base_id_to_index, base_id, bases.count);
-    array_add(*bases, base);
+    table_set(*outpost_id_to_index, outpost_id, outposts.count);
+    array_add(*outposts, outpost);
 
     // Give a little breathing room with caves for the home base
     if is_home_base {
@@ -6100,8 +6074,8 @@ create_base :: (pos: Vector2, is_home_base: bool) -> Base {
                 }
 
                 neighbor_pos := Vector2.{ 
-                    base.pos.x + (dx_idx * TILEMAP_GENERAL_WORLD_WIDTH), 
-                    base.pos.y + (dy_idx * TILEMAP_GENERAL_WORLD_HEIGHT) 
+                    outpost.pos.x + (dx_idx * TILEMAP_GENERAL_WORLD_WIDTH), 
+                    outpost.pos.y + (dy_idx * TILEMAP_GENERAL_WORLD_HEIGHT) 
                 };
                 
                 found, neighbor_id := find_tile_id_by_pos(neighbor_pos);
@@ -6110,24 +6084,26 @@ create_base :: (pos: Vector2, is_home_base: bool) -> Base {
         }
     }
 
-    // Carve out some tiles around the base (including the base tile itself)
+    // TODO: outposts are 3x3, so we need to fix this
+    //
+    // Carve out some tiles around the outpost (including the outpost tiles itself)
     for DIRECTIONS_ALL {
-        tile_id := get_neighbor_tile_id_by_direction(base_tile_id, it);
+        tile_id := get_neighbor_tile_id_by_direction(outpost_tile_id, it);
         set_tile_as_type(tile_id, .MINED, false, false);
         reveal_cave_if_necessary(tile_id, false, false);
     }
 
-    return base;
+    return outpost;
 }
 
 game_over_if_touching_home_base :: (tile_id: s32) {
     kill_pos  := get_tile_pos_by_id(tile_id);
     kill_rect := Rectangle.{ kill_pos.x, kill_pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
     // PERF: can just save home base id at start up
-    for base: bases {
-        if !base.is_home_base continue;
+    for outpost: outposts {
+        if !outpost.is_home_base continue;
 
-        home_base_rect := Rectangle.{ base.pos.x, base.pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
+        home_base_rect := Rectangle.{ outpost.pos.x, outpost.pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
         if CheckCollisionRecs(home_base_rect, kill_rect) {
             context.metagame.state = .GAME_OVER;
         }
@@ -6203,29 +6179,29 @@ kill_goblin_by_id :: (goblin_id: s32) {
 }
 
 // TODO: refactor to entity probably
-kill_base_by_index :: (base_index: s64) {
-    base_being_killed := bases[base_index];
-    if base_being_killed.is_home_base {
+kill_outpost_by_index :: (outpost_index: s64) {
+    outpost_being_killed := outposts[outpost_index];
+    if outpost_being_killed.is_home_base {
         context.metagame.state = .GAME_OVER;
     }
 
-    base_id_being_swapped := bases[bases.count - 1].id;
-    base_id_being_killed  := bases[base_index].id;
+    outpost_id_being_swapped := outposts[outposts.count - 1].id;
+    outpost_id_being_killed  := outposts[outpost_index].id;
 
-    tile_id_of_base_being_killed := get_tile_id_by_pos(base_being_killed.pos);
+    tile_id_of_outpost_being_killed := get_tile_id_by_pos(outpost_being_killed.pos);
 
-    if base_id_being_swapped != base_id_being_killed {
-        table_set(*base_id_to_index, base_id_being_swapped, base_index);
+    if outpost_id_being_swapped != outpost_id_being_killed {
+        table_set(*outpost_id_to_index, outpost_id_being_swapped, outpost_index);
     }
-    table_remove(*base_id_to_index, base_id_being_killed);
+    table_remove(*outpost_id_to_index, outpost_id_being_killed);
 
-    array_unordered_remove_by_index(*bases, base_index);
+    array_unordered_remove_by_index(*outposts, outpost_index);
 }
 
-kill_base_by_id :: (base_id: s32) {
-    found, base_index := table_find(*base_id_to_index, base_id);
+kill_outpost_by_id :: (outpost_id: s32) {
+    found, outpost_index := table_find(*outpost_id_to_index, outpost_id);
     assert(found);
-    kill_base_by_index(base_index);
+    kill_outpost_by_index(outpost_index);
 }
 
 get_neighbor_tile_id_by_direction :: (tile_id: s32, direction: Direction) -> s32 {
@@ -7411,7 +7387,7 @@ get_steps_between_tiles :: (tile_id_a: s32, tile_id_b: s32) -> int {
 derive_things_to_draw :: () {
     array_reset(*tiles_to_draw_this_frame);
     array_reset(*alerts_to_draw_this_frame);
-    array_reset(*bases_to_draw_this_frame);
+    array_reset(*outposts_to_draw_this_frame);
     array_reset(*dwarves_to_draw_this_frame);
     array_reset(*goblins_to_draw_this_frame);
     array_reset(*paths_to_draw_this_frame);
@@ -7432,19 +7408,19 @@ derive_things_to_draw :: () {
     }
     derive_tiles_to_draw_this_frame();
 
-    derive_bases_to_draw_this_frame :: () {
-        for base: bases {
-            pos := base.pos;
+    derive_outposts_to_draw_this_frame :: () {
+        for outpost: outposts {
+            pos := outpost.pos;
 
             if pos.x + TILEMAP_GENERAL_WORLD_WIDTH  < context.window_start.x continue;
             if pos.x - TILEMAP_GENERAL_WORLD_WIDTH  > context.window_end.x   continue;
             if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > context.window_end.y   continue;
             if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < context.window_start.y continue;
 
-            array_add(*bases_to_draw_this_frame, base);
+            array_add(*outposts_to_draw_this_frame, outpost);
         }
     }
-    derive_bases_to_draw_this_frame();
+    derive_outposts_to_draw_this_frame();
 
     // Derive viewable dwarves
     derive_dwarves_to_draw_this_frame :: () {
@@ -7722,7 +7698,7 @@ set_tile_ids_to_entity :: (T: Type) #expand
     `tile_ids_to_entity : Table(s32, *T);
     #if      T == Dwarf  `tile_ids_to_entity = tile_ids_to_dwarfs;
     else #if T == Goblin `tile_ids_to_entity = tile_ids_to_goblins;
-    else #if T == Base   `tile_ids_to_entity = tile_ids_to_bases;
+    else #if T == Outpost   `tile_ids_to_entity = tile_ids_to_outposts;
     else assert(false); // TODO: what if we didn't need this somehow
 }
 
@@ -7732,13 +7708,13 @@ set_entity_id_to_index :: ($T: Type) #expand
     `entity_id_to_index : Table(s32, s64);
     #if      T == Dwarf  `entity_id_to_index = dwarf_id_to_index;
     else #if T == Goblin `entity_id_to_index = goblin_id_to_index;
-    else #if T == Base   `entity_id_to_index = base_id_to_index;
+    else #if T == Outpost   `entity_id_to_index = outpost_id_to_index;
     else assert(false); // TODO: what if we didn't need this somehow
 }
 
 get_entity_kind_to_type :: (entity_kind: EntityKind) -> Type {
     if #complete entity_kind == {
-        case .Base;   return Base;
+        case .Outpost;   return Outpost;
         case .Dwarf;  return Dwarf;
         case .Goblin; return Goblin;
     }
@@ -7748,7 +7724,7 @@ get_entity_by_id :: (entity_kind: EntityKind, id: s32) -> (found: bool, entity: 
 {
     entity_id_to_index : Table(s32, s64);
     if #complete entity_kind == {
-        case .Base;   entity_id_to_index = base_id_to_index;
+        case .Outpost;   entity_id_to_index = outpost_id_to_index;
         case .Dwarf;  entity_id_to_index = dwarf_id_to_index;
         case .Goblin; entity_id_to_index = goblin_id_to_index;
     }
@@ -7765,7 +7741,7 @@ get_entity_by_id :: (entity_kind: EntityKind, id: s32) -> (found: bool, entity: 
 get_entity_by_index :: (entity_kind: EntityKind, index: s64) -> *Entity
 {
     if #complete entity_kind == {
-        case .Base;   return *(bases[index]);
+        case .Outpost;   return *(outposts[index]);
         case .Dwarf;  return *(dwarves[index]);
         case .Goblin; return *(goblins[index]);
     }
