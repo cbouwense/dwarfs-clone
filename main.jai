@@ -2416,7 +2416,9 @@ update_and_draw_frame_round :: () {
                                         tile_id_next_in_dwarfs_path := dwarf.tile_ids_on_path[0];
 
                                         // Set dwarf to face the direction of the new target
-                                        dwarf.direction = get_direction_of_cardinal_neighbor(dwarf_tile_id, tile_id_next_in_dwarfs_path);
+                                        if is_tile_id_neighbor_of_tile_id_cardinal(tile_id_next_in_dwarfs_path, dwarf_tile_id) {
+                                            dwarf.direction = get_direction_of_cardinal_neighbor(dwarf_tile_id, tile_id_next_in_dwarfs_path);
+                                        }
 
                                         // If it's walkable, proceed
                                         if is_tile_id_walkable_for_entity(tile_id_next_in_dwarfs_path, dwarf.id) {
