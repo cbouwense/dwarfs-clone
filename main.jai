@@ -378,6 +378,16 @@ TILEMAP_SOURCE_RECT_HOLE := Rectangle.{
     TILEMAP_GENERAL_TILE_HEIGHT,
 };
 
+HOME_BASE_SPRITE_SOURCE_ROW :: 5.0;
+HOME_BASE_SPRITE_SOURCE_COL :: 0.0;
+
+TILEMAP_SOURCE_RECT_HOME_BASE := Rectangle.{
+    HOME_BASE_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
+    HOME_BASE_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
+    TILEMAP_GENERAL_TILE_WIDTH * 3,
+    TILEMAP_GENERAL_TILE_HEIGHT * 3,
+};
+
 OUTPOST_FLOOR_SPRITE_SOURCE_ROW :: 4.0;
 OUTPOST_FLOOR_SPRITE_SOURCE_COL :: 0.0;
 
@@ -3535,7 +3545,11 @@ update_and_draw_frame_round :: () {
                         outpost.pos.x, outpost.pos.y, TILEMAP_GENERAL_WORLD_WIDTH * 3, TILEMAP_GENERAL_WORLD_HEIGHT * 3,
                     };
 
-                    DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTPOST, dest, Vector2.{0,0}, 0.0, WHITE);
+                    if outpost.is_home_base {
+                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE, dest, Vector2.{0,0}, 0.0, WHITE);
+                    } else {
+                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTPOST, dest, Vector2.{0,0}, 0.0, WHITE);
+                    }
                 }
             }
             DRAW_OUTPOSTS :: true;
