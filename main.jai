@@ -378,6 +378,56 @@ TILEMAP_SOURCE_RECT_HOLE := Rectangle.{
     TILEMAP_GENERAL_TILE_HEIGHT,
 };
 
+HOME_BASE_FLOOR_CENTER_SPRITE_SOURCE_ROW :: 8.0;
+HOME_BASE_FLOOR_CENTER_SPRITE_SOURCE_COL :: 6.0;
+
+TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_CENTER := Rectangle.{
+    HOME_BASE_FLOOR_CENTER_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
+    HOME_BASE_FLOOR_CENTER_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
+    TILEMAP_GENERAL_TILE_WIDTH,
+    TILEMAP_GENERAL_TILE_HEIGHT,
+};
+
+HOME_BASE_FLOOR_NORTH_WEST_SPRITE_SOURCE_ROW :: 7.0;
+HOME_BASE_FLOOR_NORTH_WEST_SPRITE_SOURCE_COL :: 7.0;
+
+TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_NORTH_WEST := Rectangle.{
+    HOME_BASE_FLOOR_NORTH_WEST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
+    HOME_BASE_FLOOR_NORTH_WEST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
+    TILEMAP_GENERAL_TILE_WIDTH,
+    TILEMAP_GENERAL_TILE_HEIGHT,
+};
+
+HOME_BASE_FLOOR_NORTH_EAST_SPRITE_SOURCE_ROW :: 7.0;
+HOME_BASE_FLOOR_NORTH_EAST_SPRITE_SOURCE_COL :: 8.0;
+
+TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_NORTH_EAST := Rectangle.{
+    HOME_BASE_FLOOR_NORTH_EAST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
+    HOME_BASE_FLOOR_NORTH_EAST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
+    TILEMAP_GENERAL_TILE_WIDTH,
+    TILEMAP_GENERAL_TILE_HEIGHT,
+};
+
+HOME_BASE_FLOOR_SOUTH_WEST_SPRITE_SOURCE_ROW :: 8.0;
+HOME_BASE_FLOOR_SOUTH_WEST_SPRITE_SOURCE_COL :: 7.0;
+
+TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_SOUTH_WEST := Rectangle.{
+    HOME_BASE_FLOOR_SOUTH_WEST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
+    HOME_BASE_FLOOR_SOUTH_WEST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
+    TILEMAP_GENERAL_TILE_WIDTH,
+    TILEMAP_GENERAL_TILE_HEIGHT,
+};
+
+HOME_BASE_FLOOR_SOUTH_EAST_SPRITE_SOURCE_ROW :: 8.0;
+HOME_BASE_FLOOR_SOUTH_EAST_SPRITE_SOURCE_COL :: 8.0;
+
+TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_SOUTH_EAST := Rectangle.{
+    HOME_BASE_FLOOR_SOUTH_EAST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
+    HOME_BASE_FLOOR_SOUTH_EAST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
+    TILEMAP_GENERAL_TILE_WIDTH,
+    TILEMAP_GENERAL_TILE_HEIGHT,
+};
+
 HOME_BASE_SPRITE_SOURCE_ROW :: 5.0;
 HOME_BASE_SPRITE_SOURCE_COL :: 0.0;
 
@@ -404,6 +454,16 @@ OUTPOST_FLOOR_SPRITE_SOURCE_COL_FAR_LOD :: 8.0;
 TILEMAP_SOURCE_RECT_OUTPOST_FLOOR_FAR_LOD := Rectangle.{
     OUTPOST_FLOOR_SPRITE_SOURCE_COL_FAR_LOD * TILEMAP_GENERAL_TILE_WIDTH,
     OUTPOST_FLOOR_SPRITE_SOURCE_ROW_FAR_LOD * TILEMAP_GENERAL_TILE_HEIGHT,
+    TILEMAP_GENERAL_TILE_WIDTH,
+    TILEMAP_GENERAL_TILE_HEIGHT,
+};
+
+HOME_BASE_FLOOR_SPRITE_SOURCE_ROW_FAR_LOD :: 6.0;
+HOME_BASE_FLOOR_SPRITE_SOURCE_COL_FAR_LOD :: 7.0;
+
+TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_FAR_LOD := Rectangle.{
+    HOME_BASE_FLOOR_SPRITE_SOURCE_COL_FAR_LOD * TILEMAP_GENERAL_TILE_WIDTH,
+    HOME_BASE_FLOOR_SPRITE_SOURCE_ROW_FAR_LOD * TILEMAP_GENERAL_TILE_HEIGHT,
     TILEMAP_GENERAL_TILE_WIDTH,
     TILEMAP_GENERAL_TILE_HEIGHT,
 };
@@ -635,6 +695,7 @@ TileType :: enum u8 {
     WALL;
     HOLE;
     OUTPOST_FLOOR;
+    HOME_BASE_FLOOR;
 }
 
 TileProperties :: enum_flags u8 {
@@ -1011,20 +1072,21 @@ does_tile_render_trenches :: (tile: *Tile) -> bool {
 
 does_tile_type_render_trenches :: (tile_type: TileType) -> bool {
     if #complete tile_type == {
-        case .UNTOUCHED_DIRT; return false;
-        case .TOUCHED_DIRT;   return false;
-        case .IRON;           return false;
+        case .UNTOUCHED_DIRT;  return false;
+        case .TOUCHED_DIRT;    return false;
+        case .IRON;            return false;
         
-        case .WATER_STILL;    return true;
-        case .WATER_FLOWING;  return true;
-        case .LAVA_STILL;     return true;
-        case .LAVA_FLOWING;   return true;
-        case .OBSIDIAN;       return true;
-        case .WALL;           return true;
-        case .HOLE;           return true;
-        case .MINED;          return true;
-        case .CAVE;           return true;
-        case .OUTPOST_FLOOR;  return true;
+        case .WATER_STILL;     return true;
+        case .WATER_FLOWING;   return true;
+        case .LAVA_STILL;      return true;
+        case .LAVA_FLOWING;    return true;
+        case .OBSIDIAN;        return true;
+        case .WALL;            return true;
+        case .HOLE;            return true;
+        case .MINED;           return true;
+        case .CAVE;            return true;
+        case .OUTPOST_FLOOR;   return true;
+        case .HOME_BASE_FLOOR; return true;
     }
 }
 
@@ -2974,7 +3036,8 @@ update_and_draw_frame_round :: () {
                             case .OBSIDIAN;
                             case .WALL;
                             case .HOLE;
-                            case .OUTPOST_FLOOR; // TODO: home base spreading, maybe?
+                            case .OUTPOST_FLOOR;
+                            case .HOME_BASE_FLOOR; // TODO: home base spreading
 
                             case .WATER_STILL; {
                                 inflict_non_dwarf_liquid_consequences(tile.id);
@@ -3308,6 +3371,9 @@ update_and_draw_frame_round :: () {
                                 case .OUTPOST_FLOOR; {
                                     DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTPOST_FLOOR_FAR_LOD, tile_dest, Vector2.{0,0}, 0.0, WHITE);
                                 }
+                                case .HOME_BASE_FLOOR; {
+                                    DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_FAR_LOD, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                }
                             }
                         }
                         // Normal / close distance
@@ -3439,6 +3505,55 @@ update_and_draw_frame_round :: () {
                                 case .OUTPOST_FLOOR; {
                                     DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTPOST_FLOOR, tile_dest, Vector2.{0,0}, 0.0, WHITE);
                                 }
+                                case .HOME_BASE_FLOOR; {
+                                    // First, draw a fully mined tile underneath
+                                    {
+                                        tile_column := tile.id % 3;
+    
+                                        source := Rectangle.{
+                                            xx (tile_column * TILEMAP_GENERAL_TILE_WIDTH),
+                                            1 * TILEMAP_GENERAL_TILE_HEIGHT,
+                                            TILEMAP_GENERAL_TILE_WIDTH,
+                                            TILEMAP_GENERAL_TILE_HEIGHT,
+                                        };
+
+                                        DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                    }
+
+                                    neighbor_tile_north := get_neighbor_tile_id_by_direction(tile.id, .NORTH);
+                                    neighbor_tile_south := get_neighbor_tile_id_by_direction(tile.id, .SOUTH);
+                                    neighbor_tile_east  := get_neighbor_tile_id_by_direction(tile.id, .EAST);
+                                    neighbor_tile_west  := get_neighbor_tile_id_by_direction(tile.id, .WEST);
+
+                                    is_home_base_floor_north := is_tile_home_base_floor(neighbor_tile_north);
+                                    is_home_base_floor_south := is_tile_home_base_floor(neighbor_tile_south);
+                                    is_home_base_floor_east  := is_tile_home_base_floor(neighbor_tile_east);
+                                    is_home_base_floor_west  := is_tile_home_base_floor(neighbor_tile_west);
+
+                                    // Center
+                                    if is_home_base_floor_north && is_home_base_floor_south && is_home_base_floor_east && is_home_base_floor_west {
+                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_CENTER, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                    }
+                                    // North west
+                                    else if is_home_base_floor_south && is_home_base_floor_east {
+                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_NORTH_WEST, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                    }
+                                    // North east
+                                    else if is_home_base_floor_south && is_home_base_floor_west {
+                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_NORTH_EAST, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                    }
+                                    // South west
+                                    else if is_home_base_floor_north && is_home_base_floor_east {
+                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_SOUTH_WEST, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                    }
+                                    // South east
+                                    else if is_home_base_floor_north && is_home_base_floor_west {
+                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_SOUTH_EAST, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                    }
+                                    else {
+                                        assert_soft(false, "Encountered a home base floor tile % with some strange neighbors: %, %, %, %", tile.id, is_home_base_floor_north, is_home_base_floor_south, is_home_base_floor_east, is_home_base_floor_west);
+                                    }   
+                                }
                             }
                         }
 
@@ -3526,6 +3641,7 @@ update_and_draw_frame_round :: () {
                             case .WALL;
                             case .HOLE;
                             case .OUTPOST_FLOOR;
+                            case .HOME_BASE_FLOOR;
                             case .IRON; {
                                 tile_dest := get_world_rect_from_pos(tile.pos);
                                 DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_IRON, tile_dest, Vector2.{0,0}, 0.0, WHITE);
@@ -6146,7 +6262,8 @@ create_outpost :: (pos: Vector2, is_home_base: bool) -> Outpost {
     for col: 0..4 {
         for row: 0..4 {
             tile_id := most_north_west_tile_id_to_carve_for_outpost + col + row * context.world_cols;
-            set_tile_as_type(xx tile_id, .OUTPOST_FLOOR, false, false);
+            tile_type : TileType = ifx is_home_base then .HOME_BASE_FLOOR else .OUTPOST_FLOOR;
+            set_tile_as_type(xx tile_id, tile_type, false, false);
         }
     }
 
@@ -6361,6 +6478,12 @@ is_tile_outpost_floor :: (tile_id: s32) -> bool {
     return tile.type == .OUTPOST_FLOOR;
 }
 
+is_tile_home_base_floor :: (tile_id: s32) -> bool {
+    tile := get_tile_by_id(tile_id);
+    if tile == null return false;
+    return tile.type == .HOME_BASE_FLOOR;
+}
+
 is_tile_dirt :: (tile_id: s32) -> bool {
     tile := get_tile_by_id(tile_id);
     if tile == null return true;
@@ -6418,23 +6541,6 @@ is_tile_alert_lava :: (tile_id: s32) -> bool {
 }
 
 // TODO: entity kind, probably
-is_tile_id_walkable :: (tile_id: s32) -> bool {
-    found_dwarf := table_contains(*tile_ids_to_dwarfs, tile_id);
-    if found_dwarf return false;
-
-    found_goblin := table_contains(*tile_ids_to_goblins, tile_id);
-    if found_goblin return false;
-
-    return (
-        is_tile_fully_mined(tile_id)   ||
-        is_tile_water_still(tile_id)   ||
-        is_tile_water_flowing(tile_id) ||
-        is_tile_lava_still(tile_id)    ||
-        is_tile_lava_flowing(tile_id)
-    );
-}
-
-// TODO: entity kind, probably
 is_tile_id_walkable_for_entity :: (tile_id: s32, entity_id: s32) -> bool {
     found_dwarf, dwarf := table_find(*tile_ids_to_dwarfs, tile_id);
     if found_dwarf && dwarf.id != entity_id return false;
@@ -6442,26 +6548,49 @@ is_tile_id_walkable_for_entity :: (tile_id: s32, entity_id: s32) -> bool {
     found_goblin, goblin := table_find(*tile_ids_to_goblins, tile_id);
     if found_goblin && goblin.id != entity_id return false;
 
-    return (
-        is_tile_outpost_floor(tile_id) ||
-        is_tile_fully_mined(tile_id)   ||
-        is_tile_water_still(tile_id)   ||
-        is_tile_water_flowing(tile_id) ||
-        is_tile_lava_still(tile_id)    ||
-        is_tile_lava_flowing(tile_id)
-    );
+    tile := get_tile_by_id(tile_id);
+    if tile == null return false;
+
+    if #complete tile.type == {
+        case .MINED;           return true;
+        case .WATER_STILL;     return true;
+        case .WATER_FLOWING;   return true;
+        case .LAVA_STILL;      return true;
+        case .LAVA_FLOWING;    return true;
+        case .OUTPOST_FLOOR;   return true;
+        case .HOME_BASE_FLOOR; return true; 
+
+        case .UNTOUCHED_DIRT;  return false;
+        case .TOUCHED_DIRT;    return false;
+        case .CAVE;            return false;
+        case .IRON;            return false;
+        case .OBSIDIAN;        return false;
+        case .WALL;            return false;
+        case .HOLE;            return false;
+    }
 }
 
 is_tile_mineable :: (tile_id: s32) -> bool {
-    return (
-        is_tile_dirt(tile_id) ||
-        is_tile_iron(tile_id) ||
-        is_tile_wall(tile_id)
-    );
-}
+    tile := get_tile_by_id(tile_id);
+    if tile == null return true; // Null tiles are untouched, which is mineable
 
-is_tile_id_walkable_or_mineable :: (tile_id: s32) -> bool {
-    return is_tile_id_walkable(tile_id) || is_tile_mineable(tile_id);
+    if #complete tile.type == {
+        case .UNTOUCHED_DIRT;  return true;
+        case .TOUCHED_DIRT;    return true;
+        case .IRON;            return true;
+        case .WALL;            return true;
+
+        case .MINED;           return false;
+        case .WATER_STILL;     return false;
+        case .WATER_FLOWING;   return false;
+        case .LAVA_STILL;      return false;
+        case .LAVA_FLOWING;    return false;
+        case .OUTPOST_FLOOR;   return false;
+        case .HOME_BASE_FLOOR; return false; 
+        case .CAVE;            return false;
+        case .OBSIDIAN;        return false;
+        case .HOLE;            return false;
+    }
 }
 
 is_tile_id_walkable_or_mineable_for_entity :: (tile_id: s32, entity_id: s32) -> bool {
@@ -6482,19 +6611,20 @@ get_neighbor_tile_ids_of_type :: (tile_id: s32, tile_type: TileType) -> [..] s32
 
         should_add_neighbor_to_list := false;
         if #complete tile_type == {
-            case .UNTOUCHED_DIRT; should_add_neighbor_to_list = is_tile_dirt(neighbor_id);
-            case .TOUCHED_DIRT;   should_add_neighbor_to_list = is_tile_dirt(neighbor_id);
-            case .MINED;          should_add_neighbor_to_list = is_tile_fully_mined(neighbor_id);
-            case .CAVE;           should_add_neighbor_to_list = is_tile_cave(neighbor_id);
-            case .WATER_STILL;    should_add_neighbor_to_list = is_tile_water_still(neighbor_id);
-            case .WATER_FLOWING;  should_add_neighbor_to_list = is_tile_water_flowing(neighbor_id);
-            case .LAVA_STILL;     should_add_neighbor_to_list = is_tile_lava_still(neighbor_id);
-            case .LAVA_FLOWING;   should_add_neighbor_to_list = is_tile_lava_flowing(neighbor_id);
-            case .IRON;           should_add_neighbor_to_list = is_tile_iron(neighbor_id);
-            case .OBSIDIAN;       should_add_neighbor_to_list = is_tile_obsidian(neighbor_id);
-            case .WALL;           should_add_neighbor_to_list = is_tile_wall(neighbor_id);
-            case .HOLE;           should_add_neighbor_to_list = is_tile_hole(neighbor_id);
-            case .OUTPOST_FLOOR;  should_add_neighbor_to_list = is_tile_outpost_floor(neighbor_id);
+            case .UNTOUCHED_DIRT;  should_add_neighbor_to_list = is_tile_dirt(neighbor_id);
+            case .TOUCHED_DIRT;    should_add_neighbor_to_list = is_tile_dirt(neighbor_id);
+            case .MINED;           should_add_neighbor_to_list = is_tile_fully_mined(neighbor_id);
+            case .CAVE;            should_add_neighbor_to_list = is_tile_cave(neighbor_id);
+            case .WATER_STILL;     should_add_neighbor_to_list = is_tile_water_still(neighbor_id);
+            case .WATER_FLOWING;   should_add_neighbor_to_list = is_tile_water_flowing(neighbor_id);
+            case .LAVA_STILL;      should_add_neighbor_to_list = is_tile_lava_still(neighbor_id);
+            case .LAVA_FLOWING;    should_add_neighbor_to_list = is_tile_lava_flowing(neighbor_id);
+            case .IRON;            should_add_neighbor_to_list = is_tile_iron(neighbor_id);
+            case .OBSIDIAN;        should_add_neighbor_to_list = is_tile_obsidian(neighbor_id);
+            case .WALL;            should_add_neighbor_to_list = is_tile_wall(neighbor_id);
+            case .HOLE;            should_add_neighbor_to_list = is_tile_hole(neighbor_id);
+            case .OUTPOST_FLOOR;   should_add_neighbor_to_list = is_tile_outpost_floor(neighbor_id);
+            case .HOME_BASE_FLOOR; should_add_neighbor_to_list = is_tile_home_base_floor(neighbor_id);
         }
 
         if should_add_neighbor_to_list array_add(*neighbor_tile_ids, neighbor_id);
@@ -7189,6 +7319,9 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
             update_trenches_if_necessary(tile_id);
         }
         case .OUTPOST_FLOOR; {
+            update_trenches_if_necessary(tile_id);
+        }
+        case .HOME_BASE_FLOOR; {
             update_trenches_if_necessary(tile_id);
         }
         case .OBSIDIAN;
