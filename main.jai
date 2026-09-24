@@ -3513,13 +3513,13 @@ update_and_draw_frame_round :: () {
 
                                 if tile_has_property(tile, .LAVA_FLOWING) {
                                     sprite_draw(
-                                        tile.animated_sprite,
-                                        tile.pos,
-                                        TILEMAP_GENERAL_WORLD_WIDTH,
-                                        TILEMAP_GENERAL_WORLD_HEIGHT,
-                                        TILEMAP_GENERAL_TILE_WIDTH,
-                                        TILEMAP_GENERAL_TILE_HEIGHT,
-                                        false,
+                                       tile.animated_sprite,
+                                       tile.pos,
+                                       TILEMAP_GENERAL_WORLD_WIDTH,
+                                       TILEMAP_GENERAL_WORLD_HEIGHT,
+                                       TILEMAP_GENERAL_TILE_WIDTH,
+                                       TILEMAP_GENERAL_TILE_HEIGHT,
+                                       false,
                                     );
                                 }
                             }
@@ -6469,6 +6469,7 @@ unset_tile_property :: (tile_id: s32, tile_property: TileProperty) -> tile_exist
 }
 
 set_tile_as_water_still :: (tile: *Tile) {
+    unset_tile_property(tile, .WATER_FLOWING);
     set_tile_property(tile, .WATER_STILL);
 
     tile.animated_sprite = AnimatedSprite.{
@@ -6493,20 +6494,18 @@ set_tile_as_water_still :: (tile_id: s32) {
 set_tile_as_water_flowing :: (tile: *Tile) {
     set_tile_property(tile, .WATER_FLOWING);
 
-    if tile_has_property(tile, TileProperty.WATER_FLOWING) {
-        tile.animated_sprite = AnimatedSprite.{
-            texture           = water_flowing_texture,
-            active            = true,
-            color             = WHITE,
-            first_frame       = 1,
-            frame_count       = WATER_FLOWING_FRAME_COUNT,
-            frame_duration_ms = WATER_FLOW_COOLDOWN_MS / WATER_FLOWING_FRAME_COUNT,
-            timer_ms          = 0,
-            loops             = true,
-        };
+    tile.animated_sprite = AnimatedSprite.{
+        texture           = water_flowing_texture,
+        active            = true,
+        color             = WHITE,
+        first_frame       = 1,
+        frame_count       = WATER_FLOWING_FRAME_COUNT,
+        frame_duration_ms = WATER_FLOW_COOLDOWN_MS / WATER_FLOWING_FRAME_COUNT,
+        timer_ms          = 0,
+        loops             = true,
+    };
 
-        try_to_add_warning_and_alert_markers(tile.id, .WATER);
-    }
+    try_to_add_warning_and_alert_markers(tile.id, .WATER);
 }
 
 set_tile_as_water_flowing :: (tile_id: s32) {
@@ -6515,6 +6514,7 @@ set_tile_as_water_flowing :: (tile_id: s32) {
 }
 
 set_tile_as_lava_still :: (tile: *Tile) {
+    unset_tile_property(tile, .LAVA_FLOWING);
     set_tile_property(tile, .LAVA_STILL);
     
     try_to_add_warning_and_alert_markers(tile.id, .LAVA);
@@ -7001,7 +7001,10 @@ try_to_set_cardinal_neighbors_as_flowing_tile_type :: (tile_id: s32, as_liquid: 
         }
 
         if is_tile_spreadable(neighbor_tile_id) {
-            set_tile_property(neighbor_tile_id, as_liquid);
+            if as_liquid == .WATER_STILL   then set_tile_as_water_still(neighbor_tile_id);
+            if as_liquid == .WATER_FLOWING then set_tile_as_water_flowing(neighbor_tile_id);
+            if as_liquid == .LAVA_STILL    then set_tile_as_lava_still(neighbor_tile_id);
+            if as_liquid == .LAVA_FLOWING  then set_tile_as_lava_flowing(neighbor_tile_id);
             directions_flowed[it_index] = true;
         }
     }
