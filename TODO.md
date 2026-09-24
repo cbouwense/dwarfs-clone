@@ -2,7 +2,7 @@
 # In progress
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- Make bases 3 x 3 tiles
+- Art: Outpost base sprites
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Bugs
@@ -46,8 +46,6 @@
 - Art: Iron ore sprite
 - Art: Obsidian sprite
 - Art: Dynamite sprite
-- Art: Home base sprite
-- Art: Outpost base sprites
 - Art: Treasure sprites
 - Art: Better lava sprites / animations
 - Art: Better water sprites / animations

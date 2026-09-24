@@ -378,7 +378,7 @@ TILEMAP_SOURCE_RECT_HOLE := Rectangle.{
     TILEMAP_GENERAL_TILE_HEIGHT,
 };
 
-HOME_BASE_FLOOR_CENTER_SPRITE_SOURCE_ROW :: 8.0;
+HOME_BASE_FLOOR_CENTER_SPRITE_SOURCE_ROW :: 7.0;
 HOME_BASE_FLOOR_CENTER_SPRITE_SOURCE_COL :: 6.0;
 
 TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_CENTER := Rectangle.{
@@ -388,8 +388,48 @@ TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_CENTER := Rectangle.{
     TILEMAP_GENERAL_TILE_HEIGHT,
 };
 
-HOME_BASE_FLOOR_NORTH_WEST_SPRITE_SOURCE_ROW :: 7.0;
-HOME_BASE_FLOOR_NORTH_WEST_SPRITE_SOURCE_COL :: 7.0;
+HOME_BASE_FLOOR_NORTH_SPRITE_SOURCE_ROW :: 6.0;
+HOME_BASE_FLOOR_NORTH_SPRITE_SOURCE_COL :: 6.0;
+
+TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_NORTH := Rectangle.{
+    HOME_BASE_FLOOR_NORTH_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
+    HOME_BASE_FLOOR_NORTH_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
+    TILEMAP_GENERAL_TILE_WIDTH,
+    TILEMAP_GENERAL_TILE_HEIGHT,
+};
+
+HOME_BASE_FLOOR_SOUTH_SPRITE_SOURCE_ROW :: 8.0;
+HOME_BASE_FLOOR_SOUTH_SPRITE_SOURCE_COL :: 6.0;
+
+TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_SOUTH := Rectangle.{
+    HOME_BASE_FLOOR_SOUTH_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
+    HOME_BASE_FLOOR_SOUTH_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
+    TILEMAP_GENERAL_TILE_WIDTH,
+    TILEMAP_GENERAL_TILE_HEIGHT,
+};
+
+HOME_BASE_FLOOR_EAST_SPRITE_SOURCE_ROW :: 7.0;
+HOME_BASE_FLOOR_EAST_SPRITE_SOURCE_COL :: 7.0;
+
+TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_EAST := Rectangle.{
+    HOME_BASE_FLOOR_EAST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
+    HOME_BASE_FLOOR_EAST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
+    TILEMAP_GENERAL_TILE_WIDTH,
+    TILEMAP_GENERAL_TILE_HEIGHT,
+};
+
+HOME_BASE_FLOOR_WEST_SPRITE_SOURCE_ROW :: 7.0;
+HOME_BASE_FLOOR_WEST_SPRITE_SOURCE_COL :: 5.0;
+
+TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_WEST := Rectangle.{
+    HOME_BASE_FLOOR_WEST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
+    HOME_BASE_FLOOR_WEST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
+    TILEMAP_GENERAL_TILE_WIDTH,
+    TILEMAP_GENERAL_TILE_HEIGHT,
+};
+
+HOME_BASE_FLOOR_NORTH_WEST_SPRITE_SOURCE_ROW :: 6.0;
+HOME_BASE_FLOOR_NORTH_WEST_SPRITE_SOURCE_COL :: 5.0;
 
 TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_NORTH_WEST := Rectangle.{
     HOME_BASE_FLOOR_NORTH_WEST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
@@ -398,8 +438,8 @@ TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_NORTH_WEST := Rectangle.{
     TILEMAP_GENERAL_TILE_HEIGHT,
 };
 
-HOME_BASE_FLOOR_NORTH_EAST_SPRITE_SOURCE_ROW :: 7.0;
-HOME_BASE_FLOOR_NORTH_EAST_SPRITE_SOURCE_COL :: 8.0;
+HOME_BASE_FLOOR_NORTH_EAST_SPRITE_SOURCE_ROW :: 6.0;
+HOME_BASE_FLOOR_NORTH_EAST_SPRITE_SOURCE_COL :: 7.0;
 
 TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_NORTH_EAST := Rectangle.{
     HOME_BASE_FLOOR_NORTH_EAST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
@@ -409,7 +449,7 @@ TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_NORTH_EAST := Rectangle.{
 };
 
 HOME_BASE_FLOOR_SOUTH_WEST_SPRITE_SOURCE_ROW :: 8.0;
-HOME_BASE_FLOOR_SOUTH_WEST_SPRITE_SOURCE_COL :: 7.0;
+HOME_BASE_FLOOR_SOUTH_WEST_SPRITE_SOURCE_COL :: 5.0;
 
 TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_SOUTH_WEST := Rectangle.{
     HOME_BASE_FLOOR_SOUTH_WEST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
@@ -419,7 +459,7 @@ TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_SOUTH_WEST := Rectangle.{
 };
 
 HOME_BASE_FLOOR_SOUTH_EAST_SPRITE_SOURCE_ROW :: 8.0;
-HOME_BASE_FLOOR_SOUTH_EAST_SPRITE_SOURCE_COL :: 8.0;
+HOME_BASE_FLOOR_SOUTH_EAST_SPRITE_SOURCE_COL :: 7.0;
 
 TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_SOUTH_EAST := Rectangle.{
     HOME_BASE_FLOOR_SOUTH_EAST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
@@ -458,8 +498,8 @@ TILEMAP_SOURCE_RECT_OUTPOST_FLOOR_FAR_LOD := Rectangle.{
     TILEMAP_GENERAL_TILE_HEIGHT,
 };
 
-HOME_BASE_FLOOR_SPRITE_SOURCE_ROW_FAR_LOD :: 6.0;
-HOME_BASE_FLOOR_SPRITE_SOURCE_COL_FAR_LOD :: 7.0;
+HOME_BASE_FLOOR_SPRITE_SOURCE_ROW_FAR_LOD :: 7.0;
+HOME_BASE_FLOOR_SPRITE_SOURCE_COL_FAR_LOD :: 8.0;
 
 TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_FAR_LOD := Rectangle.{
     HOME_BASE_FLOOR_SPRITE_SOURCE_COL_FAR_LOD * TILEMAP_GENERAL_TILE_WIDTH,
@@ -3534,6 +3574,22 @@ update_and_draw_frame_round :: () {
                                     if is_home_base_floor_north && is_home_base_floor_south && is_home_base_floor_east && is_home_base_floor_west {
                                         DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_CENTER, tile_dest, Vector2.{0,0}, 0.0, WHITE);
                                     }
+                                    // North
+                                    else if is_home_base_floor_south && is_home_base_floor_east && is_home_base_floor_west {
+                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_NORTH, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                    }
+                                    // South
+                                    else if is_home_base_floor_north && is_home_base_floor_east && is_home_base_floor_west {
+                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_SOUTH, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                    }
+                                    // East
+                                    else if is_home_base_floor_north && is_home_base_floor_south && is_home_base_floor_west {
+                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_EAST, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                    }
+                                    // West
+                                    else if is_home_base_floor_north && is_home_base_floor_south && is_home_base_floor_east {
+                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_WEST, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                    }
                                     // North west
                                     else if is_home_base_floor_south && is_home_base_floor_east {
                                         DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_NORTH_WEST, tile_dest, Vector2.{0,0}, 0.0, WHITE);
@@ -6285,7 +6341,7 @@ game_over_if_touching_home_base :: (tile_id: s32) {
     for outpost: outposts {
         if !outpost.is_home_base continue;
 
-        home_base_rect := Rectangle.{ outpost.pos.x, outpost.pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT };
+        home_base_rect := Rectangle.{ outpost.pos.x, outpost.pos.y, TILEMAP_GENERAL_WORLD_WIDTH * 3, TILEMAP_GENERAL_WORLD_HEIGHT * 3 };
         if CheckCollisionRecs(home_base_rect, kill_rect) {
             context.metagame.state = .GAME_OVER;
         }
@@ -6898,17 +6954,39 @@ try_to_encase_tiles :: (starting_tile_id: s32) {
     }
 }
 
+is_tile_spreadable :: (tile_id: s32) -> bool {
+    tile := get_tile_by_id(tile_id);
+    if tile == null return false;
+    
+    if #complete tile.type == {
+        case .MINED;           return true;
+        case .OUTPOST_FLOOR;   return true;
+        case .HOME_BASE_FLOOR; return true;
+
+        case .UNTOUCHED_DIRT;  return false;
+        case .TOUCHED_DIRT;    return false;
+        case .CAVE;            return false;
+        case .WATER_STILL;     return false;
+        case .WATER_FLOWING;   return false;
+        case .LAVA_STILL;      return false;
+        case .LAVA_FLOWING;    return false;
+        case .IRON;            return false;
+        case .OBSIDIAN;        return false;
+        case .WALL;            return false;
+        case .HOLE;            return false;
+    }
+}
+
 are_all_neighbors_unable_to_be_spread_to :: (tile_id: s32) -> bool {
     north_tile_id : s32 = tile_id - xx context.world_rows;
     south_tile_id : s32 = tile_id + xx context.world_rows;
     east_tile_id  : s32 = tile_id + 1;
     west_tile_id  : s32 = tile_id - 1;
 
-    // "Walkable" means "mined and not liquid". "Mineable" means dirt, iron, or wall.
-    is_neighbor_north_spreadable := is_tile_fully_mined(north_tile_id);
-    is_neighbor_south_spreadable := is_tile_fully_mined(south_tile_id);
-    is_neighbor_east_spreadable  := is_tile_fully_mined(east_tile_id);
-    is_neighbor_west_spreadable  := is_tile_fully_mined(west_tile_id);
+    is_neighbor_north_spreadable := is_tile_spreadable(north_tile_id);
+    is_neighbor_south_spreadable := is_tile_spreadable(south_tile_id);
+    is_neighbor_east_spreadable  := is_tile_spreadable(east_tile_id);
+    is_neighbor_west_spreadable  := is_tile_spreadable(west_tile_id);
 
     return (
         !is_neighbor_north_spreadable &&
@@ -6922,47 +7000,46 @@ try_to_set_cardinal_neighbors_as_flowing_tile_type :: (tile_id: s32, as_type: Ti
     directions_flowed := bool.[false, false, false, false];
 
     for DIRECTIONS_CARDINAL {
-        neighbor_id := get_neighbor_tile_id_by_direction(tile_id, it);
-
-        // TODO: this is kind of terrible because if/when I add new things, I'm going to have to remember
-        // to add them here. Would be good to have this automated somehow.
-
-        tile_is_still_water := is_tile_water_still(neighbor_id);
-        if tile_is_still_water continue;
-
-        tile_is_still_lava := is_tile_lava_still(neighbor_id);
-        if tile_is_still_lava continue;
-
-        tile_is_flowing_water := is_tile_water_flowing(neighbor_id);
-
-        tile_is_flowing_lava := is_tile_lava_flowing(neighbor_id);
-
-        tile_is_iron := is_tile_iron(neighbor_id);
-        if tile_is_iron continue;
-
-        tile_is_obsidian := is_tile_obsidian(neighbor_id);
-        if tile_is_obsidian continue;
+        neighbor_tile_id := get_neighbor_tile_id_by_direction(tile_id, it);
+        neighbor_tile    := get_tile_by_id(neighbor_tile_id);
+        if neighbor_tile == null continue;
 
         // If the tile is a wall and you are lava, damage it a bit.
         as_lava := as_type == .LAVA_STILL || as_type == .LAVA_FLOWING;
 
-        if is_tile_wall(neighbor_id) && as_lava {
-            new_health : s16 = xx (get_tile_by_id(neighbor_id).health - LAVA_DAMAGE_PER_HIT);
+        if is_tile_wall(neighbor_tile_id) && as_lava {
+            new_health : s16 = xx (get_tile_by_id(neighbor_tile_id).health - LAVA_DAMAGE_PER_HIT);
 
             if new_health <= 0 {
-                set_tile_as_type(neighbor_id, .MINED, false, false);
+                set_tile_as_type(neighbor_tile_id, .MINED, false, false);
             } else {
-                get_tile_by_id(neighbor_id).health = new_health;
+                get_tile_by_id(neighbor_tile_id).health = new_health;
             }
 
             continue;
         }
 
-        tile_is_empty := is_tile_fully_mined(neighbor_id);
-        if !tile_is_empty continue;
+        if #complete neighbor_tile.type == {
+            // Have the liquid flow onto these tile types.
+            case .MINED;           #through;
+            case .OUTPOST_FLOOR;   #through;
+            case .HOME_BASE_FLOOR;
+                set_tile_as_type(neighbor_tile_id, as_type, false, false);
+                directions_flowed[it_index] = true;
 
-        set_tile_as_type(neighbor_id, as_type, false, false);
-        directions_flowed[it_index] = true;
+            // Liquids don't flow onto these, so there's nothing to do.
+            case .UNTOUCHED_DIRT;
+            case .TOUCHED_DIRT;
+            case .CAVE;
+            case .WATER_STILL;
+            case .WATER_FLOWING;
+            case .LAVA_STILL;
+            case .LAVA_FLOWING;
+            case .IRON;
+            case .OBSIDIAN;
+            case .WALL;
+            case .HOLE; // TODO: Might need a lava-filled hole tile type 
+        }
     }
 
     return directions_flowed;
