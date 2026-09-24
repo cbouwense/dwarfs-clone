@@ -2,7 +2,7 @@
 # In progress
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- Art: Outpost base sprites
+- Control mode placement validity / onion skin
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Bugs
@@ -21,7 +21,6 @@
 - Death particles, aggro particles, and hit star particles need TLC
 - In addition to control modes, allow users to hold down controls
 - Death poof particles
-- Control mode placement validity / onion skin
 - outpost canons
 - outpost spawn diggers control
 - outpost spawn warriors control
