@@ -3082,8 +3082,7 @@ update_and_draw_frame_round :: () {
                                 try_to_set_cardinal_neighbors_as_flowing_tile_type(tile.id, .WATER_FLOWING);
 
                                 if are_all_neighbors_unable_to_be_spread_to(tile.id) {
-                                    unset_tile_property(tile, .WATER_FLOWING);
-                                    set_tile_property(tile, .WATER_STILL);
+                                    set_tile_as_water_still(tile);
                                 }
                             }
                         }
@@ -3109,8 +3108,7 @@ update_and_draw_frame_round :: () {
                                 try_to_set_cardinal_neighbors_as_flowing_tile_type(tile.id, .LAVA_FLOWING);
 
                                 if are_all_neighbors_unable_to_be_spread_to(tile.id) {
-                                    unset_tile_property(tile, .LAVA_FLOWING);
-                                    set_tile_property(tile, .LAVA_STILL);
+                                    set_tile_as_lava_still(tile);
                                 }
                             }
                         }
@@ -6470,6 +6468,85 @@ unset_tile_property :: (tile_id: s32, tile_property: TileProperty) -> tile_exist
     return true;
 }
 
+set_tile_as_water_still :: (tile: *Tile) {
+    set_tile_property(tile, .WATER_STILL);
+
+    tile.animated_sprite = AnimatedSprite.{
+        texture           = water_still_texture,
+        active            = true,
+        color             = WHITE,
+        first_frame       = 1, 
+        frame_count       = WATER_STILL_FRAME_COUNT,
+        frame_duration_ms = WATER_STILL_FRAME_DURATION_MS,
+        timer_ms          = WATER_STILL_FRAME_COUNT * WATER_STILL_FRAME_DURATION_MS, // Start at the end so it resets immediately so water starts flowing instantly
+        loops             = true,
+    };
+
+    try_to_add_warning_and_alert_markers(tile.id, .WATER);
+}
+
+set_tile_as_water_still :: (tile_id: s32) {
+    tile := get_tile_by_id(tile_id);
+    if tile != null then set_tile_as_water_still(tile);
+}
+
+set_tile_as_water_flowing :: (tile: *Tile) {
+    set_tile_property(tile, .WATER_FLOWING);
+
+    if tile_has_property(tile, TileProperty.WATER_FLOWING) {
+        tile.animated_sprite = AnimatedSprite.{
+            texture           = water_flowing_texture,
+            active            = true,
+            color             = WHITE,
+            first_frame       = 1,
+            frame_count       = WATER_FLOWING_FRAME_COUNT,
+            frame_duration_ms = WATER_FLOW_COOLDOWN_MS / WATER_FLOWING_FRAME_COUNT,
+            timer_ms          = 0,
+            loops             = true,
+        };
+
+        try_to_add_warning_and_alert_markers(tile.id, .WATER);
+    }
+}
+
+set_tile_as_water_flowing :: (tile_id: s32) {
+    tile := get_tile_by_id(tile_id);
+    if tile != null then set_tile_as_water_flowing(tile);
+}
+
+set_tile_as_lava_still :: (tile: *Tile) {
+    set_tile_property(tile, .LAVA_STILL);
+    
+    try_to_add_warning_and_alert_markers(tile.id, .LAVA);
+}
+
+set_tile_as_lava_still :: (tile_id: s32) {
+    tile := get_tile_by_id(tile_id);
+    if tile != null then set_tile_as_lava_still(tile);
+}
+
+set_tile_as_lava_flowing :: (tile: *Tile) {
+    set_tile_property(tile, .LAVA_FLOWING);
+
+    tile.animated_sprite = AnimatedSprite.{
+        texture           = lava_flowing_texture,
+        active            = true,
+        color             = WHITE,
+        first_frame       = 1,
+        frame_count       = LAVA_FLOWING_FRAME_COUNT,
+        frame_duration_ms = LAVA_FLOW_COOLDOWN_MS / LAVA_FLOWING_FRAME_COUNT,
+        timer_ms          = 0,
+        loops             = true,
+    };
+
+    try_to_add_warning_and_alert_markers(tile.id, .LAVA);
+}
+
+set_tile_as_lava_flowing :: (tile_id: s32) {
+    tile := get_tile_by_id(tile_id);
+    if tile != null then set_tile_as_lava_flowing(tile);
+}
+
 is_tile_water_still :: (tile_id: s32) -> bool {
     return tile_has_property(tile_id, .WATER_STILL);
 }
@@ -6831,8 +6908,7 @@ try_to_encase_tiles :: (starting_tile_id: s32) {
 
         if is_tile_water_flowing(id) {
             found_liquid = true;
-            unset_tile_property(id, .WATER_FLOWING);
-            set_tile_property(id, .WATER_STILL);
+            set_tile_as_water_still(id);
         }
 
         if is_tile_lava_still(id) {
@@ -6841,8 +6917,7 @@ try_to_encase_tiles :: (starting_tile_id: s32) {
 
         if is_tile_lava_flowing(id) {
             found_liquid = true;
-            unset_tile_property(id, .LAVA_FLOWING);
-            set_tile_property(id, .LAVA_STILL);
+            set_tile_as_lava_still(id);
         }
 
         // Mark it as processed and encased
@@ -7121,9 +7196,9 @@ set_cave_as_mined :: (tile_id: s32, cave_type: CaveType, grant_points: bool, gra
         case .EMPTY;
             
         case .WATER;
-            set_tile_property(tile_id, .WATER_STILL);
+            set_tile_as_water_still(tile_id);
         case .LAVA;
-            set_tile_property(tile_id, .LAVA_STILL);
+            set_tile_as_lava_still(tile_id);
         case .TREASURE;
             rng := random_get_within_range(0, 1);
             is_treasure := rng <= 0.333;
@@ -7237,55 +7312,6 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
         case .HOLE;
         case .IRON;
         case .TOUCHED_DIRT;
-    }
-
-    if tile_has_property(tile, TileProperty.WATER_STILL) {
-        get_tile_by_id(tile_id).animated_sprite = AnimatedSprite.{
-            texture           = water_still_texture,
-            active            = true,
-            color             = WHITE,
-            first_frame       = 1, 
-            frame_count       = WATER_STILL_FRAME_COUNT,
-            frame_duration_ms = WATER_STILL_FRAME_DURATION_MS,
-            timer_ms          = WATER_STILL_FRAME_COUNT * WATER_STILL_FRAME_DURATION_MS, // Start at the end so it resets immediately so water starts flowing instantly
-            loops             = true,
-        };
-
-        try_to_add_warning_and_alert_markers(tile_id, .WATER);
-    }
-
-    if tile_has_property(tile, TileProperty.WATER_FLOWING) {
-        get_tile_by_id(tile_id).animated_sprite = AnimatedSprite.{
-            texture           = water_flowing_texture,
-            active            = true,
-            color             = WHITE,
-            first_frame       = 1,
-            frame_count       = WATER_FLOWING_FRAME_COUNT,
-            frame_duration_ms = WATER_FLOW_COOLDOWN_MS / WATER_FLOWING_FRAME_COUNT,
-            timer_ms          = 0,
-            loops             = true,
-        };
-
-        try_to_add_warning_and_alert_markers(tile_id, .WATER);
-    }
-
-    if tile_has_property(tile, TileProperty.LAVA_STILL) {
-        try_to_add_warning_and_alert_markers(tile_id, .LAVA);
-    }
-
-    if tile_has_property(tile, TileProperty.LAVA_FLOWING) {
-        get_tile_by_id(tile_id).animated_sprite = AnimatedSprite.{
-            texture           = lava_flowing_texture,
-            active            = true,
-            color             = WHITE,
-            first_frame       = 1,
-            frame_count       = LAVA_FLOWING_FRAME_COUNT,
-            frame_duration_ms = LAVA_FLOW_COOLDOWN_MS / LAVA_FLOWING_FRAME_COUNT,
-            timer_ms          = 0,
-            loops             = true,
-        };
-
-        try_to_add_warning_and_alert_markers(tile_id, .LAVA);
     }
 }
 
