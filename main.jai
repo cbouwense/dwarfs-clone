@@ -252,6 +252,8 @@ TILE_WIDTH_F  :: cast(float32) TILEMAP_GENERAL_WORLD_WIDTH;
 TILE_HEIGHT_F :: cast(float32) TILEMAP_GENERAL_WORLD_HEIGHT;
 
 TRANSPARENT_WHITE :: Color.{ 255, 255, 255, 100 };
+TRANSPARENT_RED   :: Color.{ 255,   0,   0, 100 };
+TRANSPARENT_GREEN :: Color.{   0, 255,   0, 100 };
 
 WATER_FLOW_COOLDOWN_MS :: 1000;
 LAVA_FLOW_COOLDOWN_MS  :: 2500;
@@ -2205,17 +2207,20 @@ update_and_draw_frame_round :: () {
                                 tile_is_mined   := is_tile_fully_mined(tile_id);
                                 tile_is_encased := is_tile_encased(tile_id);
 
+                                // Add outpost
                                 if context.metagame.debug_mode || (tile_is_mined && !tile_is_encased) {
-                                    // Add outpost.
-                                    outpost_rect := get_tile_rect_that_pos_is_within(get_world_width(), get_world_height(), TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, context.mouse_pos_in_world);
-                                    outpost_pos  := Vector2.{ outpost_rect.x, outpost_rect.y };
-                                    outpost_tile_id := get_tile_id_by_pos(outpost_pos);
+                                    // The position of the outpost shown to the player is with its entrance where their mouse is.
+                                    // In other words, not the top left of the outpost, so we need to shift the position up and
+                                    // to the right a bit.
+                                    outpost_step_1_tile_id    := get_neighbor_tile_id_by_direction(tile_id, .NORTH_WEST);
+                                    top_left_tile_id_outpost  := get_neighbor_tile_id_by_direction(outpost_step_1_tile_id, .NORTH);
+                                    top_left_tile_pos_outpost := get_tile_pos_by_id(top_left_tile_id_outpost); 
 
-                                    create_outpost(outpost_pos, false);
+                                    create_outpost(top_left_tile_pos_outpost, false);
 
                                     // Debit the gold cost.
                                     if !context.metagame.debug_mode context.game_state.gold -= GOLD_COST_OUTPOST;
-                                    create_gold_particle(outpost_pos, -1 * GOLD_COST_OUTPOST, false);
+                                    create_gold_particle(top_left_tile_pos_outpost, -1 * GOLD_COST_OUTPOST, false);
 
                                     // Reset control mode.
                                     context.game_state.control_mode = .NORMAL;
@@ -3654,7 +3659,7 @@ update_and_draw_frame_round :: () {
             // This has to be drawn separately from the unit drawing loops like "draw_dwarves" and "draw_goblins" because of
             // z-ordering. Namely, the rings must be below all units to look correct. Even though logically units can only be
             // on one tile at a time, their sprites do overlap while going between tiles.
-            draw_dropshadows :: () {
+            draw_unit_rings :: () {
                 source_rect: Rectangle;
 
                 for dwarf: dwarves_to_draw_this_frame {
@@ -3713,7 +3718,7 @@ update_and_draw_frame_round :: () {
                     }
                 }
             }
-            draw_dropshadows();
+            draw_unit_rings();
 
             // Draw dwarves
             draw_dwarves :: () {
@@ -3778,10 +3783,49 @@ update_and_draw_frame_round :: () {
             }
             draw_goblins();
 
-            // Draw hovered tile
-            draw_hovered_tile :: () {
+            // Draw hovered tile / onion skins
+            draw_hovered_tile_or_onion_skins :: () {
                 hovered_tile_rect := get_tile_rect_that_pos_is_within(get_world_width(), get_world_height(), TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, context.mouse_pos_in_world);
-                DrawRectangleRec(hovered_tile_rect, TRANSPARENT_WHITE);
+
+                if context.game_state.control_mode == .ADD_OUTPOST {
+                    // If we're adding an outpost, we want to draw a 7 x 7 grid of transparent squares that indicate
+                    // the validity of the placement of the outpost. The position of the mouse goes one below the center
+                    // of the sprite, which ultimately means that we need to go up four and to the left three to draw
+                    // the onion skin.
+                    hovered_tile_id := get_tile_id_by_pos(context.mouse_pos_in_world);
+                    step_1_tile_id := get_neighbor_tile_id_by_direction(hovered_tile_id, .NORTH_WEST);
+                    step_2_tile_id := get_neighbor_tile_id_by_direction(step_1_tile_id, .NORTH_WEST);
+                    step_3_tile_id := get_neighbor_tile_id_by_direction(step_2_tile_id, .NORTH_WEST);
+                    top_left_tile_id_of_onion_skin  := get_neighbor_tile_id_by_direction(step_3_tile_id, .NORTH);
+                    top_left_tile_pos_of_onion_skin := get_tile_pos_by_id(top_left_tile_id_of_onion_skin); 
+
+                    onion_skin_rect := Rectangle.{
+                        top_left_tile_pos_of_onion_skin.x,
+                        top_left_tile_pos_of_onion_skin.y,
+                        TILEMAP_GENERAL_WORLD_WIDTH  * 7,
+                        TILEMAP_GENERAL_WORLD_HEIGHT * 7,
+                    };
+
+                    // TODO: check validity of placement, and change color based on that.
+                    DrawRectangleRec(onion_skin_rect, TRANSPARENT_GREEN);
+
+                    // Now that the onion skin is drawn, we want to also draw the outpost.
+                    outpost_step_1_tile_id := get_neighbor_tile_id_by_direction(hovered_tile_id, .NORTH_WEST);
+                    top_left_tile_id_outpost := get_neighbor_tile_id_by_direction(outpost_step_1_tile_id, .NORTH);
+                    top_left_tile_pos_outpost := get_tile_pos_by_id(top_left_tile_id_outpost); 
+
+                    outpost_dest_rect := Rectangle.{
+                        top_left_tile_pos_outpost.x,
+                        top_left_tile_pos_outpost.y,
+                        TILEMAP_GENERAL_WORLD_WIDTH  * 3,
+                        TILEMAP_GENERAL_WORLD_HEIGHT * 3,
+                    };
+
+                    DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTPOST, outpost_dest_rect, Vector2.{0,0}, 0.0, TRANSPARENT_WHITE);
+                } else {
+                    DrawRectangleRec(hovered_tile_rect, TRANSPARENT_WHITE);
+                }
+
                 if context.metagame.debug_mode {
                     found_tile, tile_id := find_tile_id_by_pos(get_rect_pos(hovered_tile_rect));
                     if found_tile {
@@ -3800,8 +3844,7 @@ update_and_draw_frame_round :: () {
                     }
                 }
             }
-            draw_hovered_tile();
-
+            draw_hovered_tile_or_onion_skins();
 
             // Draw particles
             draw_particles :: () {

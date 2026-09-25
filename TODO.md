@@ -2,7 +2,7 @@
 # In progress
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- Control mode placement validity / onion skin
+- Control mode placement validity
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Bugs
@@ -16,10 +16,10 @@
 # Core gameplay
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+- In addition to control modes, allow users to hold down controls
 - Don't let outposts be created on top of caves
 - Dwarf warrior patrolling
 - Death particles, aggro particles, and hit star particles need TLC
-- In addition to control modes, allow users to hold down controls
 - Death poof particles
 - outpost canons
 - outpost spawn diggers control
