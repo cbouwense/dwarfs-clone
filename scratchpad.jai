@@ -4,7 +4,16 @@
 #import "Program_Print";
 #import "String";
 
-main :: () {
-    for 1..5 print("%", it_index);
+fn :: () {
+    should_stop := false;
+    for 0..5 {
+        for 0..5 {
+            for 6..10 {
+                should_stop := some_func();
+                if should_stop break;
+            }
+            if should_stop break;
+        }
+        if should_stop break;
+    }
 }
-get_rect_center(get_world_rect_from_pos

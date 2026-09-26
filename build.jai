@@ -1,4 +1,4 @@
-
+#import "ctags";
 #import "Basic";
 Compiler :: #import "Compiler";
 Metaprogram_Plugin :: Compiler.Metaprogram_Plugin;
@@ -56,11 +56,19 @@ create_workspace :: (opts: Compiler.Build_Options, workspace_name := "") -> Work
 
     Compiler.add_build_file("main.jai", ws);
 
+    // Set up ctags options
+	ctags: CTags;
+	ctags.base_path = get_working_directory();
+	defer reset(*ctags);
+
     while true {
         message := Compiler.compiler_wait_for_message();
 
         // Forward the messages to our plugins
         for plugins it.message(it, message);
+
+        // Forward message to ctags generator
+        process_message(*ctags, message);
 
         if message.kind == .COMPLETE break;
 

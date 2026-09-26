@@ -1,0 +1,9 @@
+{
+    "compiler_path": "C:/ThirdParty/jai/bin/",
+    "roots": [
+        "main.jai"
+    ],
+    "local_modules": [
+        "modules"
+    ]
+}

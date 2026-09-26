@@ -1030,6 +1030,110 @@ main :: () {
 
 // Functions
 
+is_tile_valid_for_outpost_placement_center :: (tile_id: s32) -> bool {
+    tile := get_tile_by_id(tile_id);
+    if tile == null return false; // untouched dirt is invalid
+    if tile.type != .MINED return false;
+
+    // TODO: I wonder if I could make this #complete somehow
+    if tile_has_property(tile, .ENCASED)         return false;
+    if tile_has_property(tile, .OUTPOST_FLOOR)   return false;
+    if tile_has_property(tile, .HOME_BASE_FLOOR) return false;
+    if tile_has_property(tile, .WATER_STILL)     return false;
+    if tile_has_property(tile, .WATER_FLOWING)   return false;
+    if tile_has_property(tile, .LAVA_STILL)      return false;
+    if tile_has_property(tile, .LAVA_FLOWING)    return false;
+
+    return true;
+}
+
+is_tile_valid_for_outpost_placement_non_center_non_outer :: (tile_id: s32) -> bool {
+    tile := get_tile_by_id(tile_id);
+    if tile == null return true; // Untouched dirt is fine for the outpost / outpost floor to be carved into.
+
+    if #complete tile.type == {
+        case .MINED; {
+            if tile_has_property(tile, .ENCASED)         return false;
+            if tile_has_property(tile, .OUTPOST_FLOOR)   return false;
+            if tile_has_property(tile, .HOME_BASE_FLOOR) return false;
+            if tile_has_property(tile, .WATER_STILL)     return false;
+            if tile_has_property(tile, .WATER_FLOWING)   return false;
+            if tile_has_property(tile, .LAVA_STILL)      return false;
+            if tile_has_property(tile, .LAVA_FLOWING)    return false;
+        }
+
+        case .UNTOUCHED_DIRT; return true;
+        case .TOUCHED_DIRT;   return true;
+        case .IRON;           return true;
+        case .WALL;           return true;
+        
+        case .HOLE;     return false;
+        case .OBSIDIAN; return false;
+        case .CAVE;     return false; // Outposts cannot be used to carve out caves.
+    }
+
+    return true;
+}
+
+is_tile_valid_for_outpost_placement_outer :: (tile_id: s32) -> bool {
+    tile := get_tile_by_id(tile_id);
+    if tile == null return true; // Untouched dirt is fine for the outpost / outpost floor to be carved into.
+
+    if #complete tile.type == {
+        case .UNTOUCHED_DIRT; return true;
+        case .TOUCHED_DIRT;   return true;
+        case .MINED;          return true;
+        case .IRON;           return true;
+        case .WALL;           return true;
+        case .HOLE;           return true;
+        case .OBSIDIAN;       return true;
+
+        case .CAVE; return false; // Outposts cannot be used to carve out caves.
+    }
+
+    if tile_has_property(tile, .ENCASED)         return false;
+    if tile_has_property(tile, .OUTPOST_FLOOR)   return false;
+    if tile_has_property(tile, .HOME_BASE_FLOOR) return false;
+
+    return true;
+}
+
+get_outpost_placement :: (hovered_tile_id: s32) -> (is_valid_placement: bool, top_left_tile_id: s32) {
+    // If we're adding an outpost, we want to draw a 7 x 7 grid of transparent squares that indicate
+    // the validity of the placement of the outpost. The position of the mouse goes one below the center
+    // of the sprite, which ultimately means that we need to go up four and to the left three to draw
+    // the onion skin.
+    step_1_tile_id   := get_neighbor_tile_id_by_direction(hovered_tile_id, .NORTH_WEST);
+    step_2_tile_id   := get_neighbor_tile_id_by_direction(step_1_tile_id,  .NORTH_WEST);
+    step_3_tile_id   := get_neighbor_tile_id_by_direction(step_2_tile_id,  .NORTH_WEST);
+    top_left_tile_id := get_neighbor_tile_id_by_direction(step_3_tile_id,  .NORTH);
+    
+    // This isn't the end of the story for is_valid_placement, we try to disprove that this
+    // is a valid placement below.
+    is_valid_placement := is_tile_valid_for_outpost_placement_center(hovered_tile_id);
+
+    if is_valid_placement {
+        for col: 0..6 {
+            for row: 0..6 {
+                tile_id : s32 = xx (top_left_tile_id + col + row * context.world_cols);
+
+                if col == 0 || col == 6 || row == 0 || row == 6 {
+                    is_valid_placement = is_tile_valid_for_outpost_placement_outer(tile_id);
+                } else {
+                    is_valid_placement = is_tile_valid_for_outpost_placement_non_center_non_outer(tile_id);
+                }
+
+                if !is_valid_placement return false, top_left_tile_id;
+            }
+
+            // TODO: this duplication sucks
+            if !is_valid_placement return false, top_left_tile_id;
+        }
+    }
+
+    return is_valid_placement, top_left_tile_id;
+}
+
 get_entity_tile_id :: (entity: Entity) -> s32 {
     entity_kind := get_entity_kind_from_type(entity.type);
     if #complete entity_kind == {
@@ -2200,19 +2304,16 @@ update_and_draw_frame_round :: () {
                             }
                         }
                     case .ADD_OUTPOST;
-                        // TODO: check if placement is valid
                         if context.game_state.controls_state_this_frame.select_is_pressed_once {
                             if context.metagame.debug_mode || context.game_state.gold >= GOLD_COST_OUTPOST {
-                                tile_id         := get_tile_id_by_pos(context.mouse_pos_in_world);
-                                tile_is_mined   := is_tile_fully_mined(tile_id);
-                                tile_is_encased := is_tile_encased(tile_id);
-
-                                // Add outpost
-                                if context.metagame.debug_mode || (tile_is_mined && !tile_is_encased) {
+                                hovered_tile_id := get_tile_id_by_pos(context.mouse_pos_in_world);
+                                is_valid_placement, top_left_tile_id := get_outpost_placement(hovered_tile_id);
+                            
+                                if is_valid_placement {
                                     // The position of the outpost shown to the player is with its entrance where their mouse is.
                                     // In other words, not the top left of the outpost, so we need to shift the position up and
                                     // to the right a bit.
-                                    outpost_step_1_tile_id    := get_neighbor_tile_id_by_direction(tile_id, .NORTH_WEST);
+                                    outpost_step_1_tile_id    := get_neighbor_tile_id_by_direction(hovered_tile_id, .NORTH_WEST);
                                     top_left_tile_id_outpost  := get_neighbor_tile_id_by_direction(outpost_step_1_tile_id, .NORTH);
                                     top_left_tile_pos_outpost := get_tile_pos_by_id(top_left_tile_id_outpost); 
 
@@ -2221,7 +2322,7 @@ update_and_draw_frame_round :: () {
                                     // Debit the gold cost.
                                     if !context.metagame.debug_mode context.game_state.gold -= GOLD_COST_OUTPOST;
                                     create_gold_particle(top_left_tile_pos_outpost, -1 * GOLD_COST_OUTPOST, false);
-
+ 
                                     // Reset control mode.
                                     context.game_state.control_mode = .NORMAL;
                                 }
@@ -3786,18 +3887,11 @@ update_and_draw_frame_round :: () {
             // Draw hovered tile / onion skins
             draw_hovered_tile_or_onion_skins :: () {
                 hovered_tile_rect := get_tile_rect_that_pos_is_within(get_world_width(), get_world_height(), TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, context.mouse_pos_in_world);
+                hovered_tile_id := get_tile_id_by_pos(get_rect_pos(hovered_tile_rect));
 
                 if context.game_state.control_mode == .ADD_OUTPOST {
-                    // If we're adding an outpost, we want to draw a 7 x 7 grid of transparent squares that indicate
-                    // the validity of the placement of the outpost. The position of the mouse goes one below the center
-                    // of the sprite, which ultimately means that we need to go up four and to the left three to draw
-                    // the onion skin.
-                    hovered_tile_id := get_tile_id_by_pos(context.mouse_pos_in_world);
-                    step_1_tile_id := get_neighbor_tile_id_by_direction(hovered_tile_id, .NORTH_WEST);
-                    step_2_tile_id := get_neighbor_tile_id_by_direction(step_1_tile_id, .NORTH_WEST);
-                    step_3_tile_id := get_neighbor_tile_id_by_direction(step_2_tile_id, .NORTH_WEST);
-                    top_left_tile_id_of_onion_skin  := get_neighbor_tile_id_by_direction(step_3_tile_id, .NORTH);
-                    top_left_tile_pos_of_onion_skin := get_tile_pos_by_id(top_left_tile_id_of_onion_skin); 
+                    is_valid_placement, top_left_tile_id := get_outpost_placement(hovered_tile_id);
+                    top_left_tile_pos_of_onion_skin := get_tile_pos_by_id(top_left_tile_id);
 
                     onion_skin_rect := Rectangle.{
                         top_left_tile_pos_of_onion_skin.x,
@@ -3806,8 +3900,7 @@ update_and_draw_frame_round :: () {
                         TILEMAP_GENERAL_WORLD_HEIGHT * 7,
                     };
 
-                    // TODO: check validity of placement, and change color based on that.
-                    DrawRectangleRec(onion_skin_rect, TRANSPARENT_GREEN);
+                    DrawRectangleRec(onion_skin_rect, ifx is_valid_placement then TRANSPARENT_GREEN else TRANSPARENT_RED);
 
                     // Now that the onion skin is drawn, we want to also draw the outpost.
                     outpost_step_1_tile_id := get_neighbor_tile_id_by_direction(hovered_tile_id, .NORTH_WEST);
@@ -6423,6 +6516,33 @@ get_tile_by_id :: (tile_id: s32) -> *Tile {
 }
 
 // TODO: rename these as "by id" or something
+is_tile_fully_mined :: (tile: Tile) -> bool {
+    return tile.type == .MINED;
+}
+
+is_tile_cave :: (tile: Tile) -> bool {
+    return tile.type == .CAVE;
+}
+
+is_tile_iron :: (tile: Tile) -> bool {
+    return tile.type == .IRON;
+}
+
+is_tile_obsidian :: (tile: Tile) -> bool {
+    return tile.type == .OBSIDIAN;
+}
+
+is_tile_wall :: (tile: Tile) -> bool {
+    return tile.type == .WALL;
+}
+
+is_tile_hole :: (tile: Tile) -> bool {
+    return tile.type == .HOLE;
+}
+
+is_tile_dirt :: (tile: Tile) -> bool {
+    return tile.type == .UNTOUCHED_DIRT || tile.type == .TOUCHED_DIRT;
+}
 
 is_tile_fully_mined :: (tile_id: s32) -> bool {
     tile := get_tile_by_id(tile_id);
