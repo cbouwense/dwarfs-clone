@@ -554,6 +554,26 @@ TILEMAP_SOURCE_RECT_DIRT := Rectangle.{
     TILEMAP_GENERAL_TILE_HEIGHT,
 };
 
+OUTLINE_SPRITE_SOURCE_ROW_1_BY_1 :: 0.0;
+OUTLINE_SPRITE_SOURCE_COL_1_BY_1 :: 10.0;
+
+TILEMAP_SOURCE_RECT_OUTLINE_1_BY_1 := Rectangle.{
+    OUTLINE_SPRITE_SOURCE_COL_1_BY_1 * TILEMAP_GENERAL_TILE_WIDTH,
+    OUTLINE_SPRITE_SOURCE_ROW_1_BY_1 * TILEMAP_GENERAL_TILE_HEIGHT,
+    TILEMAP_GENERAL_TILE_WIDTH,
+    TILEMAP_GENERAL_TILE_HEIGHT,
+};
+
+OUTLINE_SPRITE_SOURCE_ROW_3_BY_3 :: 1.0;
+OUTLINE_SPRITE_SOURCE_COL_3_BY_3 :: 10.0;
+
+TILEMAP_SOURCE_RECT_OUTLINE_3_BY_3 := Rectangle.{
+    OUTLINE_SPRITE_SOURCE_COL_3_BY_3 * TILEMAP_GENERAL_TILE_WIDTH,
+    OUTLINE_SPRITE_SOURCE_ROW_3_BY_3 * TILEMAP_GENERAL_TILE_HEIGHT,
+    TILEMAP_GENERAL_TILE_WIDTH * 3,
+    TILEMAP_GENERAL_TILE_HEIGHT * 3,
+};
+
 TILEMAP_DWARF_MINER_TILE_WIDTH     :: 96;
 TILEMAP_DWARF_MINER_TILE_HEIGHT    :: 64;
 TILEMAP_DWARF_MINER_TILE_PADDING_X :: 32;
@@ -1975,7 +1995,15 @@ update_and_draw_frame_round :: () {
         // PERF: caching this might not even be faster
         for *outpost: outposts {
             outpost_tile_id := get_entity_tile_id(outpost);
-            table_set(*tile_ids_to_outposts, outpost_tile_id, outpost);
+            table_set(*tile_ids_to_outposts, xx (outpost_tile_id + 0 * context.world_cols + 0), outpost);
+            table_set(*tile_ids_to_outposts, xx (outpost_tile_id + 0 * context.world_cols + 1), outpost);
+            table_set(*tile_ids_to_outposts, xx (outpost_tile_id + 0 * context.world_cols + 2), outpost);
+            table_set(*tile_ids_to_outposts, xx (outpost_tile_id + 1 * context.world_cols + 0), outpost);
+            table_set(*tile_ids_to_outposts, xx (outpost_tile_id + 1 * context.world_cols + 1), outpost);
+            table_set(*tile_ids_to_outposts, xx (outpost_tile_id + 1 * context.world_cols + 2), outpost);
+            table_set(*tile_ids_to_outposts, xx (outpost_tile_id + 2 * context.world_cols + 0), outpost);
+            table_set(*tile_ids_to_outposts, xx (outpost_tile_id + 2 * context.world_cols + 1), outpost);
+            table_set(*tile_ids_to_outposts, xx (outpost_tile_id + 2 * context.world_cols + 2), outpost);
         }
     }
 
@@ -3986,7 +4014,20 @@ update_and_draw_frame_round :: () {
 
                     DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTPOST, outpost_dest_rect, Vector2.{0,0}, 0.0, TRANSPARENT_WHITE);
                 } else {
-                    DrawRectangleRec(hovered_tile_rect, TRANSPARENT_WHITE);
+                    hovering_over_outpost, outpost := table_find(*tile_ids_to_outposts, hovered_tile_id);
+
+                    if hovering_over_outpost {
+                        outpost_dest_rect := Rectangle.{
+                            outpost.pos.x,
+                            outpost.pos.y,
+                            TILEMAP_GENERAL_WORLD_WIDTH  * 3,
+                            TILEMAP_GENERAL_WORLD_HEIGHT * 3,
+                        };
+
+                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTLINE_3_BY_3, outpost_dest_rect, Vector2.{0,0}, 0.0, WHITE);
+                    } else {
+                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTLINE_1_BY_1, hovered_tile_rect, Vector2.{0,0}, 0.0, WHITE);
+                    }
                 }
 
                 if context.metagame.debug_mode {
@@ -4951,15 +4992,15 @@ initialize_round :: () {
 
     // Set temp allocator for various things.
     {
-        tiles_to_draw_this_frame.allocator   = temp;
-        dwarves_to_draw_this_frame.allocator = temp;
-        goblins_to_draw_this_frame.allocator = temp;
-        paths_to_draw_this_frame.allocator   = temp;
-        alerts_to_draw_this_frame.allocator  = temp;
-        outposts_to_draw_this_frame.allocator   = temp;
-        tile_ids_to_dwarfs.allocator         = temp;
-        tile_ids_to_goblins.allocator        = temp;
-        tile_ids_to_outposts.allocator          = temp;
+        tiles_to_draw_this_frame.allocator    = temp;
+        dwarves_to_draw_this_frame.allocator  = temp;
+        goblins_to_draw_this_frame.allocator  = temp;
+        paths_to_draw_this_frame.allocator    = temp;
+        alerts_to_draw_this_frame.allocator   = temp;
+        outposts_to_draw_this_frame.allocator = temp;
+        tile_ids_to_dwarfs.allocator          = temp;
+        tile_ids_to_goblins.allocator         = temp;
+        tile_ids_to_outposts.allocator        = temp;
     }
 
     // TODO: parametrize
