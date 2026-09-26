@@ -26,6 +26,8 @@ window_height := 800;
 // Constants
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+INCREMENT_Y :: 20;
+
 CAMERA_MOVE_SPEED_BASE :: 4;
 CAMERA_ZOOM_LOD_CLOSE_MIN  :: 1.0;
 CAMERA_ZOOM_LOD_NORMAL_MIN :: 0.3;
@@ -811,6 +813,7 @@ Outpost :: struct {
 
     spawn_dwarf_cooldown_ms : s32;
     is_home_base : bool;
+    build_completion_percentage : float32;
 }
 
 DwarfState :: enum {
@@ -1024,11 +1027,75 @@ main :: () {
             case .TUTORIAL_CONTROLS;
         }
 
-        defer context.metagame.should_quit_game = context.metagame.should_quit_game || WindowShouldClose();
+        context.metagame.should_quit_game = context.metagame.should_quit_game || WindowShouldClose();
     }
 }
 
 // Functions
+
+debug_struct_runtime :: (thing: Any, name_prefix: string, debug_text_x: s32, debug_text_y: *s32, render_struct_name_prefix: bool) {
+    if thing.type.type != .STRUCT return; // TODO: dont just eat this, assert probably
+    tis := cast(*Type_Info_Struct) thing.type;
+
+    // print("tis.members: %\n", tis.members);
+
+    for tis.members {
+        // Calculate where this field lives in memory
+        field_ptr := thing.value_pointer + it.offset_in_bytes;
+        
+        // Construct an 'Any' so tprint knows how to format it
+        field_any: Any;
+        field_any.type = it.type;
+        field_any.value_pointer = field_ptr;
+
+        // Format the string dynamically
+        text := ifx render_struct_name_prefix
+            then tprint("%.%: %\0", name_prefix, it.name, field_any)
+            else tprint("%: %\0", it.name, field_any);
+
+        print("debug_text_x: %\ndebug_text_y: %\n", debug_text_x, debug_text_y.*);
+
+        DrawText(text.data, debug_text_x, read_then_increment(debug_text_y, INCREMENT_Y), 18, WHITE);
+    }
+}
+
+debug_variable_runtime :: (thing: Any, thing_symbol_as_string: string, debug_text_y: *s32) {
+    // Format the string dynamically
+    text := tprint("%: %\0", thing_symbol_as_string, thing);
+    
+    DrawText(text.data, 10, read_then_increment(debug_text_y, INCREMENT_Y), 18, WHITE);
+}
+
+// TODO: recursive struct drawing?
+// TODO: way to label fields as not wanted as debuggable
+debug_with_raylib_draw_text :: (c: Code, text_x: s32, text_y: *s32, render_struct_name_prefix := false) #expand {
+    var_name := #run code_to_string(c);
+    var_val  := #insert c;
+
+    ti := type_info(type_of(var_val));
+    if #complete ti.type == {
+        case .STRUCT; debug_struct_runtime(var_val, var_name, text_x, text_y, render_struct_name_prefix);
+
+        case .INTEGER; #through;   
+        case .FLOAT;   #through; 
+        case .BOOL;    #through;
+        case .STRING;  #through;  
+        case .ANY;     #through;
+        case .POINTER; debug_variable_runtime(var_val, var_name, text_y);
+
+        case .PROCEDURE;            #through;
+        case .VOID;                 #through;
+        case .ARRAY;                #through;
+        case .OVERLOAD_SET;         #through;
+        case .ENUM;                 #through;
+        case .POLYMORPHIC_VARIABLE; #through;
+        case .TYPE;                 #through;
+        case .CODE;                 #through;
+        case .UNTYPED_LITERAL;      #through;
+        case .UNTYPED_ENUM;         #through;
+        case .VARIANT;              assert(false, "Unsupported debug thing");
+    }
+}
 
 is_tile_valid_for_outpost_placement_center :: (tile_id: s32) -> bool {
     tile := get_tile_by_id(tile_id);
@@ -1123,11 +1190,8 @@ get_outpost_placement :: (hovered_tile_id: s32) -> (is_valid_placement: bool, to
                     is_valid_placement = is_tile_valid_for_outpost_placement_non_center_non_outer(tile_id);
                 }
 
-                if !is_valid_placement return false, top_left_tile_id;
+                if !is_valid_placement break col;
             }
-
-            // TODO: this duplication sucks
-            if !is_valid_placement return false, top_left_tile_id;
         }
     }
 
@@ -3146,12 +3210,18 @@ update_and_draw_frame_round :: () {
                 update_outposts :: () {
                     #if DWARF_MINER_SPAWN_ENABLED {
                         for *outpost: outposts {
-                            if outpost.spawn_dwarf_cooldown_ms <= 0 {
-                                create_dwarf(Vector2.{ outpost.pos.x, outpost.pos.y }, .MINER);
-
-                                outpost.spawn_dwarf_cooldown_ms = DWARF_MINER_SPAWN_MS;
+                            if outpost.build_completion_percentage < 1.0 {
+                                outpost.build_completion_percentage += 0.25 * context.dt_seconds;
                             } else {
-                                outpost.spawn_dwarf_cooldown_ms -= xx (context.dt_seconds * 1000);
+                                outpost.build_completion_percentage = 1.0;
+
+                                if outpost.spawn_dwarf_cooldown_ms <= 0 {
+                                    create_dwarf(Vector2.{ outpost.pos.x, outpost.pos.y }, .MINER);
+    
+                                    outpost.spawn_dwarf_cooldown_ms = DWARF_MINER_SPAWN_MS;
+                                } else {
+                                    outpost.spawn_dwarf_cooldown_ms -= xx (context.dt_seconds * 1000);
+                                }
                             }
                         }
                     }
@@ -3738,7 +3808,7 @@ update_and_draw_frame_round :: () {
                     if outpost.is_home_base {
                         DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE, dest, Vector2.{0,0}, 0.0, WHITE);
                     } else {
-                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTPOST, dest, Vector2.{0,0}, 0.0, WHITE);
+                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTPOST, dest, Vector2.{0,0}, 0.0, Color.{ 255, 255, 255, xx (255 * outpost.build_completion_percentage) });
                     }
                 }
             }
@@ -4033,106 +4103,30 @@ update_and_draw_frame_round :: () {
                 draw_path_cost_particle(pos, gold_cost);
             }
 
+            DEBUG_TEXT_X :: 10;
             debug_text_y : s32 = 10;
-            INCREMENT_Y :: 20;
             if context.metagame.debug_mode {
-                DrawFPS(10, read_then_increment(*debug_text_y, INCREMENT_Y));
-                DrawText(tprint("dwarf count: %\0", dwarves.count).data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 12, WHITE);
+                DrawFPS(DEBUG_TEXT_X, read_then_increment(*debug_text_y, INCREMENT_Y));
+                DrawText(tprint("dwarf count: %\0", dwarves.count).data, DEBUG_TEXT_X, read_then_increment(*debug_text_y, INCREMENT_Y), 12, WHITE);
                 {
-                    debug_struct_runtime :: (thing: Any, name_prefix: string, render_struct_name_prefix: bool) #expand {
-                        if thing.type.type != .STRUCT return;
-                        tis := cast(*Type_Info_Struct) thing.type;
-
-                        for tis.members {
-                            // Calculate where this field lives in memory
-                            field_ptr := thing.value_pointer + it.offset_in_bytes;
-                            
-                            // Construct an 'Any' so tprint knows how to format it
-                            field_any: Any;
-                            field_any.type = it.type;
-                            field_any.value_pointer = field_ptr;
-
-                            // Format the string dynamically
-                            text := ifx render_struct_name_prefix
-                                then tprint("%.%: %\0", name_prefix, it.name, field_any)
-                                else tprint("%: %\0", it.name, field_any);
-                            
-                            DrawText(text.data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                        }
-                    }
-
-                    debug_variable_runtime :: (thing: Any, thing_symbol_as_string: string) #expand {
-                        // Format the string dynamically
-                        text := tprint("%: %\0", thing_symbol_as_string, thing);
-                        
-                        DrawText(text.data, 10, read_then_increment(*debug_text_y, INCREMENT_Y), 18, WHITE);
-                    }
-
-                    // TODO: recursive struct drawing?
-                    // TODO: way to label fields as not wanted as debuggable
-                    debug_with_raylib_draw_text :: (c: Code, render_struct_name_prefix := false) #expand {
-                        var_name := #run code_to_string(c);
-                        var_val  := #insert c;
-                        
-                        ti := type_info(type_of(var_val));
-                        if #complete ti.type == {
-                            case .STRUCT; debug_struct_runtime(var_val, var_name, render_struct_name_prefix);
-
-                            case .INTEGER; #through;   
-                            case .FLOAT;   #through; 
-                            case .BOOL;    #through;
-                            case .STRING;  #through;  
-                            case .ANY;     #through;
-                            case .POINTER; debug_variable_runtime(var_val, var_name);
-
-                            case .PROCEDURE;            #through;
-                            case .VOID;                 #through;
-                            case .ARRAY;                #through;
-                            case .OVERLOAD_SET;         #through;
-                            case .ENUM;                 #through;
-                            case .POLYMORPHIC_VARIABLE; #through;
-                            case .TYPE;                 #through;
-                            case .CODE;                 #through;
-                            case .UNTYPED_LITERAL;      #through;
-                            case .UNTYPED_ENUM;         #through;
-                            case .VARIANT;              assert(false, "Unsupported debug thing");
-                        }
-                        
-                    }
-
-                    // debug_with_raylib_draw_text(#code context.game_state.*);
-                    // debug_with_raylib_draw_text(#code context.game_state.controls_state_this_frame);
-                    // debug_with_raylib_draw_text(#code context.camera.*);
-
                     // Draw hovered dwarf
-                    debug_text_y = 0;
-                    for dwarves {
-                        if CheckCollisionPointRec(context.mouse_pos_in_world, Rectangle.{ it.pos.x, it.pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT }) {
-                            // TODO: parametrize debug_with_draw_text positions
-                            //
-                            // Draw basic info
-                            DrawText(tprint("id: %\0", it.id).data,                                 xx (context.mouse_pos_in_ui.x + 20), xx (context.mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                            DrawText(tprint("pos: %\0", it.pos).data,                               xx (context.mouse_pos_in_ui.x + 20), xx (context.mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                            DrawText(tprint("state: %\0", it.state).data,                           xx (context.mouse_pos_in_ui.x + 20), xx (context.mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                            DrawText(tprint("tile_ids_on_path: %\0", it.tile_ids_on_path).data,     xx (context.mouse_pos_in_ui.x + 20), xx (context.mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                            DrawText(tprint("goblin_id_attacking: %\0", it.goblin_id_attacking).data, xx (context.mouse_pos_in_ui.x + 20), xx (context.mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                            DrawText(tprint("tile_id_mining: %\0", it.tile_id_mining).data,         xx (context.mouse_pos_in_ui.x + 20), xx (context.mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                            DrawText(tprint("direction: %\0", it.direction).data,                   xx (context.mouse_pos_in_ui.x + 20), xx (context.mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                            DrawText(tprint("dwarf_type: %\0", it.dwarf_type).data,                 xx (context.mouse_pos_in_ui.x + 20), xx (context.mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                            DrawText(tprint("hp: %\0", it.hp).data,                                 xx (context.mouse_pos_in_ui.x + 20), xx (context.mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                            DrawText(tprint("ignore_goblins_for: %\0", it.ignore_goblins_for).data, xx (context.mouse_pos_in_ui.x + 20), xx (context.mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                    for dwarf: dwarves {
+                        if CheckCollisionPointRec(context.mouse_pos_in_world, Rectangle.{ dwarf.pos.x, dwarf.pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT }) {
+                            debug_with_raylib_draw_text(dwarf, 10, *debug_text_y);
                         }
                     }
                     
-                    for goblins {
-                        if CheckCollisionPointRec(context.mouse_pos_in_world, Rectangle.{ it.pos.x, it.pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT }) {
-                            DrawText(tprint("id: %\0", it.id).data,                                 xx (context.mouse_pos_in_ui.x + 20), xx (context.mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                            DrawText(tprint("pos: %\0", it.pos).data,                               xx (context.mouse_pos_in_ui.x + 20), xx (context.mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                            DrawText(tprint("state: %\0", it.state).data,                           xx (context.mouse_pos_in_ui.x + 20), xx (context.mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                            DrawText(tprint("tile_ids_on_path: %\0", it.tile_ids_on_path).data,     xx (context.mouse_pos_in_ui.x + 20), xx (context.mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                            DrawText(tprint("direction: %\0", it.direction).data,                   xx (context.mouse_pos_in_ui.x + 20), xx (context.mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                            DrawText(tprint("hp: %\0", it.hp).data,                                 xx (context.mouse_pos_in_ui.x + 20), xx (context.mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
-                            DrawText(tprint("attack_cooldown_ms: %\0", it.attack_cooldown_ms).data, xx (context.mouse_pos_in_ui.x + 20), xx (context.mouse_pos_in_ui.y + read_then_increment(*debug_text_y, INCREMENT_Y)), 18, WHITE);
+                    for goblin: goblins {
+                        if CheckCollisionPointRec(context.mouse_pos_in_world, Rectangle.{ goblin.pos.x, goblin.pos.y, TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT }) {
+                            debug_with_raylib_draw_text(goblin, 10, *debug_text_y);
+                        }
+                    }
+
+                    for outpost: outposts_to_draw_this_frame {
+                        if context.metagame.debug_mode {
+                            if CheckCollisionPointRec(context.mouse_pos_in_world, Rectangle.{ outpost.pos.x, outpost.pos.y, TILEMAP_GENERAL_WORLD_WIDTH * 3, TILEMAP_GENERAL_WORLD_HEIGHT * 3 }) {
+                                debug_with_raylib_draw_text(outpost, 10, *debug_text_y);
+                            }
                         }
                     }
                 }
@@ -6329,7 +6323,8 @@ create_outpost :: (pos: Vector2, is_home_base: bool) -> Outpost {
         pos = pos,
         spawn_dwarf_cooldown_ms = DWARF_MINER_SPAWN_MS,
         is_home_base = is_home_base,
-        hp = 1000
+        hp = 1000,
+        build_completion_percentage = ifx is_home_base then 1.0 else 0.0,
     };
 
     outpost_tile_id := get_tile_id_by_pos(outpost.pos);
