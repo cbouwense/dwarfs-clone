@@ -594,6 +594,16 @@ TILEMAP_SOURCE_RECT_OUTPOST_MENU_SPAWN_MINERS := Rectangle.{
     TILEMAP_GENERAL_TILE_HEIGHT,
 };
 
+OUTPOST_MENU_SPAWN_WARRIOR_SPRITE_SOURCE_ROW :: 7.0;
+OUTPOST_MENU_SPAWN_WARRIOR_SPRITE_SOURCE_COL :: 11.0;
+
+TILEMAP_SOURCE_RECT_OUTPOST_MENU_SPAWN_WARRIOR := Rectangle.{
+    OUTPOST_MENU_SPAWN_WARRIOR_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
+    OUTPOST_MENU_SPAWN_WARRIOR_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
+    TILEMAP_GENERAL_TILE_WIDTH,
+    TILEMAP_GENERAL_TILE_HEIGHT,
+};
+
 TILEMAP_DWARF_MINER_TILE_WIDTH     :: 96;
 TILEMAP_DWARF_MINER_TILE_HEIGHT    :: 64;
 TILEMAP_DWARF_MINER_TILE_PADDING_X :: 32;
@@ -3289,8 +3299,12 @@ update_and_draw_frame_round :: () {
                                 // Home base always spawns miners
                                 if outpost.is_home_base || outpost.is_spawning_miners {
                                     if outpost.spawn_dwarf_cooldown_ms <= 0 {
-                                        create_dwarf(Vector2.{ outpost.pos.x, outpost.pos.y }, .MINER);
-        
+                                        gold_cost := ifx outpost.is_home_base then 0 else 50;
+
+                                        if context.game_state.gold >= gold_cost {
+                                            create_dwarf(Vector2.{ outpost.pos.x, outpost.pos.y }, .MINER, gold_cost);
+                                        }
+
                                         outpost.spawn_dwarf_cooldown_ms = DWARF_MINER_SPAWN_MS;
                                     } else {
                                         outpost.spawn_dwarf_cooldown_ms -= xx (context.dt_seconds * 1000);
@@ -4223,6 +4237,48 @@ update_and_draw_frame_round :: () {
                             tilemap_texture_general,
                             TILEMAP_SOURCE_RECT_OUTPOST_MENU_SPAWN_MINERS,
                             outpost_menu_swawn_miners_button_rect,
+                            Vector2.{ 0, 0 },
+                            0.0,
+                            tint
+                        );
+                    }
+
+                    // Draw outpost menu spawn warrior button 
+                    {
+                        outpost_menu_swawn_warrior_button_rect := Rectangle.{
+                            outpost_rect_in_ui_space.x,
+                            outpost_rect_in_ui_space.y,
+                            TILEMAP_GENERAL_WORLD_WIDTH * 2,
+                            TILEMAP_GENERAL_WORLD_HEIGHT * 2,
+                        };
+
+                        outpost_menu_spawn_warrior_button_is_hovered := CheckCollisionPointRec(context.mouse_pos_in_ui, outpost_menu_swawn_warrior_button_rect);
+                        outpost_menu_spawn_warrior_button_is_pressed := outpost_menu_spawn_warrior_button_is_hovered && context.game_state.controls_state_this_frame.select_is_pressed_once;
+                        outpost_menu_spawn_warrior_button_is_held_down := outpost_menu_spawn_warrior_button_is_hovered && context.game_state.controls_state_this_frame.select_is_held_down;
+
+                        tint : Color;
+                        if outpost_menu_spawn_warrior_button_is_held_down {
+                            tint = BEIGE;  
+                        }
+                        else if outpost_menu_spawn_warrior_button_is_hovered {
+                            tint = LIGHTGRAY;
+                        }
+                        else {
+                            tint = WHITE;
+                        }
+
+                        // TODO: limit to 4 (or 8 for home base)
+                        if outpost_menu_spawn_warrior_button_is_pressed {
+                            gold_cost := 50;
+                            if context.game_state.gold >= gold_cost {
+                                create_dwarf(outpost.pos, .WARRIOR, gold_cost);
+                            }
+                        }
+
+                        DrawTexturePro(
+                            tilemap_texture_general,
+                            TILEMAP_SOURCE_RECT_OUTPOST_MENU_SPAWN_WARRIOR,
+                            outpost_menu_swawn_warrior_button_rect,
                             Vector2.{ 0, 0 },
                             0.0,
                             tint
@@ -6314,7 +6370,7 @@ create_miss_particle :: (pos: Vector2) {
     array_add(*particles, particle);
 }
 
-create_dwarf :: (pos: Vector2, dwarf_type: DwarfType) -> Dwarf {
+create_dwarf :: (pos: Vector2, dwarf_type: DwarfType, gold_cost: int = 0) -> Dwarf {
     dwarf_id   := increment_then_read(*entity_id_counter);
     direction  := cast(Direction) cast(int) random_get_within_range(0, 3);
 
@@ -6415,6 +6471,11 @@ create_dwarf :: (pos: Vector2, dwarf_type: DwarfType) -> Dwarf {
 
     table_set(*dwarf_id_to_index, dwarf_id, dwarves.count);
     array_add(*dwarves, dwarf);
+
+    if gold_cost > 0 {
+        context.game_state.gold -= gold_cost;
+        create_gold_particle(dwarf.pos, -1 * gold_cost, false);
+    }
 
     return dwarf;
 }

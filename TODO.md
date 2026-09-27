@@ -17,6 +17,7 @@
 # Core gameplay
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+- Outpost cannot afford onion skin
 - Draw outpost menu over outpost in world space?
 - Draw outpost health on hover
 - In addition to control modes, allow users to hold down controls
@@ -24,7 +25,6 @@
 - Death particles, aggro particles, and hit star particles need TLC
 - Death poof particles
 - outpost canons
-- outpost spawn warriors control
 - options menu
     - apply changes
     - restore defaults
