@@ -2,7 +2,6 @@
 # In progress
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- Draw green outlines around entities on hover
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Bugs
@@ -18,12 +17,13 @@
 # Core gameplay
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+- Draw outpost menu over outpost in world space?
+- Draw outpost health on hover
 - In addition to control modes, allow users to hold down controls
 - Dwarf warrior patrolling
 - Death particles, aggro particles, and hit star particles need TLC
 - Death poof particles
 - outpost canons
-- outpost spawn diggers control
 - outpost spawn warriors control
 - options menu
     - apply changes

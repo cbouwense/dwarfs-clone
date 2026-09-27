@@ -574,6 +574,26 @@ TILEMAP_SOURCE_RECT_OUTLINE_3_BY_3 := Rectangle.{
     TILEMAP_GENERAL_TILE_HEIGHT * 3,
 };
 
+OUTPOST_MENU_SPRITE_SOURCE_ROW_3_BY_3 :: 4.0;
+OUTPOST_MENU_SPRITE_SOURCE_COL_3_BY_3 :: 10.0;
+
+TILEMAP_SOURCE_RECT_OUTPOST_MENU_3_BY_3 := Rectangle.{
+    OUTPOST_MENU_SPRITE_SOURCE_COL_3_BY_3 * TILEMAP_GENERAL_TILE_WIDTH,
+    OUTPOST_MENU_SPRITE_SOURCE_ROW_3_BY_3 * TILEMAP_GENERAL_TILE_HEIGHT,
+    TILEMAP_GENERAL_TILE_WIDTH * 3,
+    TILEMAP_GENERAL_TILE_HEIGHT * 3,
+};
+
+OUTPOST_MENU_SPAWN_MINERS_SPRITE_SOURCE_ROW :: 7.0;
+OUTPOST_MENU_SPAWN_MINERS_SPRITE_SOURCE_COL :: 10.0;
+
+TILEMAP_SOURCE_RECT_OUTPOST_MENU_SPAWN_MINERS := Rectangle.{
+    OUTPOST_MENU_SPAWN_MINERS_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
+    OUTPOST_MENU_SPAWN_MINERS_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
+    TILEMAP_GENERAL_TILE_WIDTH,
+    TILEMAP_GENERAL_TILE_HEIGHT,
+};
+
 TILEMAP_DWARF_MINER_TILE_WIDTH     :: 96;
 TILEMAP_DWARF_MINER_TILE_HEIGHT    :: 64;
 TILEMAP_DWARF_MINER_TILE_PADDING_X :: 32;
@@ -831,9 +851,11 @@ Outpost :: struct {
     #as using entity: Entity;
     type = Outpost;
 
-    spawn_dwarf_cooldown_ms : s32;
     is_home_base : bool;
     build_completion_percentage : float32;
+    spawn_dwarf_cooldown_ms : s32;
+    is_menu_open: bool;
+    is_spawning_miners: bool;
 }
 
 DwarfState :: enum {
@@ -2128,6 +2150,27 @@ update_and_draw_frame_round :: () {
                 context.game_state.control_mode = ifx context.game_state.control_mode == .REMOVE then .NORMAL else .REMOVE;
             }
         }
+
+
+        // TODO: should this go here? or just, like, collecting inputs or whatever... instead of updating state?
+        if context.game_state.controls_state_this_frame.select_is_pressed_once {
+            // PERF: probably do this with more than one brain cell of thought given to it.
+            //
+            // Clear any open menus
+            {
+                for *outpost: outposts {
+                    outpost.is_menu_open = false;
+                }
+            }
+
+            hovered_tile_rect := get_tile_rect_that_pos_is_within(get_world_width(), get_world_height(), TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, context.mouse_pos_in_world);
+            hovered_tile_id := get_tile_id_by_pos(get_rect_pos(hovered_tile_rect));
+
+            selected_an_outpost, outpost := table_find(*tile_ids_to_outposts, hovered_tile_id);
+            if selected_an_outpost {
+                outpost.is_menu_open = true;
+            }
+        }
     }
     input();
 
@@ -3243,12 +3286,17 @@ update_and_draw_frame_round :: () {
                             } else {
                                 outpost.build_completion_percentage = 1.0;
 
-                                if outpost.spawn_dwarf_cooldown_ms <= 0 {
-                                    create_dwarf(Vector2.{ outpost.pos.x, outpost.pos.y }, .MINER);
-    
-                                    outpost.spawn_dwarf_cooldown_ms = DWARF_MINER_SPAWN_MS;
+                                // Home base always spawns miners
+                                if outpost.is_home_base || outpost.is_spawning_miners {
+                                    if outpost.spawn_dwarf_cooldown_ms <= 0 {
+                                        create_dwarf(Vector2.{ outpost.pos.x, outpost.pos.y }, .MINER);
+        
+                                        outpost.spawn_dwarf_cooldown_ms = DWARF_MINER_SPAWN_MS;
+                                    } else {
+                                        outpost.spawn_dwarf_cooldown_ms -= xx (context.dt_seconds * 1000);
+                                    }
                                 } else {
-                                    outpost.spawn_dwarf_cooldown_ms -= xx (context.dt_seconds * 1000);
+                                    outpost.spawn_dwarf_cooldown_ms = DWARF_MINER_SPAWN_MS;
                                 }
                             }
                         }
@@ -3998,6 +4046,7 @@ update_and_draw_frame_round :: () {
                         TILEMAP_GENERAL_WORLD_HEIGHT * 7,
                     };
 
+                    // PERF: texture
                     DrawRectangleRec(onion_skin_rect, ifx is_valid_placement then TRANSPARENT_GREEN else TRANSPARENT_RED);
 
                     // Now that the onion skin is drawn, we want to also draw the outpost.
@@ -4106,6 +4155,80 @@ update_and_draw_frame_round :: () {
                     draw_warning_rings_if_necessary(dwarf_center, .LAVA);
                 }
                 draw_warnings_onscreen(dwarf);
+            }
+
+            // Draw outpost menus
+            for *outpost: outposts {
+                if outpost.is_menu_open {
+                    outpost_rect_in_world := get_world_rect_from_pos(outpost.pos, 3);
+                    outpost_pos_center_in_world := get_rect_center(outpost_rect_in_world);
+                    outpost_pos_center_in_ui := GetWorldToScreen2D(outpost_pos_center_in_world, context.camera);
+                    outpost_rect_in_ui_space := Rectangle.{
+                        outpost_pos_center_in_ui.x - TILEMAP_GENERAL_WORLD_WIDTH * 2.5,
+                        outpost_pos_center_in_ui.y - TILEMAP_GENERAL_WORLD_HEIGHT * 2.5,
+                        TILEMAP_GENERAL_WORLD_WIDTH * 5,
+                        TILEMAP_GENERAL_WORLD_HEIGHT * 5,
+                    };
+
+                    DrawTexturePro(
+                        tilemap_texture_general,
+                        TILEMAP_SOURCE_RECT_OUTPOST_MENU_3_BY_3,
+                        outpost_rect_in_ui_space,
+                        Vector2.{ 0, 0 },
+                        0.0,
+                        WHITE
+                    );
+
+                    // Draw outpost menu spawn miners button 
+                    if !outpost.is_home_base {
+                        outpost_menu_swawn_miners_button_rect := Rectangle.{
+                            outpost_rect_in_ui_space.x + TILEMAP_GENERAL_WORLD_WIDTH * 3,
+                            outpost_rect_in_ui_space.y,
+                            TILEMAP_GENERAL_WORLD_WIDTH * 2,
+                            TILEMAP_GENERAL_WORLD_HEIGHT * 2,
+                        };
+
+                        outpost_menu_spawn_miners_button_is_hovered := CheckCollisionPointRec(context.mouse_pos_in_ui, outpost_menu_swawn_miners_button_rect);
+                        outpost_menu_spawn_miners_button_is_pressed := outpost_menu_spawn_miners_button_is_hovered && context.game_state.controls_state_this_frame.select_is_pressed_once;
+                        outpost_menu_spawn_miners_button_is_held_down := outpost_menu_spawn_miners_button_is_hovered && context.game_state.controls_state_this_frame.select_is_held_down;
+
+                        tint : Color;
+                        if outpost_menu_spawn_miners_button_is_held_down {
+                            if outpost.is_spawning_miners {
+                                tint = GRAY;
+                            } else {
+                                tint = BEIGE;
+                            }  
+                        }
+                        else if outpost_menu_spawn_miners_button_is_hovered {
+                            if outpost.is_spawning_miners {
+                                tint = GOLD;
+                            } else {
+                                tint = LIGHTGRAY;
+                            }
+                        }
+                        else {
+                            if outpost.is_spawning_miners {
+                                tint = YELLOW;
+                            } else {
+                                tint = WHITE;
+                            }
+                        }
+
+                        if outpost_menu_spawn_miners_button_is_pressed {
+                            outpost.is_spawning_miners = !outpost.is_spawning_miners;
+                        }
+
+                        DrawTexturePro(
+                            tilemap_texture_general,
+                            TILEMAP_SOURCE_RECT_OUTPOST_MENU_SPAWN_MINERS,
+                            outpost_menu_swawn_miners_button_rect,
+                            Vector2.{ 0, 0 },
+                            0.0,
+                            tint
+                        );
+                    }
+                }
             }
 
             // Draw alerts
