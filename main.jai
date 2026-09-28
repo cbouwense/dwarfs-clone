@@ -1115,8 +1115,6 @@ debug_struct_runtime :: (thing: Any, name_prefix: string, debug_text_x: s32, deb
             then tprint("%.%: %\0", name_prefix, it.name, field_any)
             else tprint("%: %\0", it.name, field_any);
 
-        print("debug_text_x: %\ndebug_text_y: %\n", debug_text_x, debug_text_y.*);
-
         DrawText(text.data, debug_text_x, read_then_increment(debug_text_y, INCREMENT_Y), 18, WHITE);
     }
 }
@@ -5851,17 +5849,11 @@ set_entity_direction_to_face_next_target :: (entity: *$T/interface Moveable) {
     target_tile_id   := entity.tile_ids_on_path[0];
     previous_tile_id := get_previous_tile_id(entity);
 
-    assert_soft(
-        target_tile_id != previous_tile_id,
-        "entity % is softlocked trying to get it the id it's already on, I think. that, or this was called before the entity moved.\n",
-        entity.id
-    );
-
     if      target_tile_id == previous_tile_id - xx context.world_rows entity.direction = .NORTH;
     else if target_tile_id == previous_tile_id + xx context.world_rows entity.direction = .SOUTH;
-    else if target_tile_id == previous_tile_id + 1          entity.direction = .EAST;
-    else if target_tile_id == previous_tile_id - 1          entity.direction = .WEST;
-    else assert(false);
+    else if target_tile_id == previous_tile_id + 1 entity.direction = .EAST;
+    else if target_tile_id == previous_tile_id - 1 entity.direction = .WEST;
+    else if target_tile_id != previous_tile_id assert(false);
 }
 
 PARTICLE_SIZE_IN_WORLD :: 14;
@@ -7336,7 +7328,11 @@ try_to_encase_tiles :: (starting_tile_id: s32) {
     // If we found a liquid, mark the tiles as encased
     if found_liquid {
         for encased_ids {
-            get_tile_by_id(it).properties |= TileProperty.ENCASED;
+            tile := get_tile_by_id(it);
+            // TODO: what does this even mean if this is null?
+            if tile != null { 
+                tile.properties |= TileProperty.ENCASED;
+            }
         }
     }
 }
@@ -7901,10 +7897,6 @@ detect_tile_within_radius :: (
         if id <= 0 continue;
         if id > max_tile_id continue;
         if get_steps_between_tiles(id, starting_tile_id) > max_radius continue;
-        // if id == starting_tile_id - (context.world_cols * (max_radius + 1)) continue; // north outside radius
-        // if id == starting_tile_id + (context.world_cols * (max_radius + 1)) continue; // south outside radius
-        // if id == starting_tile_id + (max_radius + 1) continue; // east outside radius
-        // if id == starting_tile_id - (max_radius + 1) continue; // west outside radius
 
         // If thing is found, return
         if fn_that_determines_if_we_found_the_tile(id) {
@@ -7929,6 +7921,7 @@ detect_tile_within_radius :: (
                 assert(next_predecessor_found);
                 current_node_id = next_predecessor;
             }
+            array_add(*reverse_path, starting_tile_id);
 
             // Now reverse the reverse path to get the final path
             for 0..reverse_path.count-1 {
