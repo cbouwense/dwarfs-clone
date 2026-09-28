@@ -484,6 +484,16 @@ TILEMAP_SOURCE_RECT_OUTPOST := Rectangle.{
     TILEMAP_GENERAL_TILE_HEIGHT * 3,
 };
 
+TOO_EXPENSIVE_SPRITE_SOURCE_ROW :: 0.0;
+TOO_EXPENSIVE_SPRITE_SOURCE_COL :: 11.0;
+
+TILEMAP_SOURCE_RECT_TOO_EXPENSIVE := Rectangle.{
+    TOO_EXPENSIVE_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
+    TOO_EXPENSIVE_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
+    TILEMAP_GENERAL_TILE_WIDTH,
+    TILEMAP_GENERAL_TILE_HEIGHT,
+};
+
 OUTPOST_FLOOR_SPRITE_SOURCE_ROW :: 4.0;
 OUTPOST_FLOOR_SPRITE_SOURCE_COL :: 0.0;
 
@@ -1149,21 +1159,23 @@ debug_with_raylib_draw_text :: (c: Code, text_x: s32, text_y: *s32, render_struc
     }
 }
 
-is_tile_valid_for_outpost_placement_center :: (tile_id: s32) -> bool {
+is_tile_valid_for_outpost_placement_center :: (tile_id: s32) -> (is_valid_placement: bool, too_expensive: bool) {
+    if context.game_state.gold < GOLD_COST_OUTPOST return false, true;
+
     tile := get_tile_by_id(tile_id);
-    if tile == null return false; // untouched dirt is invalid
-    if tile.type != .MINED return false;
+    if tile == null return false, false; // untouched dirt is invalid
+    if tile.type != .MINED return false, false;
 
     // TODO: I wonder if I could make this #complete somehow
-    if tile_has_property(tile, .ENCASED)         return false;
-    if tile_has_property(tile, .OUTPOST_FLOOR)   return false;
-    if tile_has_property(tile, .HOME_BASE_FLOOR) return false;
-    if tile_has_property(tile, .WATER_STILL)     return false;
-    if tile_has_property(tile, .WATER_FLOWING)   return false;
-    if tile_has_property(tile, .LAVA_STILL)      return false;
-    if tile_has_property(tile, .LAVA_FLOWING)    return false;
+    if tile_has_property(tile, .ENCASED)         return false, false;
+    if tile_has_property(tile, .OUTPOST_FLOOR)   return false, false;
+    if tile_has_property(tile, .HOME_BASE_FLOOR) return false, false;
+    if tile_has_property(tile, .WATER_STILL)     return false, false;
+    if tile_has_property(tile, .WATER_FLOWING)   return false, false;
+    if tile_has_property(tile, .LAVA_STILL)      return false, false;
+    if tile_has_property(tile, .LAVA_FLOWING)    return false, false;
 
-    return true;
+    return true, false;
 }
 
 is_tile_valid_for_outpost_placement_non_center_non_outer :: (tile_id: s32) -> bool {
@@ -1217,7 +1229,7 @@ is_tile_valid_for_outpost_placement_outer :: (tile_id: s32) -> bool {
     return true;
 }
 
-get_outpost_placement :: (hovered_tile_id: s32) -> (is_valid_placement: bool, top_left_tile_id: s32) {
+get_outpost_placement :: (hovered_tile_id: s32) -> (is_valid_placement: bool, is_too_expensive: bool, is_top_left_tile_id: s32) {
     // If we're adding an outpost, we want to draw a 7 x 7 grid of transparent squares that indicate
     // the validity of the placement of the outpost. The position of the mouse goes one below the center
     // of the sprite, which ultimately means that we need to go up four and to the left three to draw
@@ -1229,7 +1241,7 @@ get_outpost_placement :: (hovered_tile_id: s32) -> (is_valid_placement: bool, to
     
     // This isn't the end of the story for is_valid_placement, we try to disprove that this
     // is a valid placement below.
-    is_valid_placement := is_tile_valid_for_outpost_placement_center(hovered_tile_id);
+    is_valid_placement, is_too_expensive := is_tile_valid_for_outpost_placement_center(hovered_tile_id);
 
     if is_valid_placement {
         for col: 0..6 {
@@ -1247,7 +1259,7 @@ get_outpost_placement :: (hovered_tile_id: s32) -> (is_valid_placement: bool, to
         }
     }
 
-    return is_valid_placement, top_left_tile_id;
+    return is_valid_placement, is_too_expensive, top_left_tile_id;
 }
 
 get_entity_tile_id :: (entity: Entity) -> s32 {
@@ -2452,7 +2464,7 @@ update_and_draw_frame_round :: () {
                         if context.game_state.controls_state_this_frame.select_is_pressed_once {
                             if context.metagame.debug_mode || context.game_state.gold >= GOLD_COST_OUTPOST {
                                 hovered_tile_id := get_tile_id_by_pos(context.mouse_pos_in_world);
-                                is_valid_placement, top_left_tile_id := get_outpost_placement(hovered_tile_id);
+                                is_valid_placement, _, top_left_tile_id := get_outpost_placement(hovered_tile_id);
                             
                                 if is_valid_placement {
                                     // The position of the outpost shown to the player is with its entrance where their mouse is.
@@ -4050,7 +4062,7 @@ update_and_draw_frame_round :: () {
                 hovered_tile_id := get_tile_id_by_pos(get_rect_pos(hovered_tile_rect));
 
                 if context.game_state.control_mode == .ADD_OUTPOST {
-                    is_valid_placement, top_left_tile_id := get_outpost_placement(hovered_tile_id);
+                    is_valid_placement, is_too_expensive, top_left_tile_id := get_outpost_placement(hovered_tile_id);
                     top_left_tile_pos_of_onion_skin := get_tile_pos_by_id(top_left_tile_id);
 
                     onion_skin_rect := Rectangle.{
@@ -4076,6 +4088,11 @@ update_and_draw_frame_round :: () {
                     };
 
                     DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTPOST, outpost_dest_rect, Vector2.{0,0}, 0.0, TRANSPARENT_WHITE);
+
+                    if !is_valid_placement && is_too_expensive {
+                        top_left_tile_rect_outpost := get_world_rect_from_pos(top_left_tile_pos_outpost);
+                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_TOO_EXPENSIVE, top_left_tile_rect_outpost, Vector2.{0,0}, 0.0, TRANSPARENT_WHITE);
+                    }
                 } else {
                     hovering_over_outpost, outpost := table_find(*tile_ids_to_outposts, hovered_tile_id);
 
@@ -8126,7 +8143,9 @@ get_tile_rect_that_pos_is_within :: (world_width: int, world_height: int, tile_w
     return Rectangle.{ xx tile_x, xx tile_y, xx tile_width, xx tile_height };
 }
 
+// Ok I admit it, I copy pasted this from Gemini I'M SORRY!!!
 get_tile_pos_by_id :: (id: s32) -> Vector2 {
+    // IDs are not zero-indexed, but pixel positions are, so we normalize this right off the bat.
     index := id - 1;
 
     // Bitwise AND (&) acts as Modulo to get the X column

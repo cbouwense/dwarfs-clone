@@ -17,14 +17,12 @@
 # Core gameplay
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- Outpost cannot afford onion skin
-- Draw outpost menu over outpost in world space?
+- outpost canons
 - Draw outpost health on hover
-- In addition to control modes, allow users to hold down controls
 - Dwarf warrior patrolling
+- In addition to control modes, allow users to hold down controls
 - Death particles, aggro particles, and hit star particles need TLC
 - Death poof particles
-- outpost canons
 - options menu
     - apply changes
     - restore defaults
@@ -36,6 +34,7 @@
 - deteriorating arrows
 - round loading screen
 - Camera restriction within world bounds
+- don't open outpost menus when hovering while onion skin is out
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 #  Art
