@@ -374,6 +374,16 @@ TILEMAP_SOURCE_RECT_HOLE := Rectangle.{
     TILEMAP_GENERAL_TILE_HEIGHT,
 };
 
+OBSIDIAN_SPRITE_SOURCE_ROW :: 4.0;
+OBSIDIAN_SPRITE_SOURCE_COL :: 5.0;
+
+TILEMAP_SOURCE_RECT_OBSIDIAN := Rectangle.{
+    OBSIDIAN_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
+    OBSIDIAN_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
+    TILEMAP_GENERAL_TILE_WIDTH,
+    TILEMAP_GENERAL_TILE_HEIGHT,
+};
+
 HOME_BASE_FLOOR_CENTER_SPRITE_SOURCE_ROW :: 7.0;
 HOME_BASE_FLOOR_CENTER_SPRITE_SOURCE_COL :: 6.0;
 
@@ -530,16 +540,6 @@ WALL_SPRITE_SOURCE_COL :: 4.0;
 TILEMAP_SOURCE_RECT_WALL := Rectangle.{
     WALL_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
     WALL_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
-    TILEMAP_GENERAL_TILE_WIDTH,
-    TILEMAP_GENERAL_TILE_HEIGHT,
-};
-
-OBSIDIAN_SPRITE_SOURCE_ROW :: 5.0;
-OBSIDIAN_SPRITE_SOURCE_COL :: 9.0;
-
-TILEMAP_SOURCE_RECT_OBSIDIAN := Rectangle.{
-    OBSIDIAN_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
-    OBSIDIAN_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
     TILEMAP_GENERAL_TILE_WIDTH,
     TILEMAP_GENERAL_TILE_HEIGHT,
 };
@@ -1349,8 +1349,8 @@ does_tile_type_render_trenches :: (tile_type: TileType) -> bool {
         case .UNTOUCHED_DIRT;  return false;
         case .TOUCHED_DIRT;    return false;
         case .IRON;            return false;
+        case .OBSIDIAN;        return false;
         
-        case .OBSIDIAN;        return true;
         case .WALL;            return true;
         case .HOLE;            return true;
         case .MINED;           return true;
@@ -1573,47 +1573,64 @@ TRENCH_SIDES_SOURCE := Rectangle.{
     TILEMAP_GENERAL_TILE_HEIGHT,
 };
 
+is_neighbor_obsidian :: (tile_id: s32, direction: Direction) -> bool {
+    neighbor_tile_id_north := get_neighbor_tile_id_by_direction(tile_id, direction);
+    neighbor_tile_north := get_tile_by_id(neighbor_tile_id_north);
+    return neighbor_tile_north != null && neighbor_tile_north.type == .OBSIDIAN;
+}
+
 draw_trench_sides :: (tile: Tile) {
     dest   := get_world_rect_from_pos(tile.pos);
     rot    := 0.0;
     origin := Vector2.{ TILEMAP_GENERAL_TILE_WIDTH * 0.5, TILEMAP_GENERAL_TILE_HEIGHT * 0.5 };
-
+    
+    get_neighbor_tile_id_by_direction(tile.id, .SOUTH);
+    get_neighbor_tile_id_by_direction(tile.id, .EAST);
+    get_neighbor_tile_id_by_direction(tile.id, .WEST);
+    tint := WHITE; // Darkened if next to obsidian
+    
     if tile.trench_directions_sides & TrenchDirections.NORTH {
         final_dest := Rectangle.{
             dest.x + TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
             dest.y - TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
             dest.width, dest.height,
         };
+        
+        tint := ifx is_neighbor_obsidian(tile.id, .NORTH) then DARKGRAY else WHITE;
 
-        DrawTexturePro(tilemap_texture_general, TRENCH_SIDES_SOURCE, final_dest, origin, rot, WHITE);
+        DrawTexturePro(tilemap_texture_general, TRENCH_SIDES_SOURCE, final_dest, origin, rot, tint);
     }
 
     if tile.trench_directions_sides & TrenchDirections.SOUTH {
-        rot     = 180.0;
-        
+        rot = 180.0;
+
         final_dest := Rectangle.{
             dest.x + TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
             dest.y + TILEMAP_GENERAL_TILE_HEIGHT * 1.5,
             dest.width, dest.height,
         };
 
-        DrawTexturePro(tilemap_texture_general, TRENCH_SIDES_SOURCE, final_dest, origin, rot, WHITE);
+        tint := ifx is_neighbor_obsidian(tile.id, .SOUTH) then DARKGRAY else WHITE;
+
+        DrawTexturePro(tilemap_texture_general, TRENCH_SIDES_SOURCE, final_dest, origin, rot, tint);
     }
 
     if tile.trench_directions_sides & TrenchDirections.EAST {
-        rot     = 90.0;
+        rot = 90.0;
         
         final_dest := Rectangle.{
             dest.x + TILEMAP_GENERAL_TILE_HEIGHT * 1.5,
             dest.y + TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
             dest.width, dest.height,
         };
+
+        tint := ifx is_neighbor_obsidian(tile.id, .EAST) then DARKGRAY else WHITE;
     
-        DrawTexturePro(tilemap_texture_general, TRENCH_SIDES_SOURCE, final_dest, origin, rot, WHITE);
+        DrawTexturePro(tilemap_texture_general, TRENCH_SIDES_SOURCE, final_dest, origin, rot, tint);
     }
 
     if tile.trench_directions_sides & TrenchDirections.WEST {
-        rot     = 270.0;
+        rot = 270.0;
         
         final_dest := Rectangle.{
             dest.x - TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
@@ -1621,7 +1638,9 @@ draw_trench_sides :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        DrawTexturePro(tilemap_texture_general, TRENCH_SIDES_SOURCE, final_dest, origin, rot, WHITE);
+        tint := ifx is_neighbor_obsidian(tile.id, .WEST) then DARKGRAY else WHITE;
+
+        DrawTexturePro(tilemap_texture_general, TRENCH_SIDES_SOURCE, final_dest, origin, rot, tint);
     }
 }
 
@@ -1650,7 +1669,9 @@ draw_trench_corners_mostly_crust :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, WHITE);
+        tint := ifx is_neighbor_obsidian(tile.id, .NORTH_EAST) then DARKGRAY else WHITE;
+
+        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
     }
 
     if tile.trench_directions_corners_mostly_crust & TrenchDirections.NORTH_WEST {
@@ -1663,7 +1684,9 @@ draw_trench_corners_mostly_crust :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, WHITE);
+        tint := ifx is_neighbor_obsidian(tile.id, .NORTH_WEST) then DARKGRAY else WHITE;
+
+        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
     }
 
     if tile.trench_directions_corners_mostly_crust & TrenchDirections.SOUTH_EAST {
@@ -1675,8 +1698,10 @@ draw_trench_corners_mostly_crust :: (tile: Tile) {
             dest.y + TILEMAP_GENERAL_TILE_HEIGHT * 1.5,
             dest.width, dest.height,
         };
+
+        tint := ifx is_neighbor_obsidian(tile.id, .SOUTH_EAST) then DARKGRAY else WHITE;
     
-        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, WHITE);
+        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
     }
 
     if tile.trench_directions_corners_mostly_crust & TrenchDirections.SOUTH_WEST {
@@ -1689,7 +1714,9 @@ draw_trench_corners_mostly_crust :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, WHITE);
+        tint := ifx is_neighbor_obsidian(tile.id, .SOUTH_WEST) then DARKGRAY else WHITE;
+
+        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
     }
 }
 
@@ -1716,7 +1743,9 @@ draw_trench_corners_mostly_dirt :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, WHITE);
+        tint := ifx is_neighbor_obsidian(tile.id, .NORTH_EAST) then DARKGRAY else WHITE;
+
+        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
     }
 
     if tile.trench_directions_corners_mostly_dirt & TrenchDirections.NORTH_WEST {
@@ -1729,7 +1758,9 @@ draw_trench_corners_mostly_dirt :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, WHITE);
+        tint := ifx is_neighbor_obsidian(tile.id, .NORTH_WEST) then DARKGRAY else WHITE;
+        
+        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
     }
 
     if tile.trench_directions_corners_mostly_dirt & TrenchDirections.SOUTH_EAST {
@@ -1741,8 +1772,10 @@ draw_trench_corners_mostly_dirt :: (tile: Tile) {
             dest.y + TILEMAP_GENERAL_TILE_HEIGHT * 1.5,
             dest.width, dest.height,
         };
+
+        tint := ifx is_neighbor_obsidian(tile.id, .SOUTH_EAST) then DARKGRAY else WHITE;
     
-        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, WHITE);
+        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
     }
 
     if tile.trench_directions_corners_mostly_dirt & TrenchDirections.SOUTH_WEST {
@@ -1755,7 +1788,9 @@ draw_trench_corners_mostly_dirt :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, WHITE);
+        tint := ifx is_neighbor_obsidian(tile.id, .SOUTH_WEST) then DARKGRAY else WHITE;
+
+        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
     }
 }
 
@@ -1782,7 +1817,9 @@ draw_trench_corners_special_crust :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, WHITE);
+        tint := ifx is_neighbor_obsidian(tile.id, .NORTH) then DARKGRAY else WHITE;
+
+        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
     }
 
     if tile.trench_directions_corners_special_crust & TrenchDirections.NORTH_WEST {
@@ -1795,7 +1832,9 @@ draw_trench_corners_special_crust :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, WHITE);
+        tint := ifx is_neighbor_obsidian(tile.id, .NORTH) then DARKGRAY else WHITE;
+
+        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
     }
 
     if tile.trench_directions_corners_special_crust & TrenchDirections.SOUTH_EAST {
@@ -1808,7 +1847,9 @@ draw_trench_corners_special_crust :: (tile: Tile) {
             dest.width, dest.height,
         };
     
-        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, WHITE);
+        tint := ifx is_neighbor_obsidian(tile.id, .SOUTH) then DARKGRAY else WHITE;
+
+        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
     }
 
     if tile.trench_directions_corners_special_crust & TrenchDirections.SOUTH_WEST {
@@ -1821,7 +1862,9 @@ draw_trench_corners_special_crust :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, WHITE);
+        tint := ifx is_neighbor_obsidian(tile.id, .SOUTH) then DARKGRAY else WHITE;
+
+        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
     }
 }
 
@@ -7329,10 +7372,8 @@ try_to_encase_tiles :: (starting_tile_id: s32) {
     if found_liquid {
         for encased_ids {
             tile := get_tile_by_id(it);
-            // TODO: what does this even mean if this is null?
-            if tile != null { 
-                tile.properties |= TileProperty.ENCASED;
-            }
+            assert_soft(tile != null, "I think all of these tiles should be defined? Maybe they shouldn't and I need to create tiles for null ones? idk man");
+            tile.properties |= TileProperty.ENCASED;
         }
     }
 }
