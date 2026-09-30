@@ -7,7 +7,6 @@
 # Bugs
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- Encasing liquids doesn't seem to tint the entire encasement properly
 - Removing paths can crash the game
 - Mined tiles have 50 health?
 - Aggro logic is fucked up. Dwarves don't seem to wait where they should when goblins coming to them.

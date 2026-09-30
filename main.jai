@@ -384,6 +384,16 @@ TILEMAP_SOURCE_RECT_OBSIDIAN := Rectangle.{
     TILEMAP_GENERAL_TILE_HEIGHT,
 };
 
+DIRT_GENERAL_SPRITE_SOURCE_ROW :: 4.0;
+DIRT_GENERAL_SPRITE_SOURCE_COL :: 4.0;
+
+TILEMAP_SOURCE_RECT_DIRT_GENERAL := Rectangle.{
+    DIRT_GENERAL_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
+    DIRT_GENERAL_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
+    TILEMAP_GENERAL_TILE_WIDTH,
+    TILEMAP_GENERAL_TILE_HEIGHT,
+};
+
 HOME_BASE_FLOOR_CENTER_SPRITE_SOURCE_ROW :: 7.0;
 HOME_BASE_FLOOR_CENTER_SPRITE_SOURCE_COL :: 6.0;
 
@@ -1587,7 +1597,7 @@ draw_trench_sides :: (tile: Tile) {
     get_neighbor_tile_id_by_direction(tile.id, .SOUTH);
     get_neighbor_tile_id_by_direction(tile.id, .EAST);
     get_neighbor_tile_id_by_direction(tile.id, .WEST);
-    tint := WHITE; // Darkened if next to obsidian
+    tint := WHITE; // Darkened if next to obsidian, dimmed if encased.
     
     if tile.trench_directions_sides & TrenchDirections.NORTH {
         final_dest := Rectangle.{
@@ -1596,7 +1606,11 @@ draw_trench_sides :: (tile: Tile) {
             dest.width, dest.height,
         };
         
-        tint := ifx is_neighbor_obsidian(tile.id, .NORTH) then DARKGRAY else WHITE;
+        if is_neighbor_obsidian(tile.id, .NORTH) || is_tile_encased(tile.id) {
+            tint = DARKGRAY;
+        } else {
+            tint = WHITE;
+        }
 
         DrawTexturePro(tilemap_texture_general, TRENCH_SIDES_SOURCE, final_dest, origin, rot, tint);
     }
@@ -1610,7 +1624,11 @@ draw_trench_sides :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        tint := ifx is_neighbor_obsidian(tile.id, .SOUTH) then DARKGRAY else WHITE;
+        if is_neighbor_obsidian(tile.id, .SOUTH) || is_tile_encased(tile.id) {
+            tint = DARKGRAY;
+        } else {
+            tint = WHITE;
+        }
 
         DrawTexturePro(tilemap_texture_general, TRENCH_SIDES_SOURCE, final_dest, origin, rot, tint);
     }
@@ -1624,7 +1642,11 @@ draw_trench_sides :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        tint := ifx is_neighbor_obsidian(tile.id, .EAST) then DARKGRAY else WHITE;
+        if is_neighbor_obsidian(tile.id, .EAST) || is_tile_encased(tile.id) {
+            tint = DARKGRAY;
+        } else {
+            tint = WHITE;
+        }
     
         DrawTexturePro(tilemap_texture_general, TRENCH_SIDES_SOURCE, final_dest, origin, rot, tint);
     }
@@ -1638,7 +1660,11 @@ draw_trench_sides :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        tint := ifx is_neighbor_obsidian(tile.id, .WEST) then DARKGRAY else WHITE;
+        if is_neighbor_obsidian(tile.id, .WEST) || is_tile_encased(tile.id) {
+            tint = DARKGRAY;
+        } else {
+            tint = WHITE;
+        }
 
         DrawTexturePro(tilemap_texture_general, TRENCH_SIDES_SOURCE, final_dest, origin, rot, tint);
     }
@@ -1658,6 +1684,7 @@ ORIGIN :: Vector2.{ TILEMAP_GENERAL_TILE_WIDTH * 0.5, TILEMAP_GENERAL_TILE_HEIGH
 draw_trench_corners_mostly_crust :: (tile: Tile) {
     source := Rectangle.{ 0, 0, TILEMAP_GENERAL_TILE_WIDTH, TILEMAP_GENERAL_TILE_HEIGHT };
     dest   := get_world_rect_from_pos(tile.pos);
+    tint   := WHITE; // Darkened if next to obsidian, dimmed if encased.
 
     if tile.trench_directions_corners_mostly_crust & TrenchDirections.NORTH_EAST {
         source.x = TRENCH_CORNER_MOSTLY_CRUST_NORTH_EAST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
@@ -1669,7 +1696,11 @@ draw_trench_corners_mostly_crust :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        tint := ifx is_neighbor_obsidian(tile.id, .NORTH_EAST) then DARKGRAY else WHITE;
+        if is_neighbor_obsidian(tile.id, .NORTH_EAST) || is_tile_encased(tile.id) {
+            tint = DARKGRAY;
+        } else {
+            tint = WHITE;
+        }
 
         DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
     }
@@ -1684,7 +1715,11 @@ draw_trench_corners_mostly_crust :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        tint := ifx is_neighbor_obsidian(tile.id, .NORTH_WEST) then DARKGRAY else WHITE;
+        if is_neighbor_obsidian(tile.id, .NORTH_WEST) || is_tile_encased(tile.id) {
+            tint = DARKGRAY;
+        } else {
+            tint = WHITE;
+        }
 
         DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
     }
@@ -1699,7 +1734,11 @@ draw_trench_corners_mostly_crust :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        tint := ifx is_neighbor_obsidian(tile.id, .SOUTH_EAST) then DARKGRAY else WHITE;
+        if is_neighbor_obsidian(tile.id, .SOUTH_EAST) || is_tile_encased(tile.id) {
+            tint = DARKGRAY;
+        } else {
+            tint = WHITE;
+        }
     
         DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
     }
@@ -1714,7 +1753,11 @@ draw_trench_corners_mostly_crust :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        tint := ifx is_neighbor_obsidian(tile.id, .SOUTH_WEST) then DARKGRAY else WHITE;
+        if is_neighbor_obsidian(tile.id, .SOUTH_WEST) || is_tile_encased(tile.id) {
+            tint = DARKGRAY;
+        } else {
+            tint = WHITE;
+        }
 
         DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
     }
@@ -1732,6 +1775,7 @@ TRENCH_CORNER_MOSTLY_DIRT_SOUTH_WEST_SPRITE_SOURCE_COL :: 4;
 draw_trench_corners_mostly_dirt :: (tile: Tile) {
     source := Rectangle.{ 0, 0, TILEMAP_GENERAL_TILE_WIDTH, TILEMAP_GENERAL_TILE_HEIGHT };
     dest   := get_world_rect_from_pos(tile.pos);
+    tint   := WHITE; // Darkened if next to obsidian, dimmed if encased.
 
     if tile.trench_directions_corners_mostly_dirt & TrenchDirections.NORTH_EAST {
         source.x = TRENCH_CORNER_MOSTLY_DIRT_NORTH_EAST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
@@ -1743,7 +1787,11 @@ draw_trench_corners_mostly_dirt :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        tint := ifx is_neighbor_obsidian(tile.id, .NORTH_EAST) then DARKGRAY else WHITE;
+        if is_neighbor_obsidian(tile.id, .NORTH_EAST) || is_tile_encased(tile.id) {
+            tint = DARKGRAY;
+        } else {
+            tint = WHITE;
+        }
 
         DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
     }
@@ -1758,7 +1806,11 @@ draw_trench_corners_mostly_dirt :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        tint := ifx is_neighbor_obsidian(tile.id, .NORTH_WEST) then DARKGRAY else WHITE;
+        if is_neighbor_obsidian(tile.id, .NORTH_WEST) || is_tile_encased(tile.id) {
+            tint = DARKGRAY;
+        } else {
+            tint = WHITE;
+        }
         
         DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
     }
@@ -1773,7 +1825,11 @@ draw_trench_corners_mostly_dirt :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        tint := ifx is_neighbor_obsidian(tile.id, .SOUTH_EAST) then DARKGRAY else WHITE;
+        if is_neighbor_obsidian(tile.id, .SOUTH_EAST) || is_tile_encased(tile.id) {
+            tint = DARKGRAY;
+        } else {
+            tint = WHITE;
+        }
     
         DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
     }
@@ -1788,7 +1844,11 @@ draw_trench_corners_mostly_dirt :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        tint := ifx is_neighbor_obsidian(tile.id, .SOUTH_WEST) then DARKGRAY else WHITE;
+        if is_neighbor_obsidian(tile.id, .SOUTH_WEST) || is_tile_encased(tile.id) {
+            tint = DARKGRAY;
+        } else {
+            tint = WHITE;
+        }
 
         DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
     }
@@ -3592,14 +3652,18 @@ update_and_draw_frame_round :: () {
             draw_tiles :: () {
                 // Draw tiles base layer
                 draw_tiles_base_layer :: () {
-                    for tile: tiles_to_draw_this_frame {
+                    for *tile: tiles_to_draw_this_frame {
+                        tint := ifx tile_has_property(tile, .ENCASED) then DARKBROWN else WHITE;
                         tile_dest := get_world_rect_from_pos(tile.pos);
 
                         if is_lod_far() {
                             if #complete tile.type == {
                                 case .UNTOUCHED_DIRT; // Nothing to draw, we tile dirt on one texture in the background
-                                case .TOUCHED_DIRT;   // Nothing to draw, we tile dirt on one texture in the background
                                 case .IRON;           // Iron is not on the base layer
+                                
+                                case .TOUCHED_DIRT; {
+                                    DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_DIRT_GENERAL, tile_dest, Vector2.{0,0}, 0.0, tint);
+                                }
 
                                 case .MINED; {
                                     source := Rectangle.{
@@ -3609,7 +3673,7 @@ update_and_draw_frame_round :: () {
                                         TILEMAP_GENERAL_TILE_HEIGHT,
                                     };
 
-                                    DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                    DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, tint);
                                 }
                                 case .CAVE; {
                                     CAVE_SPRITE_SOURCE_ROW :: 2;
@@ -3622,16 +3686,16 @@ update_and_draw_frame_round :: () {
                                         TILEMAP_GENERAL_TILE_HEIGHT,
                                     };
 
-                                    DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                    DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, tint);
                                 }
                                 case .OBSIDIAN; {
-                                    DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OBSIDIAN, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                    DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OBSIDIAN, tile_dest, Vector2.{0,0}, 0.0, tint);
                                 }
                                 case .WALL; {
-                                    DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_WALL, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                    DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_WALL, tile_dest, Vector2.{0,0}, 0.0, tint);
                                 }
                                 case .HOLE; {
-                                    DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOLE, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                    DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOLE, tile_dest, Vector2.{0,0}, 0.0, tint);
                                 }
                             }
                         }
@@ -3640,7 +3704,9 @@ update_and_draw_frame_round :: () {
                             if #complete tile.type == {
                                 case .UNTOUCHED_DIRT; // Nothing to draw, we tile dirt on one texture in the background
                                 // TODO: maybe draw cracks based on health
-                                case .TOUCHED_DIRT;   // Nothing to draw, we tile dirt on one texture in the background
+                                case .TOUCHED_DIRT; {
+                                    DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_DIRT_GENERAL, tile_dest, Vector2.{0,0}, 0.0, tint);
+                                }
                                 case .MINED; {
                                     tile_column := tile.id % 3;
     
@@ -3651,7 +3717,7 @@ update_and_draw_frame_round :: () {
                                         TILEMAP_GENERAL_TILE_HEIGHT,
                                     };
 
-                                    DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                    DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, tint);
                                 }
                                 case .CAVE; {
                                     CAVE_SPRITE_SOURCE_ROW :: 2;
@@ -3664,7 +3730,7 @@ update_and_draw_frame_round :: () {
                                         TILEMAP_GENERAL_TILE_HEIGHT,
                                     };
 
-                                    DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                    DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, tint);
                                 }
                                 
                                 // Drawn on the top layer, so, nothing to do here while drawing the base layer.
@@ -3673,7 +3739,7 @@ update_and_draw_frame_round :: () {
                                 case .HOLE; 
                                 
                                 case .OBSIDIAN; {
-                                    DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OBSIDIAN, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                    DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OBSIDIAN, tile_dest, Vector2.{0,0}, 0.0, tint);
                                 }
                             }
                         }
@@ -3682,11 +3748,11 @@ update_and_draw_frame_round :: () {
                         if tile.properties > 0 {
                             if is_lod_far() {
                                 if tile_has_property(tile, .OUTPOST_FLOOR) {
-                                    DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTPOST_FLOOR_FAR_LOD, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                    DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTPOST_FLOOR_FAR_LOD, tile_dest, Vector2.{0,0}, 0.0, tint);
                                 }
 
                                 if tile_has_property(tile, .HOME_BASE_FLOOR) {
-                                    DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_FAR_LOD, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                    DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_FAR_LOD, tile_dest, Vector2.{0,0}, 0.0, tint);
                                 }
 
                                 if tile_has_property(tile, .WATER_STILL) {
@@ -3700,11 +3766,13 @@ update_and_draw_frame_round :: () {
                                         TILEMAP_GENERAL_TILE_HEIGHT,
                                     };
 
-                                    DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                    DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, tint);
                                 }
 
                                 if tile_has_property(tile, .WATER_FLOWING) {
-                                    sprite_draw(
+                                    tile.animated_sprite.color = tint;
+
+                                    sprite_draw( 
                                         tile.animated_sprite,
                                         tile.pos,
                                         TILEMAP_GENERAL_WORLD_WIDTH,
@@ -3726,10 +3794,12 @@ update_and_draw_frame_round :: () {
                                         TILEMAP_GENERAL_TILE_HEIGHT,
                                     };
 
-                                    DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                    DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, tint);
                                 }
 
                                 if tile_has_property(tile, .LAVA_FLOWING) {
+                                    tile.animated_sprite.color = tint;
+
                                     sprite_draw(
                                         tile.animated_sprite,
                                         tile.pos,
@@ -3742,7 +3812,7 @@ update_and_draw_frame_round :: () {
                                 }
                             } else {
                                 if tile_has_property(tile, .OUTPOST_FLOOR) {
-                                    DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTPOST_FLOOR, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                    DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTPOST_FLOOR, tile_dest, Vector2.{0,0}, 0.0, tint);
                                 }
                                 
                                 if tile_has_property(tile, .HOME_BASE_FLOOR) {
@@ -3758,39 +3828,39 @@ update_and_draw_frame_round :: () {
 
                                     // Center
                                     if is_home_base_floor_north && is_home_base_floor_south && is_home_base_floor_east && is_home_base_floor_west {
-                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_CENTER, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_CENTER, tile_dest, Vector2.{0,0}, 0.0, tint);
                                     }
                                     // North
                                     else if is_home_base_floor_south && is_home_base_floor_east && is_home_base_floor_west {
-                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_NORTH, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_NORTH, tile_dest, Vector2.{0,0}, 0.0, tint);
                                     }
                                     // South
                                     else if is_home_base_floor_north && is_home_base_floor_east && is_home_base_floor_west {
-                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_SOUTH, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_SOUTH, tile_dest, Vector2.{0,0}, 0.0, tint);
                                     }
                                     // East
                                     else if is_home_base_floor_north && is_home_base_floor_south && is_home_base_floor_west {
-                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_EAST, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_EAST, tile_dest, Vector2.{0,0}, 0.0, tint);
                                     }
                                     // West
                                     else if is_home_base_floor_north && is_home_base_floor_south && is_home_base_floor_east {
-                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_WEST, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_WEST, tile_dest, Vector2.{0,0}, 0.0, tint);
                                     }
                                     // North west
                                     else if is_home_base_floor_south && is_home_base_floor_east {
-                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_NORTH_WEST, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_NORTH_WEST, tile_dest, Vector2.{0,0}, 0.0, tint);
                                     }
                                     // North east
                                     else if is_home_base_floor_south && is_home_base_floor_west {
-                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_NORTH_EAST, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_NORTH_EAST, tile_dest, Vector2.{0,0}, 0.0, tint);
                                     }
                                     // South west
                                     else if is_home_base_floor_north && is_home_base_floor_east {
-                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_SOUTH_WEST, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_SOUTH_WEST, tile_dest, Vector2.{0,0}, 0.0, tint);
                                     }
                                     // South east
                                     else if is_home_base_floor_north && is_home_base_floor_west {
-                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_SOUTH_EAST, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_SOUTH_EAST, tile_dest, Vector2.{0,0}, 0.0, tint);
                                     }
                                     else {
                                         assert_soft(false, "Encountered a home base floor tile % with some strange neighbors: %, %, %, %", tile.id, is_home_base_floor_north, is_home_base_floor_south, is_home_base_floor_east, is_home_base_floor_west);
@@ -3798,6 +3868,8 @@ update_and_draw_frame_round :: () {
                                 }
 
                                 if tile_has_property(tile, .WATER_STILL) {
+                                    tile.animated_sprite.color = tint;
+
                                     sprite_draw(
                                         tile.animated_sprite,
                                         tile.pos,
@@ -3810,6 +3882,8 @@ update_and_draw_frame_round :: () {
                                 }
 
                                 if tile_has_property(tile, .WATER_FLOWING) {
+                                    tile.animated_sprite.color = tint;
+
                                     sprite_draw(
                                         tile.animated_sprite,
                                         tile.pos,
@@ -3829,10 +3903,12 @@ update_and_draw_frame_round :: () {
                                         TILEMAP_GENERAL_TILE_HEIGHT,
                                     };
 
-                                    DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                    DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, tint);
                                 }
 
                                 if tile_has_property(tile, .LAVA_FLOWING) {
+                                    tile.animated_sprite.color = tint;
+
                                     sprite_draw(
                                        tile.animated_sprite,
                                        tile.pos,
@@ -3846,11 +3922,11 @@ update_and_draw_frame_round :: () {
                             }
 
                             if tile_has_property(tile, .HAS_DYNAMITE) {
-                                DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_DYNAMITE, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_DYNAMITE, tile_dest, Vector2.{0,0}, 0.0, tint);
                             }
 
                             if tile_has_property(tile, .HAS_TREASURE) {
-                                DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_TREASURE, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_TREASURE, tile_dest, Vector2.{0,0}, 0.0, tint);
                             }
 
                             if context.metagame.debug_mode {
@@ -3874,16 +3950,6 @@ update_and_draw_frame_round :: () {
                                 if tile_has_property(tile, .LAVA_ALERT) {
                                     DrawCircleV(real_pos, 4.0, WHITE);
                                     DrawCircleV(real_pos, 3.0, RED);
-                                }
-                            } else {
-                                // Draw encased tiles
-                                if tile_has_property(tile, .ENCASED) {
-                                    // PERF: don't swap buffers here like this
-                                    DrawRectangleV(
-                                        tile.pos,
-                                        Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT },
-                                        TRANSPARENT_WHITE
-                                    );
                                 }
                             }
                         }
@@ -4150,24 +4216,6 @@ update_and_draw_frame_round :: () {
                         DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTLINE_1_BY_1, hovered_tile_rect, Vector2.{0,0}, 0.0, WHITE);
                     }
                 }
-
-                if context.metagame.debug_mode {
-                    found_tile, tile_id := find_tile_id_by_pos(get_rect_pos(hovered_tile_rect));
-                    if found_tile {
-                        tile_isnt_dirt, tile_index := table_find(*context.tile_ids_to_index, tile_id);
-                        if tile_isnt_dirt {
-                            tile := context.tiles[tile_index];
-
-                            tile_y : s32 = xx hovered_tile_rect.y;
-                            TILE_DEBUG_INC :: 15;
-
-                            DrawText(tprint("id: %\0", tile.id).data, xx hovered_tile_rect.x, read_then_increment(*tile_y, TILE_DEBUG_INC), 12, WHITE);
-                            DrawText(tprint("type: %\0", tile.type).data, xx hovered_tile_rect.x, read_then_increment(*tile_y, TILE_DEBUG_INC), 12, WHITE);
-                            DrawText(tprint("props: %\0", tile.properties).data, xx hovered_tile_rect.x, read_then_increment(*tile_y, TILE_DEBUG_INC), 12, WHITE);
-                            DrawText(tprint("health: %\0", tile.health).data, xx hovered_tile_rect.x, read_then_increment(*tile_y, TILE_DEBUG_INC), 12, WHITE);
-                        }
-                    }
-                }
             }
             draw_hovered_tile_or_onion_skins();
 
@@ -4383,9 +4431,25 @@ update_and_draw_frame_round :: () {
 
             DEBUG_TEXT_X :: 10;
             debug_text_y : s32 = 10;
+
             if context.metagame.debug_mode {
                 DrawFPS(DEBUG_TEXT_X, read_then_increment(*debug_text_y, INCREMENT_Y));
+
                 DrawText(tprint("dwarf count: %\0", dwarves.count).data, DEBUG_TEXT_X, read_then_increment(*debug_text_y, INCREMENT_Y), 12, WHITE);
+
+                // Draw hovered tile
+                {
+                    hovered_tile_rect := get_tile_rect_that_pos_is_within(get_world_width(), get_world_height(), TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, context.mouse_pos_in_world);
+                    found_tile, tile_id := find_tile_id_by_pos(get_rect_pos(hovered_tile_rect));
+                    if found_tile {
+                        tile_isnt_dirt, tile_index := table_find(*context.tile_ids_to_index, tile_id);
+                        if tile_isnt_dirt {
+                            tile := context.tiles[tile_index];
+                            debug_with_raylib_draw_text(tile, DEBUG_TEXT_X, *debug_text_y);
+                        }
+                    }
+                }
+
                 {
                     // Draw hovered dwarf
                     for dwarf: dwarves {
@@ -7316,6 +7380,8 @@ check_interior_volume :: (cycle: [] Vector2) -> float {
 
 try_to_encase_tiles :: (starting_tile_id: s32) {
     found_liquid: bool = false;
+    hole_ids : [..] s32;
+    hole_ids.allocator = temp;
 
     ids_processed: Table(s32, s32);
     ids_processed.allocator = temp;
@@ -7336,7 +7402,14 @@ try_to_encase_tiles :: (starting_tile_id: s32) {
         id_already_processed := table_contains(*ids_processed, id);
         if id_already_processed continue;
         if is_tile_obsidian(id) continue;
-        if is_tile_hole(id) continue;
+
+        // We need to keep track of the holes that are involved in case this
+        // does turn out to be an encasement, because we'll need to tint them
+        // and their trenches.
+        if is_tile_hole(id) {
+            array_add(*hole_ids, id);
+            continue;
+        }
 
         // Check if this tile is liquid
         if is_tile_water_still(id) {
@@ -7370,9 +7443,23 @@ try_to_encase_tiles :: (starting_tile_id: s32) {
 
     // If we found a liquid, mark the tiles as encased
     if found_liquid {
-        for encased_ids {
-            tile := get_tile_by_id(it);
-            assert_soft(tile != null, "I think all of these tiles should be defined? Maybe they shouldn't and I need to create tiles for null ones? idk man");
+        for tile_id: encased_ids {
+            tile := get_tile_by_id(tile_id);
+            
+            // If the tile is undefined, that just means that it's an untouched dirt in the encasement.
+            // Sloppy play from the player, but definitely allowed. Since the encasement tinting is a
+            // property on a tile, we'll have to create a touched dirt tile in order to set that.
+            if tile == null {
+                set_tile_as_type(tile_id, .TOUCHED_DIRT, false, false);
+                tile = get_tile_by_id(tile_id);
+            }
+
+            tile.properties |= TileProperty.ENCASED;
+        }
+        
+        for hole_id: hole_ids {
+            tile := get_tile_by_id(hole_id);
+            assert_soft(tile != null, "No hole tile ids should be invalid here, this probably indicates a problem with the hole detection above");
             tile.properties |= TileProperty.ENCASED;
         }
     }
