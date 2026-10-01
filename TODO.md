@@ -2,11 +2,13 @@
 # In progress
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+- outpost canons
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Bugs
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+- Outpost menu buttons don't seem to work unless the menu is above the outpost itself.
 - Mined tiles have 50 health?
 - Aggro logic is fucked up. Dwarves don't seem to wait where they should when goblins coming to them.
 - Water doesn't spread immediately
@@ -16,10 +18,9 @@
 # Core gameplay
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- outpost canons
+- In addition to control modes, allow users to hold down controls
 - Draw outpost health on hover
 - Dwarf warrior patrolling
-- In addition to control modes, allow users to hold down controls
 - Death particles, aggro particles, and hit star particles need TLC
 - Death poof particles
 - options menu
@@ -45,6 +46,7 @@
 - Treasure sprites
 - Better lava sprites / animations
 - Better water sprites / animations
+- Sprites / animations for alerts and warnings
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Tutorial

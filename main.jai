@@ -384,6 +384,16 @@ TILEMAP_SOURCE_RECT_OBSIDIAN := Rectangle.{
     TILEMAP_GENERAL_TILE_HEIGHT,
 };
 
+CANNON_PERIMETER_SPRITE_SOURCE_ROW :: 5.0;
+CANNON_PERIMETER_SPRITE_SOURCE_COL :: 5.0;
+
+TILEMAP_SOURCE_RECT_CANNON_PERIMETER := Rectangle.{
+    CANNON_PERIMETER_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
+    CANNON_PERIMETER_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
+    TILEMAP_GENERAL_TILE_WIDTH,
+    TILEMAP_GENERAL_TILE_HEIGHT,
+};
+
 DIRT_GENERAL_SPRITE_SOURCE_ROW :: 4.0;
 DIRT_GENERAL_SPRITE_SOURCE_COL :: 4.0;
 
@@ -624,6 +634,16 @@ TILEMAP_SOURCE_RECT_OUTPOST_MENU_SPAWN_WARRIOR := Rectangle.{
     TILEMAP_GENERAL_TILE_HEIGHT,
 };
 
+OUTPOST_MENU_CANNON_SPRITE_SOURCE_ROW :: 7.0;
+OUTPOST_MENU_CANNON_SPRITE_SOURCE_COL :: 12.0;
+
+TILEMAP_SOURCE_RECT_OUTPOST_MENU_CANNON := Rectangle.{
+    OUTPOST_MENU_CANNON_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
+    OUTPOST_MENU_CANNON_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
+    TILEMAP_GENERAL_TILE_WIDTH,
+    TILEMAP_GENERAL_TILE_HEIGHT,
+};
+
 TILEMAP_DWARF_MINER_TILE_WIDTH     :: 96;
 TILEMAP_DWARF_MINER_TILE_HEIGHT    :: 64;
 TILEMAP_DWARF_MINER_TILE_PADDING_X :: 32;
@@ -727,6 +747,7 @@ GameState :: struct {
     panic_pause_timer_ms       : int;
     controls_state_this_frame  : ControlsState;
     controls_state_prev_frame  : ControlsState;
+    started_dragging_at_pos    : Vector2;
     alert_banner_text          : string;
     alert_banner_text_ms       : int;
     alert_banner_text_color    : Color;
@@ -881,11 +902,15 @@ Outpost :: struct {
     #as using entity: Entity;
     type = Outpost;
 
-    is_home_base : bool;
     build_completion_percentage : float32;
     spawn_dwarf_cooldown_ms : s32;
+
+    // PERF: props?
+    is_home_base : bool;
     is_menu_open: bool;
     is_spawning_miners: bool;
+    is_showing_cannon_perimeter: bool;
+    cannon_perimeter_particle_ids: [..] s32;
 }
 
 DwarfState :: enum {
@@ -986,10 +1011,15 @@ Particle :: struct {
     velocity              : Vector2;
     acceleration          : Vector2;
     rotation              : float; // degrees
-    angular_velocity      : float; // degrees per second
+    rotational_velocity   : float; // degrees per second
+    orbital_center        : Vector2;
+    orbital_period        : float; // how many seconds it should take to do a full orbit
+    orbital_angle         : float; // the current angle in degrees of the orbit
+    orbital_radius        : float;
     size                  : float;
     fade                  : bool;
     opacity               : float;
+    auto_remove           : bool;
     time_left_ms          : int;
     time_left_max         : int;
     entity_id_to_follow   : s32;
@@ -2984,7 +3014,6 @@ update_and_draw_frame_round :: () {
                                         dwarf_transition_state(dwarf, .DECIDING);
                                     } else {
                                         move_one_step_towards_its_next_target_cardinal(dwarf, speed);
-
                                         // Remain in the .MOVING state, since we didn't reach the target yet
                                     }
 
@@ -3514,13 +3543,15 @@ update_and_draw_frame_round :: () {
                     particle_ids_to_kill_this_frame.allocator = temp;
 
                     for *particle: particles {
-                        // Update timer
-                        particle.time_left_ms -= xx (context.dt_seconds * 1000);
+                        if particle.auto_remove {
+                            // Update timer
+                            particle.time_left_ms -= xx (context.dt_seconds * 1000);
 
-                        // Mark particle for death if it's out of time
-                        if particle.time_left_ms <= 0 {
-                            array_add(*particle_ids_to_kill_this_frame, particle.id);
-                            continue;
+                            // Mark particle for death if it's out of time
+                            if particle.time_left_ms <= 0 {
+                                array_add(*particle_ids_to_kill_this_frame, particle.id);
+                                continue;
+                            }
                         }
 
                         if particle.fade {
@@ -3544,7 +3575,18 @@ update_and_draw_frame_round :: () {
                                 print("WARN: Particle % was trying to reference entity % (kind %) that it's supposed to follow, but didn't find it. Destroying particle.\n", particle.id, particle.entity_id_to_follow, particle.entity_kind_to_follow);
                                 array_add(*particle_ids_to_kill_this_frame, particle.id);
                             }
-                        } else {
+                        }
+                        // Update orbital position
+                        else if particle.orbital_period > 0 {
+                            // PERF: Is this stupid to divide like this? Should I just store the increment?
+                            angle_increment := 360 / particle.orbital_period;
+                            particle.orbital_angle += angle_increment * context.dt_seconds;
+                            if particle.orbital_angle > 360.0 then particle.orbital_angle -= 360.0; // Poor man's modulus...
+
+                            particle.position.x = particle.orbital_center.x + particle.orbital_radius * cos(particle.orbital_angle);
+                            particle.position.y = particle.orbital_center.y + particle.orbital_radius * sin(particle.orbital_angle);
+                        }
+                        else {
                             particle.position.x += particle.velocity.x * context.dt_seconds;
                             particle.position.y += particle.velocity.y * context.dt_seconds;
                             
@@ -3553,7 +3595,7 @@ update_and_draw_frame_round :: () {
                         }
 
                         // Update particle rotation
-                        particle.rotation += particle.angular_velocity * context.dt_seconds;
+                        particle.rotation += particle.rotational_velocity * context.dt_seconds;
                     }
 
                     for particle_ids_to_kill_this_frame kill_particle_by_id(it);
@@ -4385,6 +4427,59 @@ update_and_draw_frame_round :: () {
                             tilemap_texture_general,
                             TILEMAP_SOURCE_RECT_OUTPOST_MENU_SPAWN_WARRIOR,
                             outpost_menu_swawn_warrior_button_rect,
+                            Vector2.{ 0, 0 },
+                            0.0,
+                            tint
+                        );
+                    }
+
+                    // Draw outpost menu cannon button 
+                    if !outpost.is_home_base {
+                        outpost_menu_cannon_button_rect := Rectangle.{
+                            outpost_rect_in_ui_space.x,
+                            outpost_rect_in_ui_space.y  + TILEMAP_GENERAL_WORLD_WIDTH * 3,
+                            TILEMAP_GENERAL_WORLD_WIDTH * 2,
+                            TILEMAP_GENERAL_WORLD_HEIGHT * 2,
+                        };
+
+                        outpost_menu_cannon_button_is_hovered   := CheckCollisionPointRec(context.mouse_pos_in_ui, outpost_menu_cannon_button_rect);
+                        outpost_menu_cannon_button_is_pressed   := outpost_menu_cannon_button_is_hovered && context.game_state.controls_state_this_frame.select_is_pressed_once;
+                        outpost_menu_cannon_button_is_held_down := outpost_menu_cannon_button_is_hovered && context.game_state.controls_state_this_frame.select_is_held_down;
+
+                        tint : Color;
+                        if outpost_menu_cannon_button_is_held_down {
+                            tint = BEIGE;  
+                        }
+                        else if outpost_menu_cannon_button_is_hovered {
+                            tint = LIGHTGRAY;
+                        }
+                        else {
+                            tint = WHITE;
+                        }
+
+                        if outpost_menu_cannon_button_is_pressed && !outpost.is_showing_cannon_perimeter {
+                            angle_in_radians := 0.0;
+                            RADIUS :: TILEMAP_GENERAL_TILE_WIDTH * 50;
+                            ANGLE_NUDGE :: TAU * 0.005;
+
+                            orbital_center := Vector2.{
+                                outpost.pos.x + TILEMAP_GENERAL_TILE_WIDTH  * 1.5,
+                                outpost.pos.y + TILEMAP_GENERAL_TILE_HEIGHT * 1.5,
+                            };
+
+                            for 0..199 {
+                                particle := create_cannon_perimeter_particle(angle_in_radians, orbital_center, RADIUS);
+                                array_add(*outpost.cannon_perimeter_particle_ids, particle.id);
+                                angle_in_radians += ANGLE_NUDGE;
+                            }
+
+                            outpost.is_menu_open = false;
+                        }
+
+                        DrawTexturePro(
+                            tilemap_texture_general,
+                            TILEMAP_SOURCE_RECT_OUTPOST_MENU_CANNON,
+                            outpost_menu_cannon_button_rect,
                             Vector2.{ 0, 0 },
                             0.0,
                             tint
@@ -5994,6 +6089,46 @@ draw_path_cost_particle :: (pos: Vector2, amount: int) {
     draw_particle(particle);
 }
 
+create_cannon_perimeter_particle :: (orbital_angle: float, orbital_center: Vector2, orbital_radius: float) -> Particle {
+    particle_id := increment_then_read(*particle_id_counter);
+
+    particle_sprite := ParticleSprite.{
+        texture            = tilemap_texture_general,
+        texture_source_row = xx CANNON_PERIMETER_SPRITE_SOURCE_ROW,
+        texture_source_col = xx CANNON_PERIMETER_SPRITE_SOURCE_COL,
+        tint               = WHITE,
+    };
+
+    particle_sprites : [..] ParticleSprite;
+    array_add(*particle_sprites, particle_sprite);
+
+    pos := Vector2.{
+        orbital_center.x + orbital_radius * cos(orbital_angle),
+        orbital_center.y + orbital_radius * sin(orbital_angle),
+    };
+
+    particle := Particle.{
+        id                  = particle_id,
+        position            = pos,
+        rotational_velocity = 25.0,
+        orbital_center      = orbital_center,
+        orbital_period      = 36000,
+        orbital_angle       = orbital_angle,
+        orbital_radius      = orbital_radius,
+        size                = TILEMAP_GENERAL_WORLD_WIDTH,
+        fade                = false,
+        opacity             = 1,
+        sprites             = particle_sprites,
+        auto_remove         = false,
+        step_function       = steepstep,
+    };
+
+    table_set(*particle_id_to_index, particle_id, particles.count);
+    array_add(*particles, particle);
+
+    return particle;
+}
+
 create_gold_particle :: (pos: Vector2, amount: int, is_positive_connotation: bool) -> Particle {
     particle_id := increment_then_read(*particle_id_counter);
 
@@ -6017,6 +6152,7 @@ create_gold_particle :: (pos: Vector2, amount: int, is_positive_connotation: boo
         fade              = true,
         opacity           = 1,
         sprites           = gold_particle_sprites,
+        auto_remove       = true,
         time_left_ms      = PARTICLE_GOLD_TIME_TO_LIVE_MS,
         time_left_max     = PARTICLE_GOLD_TIME_TO_LIVE_MS,
         step_function     = steepstep,
@@ -6049,6 +6185,7 @@ create_dwarf_death_particle :: (pos: Vector2) -> Particle {
         fade              = true,
         opacity           = 1,
         sprites           = particle_sprites,
+        auto_remove       = true,
         time_left_ms      = PARTICLE_DWARF_DEATH_TIME_TO_LIVE_MS,
         time_left_max     = PARTICLE_DWARF_DEATH_TIME_TO_LIVE_MS,
         step_function     = steepstep,
@@ -6080,6 +6217,7 @@ create_goblin_death_particle :: (pos: Vector2) -> Particle {
         size              = PARTICLE_SIZE_IN_WORLD,
         fade              = true,
         opacity           = 1,
+        auto_remove       = true,
         time_left_ms      = PARTICLE_GOBLIN_DEATH_TIME_TO_LIVE_MS,
         time_left_max     = PARTICLE_GOBLIN_DEATH_TIME_TO_LIVE_MS,
         sprites           = particle_sprites,
@@ -6112,6 +6250,7 @@ create_dwarf_aggro_particle :: (pos: Vector2, dwarf_id: s32) -> Particle {
         fade                  = false,
         size                  = PARTICLE_SIZE_IN_WORLD,
         opacity               = 1,
+        auto_remove           = true,
         time_left_ms          = PARTICLE_DWARF_AGGRO_TIME_TO_LIVE_MS,
         time_left_max         = PARTICLE_DWARF_AGGRO_TIME_TO_LIVE_MS,
         sprites               = particle_sprites,
@@ -6145,8 +6284,7 @@ create_dwarf_selected_particle :: (pos: Vector2, dwarf_id: s32) -> Particle {
         fade                  = false,
         size                  = PARTICLE_SIZE_IN_WORLD,
         opacity               = 1,
-        time_left_ms          = PARTICLE_DWARF_SELECTED_TIME_TO_LIVE_MS, // This really should just be infinite
-        time_left_max         = PARTICLE_DWARF_SELECTED_TIME_TO_LIVE_MS, // This really should just be infinite
+        auto_remove           = false,
         sprites               = particle_sprites,
         entity_id_to_follow   = dwarf_id,
         entity_kind_to_follow = .Dwarf,
@@ -6218,6 +6356,7 @@ create_damage_particles :: (pos: Vector2, amount: int, direction_stars_should_fl
             size          = PARTICLE_SIZE_IN_WORLD,
             fade          = true,
             opacity       = 1,
+            auto_remove   = true,
             time_left_ms  = PARTICLE_DAMAGE_TIME_TO_LIVE_MS,
             time_left_max = PARTICLE_DAMAGE_TIME_TO_LIVE_MS,
             sprites       = particle_sprites,
@@ -6279,6 +6418,7 @@ create_damage_particles :: (pos: Vector2, amount: int, direction_stars_should_fl
             fade          = true,
             size          = PARTICLE_SIZE_IN_WORLD,
             opacity       = 1,
+            auto_remove   = true,
             time_left_ms  = PARTICLE_DAMAGE_STAR_TIME_TO_LIVE_MS,
             time_left_max = PARTICLE_DAMAGE_STAR_TIME_TO_LIVE_MS,
             sprites       = particle_sprites,
@@ -6339,6 +6479,7 @@ create_damage_particles :: (pos: Vector2, amount: int, direction_stars_should_fl
             fade          = true,
             size          = PARTICLE_SIZE_IN_WORLD,
             opacity       = 1,
+            auto_remove   = true,
             time_left_ms  = PARTICLE_DAMAGE_STAR_TIME_TO_LIVE_MS,
             time_left_max = PARTICLE_DAMAGE_STAR_TIME_TO_LIVE_MS,
             sprites       = particle_sprites,
@@ -6425,12 +6566,13 @@ create_mine_chip_particles :: (position: Vector2, amount: int, direction: Direct
             id               = particle_id,
             position         = pos,
             velocity         = velocity,
-            angular_velocity = random_get_within_range(-1000, 1000),
+            rotational_velocity = random_get_within_range(-1000, 1000),
             size             = 5.5,
             fade             = true,
             opacity          = 1,
             time_left_ms     = 500,
             time_left_max    = 500,
+            auto_remove      = true,
             sprites          = particle_sprites,
             step_function    = steepstep,
         };
@@ -6477,6 +6619,7 @@ create_miss_particle :: (pos: Vector2) {
         fade          = true,
         size          = PARTICLE_SIZE_IN_WORLD * 0.67,
         opacity       = 1,
+        auto_remove   = true,
         time_left_ms  = PARTICLE_DAMAGE_TIME_TO_LIVE_MS,
         sprites       = particle_sprites,
         step_function = smootherstep,
