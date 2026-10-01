@@ -1135,863 +1135,282 @@ main :: () {
 
 // Functions
 
-debug_struct_runtime :: (thing: Any, name_prefix: string, debug_text_x: s32, debug_text_y: *s32, render_struct_name_prefix: bool) {
-    if thing.type.type != .STRUCT return; // TODO: dont just eat this, assert probably
-    tis := cast(*Type_Info_Struct) thing.type;
+initialize_round :: () {
+    reset_memory();
 
-    // print("tis.members: %\n", tis.members);
+    GAME_TIME_REMAINING_MS    :: 900_000; // 15 minutes
+    GAME_STARTING_GOLD_HARD   :: 0;
+    GAME_STARTING_GOLD_MEDIUM :: 150;
+    GAME_STARTING_GOLD_EASY   :: 250;
 
-    for tis.members {
-        // Calculate where this field lives in memory
-        field_ptr := thing.value_pointer + it.offset_in_bytes;
+    if #complete context.metagame.level == {
+        case .NORMAL;
+            context.world_rows = WORLD_COLS_HUGE;
+            context.world_cols = WORLD_ROWS_HUGE;
+            context.camera_zoom_min = 0.07428;
+        case .TUTORIAL_CONTROLS;
+            context.world_rows = WORLD_COLS_TUTORIAL_CONTROLS;
+            context.world_cols = WORLD_ROWS_TUTORIAL_CONTROLS;
+            context.camera_zoom_min = 1.728;
+    }
+
+    // Set world dimension caches
+    context.world_cols_mask  = context.world_cols - 1;
+    context.world_rows_mask  = context.world_rows - 1;
+    context.world_cols_shift = integer_log2(xx context.world_cols);
+    context.world_cols_recip = 1.0 / context.world_cols;
+    context.world_rows_recip = 1.0 / context.world_rows;
+
+    // Set temp allocator for various things.
+    {
+        tiles_to_draw_this_frame.allocator    = temp;
+        dwarves_to_draw_this_frame.allocator  = temp;
+        goblins_to_draw_this_frame.allocator  = temp;
+        paths_to_draw_this_frame.allocator    = temp;
+        alerts_to_draw_this_frame.allocator   = temp;
+        outposts_to_draw_this_frame.allocator = temp;
+        tile_ids_to_dwarfs.allocator          = temp;
+        tile_ids_to_goblins.allocator         = temp;
+        tile_ids_to_outposts.allocator        = temp;
+    }
+
+    // TODO: parametrize
+    random_seed(123456789);
+
+    // TODO: Defaults to fall back on
+    // TODO: Put in a config file, but keep as jai, and then parse and #insert or something?
+    // Initialize controls
+    controls: Controls;
+    {
+        controls.select.binds[0] = Bind.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_LEFT };
+
+        controls.clear_selection.id   = read_then_increment(*control_id_counter);
+        controls.clear_selection.name = "Clear selection";
+        controls.clear_selection.control_mode = .NORMAL;
+        controls.clear_selection.rebindable_by_user = true;
+        controls.clear_selection.binds[0] = Bind.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_RIGHT };
+
+        controls.toggle_outpost_mode.id   = read_then_increment(*control_id_counter);
+        controls.toggle_outpost_mode.name = "Build outpost mode";
+        // TODO: This text needs to change dynamically ("Cost: % (Next will cost %)")
+        controls.toggle_outpost_mode.tooltip_text = "Outposts increase your max amount of warriors, and allow you to spawn additional miners. Must be built on a path. Cost more each time you build one.";
+        controls.toggle_outpost_mode.control_mode = .ADD_OUTPOST;
+        controls.toggle_outpost_mode.rebindable_by_user = true;
+        controls.toggle_outpost_mode.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_B };
+
+        controls.add_iron.id   = read_then_increment(*control_id_counter);
+        controls.add_iron.name = "DEBUG: Add iron deposit";
+        controls.add_iron.rebindable_by_user = false;
+        controls.add_iron.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_I };
+
+        controls.select_as_place_miner_dwarf.id   = read_then_increment(*control_id_counter);
+        controls.select_as_place_miner_dwarf.name = "DEBUG: Add miner dwarf";
+        controls.select_as_place_miner_dwarf.rebindable_by_user = false;
+        controls.select_as_place_miner_dwarf.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_D };
+
+        controls.select_as_place_warrior_dwarf.id   = read_then_increment(*control_id_counter);
+        controls.select_as_place_warrior_dwarf.name = "DEBUG: Add warrior dwarf";
+        controls.select_as_place_warrior_dwarf.rebindable_by_user = false;
+        controls.select_as_place_warrior_dwarf.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_A };
+
+        controls.toggle_dynamite_mode.id   = read_then_increment(*control_id_counter);
+        controls.toggle_dynamite_mode.name = "Place dynamite mode";
+        controls.toggle_dynamite_mode.tooltip_text = "Blows up a dwarf when stepped on, creating a hole. Holes stop water and lava flows permanently.";
+        controls.toggle_dynamite_mode.control_mode = .ADD_DYNAMITE;
+        controls.toggle_dynamite_mode.rebindable_by_user = true;
+        controls.toggle_dynamite_mode.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_E };
+
+        controls.select_as_place_goblin.id   = read_then_increment(*control_id_counter);
+        controls.select_as_place_goblin.name = "DEBUG: Place goblin";
+        controls.select_as_place_goblin.rebindable_by_user = false;
+        controls.select_as_place_goblin.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_T };
         
-        // Construct an 'Any' so tprint knows how to format it
-        field_any: Any;
-        field_any.type = it.type;
-        field_any.value_pointer = field_ptr;
-
-        // Format the string dynamically
-        text := ifx render_struct_name_prefix
-            then tprint("%.%: %\0", name_prefix, it.name, field_any)
-            else tprint("%: %\0", it.name, field_any);
-
-        DrawText(text.data, debug_text_x, read_then_increment(debug_text_y, INCREMENT_Y), 18, WHITE);
-    }
-}
-
-debug_variable_runtime :: (thing: Any, thing_symbol_as_string: string, debug_text_y: *s32) {
-    // Format the string dynamically
-    text := tprint("%: %\0", thing_symbol_as_string, thing);
-    
-    DrawText(text.data, 10, read_then_increment(debug_text_y, INCREMENT_Y), 18, WHITE);
-}
-
-// TODO: recursive struct drawing?
-// TODO: way to label fields as not wanted as debuggable
-debug_with_raylib_draw_text :: (c: Code, text_x: s32, text_y: *s32, render_struct_name_prefix := false) #expand {
-    var_name := #run code_to_string(c);
-    var_val  := #insert c;
-
-    ti := type_info(type_of(var_val));
-    if #complete ti.type == {
-        case .STRUCT; debug_struct_runtime(var_val, var_name, text_x, text_y, render_struct_name_prefix);
-
-        case .INTEGER; #through;   
-        case .FLOAT;   #through; 
-        case .BOOL;    #through;
-        case .STRING;  #through;  
-        case .ANY;     #through;
-        case .POINTER; debug_variable_runtime(var_val, var_name, text_y);
-
-        case .PROCEDURE;            #through;
-        case .VOID;                 #through;
-        case .ARRAY;                #through;
-        case .OVERLOAD_SET;         #through;
-        case .ENUM;                 #through;
-        case .POLYMORPHIC_VARIABLE; #through;
-        case .TYPE;                 #through;
-        case .CODE;                 #through;
-        case .UNTYPED_LITERAL;      #through;
-        case .UNTYPED_ENUM;         #through;
-        case .VARIANT;              assert(false, "Unsupported debug thing");
-    }
-}
-
-is_tile_valid_for_outpost_placement_center :: (tile_id: s32) -> (is_valid_placement: bool, too_expensive: bool) {
-    if context.game_state.gold < GOLD_COST_OUTPOST return false, true;
-
-    tile := get_tile_by_id(tile_id);
-    if tile == null return false, false; // untouched dirt is invalid
-    if tile.type != .MINED return false, false;
-
-    // TODO: I wonder if I could make this #complete somehow
-    if tile_has_property(tile, .ENCASED)         return false, false;
-    if tile_has_property(tile, .OUTPOST_FLOOR)   return false, false;
-    if tile_has_property(tile, .HOME_BASE_FLOOR) return false, false;
-    if tile_has_property(tile, .WATER_STILL)     return false, false;
-    if tile_has_property(tile, .WATER_FLOWING)   return false, false;
-    if tile_has_property(tile, .LAVA_STILL)      return false, false;
-    if tile_has_property(tile, .LAVA_FLOWING)    return false, false;
-
-    return true, false;
-}
-
-is_tile_valid_for_outpost_placement_non_center_non_outer :: (tile_id: s32) -> bool {
-    tile := get_tile_by_id(tile_id);
-    if tile == null return true; // Untouched dirt is fine for the outpost / outpost floor to be carved into.
-
-    if #complete tile.type == {
-        case .MINED; {
-            if tile_has_property(tile, .ENCASED)         return false;
-            if tile_has_property(tile, .OUTPOST_FLOOR)   return false;
-            if tile_has_property(tile, .HOME_BASE_FLOOR) return false;
-            if tile_has_property(tile, .WATER_STILL)     return false;
-            if tile_has_property(tile, .WATER_FLOWING)   return false;
-            if tile_has_property(tile, .LAVA_STILL)      return false;
-            if tile_has_property(tile, .LAVA_FLOWING)    return false;
-        }
-
-        case .UNTOUCHED_DIRT; return true;
-        case .TOUCHED_DIRT;   return true;
-        case .IRON;           return true;
-        case .WALL;           return true;
+        controls.toggle_obsidian_mode.id   = read_then_increment(*control_id_counter);
+        controls.toggle_obsidian_mode.name = "Obsidian mode";
+        controls.toggle_obsidian_mode.tooltip_text = "Turns soil into solid obsidian, making it impenetrable to almost anything.";
+        controls.toggle_obsidian_mode.control_mode = .ADD_OBSIDIAN;
+        controls.toggle_obsidian_mode.rebindable_by_user = true;
+        controls.toggle_obsidian_mode.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_Q           };
+        controls.toggle_obsidian_mode.binds[1] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT_SHIFT  };
+        controls.toggle_obsidian_mode.binds[2] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT_SHIFT };
         
-        case .HOLE;     return false;
-        case .OBSIDIAN; return false;
-        case .CAVE;     return false; // Outposts cannot be used to carve out caves.
+        controls.toggle_wall_mode.id   = read_then_increment(*control_id_counter);
+        controls.toggle_wall_mode.name = "Build wall mode";
+        controls.toggle_wall_mode.tooltip_text = "Place a wall that permanently stops water, slows down lava, and blocks warriors and certain enemies. Miners, some enemies, and lava can destroy walls.";
+        controls.toggle_wall_mode.control_mode = .ADD_WALL;
+        controls.toggle_wall_mode.rebindable_by_user = true;
+        controls.toggle_wall_mode.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_W };
+        
+        controls.drag_cam.id   = read_then_increment(*control_id_counter);
+        controls.drag_cam.name = "Drag camera";
+        controls.drag_cam.rebindable_by_user = true;
+        controls.drag_cam.binds[0] = Bind.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_RIGHT  };
+        controls.drag_cam.binds[1] = Bind.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_MIDDLE };
+        
+        controls.move_camera_up.id   = read_then_increment(*control_id_counter);
+        controls.move_camera_up.name = "Move camera up";
+        controls.move_camera_up.rebindable_by_user = true;
+        controls.move_camera_up.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_UP };
+        
+        controls.move_camera_down.id   = read_then_increment(*control_id_counter);
+        controls.move_camera_down.name = "Move camera down";
+        controls.move_camera_down.rebindable_by_user = true; 
+        controls.move_camera_down.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_DOWN };
+        
+        controls.move_camera_left.id   = read_then_increment(*control_id_counter);
+        controls.move_camera_left.name = "Move camera left";
+        controls.move_camera_left.rebindable_by_user = true; 
+        controls.move_camera_left.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT };
+        
+        controls.move_camera_right.id   = read_then_increment(*control_id_counter);
+        controls.move_camera_right.name = "Move camera right";
+        controls.move_camera_right.rebindable_by_user = true; 
+        controls.move_camera_right.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT };
+        
+        controls.toggle_remove_mode.id   = read_then_increment(*control_id_counter);
+        controls.toggle_remove_mode.name = "Remove mode";
+        controls.toggle_remove_mode.control_mode = .REMOVE;
+        controls.toggle_remove_mode.tooltip_text = "While active, you can select a created object to destroy it, like dynamite and path arrows.";
+        controls.toggle_remove_mode.rebindable_by_user = true; 
+        controls.toggle_remove_mode.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_R };
+
+        controls.panic_pause.id   = read_then_increment(*control_id_counter);
+        controls.panic_pause.name = "Panic pause";
+        controls.panic_pause.tooltip_text = "Forces time to a halt for a short duration, but has a decently-long cooldown.";
+        controls.panic_pause.rebindable_by_user = true;
+        controls.panic_pause.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_SPACE };
+
+        controls.fast_forward.id   = read_then_increment(*control_id_counter);
+        controls.fast_forward.name = "Fast forward";
+        controls.fast_forward.tooltip_text = "Speeds up the action, takes on resources to do, and has no cooldown.";
+        controls.fast_forward.rebindable_by_user = true;
+        controls.fast_forward.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_S };
     }
 
-    return true;
-}
+    // Initialize game
+    context.game_state = GameState.{
+        selected_dwarf_id          = 0,
+        selected_dwarf_particle_id = 0,
+        water_flow_cooldown_ms     = WATER_FLOW_COOLDOWN_MS,
+        lava_flow_cooldown_ms      = LAVA_FLOW_COOLDOWN_MS,
+        time_remaining_ms          = GAME_TIME_REMAINING_MS,
+        points                     = 0,
+        gold                       = GAME_STARTING_GOLD_EASY,
+        control_mode               = .NORMAL,
+        alert_banner_text          = "",
+        alert_banner_text_ms       = 0,
+    };
 
-is_tile_valid_for_outpost_placement_outer :: (tile_id: s32) -> bool {
-    tile := get_tile_by_id(tile_id);
-    if tile == null return true; // Untouched dirt is fine for the outpost / outpost floor to be carved into.
+    context.metagame.state            = .RUNNING;
+    context.metagame.thing_running    = .ROUND;
+    context.metagame.initialized      = true;
+    context.metagame.should_quit_game = false;
+    context.metagame.debug_mode       = false;
+    context.metagame.pause_state      = .MENU;
+    context.metagame.game_over_state  = .MENU;
+    context.metagame.main_menu_screen = .ROOT;
+    context.metagame.controls         = controls;
 
-    if #complete tile.type == {
-        case .UNTOUCHED_DIRT; return true;
-        case .TOUCHED_DIRT;   return true;
-        case .MINED;          return true;
-        case .IRON;           return true;
-        case .WALL;           return true;
-        case .HOLE;           return true;
-        case .OBSIDIAN;       return true;
+    GENERATE_CAVES_ENABLED :: true;
 
-        case .CAVE; return false; // Outposts cannot be used to carve out caves.
-    }
+    if #complete context.metagame.level == {
+        case .NORMAL;
+            // Initialize iron
+            GENERATE_IRON_ENABLED :: true;
+            #if GENERATE_IRON_ENABLED {
+                IRON_SPAWN_CHANCE_NUMERATOR   :: 5;
+                IRON_SPAWN_CHANCE_DENOMINATOR :: 1000;
+                IRON_VEIN_SIZE_MIN :: 8;
+                IRON_VEIN_SIZE_MAX :: 15;
 
-    if tile_has_property(tile, .ENCASED)         return false;
-    if tile_has_property(tile, .OUTPOST_FLOOR)   return false;
-    if tile_has_property(tile, .HOME_BASE_FLOOR) return false;
+                for col: 0..context.world_cols-1 {
+                    for row: 0..context.world_rows-1 {
+                        tile_id := (row * context.world_cols) + col + 1;
 
-    return true;
-}
-
-get_outpost_placement :: (hovered_tile_id: s32) -> (is_valid_placement: bool, is_too_expensive: bool, is_top_left_tile_id: s32) {
-    // If we're adding an outpost, we want to draw a 7 x 7 grid of transparent squares that indicate
-    // the validity of the placement of the outpost. The position of the mouse goes one below the center
-    // of the sprite, which ultimately means that we need to go up four and to the left three to draw
-    // the onion skin.
-    step_1_tile_id   := get_neighbor_tile_id_by_direction(hovered_tile_id, .NORTH_WEST);
-    step_2_tile_id   := get_neighbor_tile_id_by_direction(step_1_tile_id,  .NORTH_WEST);
-    step_3_tile_id   := get_neighbor_tile_id_by_direction(step_2_tile_id,  .NORTH_WEST);
-    top_left_tile_id := get_neighbor_tile_id_by_direction(step_3_tile_id,  .NORTH);
-    
-    // This isn't the end of the story for is_valid_placement, we try to disprove that this
-    // is a valid placement below.
-    is_valid_placement, is_too_expensive := is_tile_valid_for_outpost_placement_center(hovered_tile_id);
-
-    if is_valid_placement {
-        for col: 0..6 {
-            for row: 0..6 {
-                tile_id : s32 = xx (top_left_tile_id + col + row * context.world_cols);
-
-                if col == 0 || col == 6 || row == 0 || row == 6 {
-                    is_valid_placement = is_tile_valid_for_outpost_placement_outer(tile_id);
-                } else {
-                    is_valid_placement = is_tile_valid_for_outpost_placement_non_center_non_outer(tile_id);
+                        iron_spawn_dice_roll := cast(int) random_get_within_range(IRON_SPAWN_CHANCE_NUMERATOR, IRON_SPAWN_CHANCE_DENOMINATOR);
+                        if iron_spawn_dice_roll <= IRON_SPAWN_CHANCE_NUMERATOR {
+                            spawn_iron(xx tile_id);
+                        }
+                    }
                 }
-
-                if !is_valid_placement break col;
             }
-        }
-    }
 
-    return is_valid_placement, is_too_expensive, top_left_tile_id;
-}
+            // Initialize caves
+            #if GENERATE_CAVES_ENABLED {
+                CAVE_PERLIN_NOISE_FREQUENCY :: 256; // How many rows / columns
+                CAVE_PERLIN_NOISE_AMPLITUDE :: 2;
+                CAVE_PERLIN_NOISE_OCTAVES   :: 1;
+                CAVE_PERLIN_NOISE_MAX_THRESHOLD :: 0.95;
 
-get_entity_tile_id :: (entity: Entity) -> s32 {
-    entity_kind := get_entity_kind_from_type(entity.type);
-    if #complete entity_kind == {
-        case .Outpost;
-            return get_tile_id_by_pos(entity.pos);
-        case .Dwarf; #through;
-        case .Goblin;
-            entity_center := get_rect_center(get_world_rect_from_pos(entity.pos));
-            return get_tile_id_by_pos(entity_center);
-    }
-}
+                cave_noise := perlin_noise_2d(xx context.world_cols, CAVE_PERLIN_NOISE_FREQUENCY, CAVE_PERLIN_NOISE_AMPLITUDE, CAVE_PERLIN_NOISE_OCTAVES);
 
-did_dwarf_do_action_this_animation_frame :: (dwarf: Dwarf) -> bool {
-    anim_index   : s64;
-    action_frame : int;
+                for i: 0..(context.world_cols * context.world_cols)-1 {
+                    normalized := (cave_noise[i] + 1.0) / 2.0;
+                    // Clamp just in case floating point math slightly overshoots
+                    cave_noise[i] = clamp(normalized, 0.0, 1.0);
+                }
 
-    dwarf_tile_id := get_entity_tile_id(dwarf);
+                for col: 0..context.world_cols-1 {
+                    for row: 0..context.world_rows-1 {
+                        tile_id := (row * context.world_cols) + col + 1;
+                        noise_index := row * context.world_cols + col;
+                        tile_should_be_part_of_cave := cave_noise[noise_index] >= CAVE_PERLIN_NOISE_MAX_THRESHOLD;
 
-    if dwarf.tile_id_mining == dwarf_tile_id + context.world_cols {
-        if #complete dwarf.dwarf_type == {
-            case .MINER;
-                anim_index   = xx DwarfAnimationMiner.MINE_DOWN;
-                action_frame = DWARF_MINER_ANIMATION_MINE_DOWN_FRAME_ACTION;
-            case .WARRIOR;
-                anim_index   = xx DwarfAnimationWarrior.CHOP_DOWN;
-                action_frame = DWARF_WARRIOR_ANIMATION_CHOP_DOWN_FRAME_ACTION;
-        }
-    }
-    else if dwarf.tile_id_mining == dwarf_tile_id - context.world_cols {
-        if #complete dwarf.dwarf_type == {
-            case .MINER;
-                anim_index   = xx DwarfAnimationMiner.MINE_UP;
-                action_frame = DWARF_MINER_ANIMATION_MINE_UP_FRAME_ACTION;
-            case .WARRIOR;
-                anim_index   = xx DwarfAnimationWarrior.CHOP_UP;
-                action_frame = DWARF_WARRIOR_ANIMATION_CHOP_UP_FRAME_ACTION;
-        }
-    }
-    else {
-        if #complete dwarf.dwarf_type == {
-            case .MINER;
-                anim_index   = xx DwarfAnimationMiner.MINE_SIDE;
-                action_frame = DWARF_MINER_ANIMATION_MINE_SIDE_FRAME_ACTION;
-            case .WARRIOR;
-                anim_index   = xx DwarfAnimationWarrior.CHOP_SIDE;
-                action_frame = DWARF_WARRIOR_ANIMATION_CHOP_SIDE_FRAME_ACTION;
-        }
-    }
-
-    frame := sprite_animation_get_current_frame(dwarf.animations[anim_index]);
-
-    return frame == action_frame && !dwarf.did_anim_action;
-}
-
-get_direction_of_cardinal_neighbor :: (my_id: s32, neighbor_id: s32) -> Direction {
-    if neighbor_id == my_id - context.world_cols return .NORTH;
-    if neighbor_id == my_id + context.world_cols return .SOUTH;
-    if neighbor_id == my_id + 1                  return .EAST;
-    if neighbor_id == my_id - 1                  return .WEST;
-    
-    assert_soft(false, "Tried finding the direction of a supposed cardinal neighbor (tile id %) from the standing point of tile id %, but couldn't.", neighbor_id, my_id);
-    return .CENTER; // Unreachable 
-}
-
-is_lod_close :: () -> bool {
-    return context.camera.zoom >= CAMERA_ZOOM_LOD_CLOSE_MIN;
-}
-
-is_lod_normal :: () -> bool {
-    return (
-        context.camera.zoom < CAMERA_ZOOM_LOD_CLOSE_MIN &&
-        context.camera.zoom >= CAMERA_ZOOM_LOD_NORMAL_MIN
-    );
-}
-
-is_lod_far :: () -> bool {
-    return context.camera.zoom < CAMERA_ZOOM_LOD_NORMAL_MIN;
-}
-
-does_tile_render_trenches :: (tile: *Tile) -> bool {
-    if (tile == null) return false;
-    return does_tile_type_render_trenches(tile.type);
-}
-
-does_tile_type_render_trenches :: (tile_type: TileType) -> bool {
-    if #complete tile_type == {
-        case .UNTOUCHED_DIRT;  return false;
-        case .TOUCHED_DIRT;    return false;
-        case .IRON;            return false;
-        case .OBSIDIAN;        return false;
-        
-        case .WALL;            return true;
-        case .HOLE;            return true;
-        case .MINED;           return true;
-        case .CAVE;            return true;
-    }
-}
-
-update_trenches_if_necessary :: (tile_id: s32) {
-    // PERF: this is too cute, flatten this
-    for dir: DIRECTIONS_ALL {
-        deltas := get_tile_direction_id_deltas(dir);
-        dx := deltas[0];
-        dy := deltas[1];
-
-        tile := get_tile_by_id(tile_id + dx + dy);
-
-        if dir == .CENTER update_trench_walls_if_necessary(tile);
-        if dir == .NORTH  update_trench_walls_if_necessary(tile);
-        if dir == .SOUTH  update_trench_walls_if_necessary(tile);
-        if dir == .EAST   update_trench_walls_if_necessary(tile);
-        if dir == .WEST   update_trench_walls_if_necessary(tile);
-
-        update_trench_corners_if_necessary(tile);
-    }
-}
-
-try_to_add_warning_and_alert_markers :: (tile_id: s32, cave_type: CaveType) {
-    prop_alert   : TileProperty = ifx cave_type == .WATER then .WATER_ALERT   else .LAVA_ALERT;
-    prop_warning : TileProperty = ifx cave_type == .WATER then .WATER_WARNING else .LAVA_WARNING;
-
-    for direction: DIRECTIONS_COMPASS {
-        dx := get_tile_direction_id_deltas(direction)[0];
-        dy := get_tile_direction_id_deltas(direction)[1];
-
-        neighbor_id_1 := tile_id + dx + dy;
-        
-        if is_cardinal_direction(direction) {
-            if !is_tile_obsidian(neighbor_id_1) && !is_tile_hole(neighbor_id_1) {
-                if get_tile_by_id(neighbor_id_1) == null then set_tile_as_type(neighbor_id_1, .TOUCHED_DIRT, false, false);
-                set_tile_property(neighbor_id_1, prop_alert);
-
-                neighbor_id_2 := tile_id + (2 * dx) + (2* dy);
-
-                if get_tile_by_id(neighbor_id_2) == null then set_tile_as_type(neighbor_id_2, .TOUCHED_DIRT, false, false);
-                set_tile_property(neighbor_id_2, prop_warning);
+                        if tile_should_be_part_of_cave {
+                            set_tile_as_type(xx tile_id, .CAVE, false, false);
+                        }
+                    }
+                }
             }
-        } else {
-            if get_tile_by_id(neighbor_id_1) == null then set_tile_as_type(neighbor_id_1, .TOUCHED_DIRT, false, false);
-            set_tile_property(neighbor_id_1, prop_warning);
-        }
-    }
-}
 
-dwarf_maybe_set_active_animation :: (dwarf: *Dwarf, active_animation_index: s64) {
-    for dwarf.animations {
-        // If there are any animations currently playing, let them finish before moving on
-        if it_index != xx active_animation_index && it.active then return;
-    }
-    entity_set_active_animation(dwarf, active_animation_index);
-}
+            home_base := create_outpost(
+                Vector2.{
+                    context.world_cols * TILEMAP_GENERAL_WORLD_WIDTH  * 0.5,
+                    context.world_rows * TILEMAP_GENERAL_WORLD_HEIGHT * 0.5,
+                },
+                true,
+            );
 
-entity_set_active_animation :: (entity: *$T/interface Moveable, active_animation_index: s64) {
-    for * anim: entity.animations {
-        anim.active = active_animation_index == it_index;
-    }
-}
+            // Initialize dwarves
+            GENERATE_DWARVES_ENABLED :: true;
+            #if GENERATE_DWARVES_ENABLED {
+                dx, dy : float;
+                neighbor_pos: Vector2;
+                assert(outposts.count > 0);
 
-update_trench_walls_if_necessary :: (tile: *Tile) {
-    if (tile == null) return;
+                for 1..DWARF_MINER_START_COUNT {
+                    // Initialize miner dwarves
+                    dx = TILE_DIRECTION_DELTAS[xx Direction.NORTH][0];
+                    dy = TILE_DIRECTION_DELTAS[xx Direction.NORTH][1];
+                    neighbor_pos = Vector2.{ home_base.pos.x + dx, home_base.pos.y + dy };
 
-    neighbor_id_north := tile.id + get_tile_direction_id_deltas(.NORTH)[0] + get_tile_direction_id_deltas(.NORTH)[1];
-    neighbor_id_south := tile.id + get_tile_direction_id_deltas(.SOUTH)[0] + get_tile_direction_id_deltas(.SOUTH)[1];
-    neighbor_id_east  := tile.id + get_tile_direction_id_deltas(.EAST)[0]  + get_tile_direction_id_deltas(.EAST)[1];
-    neighbor_id_west  := tile.id + get_tile_direction_id_deltas(.WEST)[0]  + get_tile_direction_id_deltas(.WEST)[1];
-
-    neighbor_north := get_tile_by_id(neighbor_id_north);
-    neighbor_south := get_tile_by_id(neighbor_id_south);
-    neighbor_east  := get_tile_by_id(neighbor_id_east);
-    neighbor_west  := get_tile_by_id(neighbor_id_west);
-
-    if !does_tile_render_trenches(neighbor_north) {
-        tile.trench_directions_sides |= TrenchDirections.NORTH;
-    } else {
-        tile.trench_directions_sides &= ~TrenchDirections.NORTH;
-    }
-
-    if !does_tile_render_trenches(neighbor_south) {
-        tile.trench_directions_sides |= TrenchDirections.SOUTH;
-    } else {
-        tile.trench_directions_sides &= ~TrenchDirections.SOUTH;
-    }
-
-    if !does_tile_render_trenches(neighbor_east) {
-        tile.trench_directions_sides |= TrenchDirections.EAST;
-    }  else {
-        tile.trench_directions_sides &= ~TrenchDirections.EAST;
-    }
-
-    if !does_tile_render_trenches(neighbor_west) {
-        tile.trench_directions_sides |= TrenchDirections.WEST;
-    }  else {
-        tile.trench_directions_sides &= ~TrenchDirections.WEST;
-    }
-}
-
-update_trench_corners_if_necessary :: (tile: *Tile) {
-    if (tile == null) return;
-
-    for dir: DIRECTIONS_CORNER {
-        if dir == {
-            case .NORTH_EAST;
-                id_deltas_north      := get_tile_direction_id_deltas(.NORTH);
-                id_deltas_east       := get_tile_direction_id_deltas(.EAST);
-                id_deltas_north_east := get_tile_direction_id_deltas(.NORTH_EAST);
-
-                neighbor_north       := get_tile_by_id(tile.id + id_deltas_north[0] + id_deltas_north[1]);
-                neighbor_east        := get_tile_by_id(tile.id + id_deltas_east[0] + id_deltas_east[1]);
-                neighbor_north_east  := get_tile_by_id(tile.id + id_deltas_north_east[0] + id_deltas_north_east[1]);
-
-                tile.trench_directions_corners_mostly_crust  &= ~TrenchDirections.NORTH_EAST;
-                tile.trench_directions_corners_mostly_dirt   &= ~TrenchDirections.NORTH_EAST;
-                tile.trench_directions_corners_special_crust &= ~TrenchDirections.NORTH_EAST;
-
-                if !does_tile_render_trenches(neighbor_north_east) {
-                    if does_tile_render_trenches(neighbor_north) && does_tile_render_trenches(neighbor_east) {
-                        tile.trench_directions_corners_mostly_crust |= TrenchDirections.NORTH_EAST;
-                    } else if !does_tile_render_trenches(neighbor_north) && !does_tile_render_trenches(neighbor_east) {
-                        tile.trench_directions_corners_mostly_dirt |= TrenchDirections.NORTH_EAST;
-                    }
-                } else {
-                    if !does_tile_render_trenches(neighbor_north) && !does_tile_render_trenches(neighbor_east) {
-                        tile.trench_directions_corners_special_crust |= .NORTH_EAST;
-                    }
+                    create_dwarf(neighbor_pos, .MINER);
                 }
-            case .NORTH_WEST;
-                id_deltas_north      := get_tile_direction_id_deltas(.NORTH);
-                id_deltas_west       := get_tile_direction_id_deltas(.WEST);
-                id_deltas_north_west := get_tile_direction_id_deltas(.NORTH_WEST);
+                
+                for 1..DWARF_WARRIOR_START_COUNT {
+                    // Initialize warrior dwarf
+                    dx = TILE_DIRECTION_DELTAS[xx Direction.EAST][0];
+                    dy = TILE_DIRECTION_DELTAS[xx Direction.EAST][1];
+                    neighbor_pos = Vector2.{ home_base.pos.x + dx, home_base.pos.y + dy };
 
-                neighbor_north       := get_tile_by_id(tile.id + id_deltas_north[0] + id_deltas_north[1]);
-                neighbor_west        := get_tile_by_id(tile.id + id_deltas_west[0] + id_deltas_west[1]);
-                neighbor_north_west  := get_tile_by_id(tile.id + id_deltas_north_west[0] + id_deltas_north_west[1]);
-
-                tile.trench_directions_corners_mostly_crust  &= ~TrenchDirections.NORTH_WEST;
-                tile.trench_directions_corners_mostly_dirt   &= ~TrenchDirections.NORTH_WEST;
-                tile.trench_directions_corners_special_crust &= ~TrenchDirections.NORTH_WEST;
-
-                if !does_tile_render_trenches(neighbor_north_west) {
-                    if does_tile_render_trenches(neighbor_north) && does_tile_render_trenches(neighbor_west) {
-                        tile.trench_directions_corners_mostly_crust |= TrenchDirections.NORTH_WEST;
-                    }
-                    else if !does_tile_render_trenches(neighbor_north) && !does_tile_render_trenches(neighbor_west) {
-                        tile.trench_directions_corners_mostly_dirt |= TrenchDirections.NORTH_WEST;
-                    }
-                } else {
-                    if !does_tile_render_trenches(neighbor_north) && !does_tile_render_trenches(neighbor_west) {
-                        tile.trench_directions_corners_special_crust |= .NORTH_WEST;
-                    }
+                    create_dwarf(neighbor_pos, .WARRIOR);
                 }
-            case .SOUTH_EAST;
-                id_deltas_south      := get_tile_direction_id_deltas(.SOUTH);
-                id_deltas_east       := get_tile_direction_id_deltas(.EAST);
-                id_deltas_south_east := get_tile_direction_id_deltas(.SOUTH_EAST);
+            }
 
-                neighbor_south      := get_tile_by_id(tile.id + id_deltas_south[0] + id_deltas_south[1]);
-                neighbor_east       := get_tile_by_id(tile.id + id_deltas_east[0] + id_deltas_east[1]);
-                neighbor_south_east := get_tile_by_id(tile.id + id_deltas_south_east[0] + id_deltas_south_east[1]);
+            // Initialize camera
+            context.camera.target = outposts[0].pos;
 
-                tile.trench_directions_corners_mostly_dirt   &= ~TrenchDirections.SOUTH_EAST;
-                tile.trench_directions_corners_mostly_crust  &= ~TrenchDirections.SOUTH_EAST;
-                tile.trench_directions_corners_special_crust &= ~TrenchDirections.SOUTH_EAST;
-
-                if !does_tile_render_trenches(neighbor_south_east) {
-                    if does_tile_render_trenches(neighbor_south) && does_tile_render_trenches(neighbor_east) {
-                        tile.trench_directions_corners_mostly_crust |= TrenchDirections.SOUTH_EAST;
-                    }
-                    else if !does_tile_render_trenches(neighbor_south) && !does_tile_render_trenches(neighbor_east) {
-                        tile.trench_directions_corners_mostly_dirt |= TrenchDirections.SOUTH_EAST;
-                    }
-                } else {
-                    if !does_tile_render_trenches(neighbor_south) && !does_tile_render_trenches(neighbor_east) {
-                        tile.trench_directions_corners_special_crust |= .SOUTH_EAST;
-                    }
-                }
-            case .SOUTH_WEST;
-                id_deltas_south      := get_tile_direction_id_deltas(.SOUTH);
-                id_deltas_west       := get_tile_direction_id_deltas(.WEST);
-                id_deltas_south_west := get_tile_direction_id_deltas(.SOUTH_WEST);
-
-                neighbor_south       := get_tile_by_id(tile.id + id_deltas_south[0] + id_deltas_south[1]);
-                neighbor_west        := get_tile_by_id(tile.id + id_deltas_west[0] + id_deltas_west[1]);
-                neighbor_south_west  := get_tile_by_id(tile.id + id_deltas_south_west[0] + id_deltas_south_west[1]);
-
-                tile.trench_directions_corners_mostly_dirt   &= ~TrenchDirections.SOUTH_WEST;
-                tile.trench_directions_corners_mostly_crust  &= ~TrenchDirections.SOUTH_WEST;
-                tile.trench_directions_corners_special_crust &= ~TrenchDirections.SOUTH_WEST;
-
-                if !does_tile_render_trenches(neighbor_south_west) {
-                    if does_tile_render_trenches(neighbor_south) && does_tile_render_trenches(neighbor_west) {
-                        tile.trench_directions_corners_mostly_crust |= TrenchDirections.SOUTH_WEST;
-                    }
-                    else if !does_tile_render_trenches(neighbor_south) && !does_tile_render_trenches(neighbor_west) {
-                        tile.trench_directions_corners_mostly_dirt |= TrenchDirections.SOUTH_WEST;
-                    }
-                } else {
-                    if !does_tile_render_trenches(neighbor_south) && !does_tile_render_trenches(neighbor_west) {
-                        tile.trench_directions_corners_special_crust |= .SOUTH_WEST;
-                    }
-                }
-        }
-    }
-}
-
-TRENCH_STRAIGHT_SPRITE_SOURCE_ROW :: 2;
-TRENCH_STRAIGHT_SPRITE_SOURCE_COL :: 0;
-TRENCH_SIDES_SOURCE := Rectangle.{
-    TRENCH_STRAIGHT_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
-    TRENCH_STRAIGHT_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
-    TILEMAP_GENERAL_TILE_WIDTH,
-    TILEMAP_GENERAL_TILE_HEIGHT,
-};
-
-is_neighbor_obsidian :: (tile_id: s32, direction: Direction) -> bool {
-    neighbor_tile_id_north := get_neighbor_tile_id_by_direction(tile_id, direction);
-    neighbor_tile_north := get_tile_by_id(neighbor_tile_id_north);
-    return neighbor_tile_north != null && neighbor_tile_north.type == .OBSIDIAN;
-}
-
-draw_trench_sides :: (tile: Tile) {
-    dest   := get_world_rect_from_pos(tile.pos);
-    rot    := 0.0;
-    origin := Vector2.{ TILEMAP_GENERAL_TILE_WIDTH * 0.5, TILEMAP_GENERAL_TILE_HEIGHT * 0.5 };
-    
-    get_neighbor_tile_id_by_direction(tile.id, .SOUTH);
-    get_neighbor_tile_id_by_direction(tile.id, .EAST);
-    get_neighbor_tile_id_by_direction(tile.id, .WEST);
-    tint := WHITE; // Darkened if next to obsidian, dimmed if encased.
-    
-    if tile.trench_directions_sides & TrenchDirections.NORTH {
-        final_dest := Rectangle.{
-            dest.x + TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
-            dest.y - TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
-            dest.width, dest.height,
-        };
-        
-        if is_neighbor_obsidian(tile.id, .NORTH) || is_tile_encased(tile.id) {
-            tint = DARKGRAY;
-        } else {
-            tint = WHITE;
-        }
-
-        DrawTexturePro(tilemap_texture_general, TRENCH_SIDES_SOURCE, final_dest, origin, rot, tint);
+        case .TUTORIAL_CONTROLS;
+            // Initialize camera
+            context.camera.target = Vector2.{
+                context.world_cols * TILEMAP_GENERAL_WORLD_WIDTH  * 0.5,
+                context.world_rows * TILEMAP_GENERAL_WORLD_HEIGHT * 0.5,
+            };
     }
 
-    if tile.trench_directions_sides & TrenchDirections.SOUTH {
-        rot = 180.0;
-
-        final_dest := Rectangle.{
-            dest.x + TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
-            dest.y + TILEMAP_GENERAL_TILE_HEIGHT * 1.5,
-            dest.width, dest.height,
-        };
-
-        if is_neighbor_obsidian(tile.id, .SOUTH) || is_tile_encased(tile.id) {
-            tint = DARKGRAY;
-        } else {
-            tint = WHITE;
-        }
-
-        DrawTexturePro(tilemap_texture_general, TRENCH_SIDES_SOURCE, final_dest, origin, rot, tint);
-    }
-
-    if tile.trench_directions_sides & TrenchDirections.EAST {
-        rot = 90.0;
-        
-        final_dest := Rectangle.{
-            dest.x + TILEMAP_GENERAL_TILE_HEIGHT * 1.5,
-            dest.y + TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
-            dest.width, dest.height,
-        };
-
-        if is_neighbor_obsidian(tile.id, .EAST) || is_tile_encased(tile.id) {
-            tint = DARKGRAY;
-        } else {
-            tint = WHITE;
-        }
-    
-        DrawTexturePro(tilemap_texture_general, TRENCH_SIDES_SOURCE, final_dest, origin, rot, tint);
-    }
-
-    if tile.trench_directions_sides & TrenchDirections.WEST {
-        rot = 270.0;
-        
-        final_dest := Rectangle.{
-            dest.x - TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
-            dest.y + TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
-            dest.width, dest.height,
-        };
-
-        if is_neighbor_obsidian(tile.id, .WEST) || is_tile_encased(tile.id) {
-            tint = DARKGRAY;
-        } else {
-            tint = WHITE;
-        }
-
-        DrawTexturePro(tilemap_texture_general, TRENCH_SIDES_SOURCE, final_dest, origin, rot, tint);
-    }
-}
-
-TRENCH_CORNER_MOSTLY_CRUST_NORTH_EAST_SPRITE_SOURCE_ROW :: 2;
-TRENCH_CORNER_MOSTLY_CRUST_NORTH_EAST_SPRITE_SOURCE_COL :: 1;
-TRENCH_CORNER_MOSTLY_CRUST_NORTH_WEST_SPRITE_SOURCE_ROW :: 2;
-TRENCH_CORNER_MOSTLY_CRUST_NORTH_WEST_SPRITE_SOURCE_COL :: 2;
-TRENCH_CORNER_MOSTLY_CRUST_SOUTH_EAST_SPRITE_SOURCE_ROW :: 2;
-TRENCH_CORNER_MOSTLY_CRUST_SOUTH_EAST_SPRITE_SOURCE_COL :: 3;
-TRENCH_CORNER_MOSTLY_CRUST_SOUTH_WEST_SPRITE_SOURCE_ROW :: 2;
-TRENCH_CORNER_MOSTLY_CRUST_SOUTH_WEST_SPRITE_SOURCE_COL :: 4;
-
-ORIGIN :: Vector2.{ TILEMAP_GENERAL_TILE_WIDTH * 0.5, TILEMAP_GENERAL_TILE_HEIGHT * 0.5 };
-
-draw_trench_corners_mostly_crust :: (tile: Tile) {
-    source := Rectangle.{ 0, 0, TILEMAP_GENERAL_TILE_WIDTH, TILEMAP_GENERAL_TILE_HEIGHT };
-    dest   := get_world_rect_from_pos(tile.pos);
-    tint   := WHITE; // Darkened if next to obsidian, dimmed if encased.
-
-    if tile.trench_directions_corners_mostly_crust & TrenchDirections.NORTH_EAST {
-        source.x = TRENCH_CORNER_MOSTLY_CRUST_NORTH_EAST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
-        source.y = TRENCH_CORNER_MOSTLY_CRUST_NORTH_EAST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
-
-        final_dest := Rectangle.{
-            dest.x + TILEMAP_GENERAL_TILE_HEIGHT * 1.5,
-            dest.y - TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
-            dest.width, dest.height,
-        };
-
-        if is_neighbor_obsidian(tile.id, .NORTH_EAST) || is_tile_encased(tile.id) {
-            tint = DARKGRAY;
-        } else {
-            tint = WHITE;
-        }
-
-        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
-    }
-
-    if tile.trench_directions_corners_mostly_crust & TrenchDirections.NORTH_WEST {
-        source.x = TRENCH_CORNER_MOSTLY_CRUST_NORTH_WEST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
-        source.y = TRENCH_CORNER_MOSTLY_CRUST_NORTH_WEST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
-
-        final_dest := Rectangle.{
-            dest.x - TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
-            dest.y - TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
-            dest.width, dest.height,
-        };
-
-        if is_neighbor_obsidian(tile.id, .NORTH_WEST) || is_tile_encased(tile.id) {
-            tint = DARKGRAY;
-        } else {
-            tint = WHITE;
-        }
-
-        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
-    }
-
-    if tile.trench_directions_corners_mostly_crust & TrenchDirections.SOUTH_EAST {
-        source.x = TRENCH_CORNER_MOSTLY_CRUST_SOUTH_EAST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
-        source.y = TRENCH_CORNER_MOSTLY_CRUST_SOUTH_EAST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
-        
-        final_dest := Rectangle.{
-            dest.x + TILEMAP_GENERAL_TILE_HEIGHT * 1.5,
-            dest.y + TILEMAP_GENERAL_TILE_HEIGHT * 1.5,
-            dest.width, dest.height,
-        };
-
-        if is_neighbor_obsidian(tile.id, .SOUTH_EAST) || is_tile_encased(tile.id) {
-            tint = DARKGRAY;
-        } else {
-            tint = WHITE;
-        }
-    
-        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
-    }
-
-    if tile.trench_directions_corners_mostly_crust & TrenchDirections.SOUTH_WEST {
-        source.x = TRENCH_CORNER_MOSTLY_CRUST_SOUTH_WEST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
-        source.y = TRENCH_CORNER_MOSTLY_CRUST_SOUTH_WEST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
-        
-        final_dest := Rectangle.{
-            dest.x - TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
-            dest.y + TILEMAP_GENERAL_TILE_HEIGHT * 1.5,
-            dest.width, dest.height,
-        };
-
-        if is_neighbor_obsidian(tile.id, .SOUTH_WEST) || is_tile_encased(tile.id) {
-            tint = DARKGRAY;
-        } else {
-            tint = WHITE;
-        }
-
-        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
-    }
-}
-
-TRENCH_CORNER_MOSTLY_DIRT_NORTH_EAST_SPRITE_SOURCE_ROW :: 3;
-TRENCH_CORNER_MOSTLY_DIRT_NORTH_EAST_SPRITE_SOURCE_COL :: 1;
-TRENCH_CORNER_MOSTLY_DIRT_NORTH_WEST_SPRITE_SOURCE_ROW :: 3;
-TRENCH_CORNER_MOSTLY_DIRT_NORTH_WEST_SPRITE_SOURCE_COL :: 2;
-TRENCH_CORNER_MOSTLY_DIRT_SOUTH_EAST_SPRITE_SOURCE_ROW :: 3;
-TRENCH_CORNER_MOSTLY_DIRT_SOUTH_EAST_SPRITE_SOURCE_COL :: 3;
-TRENCH_CORNER_MOSTLY_DIRT_SOUTH_WEST_SPRITE_SOURCE_ROW :: 3;
-TRENCH_CORNER_MOSTLY_DIRT_SOUTH_WEST_SPRITE_SOURCE_COL :: 4;
-
-draw_trench_corners_mostly_dirt :: (tile: Tile) {
-    source := Rectangle.{ 0, 0, TILEMAP_GENERAL_TILE_WIDTH, TILEMAP_GENERAL_TILE_HEIGHT };
-    dest   := get_world_rect_from_pos(tile.pos);
-    tint   := WHITE; // Darkened if next to obsidian, dimmed if encased.
-
-    if tile.trench_directions_corners_mostly_dirt & TrenchDirections.NORTH_EAST {
-        source.x = TRENCH_CORNER_MOSTLY_DIRT_NORTH_EAST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
-        source.y = TRENCH_CORNER_MOSTLY_DIRT_NORTH_EAST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
-
-        final_dest := Rectangle.{
-            dest.x + TILEMAP_GENERAL_TILE_HEIGHT * 1.5,
-            dest.y - TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
-            dest.width, dest.height,
-        };
-
-        if is_neighbor_obsidian(tile.id, .NORTH_EAST) || is_tile_encased(tile.id) {
-            tint = DARKGRAY;
-        } else {
-            tint = WHITE;
-        }
-
-        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
-    }
-
-    if tile.trench_directions_corners_mostly_dirt & TrenchDirections.NORTH_WEST {
-        source.x = TRENCH_CORNER_MOSTLY_DIRT_NORTH_WEST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
-        source.y = TRENCH_CORNER_MOSTLY_DIRT_NORTH_WEST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
-
-        final_dest := Rectangle.{
-            dest.x - TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
-            dest.y - TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
-            dest.width, dest.height,
-        };
-
-        if is_neighbor_obsidian(tile.id, .NORTH_WEST) || is_tile_encased(tile.id) {
-            tint = DARKGRAY;
-        } else {
-            tint = WHITE;
-        }
-        
-        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
-    }
-
-    if tile.trench_directions_corners_mostly_dirt & TrenchDirections.SOUTH_EAST {
-        source.x = TRENCH_CORNER_MOSTLY_DIRT_SOUTH_EAST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
-        source.y = TRENCH_CORNER_MOSTLY_DIRT_SOUTH_EAST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
-        
-        final_dest := Rectangle.{
-            dest.x + TILEMAP_GENERAL_TILE_HEIGHT * 1.5,
-            dest.y + TILEMAP_GENERAL_TILE_HEIGHT * 1.5,
-            dest.width, dest.height,
-        };
-
-        if is_neighbor_obsidian(tile.id, .SOUTH_EAST) || is_tile_encased(tile.id) {
-            tint = DARKGRAY;
-        } else {
-            tint = WHITE;
-        }
-    
-        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
-    }
-
-    if tile.trench_directions_corners_mostly_dirt & TrenchDirections.SOUTH_WEST {
-        source.x = TRENCH_CORNER_MOSTLY_DIRT_SOUTH_WEST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
-        source.y = TRENCH_CORNER_MOSTLY_DIRT_SOUTH_WEST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
-        
-        final_dest := Rectangle.{
-            dest.x - TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
-            dest.y + TILEMAP_GENERAL_TILE_HEIGHT * 1.5,
-            dest.width, dest.height,
-        };
-
-        if is_neighbor_obsidian(tile.id, .SOUTH_WEST) || is_tile_encased(tile.id) {
-            tint = DARKGRAY;
-        } else {
-            tint = WHITE;
-        }
-
-        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
-    }
-}
-
-TRENCH_CORNER_SPECIAL_CRUST_NORTH_EAST_SPRITE_SOURCE_ROW :: 2;
-TRENCH_CORNER_SPECIAL_CRUST_NORTH_EAST_SPRITE_SOURCE_COL :: 2;
-TRENCH_CORNER_SPECIAL_CRUST_NORTH_WEST_SPRITE_SOURCE_ROW :: 2;
-TRENCH_CORNER_SPECIAL_CRUST_NORTH_WEST_SPRITE_SOURCE_COL :: 1;
-TRENCH_CORNER_SPECIAL_CRUST_SOUTH_EAST_SPRITE_SOURCE_ROW :: 2;
-TRENCH_CORNER_SPECIAL_CRUST_SOUTH_EAST_SPRITE_SOURCE_COL :: 4;
-TRENCH_CORNER_SPECIAL_CRUST_SOUTH_WEST_SPRITE_SOURCE_ROW :: 2;
-TRENCH_CORNER_SPECIAL_CRUST_SOUTH_WEST_SPRITE_SOURCE_COL :: 3;
-
-draw_trench_corners_special_crust :: (tile: Tile) {
-    source := Rectangle.{ 0, 0, TILEMAP_GENERAL_TILE_WIDTH, TILEMAP_GENERAL_TILE_HEIGHT };
-    dest   := get_world_rect_from_pos(tile.pos);
-
-    if tile.trench_directions_corners_special_crust & TrenchDirections.NORTH_EAST {
-        source.x = TRENCH_CORNER_SPECIAL_CRUST_NORTH_EAST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
-        source.y = TRENCH_CORNER_SPECIAL_CRUST_NORTH_EAST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
-
-        final_dest := Rectangle.{
-            dest.x + TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
-            dest.y - TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
-            dest.width, dest.height,
-        };
-
-        tint := ifx is_neighbor_obsidian(tile.id, .NORTH) then DARKGRAY else WHITE;
-
-        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
-    }
-
-    if tile.trench_directions_corners_special_crust & TrenchDirections.NORTH_WEST {
-        source.x = TRENCH_CORNER_SPECIAL_CRUST_NORTH_WEST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
-        source.y = TRENCH_CORNER_SPECIAL_CRUST_NORTH_WEST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
-
-        final_dest := Rectangle.{
-            dest.x + TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
-            dest.y - TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
-            dest.width, dest.height,
-        };
-
-        tint := ifx is_neighbor_obsidian(tile.id, .NORTH) then DARKGRAY else WHITE;
-
-        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
-    }
-
-    if tile.trench_directions_corners_special_crust & TrenchDirections.SOUTH_EAST {
-        source.x = TRENCH_CORNER_SPECIAL_CRUST_SOUTH_EAST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
-        source.y = TRENCH_CORNER_SPECIAL_CRUST_SOUTH_EAST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
-        
-        final_dest := Rectangle.{
-            dest.x + TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
-            dest.y + TILEMAP_GENERAL_TILE_HEIGHT * 1.5,
-            dest.width, dest.height,
-        };
-    
-        tint := ifx is_neighbor_obsidian(tile.id, .SOUTH) then DARKGRAY else WHITE;
-
-        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
-    }
-
-    if tile.trench_directions_corners_special_crust & TrenchDirections.SOUTH_WEST {
-        source.x = TRENCH_CORNER_SPECIAL_CRUST_SOUTH_WEST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
-        source.y = TRENCH_CORNER_SPECIAL_CRUST_SOUTH_WEST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
-        
-        final_dest := Rectangle.{
-            dest.x + TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
-            dest.y + TILEMAP_GENERAL_TILE_HEIGHT * 1.5,
-            dest.width, dest.height,
-        };
-
-        tint := ifx is_neighbor_obsidian(tile.id, .SOUTH) then DARKGRAY else WHITE;
-
-        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
-    }
-}
-
-LiquidType :: enum {
-    WATER;
-    LAVA;
-}
-
-determine_rotation_of_liquid_flowing_sprite :: (tile_id: s32, liquid_type: LiquidType) -> float {
-    north_tile_id : s32 = tile_id - xx context.world_rows;
-    south_tile_id : s32 = tile_id + xx context.world_rows;
-    east_tile_id  : s32 = tile_id + 1;
-    west_tile_id  : s32 = tile_id - 1;
-
-    is_neighbor_north_liquid_still := ifx liquid_type == .LAVA then is_tile_lava_still(north_tile_id) else is_tile_water_still(north_tile_id);
-    is_neighbor_south_liquid_still := ifx liquid_type == .LAVA then is_tile_lava_still(south_tile_id) else is_tile_water_still(south_tile_id);
-    is_neighbor_east_liquid_still  := ifx liquid_type == .LAVA then is_tile_lava_still(east_tile_id) else is_tile_water_still(east_tile_id);
-    is_neighbor_west_liquid_still  := ifx liquid_type == .LAVA then is_tile_lava_still(west_tile_id) else is_tile_water_still(west_tile_id);
-
-    if (
-        is_neighbor_north_liquid_still  &&
-        !is_neighbor_south_liquid_still &&
-        !is_neighbor_east_liquid_still  &&
-        !is_neighbor_west_liquid_still
-    ) return 0;
-
-    if (
-        !is_neighbor_north_liquid_still &&
-        is_neighbor_south_liquid_still  &&
-        !is_neighbor_east_liquid_still  &&
-        !is_neighbor_west_liquid_still
-    ) return 180; // Flow to the left if the only lava around is to the right
-
-    if is_neighbor_east_liquid_still return 90;
-    if is_neighbor_west_liquid_still return 270;
-
-    return 0;
+    context.camera.offset   = Vector2.{ GetScreenWidth() * 0.5, GetScreenHeight() * 0.5 };
+    context.camera.rotation = 0.0;
+    context.camera.zoom     = 2.0;
 }
 
 update_and_draw_frame_main_menu :: () {
@@ -2303,7 +1722,6 @@ update_and_draw_frame_round :: () {
                 context.game_state.control_mode = ifx context.game_state.control_mode == .REMOVE then .NORMAL else .REMOVE;
             }
         }
-
 
         // TODO: should this go here? or just, like, collecting inputs or whatever... instead of updating state?
         if context.game_state.controls_state_this_frame.select_is_pressed_once {
@@ -4990,6 +4408,865 @@ update_and_draw_frame_round :: () {
     draw();
 }
 
+debug_struct_runtime :: (thing: Any, name_prefix: string, debug_text_x: s32, debug_text_y: *s32, render_struct_name_prefix: bool) {
+    if thing.type.type != .STRUCT return; // TODO: dont just eat this, assert probably
+    tis := cast(*Type_Info_Struct) thing.type;
+
+    // print("tis.members: %\n", tis.members);
+
+    for tis.members {
+        // Calculate where this field lives in memory
+        field_ptr := thing.value_pointer + it.offset_in_bytes;
+        
+        // Construct an 'Any' so tprint knows how to format it
+        field_any: Any;
+        field_any.type = it.type;
+        field_any.value_pointer = field_ptr;
+
+        // Format the string dynamically
+        text := ifx render_struct_name_prefix
+            then tprint("%.%: %\0", name_prefix, it.name, field_any)
+            else tprint("%: %\0", it.name, field_any);
+
+        DrawText(text.data, debug_text_x, read_then_increment(debug_text_y, INCREMENT_Y), 18, WHITE);
+    }
+}
+
+debug_variable_runtime :: (thing: Any, thing_symbol_as_string: string, debug_text_y: *s32) {
+    // Format the string dynamically
+    text := tprint("%: %\0", thing_symbol_as_string, thing);
+    
+    DrawText(text.data, 10, read_then_increment(debug_text_y, INCREMENT_Y), 18, WHITE);
+}
+
+// TODO: recursive struct drawing?
+// TODO: way to label fields as not wanted as debuggable
+debug_with_raylib_draw_text :: (c: Code, text_x: s32, text_y: *s32, render_struct_name_prefix := false) #expand {
+    var_name := #run code_to_string(c);
+    var_val  := #insert c;
+
+    ti := type_info(type_of(var_val));
+    if #complete ti.type == {
+        case .STRUCT; debug_struct_runtime(var_val, var_name, text_x, text_y, render_struct_name_prefix);
+
+        case .INTEGER; #through;   
+        case .FLOAT;   #through; 
+        case .BOOL;    #through;
+        case .STRING;  #through;  
+        case .ANY;     #through;
+        case .POINTER; debug_variable_runtime(var_val, var_name, text_y);
+
+        case .PROCEDURE;            #through;
+        case .VOID;                 #through;
+        case .ARRAY;                #through;
+        case .OVERLOAD_SET;         #through;
+        case .ENUM;                 #through;
+        case .POLYMORPHIC_VARIABLE; #through;
+        case .TYPE;                 #through;
+        case .CODE;                 #through;
+        case .UNTYPED_LITERAL;      #through;
+        case .UNTYPED_ENUM;         #through;
+        case .VARIANT;              assert(false, "Unsupported debug thing");
+    }
+}
+
+is_tile_valid_for_outpost_placement_center :: (tile_id: s32) -> (is_valid_placement: bool, too_expensive: bool) {
+    if context.game_state.gold < GOLD_COST_OUTPOST return false, true;
+
+    tile := get_tile_by_id(tile_id);
+    if tile == null return false, false; // untouched dirt is invalid
+    if tile.type != .MINED return false, false;
+
+    // TODO: I wonder if I could make this #complete somehow
+    if tile_has_property(tile, .ENCASED)         return false, false;
+    if tile_has_property(tile, .OUTPOST_FLOOR)   return false, false;
+    if tile_has_property(tile, .HOME_BASE_FLOOR) return false, false;
+    if tile_has_property(tile, .WATER_STILL)     return false, false;
+    if tile_has_property(tile, .WATER_FLOWING)   return false, false;
+    if tile_has_property(tile, .LAVA_STILL)      return false, false;
+    if tile_has_property(tile, .LAVA_FLOWING)    return false, false;
+
+    return true, false;
+}
+
+is_tile_valid_for_outpost_placement_non_center_non_outer :: (tile_id: s32) -> bool {
+    tile := get_tile_by_id(tile_id);
+    if tile == null return true; // Untouched dirt is fine for the outpost / outpost floor to be carved into.
+
+    if #complete tile.type == {
+        case .MINED; {
+            if tile_has_property(tile, .ENCASED)         return false;
+            if tile_has_property(tile, .OUTPOST_FLOOR)   return false;
+            if tile_has_property(tile, .HOME_BASE_FLOOR) return false;
+            if tile_has_property(tile, .WATER_STILL)     return false;
+            if tile_has_property(tile, .WATER_FLOWING)   return false;
+            if tile_has_property(tile, .LAVA_STILL)      return false;
+            if tile_has_property(tile, .LAVA_FLOWING)    return false;
+        }
+
+        case .UNTOUCHED_DIRT; return true;
+        case .TOUCHED_DIRT;   return true;
+        case .IRON;           return true;
+        case .WALL;           return true;
+        
+        case .HOLE;     return false;
+        case .OBSIDIAN; return false;
+        case .CAVE;     return false; // Outposts cannot be used to carve out caves.
+    }
+
+    return true;
+}
+
+is_tile_valid_for_outpost_placement_outer :: (tile_id: s32) -> bool {
+    tile := get_tile_by_id(tile_id);
+    if tile == null return true; // Untouched dirt is fine for the outpost / outpost floor to be carved into.
+
+    if #complete tile.type == {
+        case .UNTOUCHED_DIRT; return true;
+        case .TOUCHED_DIRT;   return true;
+        case .MINED;          return true;
+        case .IRON;           return true;
+        case .WALL;           return true;
+        case .HOLE;           return true;
+        case .OBSIDIAN;       return true;
+
+        case .CAVE; return false; // Outposts cannot be used to carve out caves.
+    }
+
+    if tile_has_property(tile, .ENCASED)         return false;
+    if tile_has_property(tile, .OUTPOST_FLOOR)   return false;
+    if tile_has_property(tile, .HOME_BASE_FLOOR) return false;
+
+    return true;
+}
+
+get_outpost_placement :: (hovered_tile_id: s32) -> (is_valid_placement: bool, is_too_expensive: bool, is_top_left_tile_id: s32) {
+    // If we're adding an outpost, we want to draw a 7 x 7 grid of transparent squares that indicate
+    // the validity of the placement of the outpost. The position of the mouse goes one below the center
+    // of the sprite, which ultimately means that we need to go up four and to the left three to draw
+    // the onion skin.
+    step_1_tile_id   := get_neighbor_tile_id_by_direction(hovered_tile_id, .NORTH_WEST);
+    step_2_tile_id   := get_neighbor_tile_id_by_direction(step_1_tile_id,  .NORTH_WEST);
+    step_3_tile_id   := get_neighbor_tile_id_by_direction(step_2_tile_id,  .NORTH_WEST);
+    top_left_tile_id := get_neighbor_tile_id_by_direction(step_3_tile_id,  .NORTH);
+    
+    // This isn't the end of the story for is_valid_placement, we try to disprove that this
+    // is a valid placement below.
+    is_valid_placement, is_too_expensive := is_tile_valid_for_outpost_placement_center(hovered_tile_id);
+
+    if is_valid_placement {
+        for col: 0..6 {
+            for row: 0..6 {
+                tile_id : s32 = xx (top_left_tile_id + col + row * context.world_cols);
+
+                if col == 0 || col == 6 || row == 0 || row == 6 {
+                    is_valid_placement = is_tile_valid_for_outpost_placement_outer(tile_id);
+                } else {
+                    is_valid_placement = is_tile_valid_for_outpost_placement_non_center_non_outer(tile_id);
+                }
+
+                if !is_valid_placement break col;
+            }
+        }
+    }
+
+    return is_valid_placement, is_too_expensive, top_left_tile_id;
+}
+
+get_entity_tile_id :: (entity: Entity) -> s32 {
+    entity_kind := get_entity_kind_from_type(entity.type);
+    if #complete entity_kind == {
+        case .Outpost;
+            return get_tile_id_by_pos(entity.pos);
+        case .Dwarf; #through;
+        case .Goblin;
+            entity_center := get_rect_center(get_world_rect_from_pos(entity.pos));
+            return get_tile_id_by_pos(entity_center);
+    }
+}
+
+did_dwarf_do_action_this_animation_frame :: (dwarf: Dwarf) -> bool {
+    anim_index   : s64;
+    action_frame : int;
+
+    dwarf_tile_id := get_entity_tile_id(dwarf);
+
+    if dwarf.tile_id_mining == dwarf_tile_id + context.world_cols {
+        if #complete dwarf.dwarf_type == {
+            case .MINER;
+                anim_index   = xx DwarfAnimationMiner.MINE_DOWN;
+                action_frame = DWARF_MINER_ANIMATION_MINE_DOWN_FRAME_ACTION;
+            case .WARRIOR;
+                anim_index   = xx DwarfAnimationWarrior.CHOP_DOWN;
+                action_frame = DWARF_WARRIOR_ANIMATION_CHOP_DOWN_FRAME_ACTION;
+        }
+    }
+    else if dwarf.tile_id_mining == dwarf_tile_id - context.world_cols {
+        if #complete dwarf.dwarf_type == {
+            case .MINER;
+                anim_index   = xx DwarfAnimationMiner.MINE_UP;
+                action_frame = DWARF_MINER_ANIMATION_MINE_UP_FRAME_ACTION;
+            case .WARRIOR;
+                anim_index   = xx DwarfAnimationWarrior.CHOP_UP;
+                action_frame = DWARF_WARRIOR_ANIMATION_CHOP_UP_FRAME_ACTION;
+        }
+    }
+    else {
+        if #complete dwarf.dwarf_type == {
+            case .MINER;
+                anim_index   = xx DwarfAnimationMiner.MINE_SIDE;
+                action_frame = DWARF_MINER_ANIMATION_MINE_SIDE_FRAME_ACTION;
+            case .WARRIOR;
+                anim_index   = xx DwarfAnimationWarrior.CHOP_SIDE;
+                action_frame = DWARF_WARRIOR_ANIMATION_CHOP_SIDE_FRAME_ACTION;
+        }
+    }
+
+    frame := sprite_animation_get_current_frame(dwarf.animations[anim_index]);
+
+    return frame == action_frame && !dwarf.did_anim_action;
+}
+
+get_direction_of_cardinal_neighbor :: (my_id: s32, neighbor_id: s32) -> Direction {
+    if neighbor_id == my_id - context.world_cols return .NORTH;
+    if neighbor_id == my_id + context.world_cols return .SOUTH;
+    if neighbor_id == my_id + 1                  return .EAST;
+    if neighbor_id == my_id - 1                  return .WEST;
+    
+    assert_soft(false, "Tried finding the direction of a supposed cardinal neighbor (tile id %) from the standing point of tile id %, but couldn't.", neighbor_id, my_id);
+    return .CENTER; // Unreachable 
+}
+
+is_lod_close :: () -> bool {
+    return context.camera.zoom >= CAMERA_ZOOM_LOD_CLOSE_MIN;
+}
+
+is_lod_normal :: () -> bool {
+    return (
+        context.camera.zoom < CAMERA_ZOOM_LOD_CLOSE_MIN &&
+        context.camera.zoom >= CAMERA_ZOOM_LOD_NORMAL_MIN
+    );
+}
+
+is_lod_far :: () -> bool {
+    return context.camera.zoom < CAMERA_ZOOM_LOD_NORMAL_MIN;
+}
+
+does_tile_render_trenches :: (tile: *Tile) -> bool {
+    if (tile == null) return false;
+    return does_tile_type_render_trenches(tile.type);
+}
+
+does_tile_type_render_trenches :: (tile_type: TileType) -> bool {
+    if #complete tile_type == {
+        case .UNTOUCHED_DIRT;  return false;
+        case .TOUCHED_DIRT;    return false;
+        case .IRON;            return false;
+        case .OBSIDIAN;        return false;
+        
+        case .WALL;            return true;
+        case .HOLE;            return true;
+        case .MINED;           return true;
+        case .CAVE;            return true;
+    }
+}
+
+update_trenches_if_necessary :: (tile_id: s32) {
+    // PERF: this is too cute, flatten this
+    for dir: DIRECTIONS_ALL {
+        deltas := get_tile_direction_id_deltas(dir);
+        dx := deltas[0];
+        dy := deltas[1];
+
+        tile := get_tile_by_id(tile_id + dx + dy);
+
+        if dir == .CENTER update_trench_walls_if_necessary(tile);
+        if dir == .NORTH  update_trench_walls_if_necessary(tile);
+        if dir == .SOUTH  update_trench_walls_if_necessary(tile);
+        if dir == .EAST   update_trench_walls_if_necessary(tile);
+        if dir == .WEST   update_trench_walls_if_necessary(tile);
+
+        update_trench_corners_if_necessary(tile);
+    }
+}
+
+try_to_add_warning_and_alert_markers :: (tile_id: s32, cave_type: CaveType) {
+    prop_alert   : TileProperty = ifx cave_type == .WATER then .WATER_ALERT   else .LAVA_ALERT;
+    prop_warning : TileProperty = ifx cave_type == .WATER then .WATER_WARNING else .LAVA_WARNING;
+
+    for direction: DIRECTIONS_COMPASS {
+        dx := get_tile_direction_id_deltas(direction)[0];
+        dy := get_tile_direction_id_deltas(direction)[1];
+
+        neighbor_id_1 := tile_id + dx + dy;
+        
+        if is_cardinal_direction(direction) {
+            if !is_tile_obsidian(neighbor_id_1) && !is_tile_hole(neighbor_id_1) {
+                if get_tile_by_id(neighbor_id_1) == null then set_tile_as_type(neighbor_id_1, .TOUCHED_DIRT, false, false);
+                set_tile_property(neighbor_id_1, prop_alert);
+
+                neighbor_id_2 := tile_id + (2 * dx) + (2* dy);
+
+                if get_tile_by_id(neighbor_id_2) == null then set_tile_as_type(neighbor_id_2, .TOUCHED_DIRT, false, false);
+                set_tile_property(neighbor_id_2, prop_warning);
+            }
+        } else {
+            if get_tile_by_id(neighbor_id_1) == null then set_tile_as_type(neighbor_id_1, .TOUCHED_DIRT, false, false);
+            set_tile_property(neighbor_id_1, prop_warning);
+        }
+    }
+}
+
+dwarf_maybe_set_active_animation :: (dwarf: *Dwarf, active_animation_index: s64) {
+    for dwarf.animations {
+        // If there are any animations currently playing, let them finish before moving on
+        if it_index != xx active_animation_index && it.active then return;
+    }
+    entity_set_active_animation(dwarf, active_animation_index);
+}
+
+entity_set_active_animation :: (entity: *$T/interface Moveable, active_animation_index: s64) {
+    for * anim: entity.animations {
+        anim.active = active_animation_index == it_index;
+    }
+}
+
+update_trench_walls_if_necessary :: (tile: *Tile) {
+    if (tile == null) return;
+
+    neighbor_id_north := tile.id + get_tile_direction_id_deltas(.NORTH)[0] + get_tile_direction_id_deltas(.NORTH)[1];
+    neighbor_id_south := tile.id + get_tile_direction_id_deltas(.SOUTH)[0] + get_tile_direction_id_deltas(.SOUTH)[1];
+    neighbor_id_east  := tile.id + get_tile_direction_id_deltas(.EAST)[0]  + get_tile_direction_id_deltas(.EAST)[1];
+    neighbor_id_west  := tile.id + get_tile_direction_id_deltas(.WEST)[0]  + get_tile_direction_id_deltas(.WEST)[1];
+
+    neighbor_north := get_tile_by_id(neighbor_id_north);
+    neighbor_south := get_tile_by_id(neighbor_id_south);
+    neighbor_east  := get_tile_by_id(neighbor_id_east);
+    neighbor_west  := get_tile_by_id(neighbor_id_west);
+
+    if !does_tile_render_trenches(neighbor_north) {
+        tile.trench_directions_sides |= TrenchDirections.NORTH;
+    } else {
+        tile.trench_directions_sides &= ~TrenchDirections.NORTH;
+    }
+
+    if !does_tile_render_trenches(neighbor_south) {
+        tile.trench_directions_sides |= TrenchDirections.SOUTH;
+    } else {
+        tile.trench_directions_sides &= ~TrenchDirections.SOUTH;
+    }
+
+    if !does_tile_render_trenches(neighbor_east) {
+        tile.trench_directions_sides |= TrenchDirections.EAST;
+    }  else {
+        tile.trench_directions_sides &= ~TrenchDirections.EAST;
+    }
+
+    if !does_tile_render_trenches(neighbor_west) {
+        tile.trench_directions_sides |= TrenchDirections.WEST;
+    }  else {
+        tile.trench_directions_sides &= ~TrenchDirections.WEST;
+    }
+}
+
+update_trench_corners_if_necessary :: (tile: *Tile) {
+    if (tile == null) return;
+
+    for dir: DIRECTIONS_CORNER {
+        if dir == {
+            case .NORTH_EAST;
+                id_deltas_north      := get_tile_direction_id_deltas(.NORTH);
+                id_deltas_east       := get_tile_direction_id_deltas(.EAST);
+                id_deltas_north_east := get_tile_direction_id_deltas(.NORTH_EAST);
+
+                neighbor_north       := get_tile_by_id(tile.id + id_deltas_north[0] + id_deltas_north[1]);
+                neighbor_east        := get_tile_by_id(tile.id + id_deltas_east[0] + id_deltas_east[1]);
+                neighbor_north_east  := get_tile_by_id(tile.id + id_deltas_north_east[0] + id_deltas_north_east[1]);
+
+                tile.trench_directions_corners_mostly_crust  &= ~TrenchDirections.NORTH_EAST;
+                tile.trench_directions_corners_mostly_dirt   &= ~TrenchDirections.NORTH_EAST;
+                tile.trench_directions_corners_special_crust &= ~TrenchDirections.NORTH_EAST;
+
+                if !does_tile_render_trenches(neighbor_north_east) {
+                    if does_tile_render_trenches(neighbor_north) && does_tile_render_trenches(neighbor_east) {
+                        tile.trench_directions_corners_mostly_crust |= TrenchDirections.NORTH_EAST;
+                    } else if !does_tile_render_trenches(neighbor_north) && !does_tile_render_trenches(neighbor_east) {
+                        tile.trench_directions_corners_mostly_dirt |= TrenchDirections.NORTH_EAST;
+                    }
+                } else {
+                    if !does_tile_render_trenches(neighbor_north) && !does_tile_render_trenches(neighbor_east) {
+                        tile.trench_directions_corners_special_crust |= .NORTH_EAST;
+                    }
+                }
+            case .NORTH_WEST;
+                id_deltas_north      := get_tile_direction_id_deltas(.NORTH);
+                id_deltas_west       := get_tile_direction_id_deltas(.WEST);
+                id_deltas_north_west := get_tile_direction_id_deltas(.NORTH_WEST);
+
+                neighbor_north       := get_tile_by_id(tile.id + id_deltas_north[0] + id_deltas_north[1]);
+                neighbor_west        := get_tile_by_id(tile.id + id_deltas_west[0] + id_deltas_west[1]);
+                neighbor_north_west  := get_tile_by_id(tile.id + id_deltas_north_west[0] + id_deltas_north_west[1]);
+
+                tile.trench_directions_corners_mostly_crust  &= ~TrenchDirections.NORTH_WEST;
+                tile.trench_directions_corners_mostly_dirt   &= ~TrenchDirections.NORTH_WEST;
+                tile.trench_directions_corners_special_crust &= ~TrenchDirections.NORTH_WEST;
+
+                if !does_tile_render_trenches(neighbor_north_west) {
+                    if does_tile_render_trenches(neighbor_north) && does_tile_render_trenches(neighbor_west) {
+                        tile.trench_directions_corners_mostly_crust |= TrenchDirections.NORTH_WEST;
+                    }
+                    else if !does_tile_render_trenches(neighbor_north) && !does_tile_render_trenches(neighbor_west) {
+                        tile.trench_directions_corners_mostly_dirt |= TrenchDirections.NORTH_WEST;
+                    }
+                } else {
+                    if !does_tile_render_trenches(neighbor_north) && !does_tile_render_trenches(neighbor_west) {
+                        tile.trench_directions_corners_special_crust |= .NORTH_WEST;
+                    }
+                }
+            case .SOUTH_EAST;
+                id_deltas_south      := get_tile_direction_id_deltas(.SOUTH);
+                id_deltas_east       := get_tile_direction_id_deltas(.EAST);
+                id_deltas_south_east := get_tile_direction_id_deltas(.SOUTH_EAST);
+
+                neighbor_south      := get_tile_by_id(tile.id + id_deltas_south[0] + id_deltas_south[1]);
+                neighbor_east       := get_tile_by_id(tile.id + id_deltas_east[0] + id_deltas_east[1]);
+                neighbor_south_east := get_tile_by_id(tile.id + id_deltas_south_east[0] + id_deltas_south_east[1]);
+
+                tile.trench_directions_corners_mostly_dirt   &= ~TrenchDirections.SOUTH_EAST;
+                tile.trench_directions_corners_mostly_crust  &= ~TrenchDirections.SOUTH_EAST;
+                tile.trench_directions_corners_special_crust &= ~TrenchDirections.SOUTH_EAST;
+
+                if !does_tile_render_trenches(neighbor_south_east) {
+                    if does_tile_render_trenches(neighbor_south) && does_tile_render_trenches(neighbor_east) {
+                        tile.trench_directions_corners_mostly_crust |= TrenchDirections.SOUTH_EAST;
+                    }
+                    else if !does_tile_render_trenches(neighbor_south) && !does_tile_render_trenches(neighbor_east) {
+                        tile.trench_directions_corners_mostly_dirt |= TrenchDirections.SOUTH_EAST;
+                    }
+                } else {
+                    if !does_tile_render_trenches(neighbor_south) && !does_tile_render_trenches(neighbor_east) {
+                        tile.trench_directions_corners_special_crust |= .SOUTH_EAST;
+                    }
+                }
+            case .SOUTH_WEST;
+                id_deltas_south      := get_tile_direction_id_deltas(.SOUTH);
+                id_deltas_west       := get_tile_direction_id_deltas(.WEST);
+                id_deltas_south_west := get_tile_direction_id_deltas(.SOUTH_WEST);
+
+                neighbor_south       := get_tile_by_id(tile.id + id_deltas_south[0] + id_deltas_south[1]);
+                neighbor_west        := get_tile_by_id(tile.id + id_deltas_west[0] + id_deltas_west[1]);
+                neighbor_south_west  := get_tile_by_id(tile.id + id_deltas_south_west[0] + id_deltas_south_west[1]);
+
+                tile.trench_directions_corners_mostly_dirt   &= ~TrenchDirections.SOUTH_WEST;
+                tile.trench_directions_corners_mostly_crust  &= ~TrenchDirections.SOUTH_WEST;
+                tile.trench_directions_corners_special_crust &= ~TrenchDirections.SOUTH_WEST;
+
+                if !does_tile_render_trenches(neighbor_south_west) {
+                    if does_tile_render_trenches(neighbor_south) && does_tile_render_trenches(neighbor_west) {
+                        tile.trench_directions_corners_mostly_crust |= TrenchDirections.SOUTH_WEST;
+                    }
+                    else if !does_tile_render_trenches(neighbor_south) && !does_tile_render_trenches(neighbor_west) {
+                        tile.trench_directions_corners_mostly_dirt |= TrenchDirections.SOUTH_WEST;
+                    }
+                } else {
+                    if !does_tile_render_trenches(neighbor_south) && !does_tile_render_trenches(neighbor_west) {
+                        tile.trench_directions_corners_special_crust |= .SOUTH_WEST;
+                    }
+                }
+        }
+    }
+}
+
+TRENCH_STRAIGHT_SPRITE_SOURCE_ROW :: 2;
+TRENCH_STRAIGHT_SPRITE_SOURCE_COL :: 0;
+TRENCH_SIDES_SOURCE := Rectangle.{
+    TRENCH_STRAIGHT_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
+    TRENCH_STRAIGHT_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
+    TILEMAP_GENERAL_TILE_WIDTH,
+    TILEMAP_GENERAL_TILE_HEIGHT,
+};
+
+is_neighbor_obsidian :: (tile_id: s32, direction: Direction) -> bool {
+    neighbor_tile_id_north := get_neighbor_tile_id_by_direction(tile_id, direction);
+    neighbor_tile_north := get_tile_by_id(neighbor_tile_id_north);
+    return neighbor_tile_north != null && neighbor_tile_north.type == .OBSIDIAN;
+}
+
+draw_trench_sides :: (tile: Tile) {
+    dest   := get_world_rect_from_pos(tile.pos);
+    rot    := 0.0;
+    origin := Vector2.{ TILEMAP_GENERAL_TILE_WIDTH * 0.5, TILEMAP_GENERAL_TILE_HEIGHT * 0.5 };
+    
+    get_neighbor_tile_id_by_direction(tile.id, .SOUTH);
+    get_neighbor_tile_id_by_direction(tile.id, .EAST);
+    get_neighbor_tile_id_by_direction(tile.id, .WEST);
+    tint := WHITE; // Darkened if next to obsidian, dimmed if encased.
+    
+    if tile.trench_directions_sides & TrenchDirections.NORTH {
+        final_dest := Rectangle.{
+            dest.x + TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
+            dest.y - TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
+            dest.width, dest.height,
+        };
+        
+        if is_neighbor_obsidian(tile.id, .NORTH) || is_tile_encased(tile.id) {
+            tint = DARKGRAY;
+        } else {
+            tint = WHITE;
+        }
+
+        DrawTexturePro(tilemap_texture_general, TRENCH_SIDES_SOURCE, final_dest, origin, rot, tint);
+    }
+
+    if tile.trench_directions_sides & TrenchDirections.SOUTH {
+        rot = 180.0;
+
+        final_dest := Rectangle.{
+            dest.x + TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
+            dest.y + TILEMAP_GENERAL_TILE_HEIGHT * 1.5,
+            dest.width, dest.height,
+        };
+
+        if is_neighbor_obsidian(tile.id, .SOUTH) || is_tile_encased(tile.id) {
+            tint = DARKGRAY;
+        } else {
+            tint = WHITE;
+        }
+
+        DrawTexturePro(tilemap_texture_general, TRENCH_SIDES_SOURCE, final_dest, origin, rot, tint);
+    }
+
+    if tile.trench_directions_sides & TrenchDirections.EAST {
+        rot = 90.0;
+        
+        final_dest := Rectangle.{
+            dest.x + TILEMAP_GENERAL_TILE_HEIGHT * 1.5,
+            dest.y + TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
+            dest.width, dest.height,
+        };
+
+        if is_neighbor_obsidian(tile.id, .EAST) || is_tile_encased(tile.id) {
+            tint = DARKGRAY;
+        } else {
+            tint = WHITE;
+        }
+    
+        DrawTexturePro(tilemap_texture_general, TRENCH_SIDES_SOURCE, final_dest, origin, rot, tint);
+    }
+
+    if tile.trench_directions_sides & TrenchDirections.WEST {
+        rot = 270.0;
+        
+        final_dest := Rectangle.{
+            dest.x - TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
+            dest.y + TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
+            dest.width, dest.height,
+        };
+
+        if is_neighbor_obsidian(tile.id, .WEST) || is_tile_encased(tile.id) {
+            tint = DARKGRAY;
+        } else {
+            tint = WHITE;
+        }
+
+        DrawTexturePro(tilemap_texture_general, TRENCH_SIDES_SOURCE, final_dest, origin, rot, tint);
+    }
+}
+
+TRENCH_CORNER_MOSTLY_CRUST_NORTH_EAST_SPRITE_SOURCE_ROW :: 2;
+TRENCH_CORNER_MOSTLY_CRUST_NORTH_EAST_SPRITE_SOURCE_COL :: 1;
+TRENCH_CORNER_MOSTLY_CRUST_NORTH_WEST_SPRITE_SOURCE_ROW :: 2;
+TRENCH_CORNER_MOSTLY_CRUST_NORTH_WEST_SPRITE_SOURCE_COL :: 2;
+TRENCH_CORNER_MOSTLY_CRUST_SOUTH_EAST_SPRITE_SOURCE_ROW :: 2;
+TRENCH_CORNER_MOSTLY_CRUST_SOUTH_EAST_SPRITE_SOURCE_COL :: 3;
+TRENCH_CORNER_MOSTLY_CRUST_SOUTH_WEST_SPRITE_SOURCE_ROW :: 2;
+TRENCH_CORNER_MOSTLY_CRUST_SOUTH_WEST_SPRITE_SOURCE_COL :: 4;
+
+ORIGIN :: Vector2.{ TILEMAP_GENERAL_TILE_WIDTH * 0.5, TILEMAP_GENERAL_TILE_HEIGHT * 0.5 };
+
+draw_trench_corners_mostly_crust :: (tile: Tile) {
+    source := Rectangle.{ 0, 0, TILEMAP_GENERAL_TILE_WIDTH, TILEMAP_GENERAL_TILE_HEIGHT };
+    dest   := get_world_rect_from_pos(tile.pos);
+    tint   := WHITE; // Darkened if next to obsidian, dimmed if encased.
+
+    if tile.trench_directions_corners_mostly_crust & TrenchDirections.NORTH_EAST {
+        source.x = TRENCH_CORNER_MOSTLY_CRUST_NORTH_EAST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
+        source.y = TRENCH_CORNER_MOSTLY_CRUST_NORTH_EAST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
+
+        final_dest := Rectangle.{
+            dest.x + TILEMAP_GENERAL_TILE_HEIGHT * 1.5,
+            dest.y - TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
+            dest.width, dest.height,
+        };
+
+        if is_neighbor_obsidian(tile.id, .NORTH_EAST) || is_tile_encased(tile.id) {
+            tint = DARKGRAY;
+        } else {
+            tint = WHITE;
+        }
+
+        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
+    }
+
+    if tile.trench_directions_corners_mostly_crust & TrenchDirections.NORTH_WEST {
+        source.x = TRENCH_CORNER_MOSTLY_CRUST_NORTH_WEST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
+        source.y = TRENCH_CORNER_MOSTLY_CRUST_NORTH_WEST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
+
+        final_dest := Rectangle.{
+            dest.x - TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
+            dest.y - TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
+            dest.width, dest.height,
+        };
+
+        if is_neighbor_obsidian(tile.id, .NORTH_WEST) || is_tile_encased(tile.id) {
+            tint = DARKGRAY;
+        } else {
+            tint = WHITE;
+        }
+
+        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
+    }
+
+    if tile.trench_directions_corners_mostly_crust & TrenchDirections.SOUTH_EAST {
+        source.x = TRENCH_CORNER_MOSTLY_CRUST_SOUTH_EAST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
+        source.y = TRENCH_CORNER_MOSTLY_CRUST_SOUTH_EAST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
+        
+        final_dest := Rectangle.{
+            dest.x + TILEMAP_GENERAL_TILE_HEIGHT * 1.5,
+            dest.y + TILEMAP_GENERAL_TILE_HEIGHT * 1.5,
+            dest.width, dest.height,
+        };
+
+        if is_neighbor_obsidian(tile.id, .SOUTH_EAST) || is_tile_encased(tile.id) {
+            tint = DARKGRAY;
+        } else {
+            tint = WHITE;
+        }
+    
+        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
+    }
+
+    if tile.trench_directions_corners_mostly_crust & TrenchDirections.SOUTH_WEST {
+        source.x = TRENCH_CORNER_MOSTLY_CRUST_SOUTH_WEST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
+        source.y = TRENCH_CORNER_MOSTLY_CRUST_SOUTH_WEST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
+        
+        final_dest := Rectangle.{
+            dest.x - TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
+            dest.y + TILEMAP_GENERAL_TILE_HEIGHT * 1.5,
+            dest.width, dest.height,
+        };
+
+        if is_neighbor_obsidian(tile.id, .SOUTH_WEST) || is_tile_encased(tile.id) {
+            tint = DARKGRAY;
+        } else {
+            tint = WHITE;
+        }
+
+        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
+    }
+}
+
+TRENCH_CORNER_MOSTLY_DIRT_NORTH_EAST_SPRITE_SOURCE_ROW :: 3;
+TRENCH_CORNER_MOSTLY_DIRT_NORTH_EAST_SPRITE_SOURCE_COL :: 1;
+TRENCH_CORNER_MOSTLY_DIRT_NORTH_WEST_SPRITE_SOURCE_ROW :: 3;
+TRENCH_CORNER_MOSTLY_DIRT_NORTH_WEST_SPRITE_SOURCE_COL :: 2;
+TRENCH_CORNER_MOSTLY_DIRT_SOUTH_EAST_SPRITE_SOURCE_ROW :: 3;
+TRENCH_CORNER_MOSTLY_DIRT_SOUTH_EAST_SPRITE_SOURCE_COL :: 3;
+TRENCH_CORNER_MOSTLY_DIRT_SOUTH_WEST_SPRITE_SOURCE_ROW :: 3;
+TRENCH_CORNER_MOSTLY_DIRT_SOUTH_WEST_SPRITE_SOURCE_COL :: 4;
+
+draw_trench_corners_mostly_dirt :: (tile: Tile) {
+    source := Rectangle.{ 0, 0, TILEMAP_GENERAL_TILE_WIDTH, TILEMAP_GENERAL_TILE_HEIGHT };
+    dest   := get_world_rect_from_pos(tile.pos);
+    tint   := WHITE; // Darkened if next to obsidian, dimmed if encased.
+
+    if tile.trench_directions_corners_mostly_dirt & TrenchDirections.NORTH_EAST {
+        source.x = TRENCH_CORNER_MOSTLY_DIRT_NORTH_EAST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
+        source.y = TRENCH_CORNER_MOSTLY_DIRT_NORTH_EAST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
+
+        final_dest := Rectangle.{
+            dest.x + TILEMAP_GENERAL_TILE_HEIGHT * 1.5,
+            dest.y - TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
+            dest.width, dest.height,
+        };
+
+        if is_neighbor_obsidian(tile.id, .NORTH_EAST) || is_tile_encased(tile.id) {
+            tint = DARKGRAY;
+        } else {
+            tint = WHITE;
+        }
+
+        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
+    }
+
+    if tile.trench_directions_corners_mostly_dirt & TrenchDirections.NORTH_WEST {
+        source.x = TRENCH_CORNER_MOSTLY_DIRT_NORTH_WEST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
+        source.y = TRENCH_CORNER_MOSTLY_DIRT_NORTH_WEST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
+
+        final_dest := Rectangle.{
+            dest.x - TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
+            dest.y - TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
+            dest.width, dest.height,
+        };
+
+        if is_neighbor_obsidian(tile.id, .NORTH_WEST) || is_tile_encased(tile.id) {
+            tint = DARKGRAY;
+        } else {
+            tint = WHITE;
+        }
+        
+        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
+    }
+
+    if tile.trench_directions_corners_mostly_dirt & TrenchDirections.SOUTH_EAST {
+        source.x = TRENCH_CORNER_MOSTLY_DIRT_SOUTH_EAST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
+        source.y = TRENCH_CORNER_MOSTLY_DIRT_SOUTH_EAST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
+        
+        final_dest := Rectangle.{
+            dest.x + TILEMAP_GENERAL_TILE_HEIGHT * 1.5,
+            dest.y + TILEMAP_GENERAL_TILE_HEIGHT * 1.5,
+            dest.width, dest.height,
+        };
+
+        if is_neighbor_obsidian(tile.id, .SOUTH_EAST) || is_tile_encased(tile.id) {
+            tint = DARKGRAY;
+        } else {
+            tint = WHITE;
+        }
+    
+        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
+    }
+
+    if tile.trench_directions_corners_mostly_dirt & TrenchDirections.SOUTH_WEST {
+        source.x = TRENCH_CORNER_MOSTLY_DIRT_SOUTH_WEST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
+        source.y = TRENCH_CORNER_MOSTLY_DIRT_SOUTH_WEST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
+        
+        final_dest := Rectangle.{
+            dest.x - TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
+            dest.y + TILEMAP_GENERAL_TILE_HEIGHT * 1.5,
+            dest.width, dest.height,
+        };
+
+        if is_neighbor_obsidian(tile.id, .SOUTH_WEST) || is_tile_encased(tile.id) {
+            tint = DARKGRAY;
+        } else {
+            tint = WHITE;
+        }
+
+        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
+    }
+}
+
+TRENCH_CORNER_SPECIAL_CRUST_NORTH_EAST_SPRITE_SOURCE_ROW :: 2;
+TRENCH_CORNER_SPECIAL_CRUST_NORTH_EAST_SPRITE_SOURCE_COL :: 2;
+TRENCH_CORNER_SPECIAL_CRUST_NORTH_WEST_SPRITE_SOURCE_ROW :: 2;
+TRENCH_CORNER_SPECIAL_CRUST_NORTH_WEST_SPRITE_SOURCE_COL :: 1;
+TRENCH_CORNER_SPECIAL_CRUST_SOUTH_EAST_SPRITE_SOURCE_ROW :: 2;
+TRENCH_CORNER_SPECIAL_CRUST_SOUTH_EAST_SPRITE_SOURCE_COL :: 4;
+TRENCH_CORNER_SPECIAL_CRUST_SOUTH_WEST_SPRITE_SOURCE_ROW :: 2;
+TRENCH_CORNER_SPECIAL_CRUST_SOUTH_WEST_SPRITE_SOURCE_COL :: 3;
+
+draw_trench_corners_special_crust :: (tile: Tile) {
+    source := Rectangle.{ 0, 0, TILEMAP_GENERAL_TILE_WIDTH, TILEMAP_GENERAL_TILE_HEIGHT };
+    dest   := get_world_rect_from_pos(tile.pos);
+
+    if tile.trench_directions_corners_special_crust & TrenchDirections.NORTH_EAST {
+        source.x = TRENCH_CORNER_SPECIAL_CRUST_NORTH_EAST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
+        source.y = TRENCH_CORNER_SPECIAL_CRUST_NORTH_EAST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
+
+        final_dest := Rectangle.{
+            dest.x + TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
+            dest.y - TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
+            dest.width, dest.height,
+        };
+
+        tint := ifx is_neighbor_obsidian(tile.id, .NORTH) then DARKGRAY else WHITE;
+
+        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
+    }
+
+    if tile.trench_directions_corners_special_crust & TrenchDirections.NORTH_WEST {
+        source.x = TRENCH_CORNER_SPECIAL_CRUST_NORTH_WEST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
+        source.y = TRENCH_CORNER_SPECIAL_CRUST_NORTH_WEST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
+
+        final_dest := Rectangle.{
+            dest.x + TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
+            dest.y - TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
+            dest.width, dest.height,
+        };
+
+        tint := ifx is_neighbor_obsidian(tile.id, .NORTH) then DARKGRAY else WHITE;
+
+        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
+    }
+
+    if tile.trench_directions_corners_special_crust & TrenchDirections.SOUTH_EAST {
+        source.x = TRENCH_CORNER_SPECIAL_CRUST_SOUTH_EAST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
+        source.y = TRENCH_CORNER_SPECIAL_CRUST_SOUTH_EAST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
+        
+        final_dest := Rectangle.{
+            dest.x + TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
+            dest.y + TILEMAP_GENERAL_TILE_HEIGHT * 1.5,
+            dest.width, dest.height,
+        };
+    
+        tint := ifx is_neighbor_obsidian(tile.id, .SOUTH) then DARKGRAY else WHITE;
+
+        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
+    }
+
+    if tile.trench_directions_corners_special_crust & TrenchDirections.SOUTH_WEST {
+        source.x = TRENCH_CORNER_SPECIAL_CRUST_SOUTH_WEST_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH;
+        source.y = TRENCH_CORNER_SPECIAL_CRUST_SOUTH_WEST_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT;
+        
+        final_dest := Rectangle.{
+            dest.x + TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
+            dest.y + TILEMAP_GENERAL_TILE_HEIGHT * 1.5,
+            dest.width, dest.height,
+        };
+
+        tint := ifx is_neighbor_obsidian(tile.id, .SOUTH) then DARKGRAY else WHITE;
+
+        DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
+    }
+}
+
+LiquidType :: enum {
+    WATER;
+    LAVA;
+}
+
+determine_rotation_of_liquid_flowing_sprite :: (tile_id: s32, liquid_type: LiquidType) -> float {
+    north_tile_id : s32 = tile_id - xx context.world_rows;
+    south_tile_id : s32 = tile_id + xx context.world_rows;
+    east_tile_id  : s32 = tile_id + 1;
+    west_tile_id  : s32 = tile_id - 1;
+
+    is_neighbor_north_liquid_still := ifx liquid_type == .LAVA then is_tile_lava_still(north_tile_id) else is_tile_water_still(north_tile_id);
+    is_neighbor_south_liquid_still := ifx liquid_type == .LAVA then is_tile_lava_still(south_tile_id) else is_tile_water_still(south_tile_id);
+    is_neighbor_east_liquid_still  := ifx liquid_type == .LAVA then is_tile_lava_still(east_tile_id) else is_tile_water_still(east_tile_id);
+    is_neighbor_west_liquid_still  := ifx liquid_type == .LAVA then is_tile_lava_still(west_tile_id) else is_tile_water_still(west_tile_id);
+
+    if (
+        is_neighbor_north_liquid_still  &&
+        !is_neighbor_south_liquid_still &&
+        !is_neighbor_east_liquid_still  &&
+        !is_neighbor_west_liquid_still
+    ) return 0;
+
+    if (
+        !is_neighbor_north_liquid_still &&
+        is_neighbor_south_liquid_still  &&
+        !is_neighbor_east_liquid_still  &&
+        !is_neighbor_west_liquid_still
+    ) return 180; // Flow to the left if the only lava around is to the right
+
+    if is_neighbor_east_liquid_still return 90;
+    if is_neighbor_west_liquid_still return 270;
+
+    return 0;
+}
+
 draw_particle :: (particle: Particle) {
     assert(particle.size > 0);
 
@@ -5358,284 +5635,6 @@ get_world_width :: () -> int {
 
 get_world_height :: () -> int {
     return context.world_rows * TILEMAP_GENERAL_WORLD_HEIGHT;
-}
-
-initialize_round :: () {
-    reset_memory();
-
-    GAME_TIME_REMAINING_MS    :: 900_000; // 15 minutes
-    GAME_STARTING_GOLD_HARD   :: 0;
-    GAME_STARTING_GOLD_MEDIUM :: 150;
-    GAME_STARTING_GOLD_EASY   :: 250;
-
-    if #complete context.metagame.level == {
-        case .NORMAL;
-            context.world_rows = WORLD_COLS_HUGE;
-            context.world_cols = WORLD_ROWS_HUGE;
-            context.camera_zoom_min = 0.07428;
-        case .TUTORIAL_CONTROLS;
-            context.world_rows = WORLD_COLS_TUTORIAL_CONTROLS;
-            context.world_cols = WORLD_ROWS_TUTORIAL_CONTROLS;
-            context.camera_zoom_min = 1.728;
-    }
-
-    // Set world dimension caches
-    context.world_cols_mask  = context.world_cols - 1;
-    context.world_rows_mask  = context.world_rows - 1;
-    context.world_cols_shift = integer_log2(xx context.world_cols);
-    context.world_cols_recip = 1.0 / context.world_cols;
-    context.world_rows_recip = 1.0 / context.world_rows;
-
-    // Set temp allocator for various things.
-    {
-        tiles_to_draw_this_frame.allocator    = temp;
-        dwarves_to_draw_this_frame.allocator  = temp;
-        goblins_to_draw_this_frame.allocator  = temp;
-        paths_to_draw_this_frame.allocator    = temp;
-        alerts_to_draw_this_frame.allocator   = temp;
-        outposts_to_draw_this_frame.allocator = temp;
-        tile_ids_to_dwarfs.allocator          = temp;
-        tile_ids_to_goblins.allocator         = temp;
-        tile_ids_to_outposts.allocator        = temp;
-    }
-
-    // TODO: parametrize
-    random_seed(123456789);
-
-    // TODO: Defaults to fall back on
-    // TODO: Put in a config file, but keep as jai, and then parse and #insert or something?
-    // Initialize controls
-    controls: Controls;
-    {
-        controls.select.binds[0] = Bind.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_LEFT };
-
-        controls.clear_selection.id   = read_then_increment(*control_id_counter);
-        controls.clear_selection.name = "Clear selection";
-        controls.clear_selection.control_mode = .NORMAL;
-        controls.clear_selection.rebindable_by_user = true;
-        controls.clear_selection.binds[0] = Bind.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_RIGHT };
-
-        controls.toggle_outpost_mode.id   = read_then_increment(*control_id_counter);
-        controls.toggle_outpost_mode.name = "Build outpost mode";
-        // TODO: This text needs to change dynamically ("Cost: % (Next will cost %)")
-        controls.toggle_outpost_mode.tooltip_text = "Outposts increase your max amount of warriors, and allow you to spawn additional miners. Must be built on a path. Cost more each time you build one.";
-        controls.toggle_outpost_mode.control_mode = .ADD_OUTPOST;
-        controls.toggle_outpost_mode.rebindable_by_user = true;
-        controls.toggle_outpost_mode.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_B };
-
-        controls.add_iron.id   = read_then_increment(*control_id_counter);
-        controls.add_iron.name = "DEBUG: Add iron deposit";
-        controls.add_iron.rebindable_by_user = false;
-        controls.add_iron.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_I };
-
-        controls.select_as_place_miner_dwarf.id   = read_then_increment(*control_id_counter);
-        controls.select_as_place_miner_dwarf.name = "DEBUG: Add miner dwarf";
-        controls.select_as_place_miner_dwarf.rebindable_by_user = false;
-        controls.select_as_place_miner_dwarf.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_D };
-
-        controls.select_as_place_warrior_dwarf.id   = read_then_increment(*control_id_counter);
-        controls.select_as_place_warrior_dwarf.name = "DEBUG: Add warrior dwarf";
-        controls.select_as_place_warrior_dwarf.rebindable_by_user = false;
-        controls.select_as_place_warrior_dwarf.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_A };
-
-        controls.toggle_dynamite_mode.id   = read_then_increment(*control_id_counter);
-        controls.toggle_dynamite_mode.name = "Place dynamite mode";
-        controls.toggle_dynamite_mode.tooltip_text = "Blows up a dwarf when stepped on, creating a hole. Holes stop water and lava flows permanently.";
-        controls.toggle_dynamite_mode.control_mode = .ADD_DYNAMITE;
-        controls.toggle_dynamite_mode.rebindable_by_user = true;
-        controls.toggle_dynamite_mode.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_E };
-
-        controls.select_as_place_goblin.id   = read_then_increment(*control_id_counter);
-        controls.select_as_place_goblin.name = "DEBUG: Place goblin";
-        controls.select_as_place_goblin.rebindable_by_user = false;
-        controls.select_as_place_goblin.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_T };
-        
-        controls.toggle_obsidian_mode.id   = read_then_increment(*control_id_counter);
-        controls.toggle_obsidian_mode.name = "Obsidian mode";
-        controls.toggle_obsidian_mode.tooltip_text = "Turns soil into solid obsidian, making it impenetrable to almost anything.";
-        controls.toggle_obsidian_mode.control_mode = .ADD_OBSIDIAN;
-        controls.toggle_obsidian_mode.rebindable_by_user = true;
-        controls.toggle_obsidian_mode.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_Q           };
-        controls.toggle_obsidian_mode.binds[1] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT_SHIFT  };
-        controls.toggle_obsidian_mode.binds[2] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT_SHIFT };
-        
-        controls.toggle_wall_mode.id   = read_then_increment(*control_id_counter);
-        controls.toggle_wall_mode.name = "Build wall mode";
-        controls.toggle_wall_mode.tooltip_text = "Place a wall that permanently stops water, slows down lava, and blocks warriors and certain enemies. Miners, some enemies, and lava can destroy walls.";
-        controls.toggle_wall_mode.control_mode = .ADD_WALL;
-        controls.toggle_wall_mode.rebindable_by_user = true;
-        controls.toggle_wall_mode.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_W };
-        
-        controls.drag_cam.id   = read_then_increment(*control_id_counter);
-        controls.drag_cam.name = "Drag camera";
-        controls.drag_cam.rebindable_by_user = true;
-        controls.drag_cam.binds[0] = Bind.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_RIGHT  };
-        controls.drag_cam.binds[1] = Bind.{ type = MouseButton, value = cast(s32) MouseButton.MOUSE_BUTTON_MIDDLE };
-        
-        controls.move_camera_up.id   = read_then_increment(*control_id_counter);
-        controls.move_camera_up.name = "Move camera up";
-        controls.move_camera_up.rebindable_by_user = true;
-        controls.move_camera_up.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_UP };
-        
-        controls.move_camera_down.id   = read_then_increment(*control_id_counter);
-        controls.move_camera_down.name = "Move camera down";
-        controls.move_camera_down.rebindable_by_user = true; 
-        controls.move_camera_down.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_DOWN };
-        
-        controls.move_camera_left.id   = read_then_increment(*control_id_counter);
-        controls.move_camera_left.name = "Move camera left";
-        controls.move_camera_left.rebindable_by_user = true; 
-        controls.move_camera_left.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_LEFT };
-        
-        controls.move_camera_right.id   = read_then_increment(*control_id_counter);
-        controls.move_camera_right.name = "Move camera right";
-        controls.move_camera_right.rebindable_by_user = true; 
-        controls.move_camera_right.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_RIGHT };
-        
-        controls.toggle_remove_mode.id   = read_then_increment(*control_id_counter);
-        controls.toggle_remove_mode.name = "Remove mode";
-        controls.toggle_remove_mode.control_mode = .REMOVE;
-        controls.toggle_remove_mode.tooltip_text = "While active, you can select a created object to destroy it, like dynamite and path arrows.";
-        controls.toggle_remove_mode.rebindable_by_user = true; 
-        controls.toggle_remove_mode.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_R };
-
-        controls.panic_pause.id   = read_then_increment(*control_id_counter);
-        controls.panic_pause.name = "Panic pause";
-        controls.panic_pause.tooltip_text = "Forces time to a halt for a short duration, but has a decently-long cooldown.";
-        controls.panic_pause.rebindable_by_user = true;
-        controls.panic_pause.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_SPACE };
-
-        controls.fast_forward.id   = read_then_increment(*control_id_counter);
-        controls.fast_forward.name = "Fast forward";
-        controls.fast_forward.tooltip_text = "Speeds up the action, takes on resources to do, and has no cooldown.";
-        controls.fast_forward.rebindable_by_user = true;
-        controls.fast_forward.binds[0] = Bind.{ type = KeyboardKey, value = cast(s32) KeyboardKey.KEY_S };
-    }
-
-    // Initialize game
-    context.game_state = GameState.{
-        selected_dwarf_id          = 0,
-        selected_dwarf_particle_id = 0,
-        water_flow_cooldown_ms     = WATER_FLOW_COOLDOWN_MS,
-        lava_flow_cooldown_ms      = LAVA_FLOW_COOLDOWN_MS,
-        time_remaining_ms          = GAME_TIME_REMAINING_MS,
-        points                     = 0,
-        gold                       = GAME_STARTING_GOLD_EASY,
-        control_mode               = .NORMAL,
-        alert_banner_text          = "",
-        alert_banner_text_ms       = 0,
-    };
-
-    context.metagame.state            = .RUNNING;
-    context.metagame.thing_running    = .ROUND;
-    context.metagame.initialized      = true;
-    context.metagame.should_quit_game = false;
-    context.metagame.debug_mode       = false;
-    context.metagame.pause_state      = .MENU;
-    context.metagame.game_over_state  = .MENU;
-    context.metagame.main_menu_screen = .ROOT;
-    context.metagame.controls         = controls;
-
-    GENERATE_CAVES_ENABLED :: true;
-
-    if #complete context.metagame.level == {
-        case .NORMAL;
-            // Initialize iron
-            GENERATE_IRON_ENABLED :: true;
-            #if GENERATE_IRON_ENABLED {
-                IRON_SPAWN_CHANCE_NUMERATOR   :: 5;
-                IRON_SPAWN_CHANCE_DENOMINATOR :: 1000;
-                IRON_VEIN_SIZE_MIN :: 8;
-                IRON_VEIN_SIZE_MAX :: 15;
-
-                for col: 0..context.world_cols-1 {
-                    for row: 0..context.world_rows-1 {
-                        tile_id := (row * context.world_cols) + col + 1;
-
-                        iron_spawn_dice_roll := cast(int) random_get_within_range(IRON_SPAWN_CHANCE_NUMERATOR, IRON_SPAWN_CHANCE_DENOMINATOR);
-                        if iron_spawn_dice_roll <= IRON_SPAWN_CHANCE_NUMERATOR {
-                            spawn_iron(xx tile_id);
-                        }
-                    }
-                }
-            }
-
-            // Initialize caves
-            #if GENERATE_CAVES_ENABLED {
-                CAVE_PERLIN_NOISE_FREQUENCY :: 256; // How many rows / columns
-                CAVE_PERLIN_NOISE_AMPLITUDE :: 2;
-                CAVE_PERLIN_NOISE_OCTAVES   :: 1;
-                CAVE_PERLIN_NOISE_MAX_THRESHOLD :: 0.95;
-
-                cave_noise := perlin_noise_2d(xx context.world_cols, CAVE_PERLIN_NOISE_FREQUENCY, CAVE_PERLIN_NOISE_AMPLITUDE, CAVE_PERLIN_NOISE_OCTAVES);
-
-                for i: 0..(context.world_cols * context.world_cols)-1 {
-                    normalized := (cave_noise[i] + 1.0) / 2.0;
-                    // Clamp just in case floating point math slightly overshoots
-                    cave_noise[i] = clamp(normalized, 0.0, 1.0);
-                }
-
-                for col: 0..context.world_cols-1 {
-                    for row: 0..context.world_rows-1 {
-                        tile_id := (row * context.world_cols) + col + 1;
-                        noise_index := row * context.world_cols + col;
-                        tile_should_be_part_of_cave := cave_noise[noise_index] >= CAVE_PERLIN_NOISE_MAX_THRESHOLD;
-
-                        if tile_should_be_part_of_cave {
-                            set_tile_as_type(xx tile_id, .CAVE, false, false);
-                        }
-                    }
-                }
-            }
-
-            home_base := create_outpost(
-                Vector2.{
-                    context.world_cols * TILEMAP_GENERAL_WORLD_WIDTH  * 0.5,
-                    context.world_rows * TILEMAP_GENERAL_WORLD_HEIGHT * 0.5,
-                },
-                true,
-            );
-
-            // Initialize dwarves
-            GENERATE_DWARVES_ENABLED :: true;
-            #if GENERATE_DWARVES_ENABLED {
-                dx, dy : float;
-                neighbor_pos: Vector2;
-                assert(outposts.count > 0);
-
-                for 1..DWARF_MINER_START_COUNT {
-                    // Initialize miner dwarves
-                    dx = TILE_DIRECTION_DELTAS[xx Direction.NORTH][0];
-                    dy = TILE_DIRECTION_DELTAS[xx Direction.NORTH][1];
-                    neighbor_pos = Vector2.{ home_base.pos.x + dx, home_base.pos.y + dy };
-
-                    create_dwarf(neighbor_pos, .MINER);
-                }
-                
-                for 1..DWARF_WARRIOR_START_COUNT {
-                    // Initialize warrior dwarf
-                    dx = TILE_DIRECTION_DELTAS[xx Direction.EAST][0];
-                    dy = TILE_DIRECTION_DELTAS[xx Direction.EAST][1];
-                    neighbor_pos = Vector2.{ home_base.pos.x + dx, home_base.pos.y + dy };
-
-                    create_dwarf(neighbor_pos, .WARRIOR);
-                }
-            }
-
-            // Initialize camera
-            context.camera.target = outposts[0].pos;
-
-        case .TUTORIAL_CONTROLS;
-            // Initialize camera
-            context.camera.target = Vector2.{
-                context.world_cols * TILEMAP_GENERAL_WORLD_WIDTH  * 0.5,
-                context.world_rows * TILEMAP_GENERAL_WORLD_HEIGHT * 0.5,
-            };
-    }
-
-    context.camera.offset   = Vector2.{ GetScreenWidth() * 0.5, GetScreenHeight() * 0.5 };
-    context.camera.rotation = 0.0;
-    context.camera.zoom     = 2.0;
 }
 
 dwarf_transition_state :: (dwarf: *Dwarf, new_state: DwarfState) {
