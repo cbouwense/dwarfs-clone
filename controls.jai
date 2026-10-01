@@ -1,4 +1,4 @@
-Bind :: struct {
+ControlBinding :: struct {
     type  : Type;   // KeyboardKey | MouseButton;
     value : s32;
     is_being_rebound : bool;
@@ -16,9 +16,9 @@ ControlMode :: enum {
 Control :: struct {
     id                 : s32;
     name               : string;      // What shows up in the keybind menu.
-    binds              : [3] Bind;
+    bindings           : [3] ControlBinding;
     rebindable_by_user : bool;        // Some controls really ought not to be rebindable.
-    control_mode       : ControlMode;
+    control_mode       : ControlMode; // TODO: document what this even is
     tooltip_text       : string;
 }
 
@@ -34,7 +34,7 @@ Controls :: struct {
     toggle_obsidian_mode          : Control;
     toggle_wall_mode              : Control;
     drag_as_create_path           : Control;
-    drag_cam                      : Control;
+    drag_camera                      : Control;
     move_camera_up                : Control;
     move_camera_down              : Control;
     move_camera_left              : Control;
@@ -45,7 +45,7 @@ Controls :: struct {
 }
 
 control_is_down :: (control: Control) -> bool {
-    for control.binds {
+    for control.bindings {
         if it.type == KeyboardKey && IsKeyDown(xx it.value) return true;
         if it.type == MouseButton && IsMouseButtonDown(xx it.value) return true;
     }
@@ -54,7 +54,7 @@ control_is_down :: (control: Control) -> bool {
 }
 
 control_is_pressed :: (control: Control) -> bool {
-    for control.binds {
+    for control.bindings {
         if it.type == KeyboardKey && IsKeyPressed(xx it.value) return true;
         if it.type == MouseButton && IsMouseButtonPressed(xx it.value) return true;
     }
@@ -62,15 +62,15 @@ control_is_pressed :: (control: Control) -> bool {
     return false;
 }
 
-bind_to_readable_name_cstr :: (bind: Bind) -> *u8 {
-    if bind.is_being_rebound return to_c_string("...");
-    if bind.value == 0 return to_c_string("<None>");
+binding_to_readable_name_cstr :: (binding: ControlBinding) -> *u8 {
+    if binding.is_being_rebound return to_c_string("...");
+    if binding.value == 0 return to_c_string("<None>");
 
     mouse_info    := type_info(MouseButton);
     keyboard_info := type_info(KeyboardKey);
 
-    info := ifx bind.type == MouseButton then mouse_info else keyboard_info;
-    found, index := array_find(info.values, bind.value);
+    info := ifx binding.type == MouseButton then mouse_info else keyboard_info;
+    found, index := array_find(info.values, binding.value);
     assert(found);
 
     return to_c_string(info.names[index]);
