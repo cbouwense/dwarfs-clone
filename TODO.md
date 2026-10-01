@@ -7,12 +7,10 @@
 # Bugs
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- Removing paths can crash the game
 - Mined tiles have 50 health?
 - Aggro logic is fucked up. Dwarves don't seem to wait where they should when goblins coming to them.
 - Water doesn't spread immediately
 - Dwarf warrior unable to path to a goblin when standing behind a miner who is attacking that goblin.
-- Dwarves can run into holes forever
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Core gameplay

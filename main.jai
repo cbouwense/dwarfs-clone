@@ -2720,7 +2720,7 @@ update_and_draw_frame_round :: () {
                         if context.game_state.controls_state_this_frame.select_is_held_down {
                             tile_id := get_tile_id_by_pos(context.mouse_pos_in_world);
 
-                            for path: paths_to_draw_this_frame {
+                            for path: paths {
                                 if tile_id == path.start_tile_id {
                                     array_unordered_remove_by_index(*paths, it_index);
                                 }
@@ -2873,7 +2873,7 @@ update_and_draw_frame_round :: () {
                                         if dwarf.tile_ids_on_path.count == 0 {
                                             dwarf.is_moving_quickly = false;
 
-                                            result := try_to_set_dwarf_random_new_target(dwarf);
+                                            result := try_to_set_dwarf_random_new_target(dwarf, false);
 
                                             // If there are no directions for this dwarf to go this frame,
                                             // just do nothing and then check again the next frame.
@@ -2930,11 +2930,11 @@ update_and_draw_frame_round :: () {
                                                     if tile then tile.health = xx new_health;
                                                 }
                                             }
-                                            // If it's unmineable, first of all I'm pretty sure this shouldn't have been on their path,
+                                            // If it's unwalkable and unmineable, first of all I'm pretty sure this shouldn't have been on their path,
                                             // but second of all, they're going to have to figure something else out then because this
                                             // is a dead end.
                                             else {
-                                                try_to_set_dwarf_random_new_target(dwarf);
+                                                try_to_set_dwarf_random_new_target(dwarf, true);
                                                 dwarf_can_remain_undecided = true;
                                                 dwarf.is_moving_quickly    = false;
                                             }
@@ -5628,7 +5628,7 @@ SetDwarfRandomNewTargetReturnStatus :: enum {
     NO_DIRECTION_FOUND;
 }
 
-try_to_set_dwarf_random_new_target :: (dwarf: *Dwarf) -> SetDwarfRandomNewTargetReturnStatus {
+try_to_set_dwarf_random_new_target :: (dwarf: *Dwarf, force: bool) -> SetDwarfRandomNewTargetReturnStatus {
     dwarf_tile_id_current := get_tile_id_by_pos(dwarf.pos);
     can_target_unmined_tiles := dwarf.dwarf_type == .MINER;
 
@@ -5654,7 +5654,7 @@ try_to_set_dwarf_random_new_target :: (dwarf: *Dwarf) -> SetDwarfRandomNewTarget
     new_direction := dwarf.direction;
 
     change_direction_rng := random_get_within_range(0, 1);
-    if change_direction_rng < 0.1 || !can_target_unmined_tiles {
+    if force || change_direction_rng < 0.1 || !can_target_unmined_tiles {
 
         go_left := change_direction_rng < 0.05;
 
@@ -8168,8 +8168,8 @@ derive_things_to_draw :: () {
     // Derive viewable paths
     derive_paths_to_draw_this_frame :: () {
         for path: paths {
-            start_tile_pos  := get_tile_pos_by_id(path.start_tile_id);
-            end_tile_pos    := get_tile_pos_by_id(get_path_end_tile_id(path));
+            start_tile_pos := get_tile_pos_by_id(path.start_tile_id);
+            end_tile_pos   := get_tile_pos_by_id(get_path_end_tile_id(path));
 
             if (
                 start_tile_pos.x  + TILEMAP_GENERAL_WORLD_WIDTH < context.window_start.x &&
