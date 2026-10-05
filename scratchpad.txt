@@ -1,0 +1,35 @@
+# Selection clearing
+
+- given outpost menu is open
+    - when right click is pressed
+        - then the outpost menu is closed, but no other right click actions occur
+    - when left click is pressed
+        - then the outpost menu is closed, but no other left click actions occur
+    - when a control mode becomes active
+        - then the outpost menu is closed
+
+- given outpost menu is closed
+    - when right click is down
+        - then the camera moves along with mouse movement
+
+- given a control mode is open
+    - when right click is pressed
+        - then the control mode goes away
+
+- given an outpost cannon perimeter is being shown
+    - when right click is down
+        - then the outpost cannon perimeter stays and the camera moves along with mouse movement
+    - when right click is pressed and the camera has moved
+        - then the outpost cannon perimeter stays
+    - when right click is pressed and the camera has not moved
+        - then the outpost cannon perimeter goes away
+
+# Actions
+
+- Close outpost menu if
+    1. an outpost menu is open
+    2. right or left click are pressed, or a control mode is activated
+ 
+- Close control mode
+- Close outpost cannon perimeter
+- Drag camera

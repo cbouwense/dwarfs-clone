@@ -701,28 +701,30 @@ init_textures :: () {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 ControlsState :: struct {
-    select_is_pressed_once        : bool;
-    select_is_held_down           : bool;
-    selection_cleared             : bool;
-    toggle_outpost_mode           : bool;
-    toggle_dynamite_mode          : bool;
-    toggle_obsidian_mode          : bool;
-    toggle_wall_mode              : bool;
-    toggle_remove_mode            : bool;
-    add_iron                      : bool;
-    select_as_place_miner_dwarf   : bool;
-    select_as_place_warrior_dwarf : bool;
-    select_as_place_goblin        : bool;
-    started_to_draw_path          : bool;
-    drawing_path                  : bool;
-    drag_camera_pressed              : bool;
-    drag_camera_down                 : bool;
-    move_camera_up                : bool;
-    move_camera_down              : bool;
-    move_camera_left              : bool;
-    move_camera_right             : bool;
-    panic_pause                   : bool;
-    fast_forward                  : bool;
+    select_is_pressed_once         : bool;
+    select_is_held_down            : bool;
+    selection_cleared              : bool;
+    toggle_outpost_mode            : bool;
+    toggle_dynamite_mode           : bool;
+    toggle_obsidian_mode           : bool;
+    toggle_wall_mode               : bool;
+    toggle_remove_mode             : bool;
+    add_iron                       : bool;
+    select_as_place_miner_dwarf    : bool;
+    select_as_place_warrior_dwarf  : bool;
+    select_as_place_goblin         : bool;
+    started_to_draw_path           : bool;
+    drawing_path                   : bool;
+    drag_camera_pressed            : bool;
+    drag_camera_down               : bool;
+    move_camera_up                 : bool;
+    move_camera_down               : bool;
+    move_camera_left               : bool;
+    move_camera_right              : bool;
+    panic_pause                    : bool;
+    fast_forward                   : bool;
+    close_outpost_menu             : bool;
+    close_outpost_cannon_perimeter : bool;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -732,26 +734,28 @@ ControlsState :: struct {
 // TODO: add this as param in build or something
 PAUSE_ON_PANIC :: true;
 
-mouse_drag_began_at_pos : Vector2;
 mouse_pos_when_path_creation_started : Vector2;
 
 GameState :: struct {
-    selected_dwarf_id          : s32;
-    selected_dwarf_particle_id : s32;
-    water_flow_cooldown_ms     : int;
-    lava_flow_cooldown_ms      : int;
-    time_remaining_ms          : int;
-    points                     : int;
-    gold                       : int;
-    control_mode               : ControlMode;
-    panic_pause_timer_ms       : int;
-    controls_state_this_frame  : ControlsState;
-    controls_state_prev_frame  : ControlsState;
-    started_dragging_at_pos    : Vector2;
-    alert_banner_text          : string;
-    alert_banner_text_ms       : int;
-    alert_banner_text_color    : Color;
+    selected_dwarf_id                  : s32;
+    selected_dwarf_particle_id         : s32;
+    water_flow_cooldown_ms             : int;
+    lava_flow_cooldown_ms              : int;
+    time_remaining_ms                  : int;
+    points                             : int;
+    gold                               : int;
+    control_mode                       : ControlMode;
+    panic_pause_timer_ms               : int;
+    controls_state_this_frame          : ControlsState;
+    controls_state_prev_frame          : ControlsState;
+    started_dragging_at_pos            : Vector2;
+    alert_banner_text                  : string;
+    alert_banner_text_ms               : int;
+    alert_banner_text_color            : Color;
     home_base_under_attack_cooldown_ms : int;
+    camera_target_when_drag_initiated  : Vector2;
+    mouse_drag_began_at_pos            : Vector2;
+    camera_has_not_moved_since_camera_drag_initiated : bool;
 }
 
 Direction :: enum u8 #specified {
@@ -1290,16 +1294,12 @@ initialize_round :: () {
 
     // Initialize game
     context.game_state = GameState.{
-        selected_dwarf_id          = 0,
-        selected_dwarf_particle_id = 0,
-        water_flow_cooldown_ms     = WATER_FLOW_COOLDOWN_MS,
-        lava_flow_cooldown_ms      = LAVA_FLOW_COOLDOWN_MS,
-        time_remaining_ms          = GAME_TIME_REMAINING_MS,
-        points                     = 0,
-        gold                       = GAME_STARTING_GOLD_EASY,
-        control_mode               = .NORMAL,
-        alert_banner_text          = "",
-        alert_banner_text_ms       = 0,
+        water_flow_cooldown_ms = WATER_FLOW_COOLDOWN_MS,
+        lava_flow_cooldown_ms  = LAVA_FLOW_COOLDOWN_MS,
+        time_remaining_ms      = GAME_TIME_REMAINING_MS,
+        gold                   = GAME_STARTING_GOLD_EASY,
+        control_mode           = .NORMAL,
+        alert_banner_text      = "",
     };
 
     context.metagame.state            = .RUNNING;
@@ -1632,7 +1632,7 @@ update_and_draw_frame_round :: () {
                             for *context.metagame.controls.toggle_obsidian_mode.bindings          it.is_being_rebound = false;
                             for *context.metagame.controls.toggle_wall_mode.bindings              it.is_being_rebound = false;
                             for *context.metagame.controls.drag_as_create_path.bindings           it.is_being_rebound = false;
-                            for *context.metagame.controls.drag_camera.bindings                      it.is_being_rebound = false;
+                            for *context.metagame.controls.drag_camera.bindings                   it.is_being_rebound = false;
                             for *context.metagame.controls.move_camera_up.bindings                it.is_being_rebound = false;
                             for *context.metagame.controls.move_camera_down.bindings              it.is_being_rebound = false;
                             for *context.metagame.controls.move_camera_left.bindings              it.is_being_rebound = false;
@@ -1660,7 +1660,6 @@ update_and_draw_frame_round :: () {
         update_controls_this_frame :: () {
             context.game_state.controls_state_this_frame.select_is_pressed_once        = control_is_pressed(context.metagame.controls.select);
             context.game_state.controls_state_this_frame.select_is_held_down           = control_is_down(context.metagame.controls.select);
-            context.game_state.controls_state_this_frame.selection_cleared             = control_is_pressed(context.metagame.controls.clear_selection);
             context.game_state.controls_state_this_frame.toggle_outpost_mode           = control_is_pressed(context.metagame.controls.toggle_outpost_mode);
             context.game_state.controls_state_this_frame.toggle_dynamite_mode          = control_is_pressed(context.metagame.controls.toggle_dynamite_mode);
             context.game_state.controls_state_this_frame.toggle_obsidian_mode          = control_is_pressed(context.metagame.controls.toggle_obsidian_mode);
@@ -1670,8 +1669,11 @@ update_and_draw_frame_round :: () {
             context.game_state.controls_state_this_frame.select_as_place_miner_dwarf   = control_is_down(context.metagame.controls.select_as_place_miner_dwarf);
             context.game_state.controls_state_this_frame.select_as_place_warrior_dwarf = control_is_down(context.metagame.controls.select_as_place_warrior_dwarf);
             context.game_state.controls_state_this_frame.select_as_place_goblin        = control_is_down(context.metagame.controls.select_as_place_goblin);
+            
+            // TODO: can't move camera if outpost menu open
             context.game_state.controls_state_this_frame.drag_camera_pressed           = control_is_pressed(context.metagame.controls.drag_camera);
             context.game_state.controls_state_this_frame.drag_camera_down              = control_is_down(context.metagame.controls.drag_camera);
+            
             context.game_state.controls_state_this_frame.move_camera_up                = control_is_down(context.metagame.controls.move_camera_up);
             context.game_state.controls_state_this_frame.move_camera_down              = control_is_down(context.metagame.controls.move_camera_down);
             context.game_state.controls_state_this_frame.move_camera_left              = control_is_down(context.metagame.controls.move_camera_left);
@@ -1692,6 +1694,40 @@ update_and_draw_frame_round :: () {
                 context.game_state.controls_state_this_frame.select_is_held_down &&
                 (context.game_state.controls_state_prev_frame.drawing_path || context.game_state.controls_state_prev_frame.started_to_draw_path)
             );
+
+            // Close any open outpost menu (there can only be on open at a time, fyi), if select or move camera are down,
+            // or a control mode is activated
+            is_control_mode_toggled := (
+                context.game_state.controls_state_this_frame.toggle_outpost_mode  ||
+                context.game_state.controls_state_this_frame.toggle_dynamite_mode ||
+                context.game_state.controls_state_this_frame.toggle_obsidian_mode ||
+                context.game_state.controls_state_this_frame.toggle_wall_mode     ||
+                context.game_state.controls_state_this_frame.toggle_remove_mode
+            );
+
+            context.game_state.controls_state_this_frame.close_outpost_menu = (
+                context.game_state.controls_state_this_frame.select_is_pressed_once ||
+                context.game_state.controls_state_this_frame.drag_camera_down       ||
+                is_control_mode_toggled
+            );
+
+            if (
+                context.game_state.controls_state_prev_frame.drag_camera_down &&
+                !context.game_state.controls_state_this_frame.drag_camera_down
+            ) {
+                
+            }
+
+            context.game_state.camera_has_not_moved_since_camera_drag_initiated = !!Vector2Equals(context.game_state.camera_target_when_drag_initiated, context.camera.target);
+
+            context.game_state.controls_state_this_frame.close_outpost_cannon_perimeter = (
+                context.game_state.controls_state_prev_frame.drag_camera_down &&
+                !context.game_state.controls_state_this_frame.drag_camera_down &&
+                context.game_state.camera_has_not_moved_since_camera_drag_initiated
+            );
+
+            // TODO: selection_cleared
+            context.game_state.controls_state_this_frame.selection_cleared = control_is_pressed(context.metagame.controls.clear_selection);
         }
         update_controls_this_frame();
 
@@ -1725,22 +1761,30 @@ update_and_draw_frame_round :: () {
         }
 
         // TODO: should this go here? or just, like, collecting inputs or whatever... instead of updating state?
-        if context.game_state.controls_state_this_frame.select_is_pressed_once {
-            // PERF: probably do this with more than one brain cell of thought given to it.
-            //
-            // Clear any open menus
-            {
-                for *outpost: outposts {
-                    outpost.is_menu_open = false;
-                }
+        // Clear any open menus
+        if context.game_state.controls_state_this_frame.close_outpost_menu {
+            for *outpost: outposts {
+                outpost.is_menu_open = false;
             }
+        }
 
+        if context.game_state.controls_state_this_frame.select_is_pressed_once {
             hovered_tile_rect := get_tile_rect_that_pos_is_within(get_world_width(), get_world_height(), TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, context.mouse_pos_in_world);
             hovered_tile_id := get_tile_id_by_pos(get_rect_pos(hovered_tile_rect));
 
             selected_an_outpost, outpost := table_find(*tile_ids_to_outposts, hovered_tile_id);
             if selected_an_outpost {
                 outpost.is_menu_open = true;
+            }
+        }
+
+        if context.game_state.controls_state_this_frame.close_outpost_cannon_perimeter {
+            for *outpost: outposts {
+                outpost.is_showing_cannon_perimeter = false;
+                for particle_id: outpost.cannon_perimeter_particle_ids {
+                    kill_particle_by_id(particle_id);
+                }
+                array_reset(*outpost.cannon_perimeter_particle_ids);
             }
         }
     }
@@ -1779,11 +1823,12 @@ update_and_draw_frame_round :: () {
 
                 camera_move_speed := CAMERA_MOVE_SPEED_BASE / 2 * context.camera.zoom;
                 if context.game_state.controls_state_this_frame.drag_camera_pressed {
-                    mouse_drag_began_at_pos = context.mouse_pos_in_world;
+                    context.game_state.mouse_drag_began_at_pos = context.mouse_pos_in_world;
+                    context.game_state.camera_target_when_drag_initiated = context.camera.target;
                 }
 
                 if context.game_state.controls_state_this_frame.drag_camera_down && can_move_camera {
-                    world_delta := Vector2Subtract(mouse_drag_began_at_pos, context.mouse_pos_in_world);
+                    world_delta := Vector2Subtract(context.game_state.mouse_drag_began_at_pos, context.mouse_pos_in_world);
                     
                     // Apply that difference to the camera target.
                     // This effectively "pulls" the world back so the mouse stays where it began.
