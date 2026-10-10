@@ -807,6 +807,9 @@ TILE_DIRECTION_DELTAS :: [2] float32.[
 #add_context mouse_wheel_move    : float;
 #add_context dwarf_miner_count   : int;
 #add_context dwarf_warrior_count : int;
+// TODO: is there any way to do this that isn't, fucking, this?
+#add_context is_user_still_holding_select_down_from_opening_outpost_menu : bool;
+#add_context enable_outpost_menu : bool;
 
 get_tile_direction_id_deltas :: (direction: Direction) -> [2] s32 {
     if #complete direction == {
@@ -911,7 +914,8 @@ Outpost :: struct {
 
     // PERF: props?
     is_home_base : bool;
-    is_menu_open: bool;
+    is_menu_enabled : bool;
+    is_menu_open : bool;
     is_spawning_miners: bool;
     is_showing_cannon_perimeter: bool;
     cannon_perimeter_particle_ids: [..] s32;
@@ -1711,13 +1715,6 @@ update_and_draw_frame_round :: () {
                 is_control_mode_toggled
             );
 
-            if (
-                context.game_state.controls_state_prev_frame.drag_camera_down &&
-                !context.game_state.controls_state_this_frame.drag_camera_down
-            ) {
-                
-            }
-
             context.game_state.camera_has_not_moved_since_camera_drag_initiated = !!Vector2Equals(context.game_state.camera_target_when_drag_initiated, context.camera.target);
 
             context.game_state.controls_state_this_frame.close_outpost_cannon_perimeter = (
@@ -1760,22 +1757,38 @@ update_and_draw_frame_round :: () {
             }
         }
 
+        //
         // TODO: should this go here? or just, like, collecting inputs or whatever... instead of updating state?
+        //
+
         // Clear any open menus
-        if context.game_state.controls_state_this_frame.close_outpost_menu {
-            for *outpost: outposts {
-                outpost.is_menu_open = false;
+        hovered_tile_rect := get_tile_rect_that_pos_is_within(get_world_width(), get_world_height(), TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, context.mouse_pos_in_world);
+        hovered_tile_id := get_tile_id_by_pos(get_rect_pos(hovered_tile_rect));
+        selected_an_outpost, outpost := table_find(*tile_ids_to_outposts, hovered_tile_id);
+
+        if selected_an_outpost {
+            if context.game_state.controls_state_this_frame.select_is_pressed_once && !outpost.is_menu_open {
+                // Just because the menu is open does not mean it's enabled. This is because if it is enabled immediately
+                // then if you are hovering over one of the menu buttons and release the select control, then you actually
+                // click the button even though that was not your intention.
+                outpost.is_menu_open = true;
+                context.is_user_still_holding_select_down_from_opening_outpost_menu = true;
+                assert_soft(!outpost.is_menu_enabled, "Expected menu to be disabled");
+            }
+        } else {
+            if context.game_state.controls_state_this_frame.close_outpost_menu {
+                for *outpost: outposts {
+                    if outpost.is_menu_open {
+                        outpost.is_menu_open = false;
+                        outpost.is_menu_enabled = false;
+                        break;
+                    }
+                }
             }
         }
 
-        if context.game_state.controls_state_this_frame.select_is_pressed_once {
-            hovered_tile_rect := get_tile_rect_that_pos_is_within(get_world_width(), get_world_height(), TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, context.mouse_pos_in_world);
-            hovered_tile_id := get_tile_id_by_pos(get_rect_pos(hovered_tile_rect));
-
-            selected_an_outpost, outpost := table_find(*tile_ids_to_outposts, hovered_tile_id);
-            if selected_an_outpost {
-                outpost.is_menu_open = true;
-            }
+        if context.game_state.controls_state_prev_frame.select_is_held_down && !context.game_state.controls_state_this_frame.select_is_held_down {
+            context.is_user_still_holding_select_down_from_opening_outpost_menu = false;
         }
 
         if context.game_state.controls_state_this_frame.close_outpost_cannon_perimeter {
@@ -2919,6 +2932,15 @@ update_and_draw_frame_round :: () {
                                     outpost.spawn_dwarf_cooldown_ms = DWARF_MINER_SPAWN_MS;
                                 }
                             }
+
+                            // Enable the outpost menu next frame when the user is no longer holding down select 
+                            if context.enable_outpost_menu {
+                                outpost.is_menu_enabled = true;
+                                context.enable_outpost_menu = false;
+                            }
+                            else if outpost.is_menu_open && !outpost.is_menu_enabled && !context.is_user_still_holding_select_down_from_opening_outpost_menu {
+                                context.enable_outpost_menu = true;
+                            }
                         }
                     }
                 }
@@ -3815,33 +3837,38 @@ update_and_draw_frame_round :: () {
                         };
 
                         outpost_menu_spawn_miners_button_is_hovered := CheckCollisionPointRec(context.mouse_pos_in_ui, outpost_menu_swawn_miners_button_rect);
-                        outpost_menu_spawn_miners_button_is_pressed := outpost_menu_spawn_miners_button_is_hovered && context.game_state.controls_state_this_frame.select_is_pressed_once;
+                        outpost_menu_spawn_miners_button_was_held_down := outpost_menu_spawn_miners_button_is_hovered && context.game_state.controls_state_prev_frame.select_is_held_down;
                         outpost_menu_spawn_miners_button_is_held_down := outpost_menu_spawn_miners_button_is_hovered && context.game_state.controls_state_this_frame.select_is_held_down;
+                        outpost_menu_spawn_miners_button_is_selected := outpost_menu_spawn_miners_button_was_held_down && !outpost_menu_spawn_miners_button_is_held_down;
 
                         tint : Color;
-                        if outpost_menu_spawn_miners_button_is_held_down {
-                            if outpost.is_spawning_miners {
-                                tint = GRAY;
-                            } else {
-                                tint = BEIGE;
-                            }  
-                        }
-                        else if outpost_menu_spawn_miners_button_is_hovered {
-                            if outpost.is_spawning_miners {
-                                tint = GOLD;
-                            } else {
-                                tint = LIGHTGRAY;
+                        if outpost.is_menu_enabled {
+                            if outpost_menu_spawn_miners_button_is_held_down {
+                                if outpost.is_spawning_miners {
+                                    tint = GRAY;
+                                } else {
+                                    tint = BEIGE;
+                                }  
                             }
-                        }
-                        else {
-                            if outpost.is_spawning_miners {
-                                tint = YELLOW;
-                            } else {
-                                tint = WHITE;
+                            else if outpost_menu_spawn_miners_button_is_hovered {
+                                if outpost.is_spawning_miners {
+                                    tint = GOLD;
+                                } else {
+                                    tint = LIGHTGRAY;
+                                }
                             }
+                            else {
+                                if outpost.is_spawning_miners {
+                                    tint = YELLOW;
+                                } else {
+                                    tint = WHITE;
+                                }
+                            }
+                        } else {
+                            tint = WHITE;
                         }
 
-                        if outpost_menu_spawn_miners_button_is_pressed {
+                        if outpost_menu_spawn_miners_button_is_selected && outpost.is_menu_enabled {
                             outpost.is_spawning_miners = !outpost.is_spawning_miners;
                         }
 
@@ -3865,22 +3892,27 @@ update_and_draw_frame_round :: () {
                         };
 
                         outpost_menu_spawn_warrior_button_is_hovered := CheckCollisionPointRec(context.mouse_pos_in_ui, outpost_menu_swawn_warrior_button_rect);
-                        outpost_menu_spawn_warrior_button_is_pressed := outpost_menu_spawn_warrior_button_is_hovered && context.game_state.controls_state_this_frame.select_is_pressed_once;
+                        outpost_menu_spawn_warrior_button_was_held_down := outpost_menu_spawn_warrior_button_is_hovered && context.game_state.controls_state_prev_frame.select_is_held_down;
                         outpost_menu_spawn_warrior_button_is_held_down := outpost_menu_spawn_warrior_button_is_hovered && context.game_state.controls_state_this_frame.select_is_held_down;
+                        outpost_menu_spawn_warrior_button_is_selected := outpost_menu_spawn_warrior_button_was_held_down && !outpost_menu_spawn_warrior_button_is_held_down;
 
                         tint : Color;
-                        if outpost_menu_spawn_warrior_button_is_held_down {
-                            tint = BEIGE;  
-                        }
-                        else if outpost_menu_spawn_warrior_button_is_hovered {
-                            tint = LIGHTGRAY;
-                        }
-                        else {
+                        if outpost.is_menu_enabled {
+                            if outpost_menu_spawn_warrior_button_is_held_down {
+                                tint = BEIGE;  
+                            }
+                            else if outpost_menu_spawn_warrior_button_is_hovered {
+                                tint = LIGHTGRAY;
+                            }
+                            else {
+                                tint = WHITE;
+                            }
+                        } else {
                             tint = WHITE;
                         }
 
                         // TODO: limit to 4 (or 8 for home base)
-                        if outpost_menu_spawn_warrior_button_is_pressed {
+                        if outpost_menu_spawn_warrior_button_is_selected  && outpost.is_menu_enabled {
                             gold_cost := 50;
                             if context.game_state.gold >= gold_cost {
                                 create_dwarf(outpost.pos, .WARRIOR, gold_cost);
@@ -3906,22 +3938,23 @@ update_and_draw_frame_round :: () {
                             TILEMAP_GENERAL_WORLD_HEIGHT * 2,
                         };
 
-                        outpost_menu_cannon_button_is_hovered   := CheckCollisionPointRec(context.mouse_pos_in_ui, outpost_menu_cannon_button_rect);
-                        outpost_menu_cannon_button_is_pressed   := outpost_menu_cannon_button_is_hovered && context.game_state.controls_state_this_frame.select_is_pressed_once;
-                        outpost_menu_cannon_button_is_held_down := outpost_menu_cannon_button_is_hovered && context.game_state.controls_state_this_frame.select_is_held_down;
+                        outpost_menu_cannon_button_is_hovered  := CheckCollisionPointRec(context.mouse_pos_in_ui, outpost_menu_cannon_button_rect);
+                        outpost_menu_cannon_button_is_selected := outpost_menu_cannon_button_is_hovered && context.game_state.controls_state_prev_frame.select_is_pressed_once;
+                        outpost_menu_cannon_button_is_held_down  := outpost_menu_cannon_button_is_hovered && context.game_state.controls_state_this_frame.select_is_held_down;
 
                         tint : Color;
-                        if outpost_menu_cannon_button_is_held_down {
-                            tint = BEIGE;  
-                        }
-                        else if outpost_menu_cannon_button_is_hovered {
-                            tint = LIGHTGRAY;
-                        }
-                        else {
+                        if outpost.is_menu_enabled {
+                            if outpost_menu_cannon_button_is_hovered {
+                                tint = LIGHTGRAY;
+                            }
+                            else {
+                                tint = WHITE;
+                            }
+                        } else {
                             tint = WHITE;
                         }
 
-                        if outpost_menu_cannon_button_is_pressed && !outpost.is_showing_cannon_perimeter {
+                        if outpost_menu_cannon_button_is_selected && !outpost.is_showing_cannon_perimeter && outpost.is_menu_enabled {
                             angle_in_radians := 0.0;
                             RADIUS :: TILEMAP_GENERAL_TILE_WIDTH * 50;
                             ANGLE_NUDGE :: TAU * 0.005;
@@ -3938,6 +3971,7 @@ update_and_draw_frame_round :: () {
                             }
 
                             outpost.is_menu_open = false;
+                            outpost.is_menu_enabled = false;
                         }
 
                         DrawTexturePro(

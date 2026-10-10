@@ -99,3 +99,4 @@
 - search feature for tiles, dwarves, etc.
 - hotreloading
 - macro or something for requiring all fields to be filled out in struct
+- OOP for outpost menu shit so you don't need to juggle state in a spaghetti manner?
