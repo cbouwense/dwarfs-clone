@@ -1777,7 +1777,10 @@ update_and_draw_frame_round :: () {
         } else {
             if context.game_state.controls_state_this_frame.close_outpost_menu {
                 for *outpost: outposts {
-                    if outpost.is_menu_open {
+                    outpost_menu_rect_in_ui_space := get_outpost_menu_rect_in_ui_space(outpost);
+                    clicked_on_outpost_menu := CheckCollisionPointRec(context.mouse_pos_in_ui, outpost_menu_rect_in_ui_space);
+
+                    if !clicked_on_outpost_menu && outpost.is_menu_open {
                         outpost.is_menu_open = false;
                         outpost.is_menu_enabled = false;
                         break;
@@ -3806,15 +3809,7 @@ update_and_draw_frame_round :: () {
             // Draw outpost menus
             for *outpost: outposts {
                 if outpost.is_menu_open {
-                    outpost_rect_in_world := get_world_rect_from_pos(outpost.pos, 3);
-                    outpost_pos_center_in_world := get_rect_center(outpost_rect_in_world);
-                    outpost_pos_center_in_ui := GetWorldToScreen2D(outpost_pos_center_in_world, context.camera);
-                    outpost_rect_in_ui_space := Rectangle.{
-                        outpost_pos_center_in_ui.x - TILEMAP_GENERAL_WORLD_WIDTH * 2.5,
-                        outpost_pos_center_in_ui.y - TILEMAP_GENERAL_WORLD_HEIGHT * 2.5,
-                        TILEMAP_GENERAL_WORLD_WIDTH * 5,
-                        TILEMAP_GENERAL_WORLD_HEIGHT * 5,
-                    };
+                    outpost_rect_in_ui_space := get_outpost_menu_rect_in_ui_space(outpost);
 
                     DrawTexturePro(
                         tilemap_texture_general,
@@ -3833,7 +3828,7 @@ update_and_draw_frame_round :: () {
                             TILEMAP_GENERAL_WORLD_WIDTH * 2,
                             TILEMAP_GENERAL_WORLD_HEIGHT * 2,
                         };
-
+                        
                         outpost_menu_spawn_miners_button_is_hovered := CheckCollisionPointRec(context.mouse_pos_in_ui, outpost_menu_swawn_miners_button_rect);
                         outpost_menu_spawn_miners_button_was_held_down := outpost_menu_spawn_miners_button_is_hovered && context.game_state.controls_state_prev_frame.select_is_held_down;
                         outpost_menu_spawn_miners_button_is_held_down := outpost_menu_spawn_miners_button_is_hovered && context.game_state.controls_state_this_frame.select_is_held_down;
@@ -4484,6 +4479,20 @@ update_and_draw_frame_round :: () {
         #if DRAW_UI then draw_ui();
     }
     draw();
+}
+
+get_outpost_menu_rect_in_ui_space :: (outpost: Outpost) -> Rectangle {
+    outpost_rect_in_world := get_world_rect_from_pos(outpost.pos, 3);
+    outpost_pos_center_in_world := get_rect_center(outpost_rect_in_world);
+    outpost_pos_center_in_ui := GetWorldToScreen2D(outpost_pos_center_in_world, context.camera);
+    outpost_rect_in_ui_space := Rectangle.{
+        outpost_pos_center_in_ui.x - TILEMAP_GENERAL_WORLD_WIDTH * 2.5,
+        outpost_pos_center_in_ui.y - TILEMAP_GENERAL_WORLD_HEIGHT * 2.5,
+        TILEMAP_GENERAL_WORLD_WIDTH * 5,
+        TILEMAP_GENERAL_WORLD_HEIGHT * 5,
+    };
+
+    return outpost_rect_in_ui_space;
 }
 
 debug_struct_runtime :: (thing: Any, name_prefix: string, debug_text_x: s32, debug_text_y: *s32, render_struct_name_prefix: bool) {
