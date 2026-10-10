@@ -918,6 +918,7 @@ Outpost :: struct {
     is_menu_open : bool;
     is_spawning_miners: bool;
     cannon_perimeter_particle_ids: [..] s32;
+    dwarf_warrior_ids: [..] s32;
 }
 
 DwarfState :: enum {
@@ -3828,7 +3829,7 @@ update_and_draw_frame_round :: () {
                             TILEMAP_GENERAL_WORLD_WIDTH * 2,
                             TILEMAP_GENERAL_WORLD_HEIGHT * 2,
                         };
-                        
+
                         outpost_menu_spawn_miners_button_is_hovered := CheckCollisionPointRec(context.mouse_pos_in_ui, outpost_menu_swawn_miners_button_rect);
                         outpost_menu_spawn_miners_button_was_held_down := outpost_menu_spawn_miners_button_is_hovered && context.game_state.controls_state_prev_frame.select_is_held_down;
                         outpost_menu_spawn_miners_button_is_held_down := outpost_menu_spawn_miners_button_is_hovered && context.game_state.controls_state_this_frame.select_is_held_down;
@@ -3907,8 +3908,9 @@ update_and_draw_frame_round :: () {
                         // TODO: limit to 4 (or 8 for home base)
                         if outpost_menu_spawn_warrior_button_is_selected  && outpost.is_menu_enabled {
                             gold_cost := 50;
-                            if context.game_state.gold >= gold_cost {
-                                create_dwarf(outpost.pos, .WARRIOR, gold_cost);
+                            if (context.metagame.debug_mode || context.game_state.gold >= gold_cost) && outpost.dwarf_warrior_ids.count < 4 {
+                                spawned_warrior := create_dwarf(outpost.pos, .WARRIOR, gold_cost);
+                                array_add(*outpost.dwarf_warrior_ids, spawned_warrior.id);
                             }
                         }
 

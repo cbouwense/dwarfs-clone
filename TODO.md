@@ -8,7 +8,6 @@
 # Bugs
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- outpost canons
 - Mined tiles have 50 health?
 - Aggro logic is fucked up. Dwarves don't seem to wait where they should when goblins coming to them.
 - Water doesn't spread immediately
@@ -18,6 +17,7 @@
 # Core gameplay
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+- Outpost canons
 - In addition to control modes, allow users to hold down controls
 - Draw outpost health on hover
 - Dwarf warrior patrolling
