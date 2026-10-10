@@ -917,7 +917,6 @@ Outpost :: struct {
     is_menu_enabled : bool;
     is_menu_open : bool;
     is_spawning_miners: bool;
-    is_showing_cannon_perimeter: bool;
     cannon_perimeter_particle_ids: [..] s32;
 }
 
@@ -1793,7 +1792,6 @@ update_and_draw_frame_round :: () {
 
         if context.game_state.controls_state_this_frame.close_outpost_cannon_perimeter {
             for *outpost: outposts {
-                outpost.is_showing_cannon_perimeter = false;
                 for particle_id: outpost.cannon_perimeter_particle_ids {
                     kill_particle_by_id(particle_id);
                 }
@@ -3954,7 +3952,7 @@ update_and_draw_frame_round :: () {
                             tint = WHITE;
                         }
 
-                        if outpost_menu_cannon_button_is_selected && !outpost.is_showing_cannon_perimeter && outpost.is_menu_enabled {
+                        if outpost_menu_cannon_button_is_selected && outpost.cannon_perimeter_particle_ids.count == 0 && outpost.is_menu_enabled {
                             angle_in_radians := 0.0;
                             RADIUS :: TILEMAP_GENERAL_TILE_WIDTH * 50;
                             ANGLE_NUDGE :: TAU * 0.005;
