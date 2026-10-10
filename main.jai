@@ -1033,6 +1033,7 @@ Particle :: struct {
     entity_id_to_follow   : s32;
     entity_kind_to_follow : EntityKind;
     step_function         : #type (x: float) -> float;
+    follow_mouse          : bool;
 }
 
 NOTIFICATION_RADIUS :: TILEMAP_GENERAL_WORLD_WIDTH;
@@ -3064,6 +3065,10 @@ update_and_draw_frame_round :: () {
                                 array_add(*particle_ids_to_kill_this_frame, particle.id);
                             }
                         }
+                        else if particle.follow_mouse {
+                            particle.position = context.mouse_pos_in_world;
+                            print_vars(particle.position);
+                        }
                         // Update orbital position
                         else if particle.orbital_period > 0 {
                             // PERF: Is this stupid to divide like this? Should I just store the increment?
@@ -3959,11 +3964,16 @@ update_and_draw_frame_round :: () {
                                 outpost.pos.y + TILEMAP_GENERAL_TILE_HEIGHT * 1.5,
                             };
 
+                            // Spawn the particles for the perimeter outline
                             for 0..199 {
                                 particle := create_cannon_perimeter_particle(angle_in_radians, orbital_center, RADIUS);
                                 array_add(*outpost.cannon_perimeter_particle_ids, particle.id);
                                 angle_in_radians += ANGLE_NUDGE;
                             }
+                            
+                            // Spawn the particle that follows the mouse around
+                            mouse_particle := create_cannon_perimeter_particle_mouse();
+                            array_add(*outpost.cannon_perimeter_particle_ids, mouse_particle.id);
 
                             outpost.is_menu_open = false;
                             outpost.is_menu_enabled = false;
@@ -6217,6 +6227,36 @@ create_cannon_perimeter_particle :: (orbital_angle: float, orbital_center: Vecto
     return particle;
 }
 
+create_cannon_perimeter_particle_mouse :: () -> Particle {
+    particle_id := increment_then_read(*particle_id_counter);
+
+    particle_sprite := ParticleSprite.{
+        texture            = tilemap_texture_general,
+        texture_source_row = xx CANNON_PERIMETER_SPRITE_SOURCE_ROW,
+        texture_source_col = xx CANNON_PERIMETER_SPRITE_SOURCE_COL,
+        tint               = WHITE,
+    };
+
+    particle_sprites : [..] ParticleSprite;
+    array_add(*particle_sprites, particle_sprite);
+
+    particle := Particle.{
+        id                  = particle_id,
+        rotational_velocity = 25.0,
+        size                = TILEMAP_GENERAL_WORLD_WIDTH,
+        fade                = false,
+        opacity             = 1,
+        sprites             = particle_sprites,
+        auto_remove         = false,
+        follow_mouse        = true,
+    };
+
+    table_set(*particle_id_to_index, particle_id, particles.count);
+    array_add(*particles, particle);
+
+    return particle;
+}
+
 create_gold_particle :: (pos: Vector2, amount: int, is_positive_connotation: bool) -> Particle {
     particle_id := increment_then_read(*particle_id_counter);
 
@@ -8435,7 +8475,7 @@ derive_things_to_draw :: () {
             
             if particle.position.y - TILEMAP_GENERAL_WORLD_HEIGHT > context.window_end.y continue;
             if particle.position.y + TILEMAP_GENERAL_WORLD_HEIGHT < context.window_start.y continue;
-
+            
             array_add(*particles_to_draw_this_frame, particle);
         }
     }
