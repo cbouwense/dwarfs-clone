@@ -17,6 +17,7 @@
 # Core gameplay
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+- Don't move camera if outpost menu open
 - Dwarf warrior patrolling
 - In addition to control modes, allow users to hold down controls
 - Draw outpost health on hover

@@ -2937,17 +2937,42 @@ update_and_draw_frame_round :: () {
                             }
 
                             // Enable the outpost menu next frame when the user is no longer holding down select 
-                            if context.enable_outpost_menu {
-                                outpost.is_menu_enabled = true;
-                                context.enable_outpost_menu = false;
+                            if outpost.is_menu_open {
+                                if context.enable_outpost_menu {
+                                    outpost.is_menu_enabled = true;
+                                    context.enable_outpost_menu = false;
+                                }
+                                else if !outpost.is_menu_enabled && !context.is_user_still_holding_select_down_from_opening_outpost_menu {
+                                    context.enable_outpost_menu = true;
+                                }
                             }
-                            else if outpost.is_menu_open && !outpost.is_menu_enabled && !context.is_user_still_holding_select_down_from_opening_outpost_menu {
-                                context.enable_outpost_menu = true;
+
+                            // TODO: this isn't exactly updating the outpost... should this go here?
+                            // TODO: some mechanism is needed to tell whether or not the dwarves are actually in the outpost
+                            // to know if they can be fired in the cannon.
+                            if outpost.cannon_perimeter_particle_ids.count > 0 && outpost.dwarf_warrior_ids.count > 0 {
+                                if context.game_state.controls_state_this_frame.select_is_pressed_once {
+                                    hovered_tile_rect := get_tile_rect_that_pos_is_within(get_world_width(), get_world_height(), TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, context.mouse_pos_in_world);
+                                    hovered_tile_pos := get_rect_pos(hovered_tile_rect);
+
+                                    dx := hovered_tile_pos.x - context.mouse_pos_in_world.x;
+                                    dy := hovered_tile_pos.y - context.mouse_pos_in_world.y;
+                                    distance_squared := (dx * dx) + (dy * dy);
+                                    ACCEPTABLE_DISTANCE_SQUARED :: (TILEMAP_GENERAL_WORLD_WIDTH * 50) * (TILEMAP_GENERAL_WORLD_WIDTH * 50);
+                                    hovering_over_tile_in_cannon_range := distance_squared <= ACCEPTABLE_DISTANCE_SQUARED;
+
+                                    if hovering_over_tile_in_cannon_range {
+                                        landing_tile_ids := get_cannon_landing_tile_ids(get_tile_id_by_pos(hovered_tile_pos));
+
+                                    }
+                                }
                             }
                         }
                     }
                 }
                 update_outposts();
+
+                if context.enable_outpost_menu then print("enable it this frame!\n");
 
                 // Update liquid timers
                 should_spread_lava_this_frame := context.game_state.lava_flow_cooldown_ms <= 0;
@@ -4670,6 +4695,40 @@ get_outpost_placement :: (hovered_tile_id: s32) -> (is_valid_placement: bool, is
     }
 
     return is_valid_placement, is_too_expensive, top_left_tile_id;
+}
+
+get_cannon_landing_tile_ids :: (hovered_tile_id: s32) -> tile_ids: [..] s32 {
+    valid_landing_tile_ids: [..] s32;
+
+    // First define the 5 x 5 grid with the hovered tile in the middle.
+    step_1_tile_id   := get_neighbor_tile_id_by_direction(hovered_tile_id, .NORTH_WEST);
+    top_left_tile_id := get_neighbor_tile_id_by_direction(step_1_tile_id,  .NORTH_WEST);
+    
+    // Next, scan each tile and check if it's a viable tile for a dwarf to be shot onto.
+    for col: 0..4 {
+        for row: 0..4 {
+            tile_id : s32 = xx (top_left_tile_id + col + row * context.world_cols);
+            tile := get_tile_by_id(tile_id);
+            // Unmined dirt cannot be landed on.
+            if tile == null continue;
+            if tile.type != .MINED continue;
+
+            // Dynamite, treasure, outpost floor, and home base floor are the only acceptable properties. 
+            if tile_has_property(tile, .ENCASED)       continue;
+            if tile_has_property(tile, .WATER_WARNING) continue;
+            if tile_has_property(tile, .WATER_ALERT)   continue;
+            if tile_has_property(tile, .LAVA_WARNING)  continue;
+            if tile_has_property(tile, .LAVA_ALERT)    continue;
+            if tile_has_property(tile, .WATER_STILL)   continue;
+            if tile_has_property(tile, .WATER_FLOWING) continue;
+            if tile_has_property(tile, .LAVA_STILL)    continue;
+            if tile_has_property(tile, .LAVA_FLOWING)  continue;
+
+            array_add(*valid_landing_tile_ids, tile_id);
+        }
+    }
+
+    return valid_landing_tile_ids;
 }
 
 get_entity_tile_id :: (entity: Entity) -> s32 {
