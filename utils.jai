@@ -1,3 +1,10 @@
+// [min, max]
+random_int_within_range :: (min: int, max: int) -> int {
+    // TODO: this won't work for int max, will it?
+    adjusted_max := max + 1 - EPSILON;
+    return cast(int) random_get_within_range(cast(float32) min, adjusted_max);
+}
+
 read_then_increment :: (x: *s32, increment: s32 = 1) -> s32 {
     defer x.* += increment;
     return x.*;

@@ -2962,8 +2962,22 @@ update_and_draw_frame_round :: () {
                                     hovering_over_tile_in_cannon_range := distance_squared <= ACCEPTABLE_DISTANCE_SQUARED;
 
                                     if hovering_over_tile_in_cannon_range {
-                                        landing_tile_ids := get_cannon_landing_tile_ids(get_tile_id_by_pos(hovered_tile_pos));
+                                        // These are "unassigned" because we're going to mutate this array as we assign dwarves to be shot onto them.
+                                        // The spots are doled out until either there are no unassigned spots left, or there are no dwarves left to
+                                        // be shot.
+                                        unassigned_landing_tile_ids := get_cannon_landing_tile_ids(get_tile_id_by_pos(hovered_tile_pos));
+                                        unassigned_dwarf_warriors_available := get_dwarf_warriors_assigned_to_outpost_that_are_present_at_outpost(outpost);
 
+                                        while unassigned_dwarf_warriors_available.count > 0 && unassigned_landing_tile_ids.count > 0 {
+                                            tile_id_index := random_int_within_range(0, unassigned_landing_tile_ids.count - 1);
+                                            tile_id_to_assign := unassigned_landing_tile_ids[tile_id_index];
+                                            dwarf_to_fire := unassigned_dwarf_warriors_available[0];
+
+                                            print("assigning dwarf % to tile %\n", dwarf_to_fire.id, tile_id_to_assign);
+                                            
+                                            array_unordered_remove_by_index(*unassigned_landing_tile_ids, tile_id_index);
+                                            array_unordered_remove_by_index(*unassigned_dwarf_warriors_available, 0);
+                                        }
                                     }
                                 }
                             }
@@ -3092,7 +3106,6 @@ update_and_draw_frame_round :: () {
                         }
                         else if particle.follow_mouse {
                             particle.position = context.mouse_pos_in_world;
-                            print_vars(particle.position);
                         }
                         // Update orbital position
                         else if particle.orbital_period > 0 {
@@ -4752,6 +4765,37 @@ get_cannon_landing_tile_ids :: (hovered_tile_id: s32) -> tile_ids: [..] s32 {
     }
 
     return valid_landing_tile_ids;
+}
+
+get_dwarf_warriors_assigned_to_outpost_that_are_present_at_outpost :: (outpost: Outpost) -> [..] *Dwarf {
+    dwarf_warriors_present: [..] *Dwarf;
+    dwarf_warriors_present.allocator = temp;
+    
+    outpost_floor_tile_ids: [..] s32;
+    outpost_floor_tile_ids.allocator = temp;
+    
+    outpost_tile_id := get_tile_id_by_pos(outpost.pos);
+    // Go one north west since the outpost floor tiles for an outpost are a 5x5 grid and the outpost's
+    // position is the top left tile of its 3x3 grid.
+    top_left_tile_id := get_neighbor_tile_id_by_direction(outpost_tile_id, .NORTH_WEST);
+    for row: 0..4 {
+        for col: 0..4 {
+            tile_id : s32 = xx (top_left_tile_id + col + row * context.world_cols);
+            array_add(*outpost_floor_tile_ids, tile_id);
+        }
+    }
+
+    for dwarf_id: outpost.dwarf_warrior_ids {
+        found, entity := get_entity_by_id(EntityKind.Dwarf, dwarf_id);
+        assert_soft(found, "Expected to find dwarf warrior assigned to outpost");
+        dwarf := cast(*Dwarf) entity;
+
+        dwarf_tile_id := get_tile_id_by_pos(dwarf.pos);
+        dwarf_is_present_at_outpost := array_find(outpost_floor_tile_ids, dwarf_tile_id);
+        array_add(*dwarf_warriors_present, dwarf);
+    }
+
+    return dwarf_warriors_present;
 }
 
 get_entity_tile_id :: (entity: Entity) -> s32 {
@@ -8789,6 +8833,7 @@ get_entity_kind_from_type :: (entity_type: Type) -> EntityKind {
     }
 }
 
+// TODO: infer return type or bake it or whatever
 get_entity_by_id :: (entity_kind: EntityKind, id: s32) -> (found: bool, entity: *Entity)
 {
     entity_id_to_index : Table(s32, s64);
