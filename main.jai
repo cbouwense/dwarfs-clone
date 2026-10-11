@@ -3579,6 +3579,28 @@ update_and_draw_frame_round :: () {
                     } else {
                         DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTPOST, dest, Vector2.{0,0}, 0.0, Color.{ 255, 255, 255, xx (255 * outpost.build_completion_percentage) });
                     }
+
+                    #if false {
+                        if outpost.cannon_perimeter_particle_ids.count > 0 {
+                            hovered_tile_rect := get_tile_rect_that_pos_is_within(get_world_width(), get_world_height(), TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, context.mouse_pos_in_world);
+                            hovered_tile_pos := get_rect_pos(hovered_tile_rect);
+
+                            dx := hovered_tile_pos.x - outpost.pos.x;
+                            dy := hovered_tile_pos.y - outpost.pos.y;
+                            distance_squared := (dx * dx) + (dy * dy);
+                            ACCEPTABLE_DISTANCE_SQUARED :: (TILEMAP_GENERAL_WORLD_WIDTH * 50) * (TILEMAP_GENERAL_WORLD_WIDTH * 50);
+                            hovering_over_tile_in_cannon_range := distance_squared <= ACCEPTABLE_DISTANCE_SQUARED;
+
+                            if hovering_over_tile_in_cannon_range {
+                                landing_tile_ids := get_cannon_landing_tile_ids(get_tile_id_by_pos(hovered_tile_pos));
+                                for tile_id: landing_tile_ids {
+                                    tile_pos := get_tile_pos_by_id(tile_id);
+                                    tile_rect := get_world_rect_from_pos(tile_pos);
+                                    DrawRectangleRec(tile_rect, PINK);
+                                }
+                            }
+                        }
+                    }
                 }
             }
             DRAW_OUTPOSTS :: true;
@@ -4699,6 +4721,7 @@ get_outpost_placement :: (hovered_tile_id: s32) -> (is_valid_placement: bool, is
 
 get_cannon_landing_tile_ids :: (hovered_tile_id: s32) -> tile_ids: [..] s32 {
     valid_landing_tile_ids: [..] s32;
+    valid_landing_tile_ids.allocator = temp;
 
     // First define the 5 x 5 grid with the hovered tile in the middle.
     step_1_tile_id   := get_neighbor_tile_id_by_direction(hovered_tile_id, .NORTH_WEST);
