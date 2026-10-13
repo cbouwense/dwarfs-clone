@@ -17,8 +17,8 @@
 # Core gameplay
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- Don't move camera if outpost menu open
 - Dwarf warrior patrolling
+- Don't move camera if outpost menu open
 - In addition to control modes, allow users to hold down controls
 - Draw outpost health on hover
 - Death particles, aggro particles, and hit star particles need TLC

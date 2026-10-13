@@ -30,16 +30,26 @@ sprite_animation_get_total_duration_ms :: (animation: AnimatedSprite) -> int {
     return animation.frame_count * animation.frame_duration_ms;
 }
 
-sprite_draw :: (sprite: $T/Sprite, pos: Vector2, sprite_width: int, sprite_height: int, texture_map_tile_width: int, texture_map_tile_height: int, flip_vertically: bool) {
+sprite_draw :: (
+    sprite: $T/Sprite,
+    pos: Vector2,
+    sprite_width: int,
+    sprite_height: int,
+    texture_map_tile_width: int,
+    texture_map_tile_height: int,
+    flip_vertically: bool = false,
+    origin_offset_x: float = 0.5,
+    origin_offset_y: float = 0.5,
+) {
     assert(texture_map_tile_width > 0,  "You probably want a positive width. If not, delete this assertion");
     assert(texture_map_tile_height > 0, "You probably want a positive height. If not, delete this assertion");
     if !sprite.active return;
 
     frame        := sprite_animation_get_current_frame(sprite) - 1;
     source_rect  := Rectangle.{xx (frame * texture_map_tile_width), 0.0, xx (ifx flip_vertically then -texture_map_tile_width else texture_map_tile_width), xx texture_map_tile_height};
-    dest_rect    := Rectangle.{ pos.x + sprite_width * 0.5, pos.y + sprite_height * 0.5, xx sprite_width, xx sprite_height }; 
+    dest_rect    := Rectangle.{ pos.x + sprite_width * origin_offset_x, pos.y + sprite_height * origin_offset_y, xx sprite_width, xx sprite_height }; 
 
-    DrawTexturePro(sprite.texture, source_rect, dest_rect, Vector2.{ xx sprite_width * 0.5, xx sprite_height * 0.5 }, sprite.rotation, sprite.color);
+    DrawTexturePro(sprite.texture, source_rect, dest_rect, Vector2.{ xx sprite_width * origin_offset_x, xx sprite_height * origin_offset_y }, sprite.rotation, sprite.color);
 }
 
 sprite_update :: (sprite: *AnimatedSprite, dt_seconds: float) -> reset_anim: bool {

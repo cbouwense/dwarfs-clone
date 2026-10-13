@@ -38,7 +38,7 @@ WALL_HEALTH :: 200;
 
 DWARF_MOVE_SPEED :: 33;
 DWARF_MOVE_SPEED_FAST :: DWARF_MOVE_SPEED * 2;
-DWARF_FIRED_BY_CANNON_SPEED :: DWARF_MOVE_SPEED_FAST * 4;
+DWARF_FIRED_BY_CANNON_SPEED :: DWARF_MOVE_SPEED_FAST * 5;
 
 DWARF_MINER_START_COUNT :: 1;
 DWARF_MINER_DIG_COOLDOWN_MS    :: 1000;
@@ -2642,7 +2642,7 @@ update_and_draw_frame_round :: () {
                                     //
                                     // Make them rotate while in the air
                                     for *anim: dwarf.animations {
-                                        if anim.active then anim.rotation += 8;
+                                        if anim.active then anim.rotation += 10;
                                     }
 
                                     target_tile_id  := dwarf.tile_id_cannon_fired_at;
@@ -3759,6 +3759,8 @@ update_and_draw_frame_round :: () {
                                 ifx dwarf.dwarf_type == .MINER then TILEMAP_DWARF_MINER_TILE_WIDTH  else TILEMAP_DWARF_WARRIOR_TILE_WIDTH,
                                 ifx dwarf.dwarf_type == .MINER then TILEMAP_DWARF_MINER_TILE_HEIGHT else TILEMAP_DWARF_WARRIOR_TILE_HEIGHT,
                                 dwarf.is_facing_left,
+                                0.5,
+                                0.666667,
                             );
                         }
                         assert_soft(found, "Dwarf % had no animation active\n", dwarf.id);
@@ -7211,8 +7213,19 @@ kill_particle_by_id :: (particle_id: s32) {
 // TODO: refactor to entity probably
 kill_dwarf_by_index :: (dwarf_index: s64) {
     dwarf_being_swapped_id := dwarves[dwarves.count - 1].id;
-    dwarf_being_killed_id  := dwarves[dwarf_index].id;
-    dwarf_being_killed_pos := dwarves[dwarf_index].pos;
+    dwarf_being_killed     := dwarves[dwarf_index];
+    dwarf_being_killed_id  := dwarf_being_killed.id;
+    dwarf_being_killed_pos := dwarf_being_killed.pos;
+
+    // PERF: do this not terribly
+    //
+    // Remove dwarf any outpost assignment lists
+    if dwarf_being_killed.dwarf_type == .WARRIOR {
+        for *outpost: outposts {
+            removed_count := array_unordered_remove_by_value(*outpost.dwarf_warrior_ids, dwarf_being_killed_id);
+            if removed_count > 0 break;
+        }
+    }
 
     if dwarf_being_swapped_id != dwarf_being_killed_id {
         table_set(*dwarf_id_to_index, dwarf_being_swapped_id, dwarf_index);
