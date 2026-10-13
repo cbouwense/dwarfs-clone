@@ -927,6 +927,7 @@ DwarfState :: enum {
     MOVING;
     ATTACKING;
     MINING;
+    FIRED_BY_CANNON;
 }
 
 DwarfType :: enum {
@@ -966,6 +967,7 @@ Dwarf :: struct {
     dwarf_type          : DwarfType;
     ignore_goblins_for  : int;
     is_moving_quickly   : bool;
+    tile_id_cannon_fired_at : s32;
 }
 
 GoblinAnimation :: enum {
@@ -1548,6 +1550,7 @@ update_and_draw_frame_round :: () {
                 case .IDLE;      #through;
                 case .DECIDING;  #through;
                 case .ATTACKING; #through;
+                case .FIRED_BY_CANNON; #through; // TODO: is this right for FIRED_BY_CANNON?
                 case .MINING;
                     dwarf_tile_id = get_tile_id_by_pos(dwarf.pos);
 
@@ -2635,6 +2638,9 @@ update_and_draw_frame_round :: () {
                                     } else {
                                         dwarf_transition_state(dwarf, .DECIDING);
                                     }
+                                case .FIRED_BY_CANNON;
+                                    assert_soft(dwarf.dwarf_type == .WARRIOR, "Expected on dwarf warriors to ever be fired by a cannon, but dwarf % is a % and is in the FIRED_BY_CANNON state", dwarf.id, dwarf.dwarf_type);
+
                                 case .IDLE;
                             }
                         }
@@ -2948,7 +2954,6 @@ update_and_draw_frame_round :: () {
                             }
 
                             // TODO: this isn't exactly updating the outpost... should this go here?
-                            // TODO: some mechanism is needed to tell whether or not the dwarves are actually in the outpost
                             // to know if they can be fired in the cannon.
                             if outpost.cannon_perimeter_particle_ids.count > 0 && outpost.dwarf_warrior_ids.count > 0 {
                                 if context.game_state.controls_state_this_frame.select_is_pressed_once {
@@ -2974,10 +2979,13 @@ update_and_draw_frame_round :: () {
                                             dwarf_to_fire := unassigned_dwarf_warriors_available[0];
 
                                             print("assigning dwarf % to tile %\n", dwarf_to_fire.id, tile_id_to_assign);
+                                            dwarf_to_fire.tile_id_cannon_fired_at = tile_id_to_assign;
                                             
                                             array_unordered_remove_by_index(*unassigned_landing_tile_ids, tile_id_index);
                                             array_unordered_remove_by_index(*unassigned_dwarf_warriors_available, 0);
                                         }
+
+
                                     }
                                 }
                             }
@@ -5674,6 +5682,7 @@ get_previous_tile_id :: (entity: Dwarf) -> s32 {
         case .MINING;    #through;
         case .IDLE;      #through;
         case .DECIDING;  #through;
+        case .FIRED_BY_CANNON;  #through;
         case .ATTACKING; return get_tile_id_by_pos(entity.pos);
 
         case .MOVING;
@@ -5872,6 +5881,7 @@ dwarf_transition_state :: (dwarf: *Dwarf, new_state: DwarfState) {
         case .MINING;
             dwarf.tile_id_mining = 0;
         case .MOVING;
+        case .FIRED_BY_CANNON;
     }
 
     dwarf.state = new_state;
@@ -5919,6 +5929,7 @@ dwarf_transition_state :: (dwarf: *Dwarf, new_state: DwarfState) {
                 case .MINER;   entity_set_active_animation(dwarf, xx DwarfAnimationMiner.WALK);
                 case .WARRIOR; entity_set_active_animation(dwarf, xx DwarfAnimationWarrior.WALK);   
             }
+        case .FIRED_BY_CANNON;
     }
 }
 
