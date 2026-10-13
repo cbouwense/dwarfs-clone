@@ -38,6 +38,7 @@ WALL_HEALTH :: 200;
 
 DWARF_MOVE_SPEED :: 33;
 DWARF_MOVE_SPEED_FAST :: DWARF_MOVE_SPEED * 2;
+DWARF_FIRED_BY_CANNON_SPEED :: DWARF_MOVE_SPEED_FAST * 4;
 
 DWARF_MINER_START_COUNT :: 1;
 DWARF_MINER_DIG_COOLDOWN_MS    :: 1000;
@@ -2462,7 +2463,7 @@ update_and_draw_frame_round :: () {
                                     target_tile_id  := dwarf.tile_ids_on_path[0];
                                     target_tile_pos := get_tile_pos_by_id(target_tile_id);
 
-                                    assert_soft(dwarf.pos.x == target_tile_pos.x || dwarf.pos.y == target_tile_pos.y, "Dwarf % is going at an angle", dwarf.id);
+                                    // assert_soft(dwarf.pos.x == target_tile_pos.x || dwarf.pos.y == target_tile_pos.y, "Dwarf % is going at an angle", dwarf.id);
 
                                     // TODO: #if DEBUG
                                     if !is_tile_id_walkable_for_entity(target_tile_id, dwarf.id) {
@@ -2640,6 +2641,35 @@ update_and_draw_frame_round :: () {
                                     }
                                 case .FIRED_BY_CANNON;
                                     assert_soft(dwarf.dwarf_type == .WARRIOR, "Expected on dwarf warriors to ever be fired by a cannon, but dwarf % is a % and is in the FIRED_BY_CANNON state", dwarf.id, dwarf.dwarf_type);
+                                    assert_soft(dwarf.tile_id_cannon_fired_at > 0, "Dwarf % was fired by cannon but has no tile id marked as being shot at", dwarf.id);
+
+                                    target_tile_id  := dwarf.tile_id_cannon_fired_at;
+                                    target_tile_pos := get_tile_pos_by_id(target_tile_id);
+
+                                    dx := target_tile_pos.x - dwarf.pos.x;
+                                    dy := target_tile_pos.y - dwarf.pos.y;
+                                    distance_squared := (dx * dx) + (dy * dy);
+
+                                    speed := DWARF_FIRED_BY_CANNON_SPEED;
+                                    step_size := speed * context.dt_seconds;
+                                    step_size_squared := step_size * step_size;
+
+                                    dwarf_pretty_much_reached_target := distance_squared <= step_size_squared;
+
+                                    if dwarf_pretty_much_reached_target {
+                                        // Teleport dwarf to the target tile to remove any floating point weirdness.
+                                        dwarf.pos = target_tile_pos;
+
+                                        // Remove the tile id fired at
+                                        dwarf.tile_id_cannon_fired_at = 0;
+
+                                        // Figure out what to do next
+                                        dwarf_transition_state(dwarf, .DECIDING);
+                                    } else {
+                                        dist := sqrt(distance_squared);
+                                        dwarf.pos.x += (dx / dist) * step_size;
+                                        dwarf.pos.y += (dy / dist) * step_size;
+                                    }
 
                                 case .IDLE;
                             }
@@ -2980,6 +3010,7 @@ update_and_draw_frame_round :: () {
 
                                             print("assigning dwarf % to tile %\n", dwarf_to_fire.id, tile_id_to_assign);
                                             dwarf_to_fire.tile_id_cannon_fired_at = tile_id_to_assign;
+                                            dwarf_to_fire.state = .FIRED_BY_CANNON;
                                             
                                             array_unordered_remove_by_index(*unassigned_landing_tile_ids, tile_id_index);
                                             array_unordered_remove_by_index(*unassigned_dwarf_warriors_available, 0);
@@ -2993,8 +3024,6 @@ update_and_draw_frame_round :: () {
                     }
                 }
                 update_outposts();
-
-                if context.enable_outpost_menu then print("enable it this frame!\n");
 
                 // Update liquid timers
                 should_spread_lava_this_frame := context.game_state.lava_flow_cooldown_ms <= 0;
@@ -3838,6 +3867,7 @@ update_and_draw_frame_round :: () {
 
             // Draw warnings
             for dwarf: dwarves {
+                if dwarf.state == .FIRED_BY_CANNON continue;
                 // Draw warnings onscreen
                 draw_warnings_onscreen :: (dwarf: Dwarf) {
                     dwarf_tile_id := get_entity_tile_id(dwarf);
@@ -5876,12 +5906,15 @@ dwarf_transition_state :: (dwarf: *Dwarf, new_state: DwarfState) {
     if #complete dwarf.state == {
         case .ATTACKING;
             dwarf.goblin_id_attacking = 0;
-        case .DECIDING;
-        case .IDLE;
         case .MINING;
             dwarf.tile_id_mining = 0;
-        case .MOVING;
         case .FIRED_BY_CANNON;
+            dwarf.tile_id_mining = 0;
+            array_reset(*dwarf.tile_ids_on_path);
+
+        case .MOVING;
+        case .IDLE;
+        case .DECIDING;
     }
 
     dwarf.state = new_state;
@@ -7337,6 +7370,11 @@ is_tile_liquid :: (tile: Tile) -> bool {
         tile_has_property(tile, .WATER_FLOWING) ||
         tile_has_property(tile, .WATER_STILL)
     );
+}
+
+is_tile_liquid :: (tile: *Tile) -> bool {
+    if tile == null return false;
+    return is_tile_liquid(tile.*);
 }
 
 // Tile properties
