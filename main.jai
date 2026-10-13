@@ -1800,12 +1800,7 @@ update_and_draw_frame_round :: () {
         }
 
         if context.game_state.controls_state_this_frame.close_outpost_cannon_perimeter {
-            for *outpost: outposts {
-                for particle_id: outpost.cannon_perimeter_particle_ids {
-                    kill_particle_by_id(particle_id);
-                }
-                array_reset(*outpost.cannon_perimeter_particle_ids);
-            }
+            for *outpost: outposts close_outpost_cannon_shooting_mode(outpost);
         }
     }
     input();
@@ -2984,7 +2979,6 @@ update_and_draw_frame_round :: () {
                             }
 
                             // TODO: this isn't exactly updating the outpost... should this go here?
-                            // to know if they can be fired in the cannon.
                             if outpost.cannon_perimeter_particle_ids.count > 0 && outpost.dwarf_warrior_ids.count > 0 {
                                 if context.game_state.controls_state_this_frame.select_is_pressed_once {
                                     hovered_tile_rect := get_tile_rect_that_pos_is_within(get_world_width(), get_world_height(), TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, context.mouse_pos_in_world);
@@ -3003,6 +2997,10 @@ update_and_draw_frame_round :: () {
                                         unassigned_landing_tile_ids := get_cannon_landing_tile_ids(get_tile_id_by_pos(hovered_tile_pos));
                                         unassigned_dwarf_warriors_available := get_dwarf_warriors_assigned_to_outpost_that_are_present_at_outpost(outpost);
 
+                                        if unassigned_landing_tile_ids.count > 0 && unassigned_dwarf_warriors_available.count > 0 {
+                                            close_outpost_cannon_shooting_mode(outpost);
+                                        }
+
                                         while unassigned_dwarf_warriors_available.count > 0 && unassigned_landing_tile_ids.count > 0 {
                                             tile_id_index := random_int_within_range(0, unassigned_landing_tile_ids.count - 1);
                                             tile_id_to_assign := unassigned_landing_tile_ids[tile_id_index];
@@ -3015,8 +3013,6 @@ update_and_draw_frame_round :: () {
                                             array_unordered_remove_by_index(*unassigned_landing_tile_ids, tile_id_index);
                                             array_unordered_remove_by_index(*unassigned_dwarf_warriors_available, 0);
                                         }
-
-
                                     }
                                 }
                             }
@@ -4591,6 +4587,13 @@ update_and_draw_frame_round :: () {
     draw();
 }
 
+close_outpost_cannon_shooting_mode :: (outpost: *Outpost) {
+    for particle_id: outpost.cannon_perimeter_particle_ids {
+        kill_particle_by_id(particle_id);
+    }
+    array_reset(*outpost.cannon_perimeter_particle_ids);
+}
+
 get_outpost_menu_rect_in_ui_space :: (outpost: Outpost) -> Rectangle {
     outpost_rect_in_world := get_world_rect_from_pos(outpost.pos, 3);
     outpost_pos_center_in_world := get_rect_center(outpost_rect_in_world);
@@ -4830,7 +4833,7 @@ get_dwarf_warriors_assigned_to_outpost_that_are_present_at_outpost :: (outpost: 
 
         dwarf_tile_id := get_tile_id_by_pos(dwarf.pos);
         dwarf_is_present_at_outpost := array_find(outpost_floor_tile_ids, dwarf_tile_id);
-        array_add(*dwarf_warriors_present, dwarf);
+        if dwarf_is_present_at_outpost then array_add(*dwarf_warriors_present, dwarf);
     }
 
     return dwarf_warriors_present;
