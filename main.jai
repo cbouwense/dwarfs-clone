@@ -2638,6 +2638,13 @@ update_and_draw_frame_round :: () {
                                     assert_soft(dwarf.dwarf_type == .WARRIOR, "Expected on dwarf warriors to ever be fired by a cannon, but dwarf % is a % and is in the FIRED_BY_CANNON state", dwarf.id, dwarf.dwarf_type);
                                     assert_soft(dwarf.tile_id_cannon_fired_at > 0, "Dwarf % was fired by cannon but has no tile id marked as being shot at", dwarf.id);
 
+                                    // TODO: keep track of active animation so we don't have to search for it like this
+                                    //
+                                    // Make them rotate while in the air
+                                    for *anim: dwarf.animations {
+                                        if anim.active then anim.rotation += 8;
+                                    }
+
                                     target_tile_id  := dwarf.tile_id_cannon_fired_at;
                                     target_tile_pos := get_tile_pos_by_id(target_tile_id);
 
@@ -3006,7 +3013,6 @@ update_and_draw_frame_round :: () {
                                             tile_id_to_assign := unassigned_landing_tile_ids[tile_id_index];
                                             dwarf_to_fire := unassigned_dwarf_warriors_available[0];
 
-                                            print("assigning dwarf % to tile %\n", dwarf_to_fire.id, tile_id_to_assign);
                                             dwarf_to_fire.tile_id_cannon_fired_at = tile_id_to_assign;
                                             dwarf_to_fire.state = .FIRED_BY_CANNON;
                                             
@@ -5914,6 +5920,7 @@ dwarf_transition_state :: (dwarf: *Dwarf, new_state: DwarfState) {
         case .FIRED_BY_CANNON;
             dwarf.tile_id_mining = 0;
             array_reset(*dwarf.tile_ids_on_path);
+            for *anim: dwarf.animations anim.rotation = 0;
 
         case .MOVING;
         case .IDLE;
