@@ -2,7 +2,7 @@
 # In progress
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- Mined tiles have 50 health?
+- Dwarf warrior patrolling
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Bugs
@@ -16,10 +16,9 @@
 # Core gameplay
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- Dwarf warrior patrolling
+- Draw outpost health on hover
 - Don't move camera if outpost menu open
 - In addition to control modes, allow users to hold down controls
-- Draw outpost health on hover
 - Death particles, aggro particles, and hit star particles need TLC
 - Death poof particles
 - options menu

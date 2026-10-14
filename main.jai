@@ -2270,7 +2270,7 @@ update_and_draw_frame_round :: () {
                                     dwarf_can_remain_undecided := false;
 
                                     // If you've touched treasure, pick it up
-                                    if is_tile_treasure(dwarf_tile_id) {
+                                    if dwarf.dwarf_type == .MINER && is_tile_treasure(dwarf_tile_id) {
                                         // Credit the gold.
                                         context.game_state.gold += GOLD_FROM_TREASURE;
                                         create_gold_particle(dwarf_center, GOLD_FROM_TREASURE, true);
@@ -2331,7 +2331,7 @@ update_and_draw_frame_round :: () {
                                         }
                                     }
 
-                                    // TODO: faster walk and mine speed when on a path, I think
+                                    // TODO: faster mine speed while on path
                                     //
                                     // Check if the dwarf is on a path arrow. If he is, then his new mission is to follow it.
                                     if !is_dwarf_done_deciding {
@@ -2361,21 +2361,65 @@ update_and_draw_frame_round :: () {
                                         //
                                         // If the dwarf is a warrior, actively seek out goblins
                                         if dwarf.dwarf_type == .WARRIOR {
-                                            dwarf_warrior_wander :: (dwarf: *Dwarf) {
+                                            nearby_goblin_status := deal_with_nearby_goblins(dwarf);
+
+                                            dwarf_warrior_patrol :: (dwarf: *Dwarf) {
                                                 dwarf_tile_id := get_entity_tile_id(dwarf);
+                                                tile_id_one_ahead := get_tile_id_one_ahead_in_direction(dwarf_tile_id, dwarf.direction);
+                                                tile_id_to_move_to: s32;
 
-                                                on_top_of_outpost, outpost := table_find(*tile_ids_to_outposts, dwarf_tile_id);
-                                                // If we're standing on a outpost right now, just keep walking in the direction you're currently going.
-                                                if on_top_of_outpost {
-                                                    try_to_set_dwarf_target_to_one_block_in_the_direction_its_facing(dwarf);
+                                                // If we are on the outpost floor to which we are assigned, then go straight
+                                                // for as long as you can. If you run into another dwarf, turn around. If you
+                                                // run into a tile that is not the outpost floor, then check left and right
+                                                // for more outpost floor.
+                                                if is_tile_outpost_floor(tile_id_one_ahead) || is_tile_home_base_floor(tile_id_one_ahead) {
+                                                    array_reset(*dwarf.tile_ids_on_path); // We probably don't need to reset this here, but let's do it anyways.
+                                                    tile_has_dwarf_on_it := table_contains(*tile_ids_to_dwarfs, tile_id_one_ahead);
+
+                                                    if tile_has_dwarf_on_it {
+                                                        direction_behind_dwarf := opposite_cardinal_direction(dwarf.direction);
+                                                        tile_id_one_behind := get_tile_id_one_ahead_in_direction(dwarf_tile_id, direction_behind_dwarf);
+                                                        tile_id_to_move_to = tile_id_one_behind;
+                                                    } else {
+                                                        tile_id_to_move_to = tile_id_one_ahead;
+                                                    }
                                                 } else {
-                                                    // TODO
+                                                    direction_to_the_left  := get_direction_to_the_left(dwarf.direction);
+                                                    direction_to_the_right := get_direction_to_the_right(dwarf.direction);
+
+                                                    tile_id_to_the_left  := get_tile_id_one_ahead_in_direction(dwarf_tile_id, direction_to_the_left);
+                                                    tile_id_to_the_right := get_tile_id_one_ahead_in_direction(dwarf_tile_id, direction_to_the_right);
+
+                                                    if is_tile_outpost_floor(tile_id_to_the_left) || is_tile_home_base_floor(tile_id_to_the_left) {
+                                                        tile_to_the_left_has_dwarf_on_it := table_contains(*tile_ids_to_dwarfs, tile_id_to_the_left);
+                                                        if tile_to_the_left_has_dwarf_on_it {
+                                                            direction_behind_dwarf := opposite_cardinal_direction(dwarf.direction);
+                                                            tile_id_one_behind := get_tile_id_one_ahead_in_direction(dwarf_tile_id, direction_behind_dwarf);
+                                                            tile_id_to_move_to = tile_id_one_behind;
+                                                        } else {
+                                                            tile_id_to_move_to = tile_id_to_the_left;
+                                                        }
+                                                    }
+                                                    else if is_tile_outpost_floor(tile_id_to_the_right) || is_tile_home_base_floor(tile_id_to_the_right) {
+                                                        tile_to_the_right_has_dwarf_on_it := table_contains(*tile_ids_to_dwarfs, tile_id_to_the_right);
+                                                        if tile_to_the_right_has_dwarf_on_it {
+                                                            direction_behind_dwarf := opposite_cardinal_direction(dwarf.direction);
+                                                            tile_id_one_behind := get_tile_id_one_ahead_in_direction(dwarf_tile_id, direction_behind_dwarf);
+                                                            tile_id_to_move_to = tile_id_one_behind;
+                                                        } else {
+                                                            tile_id_to_move_to = tile_id_to_the_right;
+                                                        }
+                                                    }
                                                 }
+
+                                                array_add(*dwarf.tile_ids_on_path, tile_id_to_move_to);
+                                                dwarf_transition_state(dwarf, .MOVING);
                                             }
-
-                                            dealing_with_goblin := deal_with_nearby_goblins(dwarf);
-
-                                            if dealing_with_goblin == .NEARBY_GOBLIN_NOT_FOUND dwarf_warrior_wander(dwarf);
+                                            if nearby_goblin_status == .NEARBY_GOBLIN_NOT_FOUND {
+                                                // TODO: probably need more here
+                                                dwarf_warrior_patrol(dwarf);
+                                                is_dwarf_done_deciding = true;
+                                            }
                                         }
 
                                         // If the dwarf has no targets, give him a new one
@@ -2497,7 +2541,7 @@ update_and_draw_frame_round :: () {
                                     }
 
                                 case .MINING;
-                                    assert(dwarf.tile_id_mining > 0, "Dwarf tryna mine but he got no gotdamn tile to mine!!!!!!!");
+                                    assert_soft(dwarf.tile_id_mining > 0, "Dwarf % tryna mine but he got no gotdamn tile to mine!!!!!!!", dwarf.id);
 
                                     tile_to_mine := get_tile_by_id(dwarf.tile_id_mining);
                                     if tile_to_mine == null {
@@ -2573,7 +2617,7 @@ update_and_draw_frame_round :: () {
 
                                                 dwarf_transition_state(dwarf, .DECIDING);
                                             }
-                                            
+
                                             tile_to_mine.health = xx new_health;
                                         }
                                     }
@@ -5854,19 +5898,47 @@ opposite_cardinal_direction :: (direction: Direction) -> Direction {
     return .CENTER; // return center to keep the compiler happy
 }
 
-get_next_direction_to_face_from_base_neighbor_direction :: (direction: Direction) -> Direction {
-    if #complete direction == {
-        case .NORTH;      return .EAST;
-        case .SOUTH;      return .WEST;
-        case .EAST;       return .SOUTH;
-        case .WEST;       return .NORTH;
-        case .NORTH_EAST; return .NORTH;
-        case .NORTH_WEST; return .WEST;
-        case .SOUTH_EAST; return .EAST;
-        case .SOUTH_WEST; return .SOUTH;
-        case .CENTER;
-            assert_soft(false, "I don't think this should happen idk (direction: %)\n", direction);
-            return .CENTER; // return center to keep the compiler happy
+get_tile_id_one_ahead_in_direction :: (source_tile_id: s32, direction: Direction) -> s32 {
+    if direction == {
+        case .NORTH;
+            assert_soft(source_tile_id > context.world_cols);
+            return source_tile_id - cast(s32) context.world_cols;
+        case .SOUTH;
+            assert_soft(source_tile_id < context.world_cols * context.world_rows - context.world_cols);
+            return source_tile_id + cast(s32) context.world_cols;
+        case .EAST;
+            assert_soft(source_tile_id % context.world_cols != 0);
+            return source_tile_id + 1;
+        case .WEST;
+            assert_soft(source_tile_id % context.world_cols != 1);
+            return source_tile_id - 1;
+        case;
+            assert_soft(false, "Expected cardinal direction, but got %", direction);
+            return -1;
+    }
+}
+
+get_direction_to_the_left :: (direction: Direction) -> Direction {
+    if direction == {
+        case .NORTH; return .WEST;
+        case .SOUTH; return .EAST;
+        case .EAST;  return .NORTH;
+        case .WEST;  return .SOUTH;
+        case;
+            assert_soft(false, "Expected cardinal direction");
+            return .CENTER;
+    }
+}
+
+get_direction_to_the_right :: (direction: Direction) -> Direction {
+    if direction == {
+        case .NORTH; return .EAST;
+        case .SOUTH; return .WEST;
+        case .EAST;  return .SOUTH;
+        case .WEST;  return .NORTH;
+        case;
+            assert_soft(false, "Expected cardinal direction");
+            return .CENTER;
     }
 }
 
