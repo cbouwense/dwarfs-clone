@@ -2363,10 +2363,10 @@ update_and_draw_frame_round :: () {
                                         if dwarf.dwarf_type == .WARRIOR {
                                             nearby_goblin_status := deal_with_nearby_goblins(dwarf);
 
-                                            dwarf_warrior_patrol :: (dwarf: *Dwarf) {
+                                            dwarf_warrior_patrol :: (dwarf: *Dwarf) -> continued_patrol: bool {
                                                 dwarf_tile_id := get_entity_tile_id(dwarf);
                                                 tile_id_one_ahead := get_tile_id_one_ahead_in_direction(dwarf_tile_id, dwarf.direction);
-                                                tile_id_to_move_to: s32;
+                                                tile_id_to_move_to: s32 = 0;
 
                                                 // If we are on the outpost floor to which we are assigned, then go straight
                                                 // for as long as you can. If you run into another dwarf, turn around. If you
@@ -2412,13 +2412,20 @@ update_and_draw_frame_round :: () {
                                                     }
                                                 }
 
+                                                // If there we no outpost floors, you're not on patrol. This means that you
+                                                // just need to wander like a normal miner dwarf, with the exception that
+                                                // you shouldn't try to mine through walls. This is handled elsewhere.
+                                                if tile_id_to_move_to == 0 return false;
+
                                                 array_add(*dwarf.tile_ids_on_path, tile_id_to_move_to);
                                                 dwarf_transition_state(dwarf, .MOVING);
+                                                return true;
                                             }
+
                                             if nearby_goblin_status == .NEARBY_GOBLIN_NOT_FOUND {
                                                 // TODO: probably need more here
-                                                dwarf_warrior_patrol(dwarf);
-                                                is_dwarf_done_deciding = true;
+                                                is_dwarf_on_patrol := dwarf_warrior_patrol(dwarf);
+                                                if is_dwarf_on_patrol then is_dwarf_done_deciding = true;
                                             }
                                         }
 
