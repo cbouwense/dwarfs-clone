@@ -2572,10 +2572,9 @@ update_and_draw_frame_round :: () {
                                                 }
 
                                                 dwarf_transition_state(dwarf, .DECIDING);
-                                            } else {
-                                                // If the tile just needs to take some damage, well, then damage it ya fuckin jallopy.
-                                                tile_to_mine.health = xx new_health;
                                             }
+                                            
+                                            tile_to_mine.health = xx new_health;
                                         }
                                     }
 
