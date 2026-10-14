@@ -103,6 +103,34 @@ DWARF_WARRIOR_ANIMATION_DIE_START_FRAME         :: 38;
 DWARF_WARRIOR_ANIMATION_DIE_FRAME_COUNT         :: 7;
 DWARF_WARRIOR_ANIMATION_DIE_FRAME_DURATION_MS   :: 100;
 
+SHAMAN_ANIMATION_REVEAL_START_FRAME       :: 1;
+SHAMAN_ANIMATION_REVEAL_FRAME_COUNT       :: 8;
+SHAMAN_ANIMATION_REVEAL_FRAME_DURATION_MS :: 100;
+SHAMAN_ANIMATION_IDLE_START_FRAME         :: 9;
+SHAMAN_ANIMATION_IDLE_FRAME_COUNT         :: 8;
+SHAMAN_ANIMATION_IDLE_FRAME_DURATION_MS   :: 100;
+SHAMAN_ANIMATION_ATTACK_UP_START_FRAME       :: 9; // TODO
+SHAMAN_ANIMATION_ATTACK_UP_FRAME_COUNT       :: 8;
+SHAMAN_ANIMATION_ATTACK_UP_FRAME_DURATION_MS :: 100;
+SHAMAN_ANIMATION_ATTACK_SIDE_START_FRAME       :: 25;
+SHAMAN_ANIMATION_ATTACK_SIDE_FRAME_COUNT       :: 8;
+SHAMAN_ANIMATION_ATTACK_SIDE_FRAME_DURATION_MS :: 100;
+SHAMAN_ANIMATION_ATTACK_DOWN_START_FRAME       :: 9; // TODO
+SHAMAN_ANIMATION_ATTACK_DOWN_FRAME_COUNT       :: 8;
+SHAMAN_ANIMATION_ATTACK_DOWN_FRAME_DURATION_MS :: 100;
+SHAMAN_ANIMATION_SUMMON_START_FRAME       :: 33; // TODO
+SHAMAN_ANIMATION_SUMMON_FRAME_COUNT       :: 16;
+SHAMAN_ANIMATION_SUMMON_FRAME_DURATION_MS :: 100;
+SHAMAN_ANIMATION_DIE_START_FRAME       :: 57; // TODO
+SHAMAN_ANIMATION_DIE_FRAME_COUNT       :: 8;
+SHAMAN_ANIMATION_DIE_FRAME_DURATION_MS :: 100;
+
+SHAMAN_ATTACK_COOLDOWN_MS :: 1000;
+SHAMAN_ATTACK_DAMAGE_PER_SWING :: 25;
+SHAMAN_HIT_CHANCE :: 0.80; // TODO: will have to be based on level
+SHAMAN_SPAWN_ENABLED :: true;
+SHAMAN_STARTING_HP :: 1000;
+
 GOBLIN_MOVE_SPEED :: 20;
 GOBLIN_ATTACK_COOLDOWN_MS :: 1000;
 GOBLIN_ATTACK_DAMAGE_PER_SWING :: 25;
@@ -672,6 +700,15 @@ GOBLIN_SCALE_Y                :: TILEMAP_GOBLIN_TILE_HEIGHT / TILEMAP_GENERAL_TI
 TILEMAP_GOBLIN_WORLD_WIDTH    :: TILEMAP_GENERAL_WORLD_WIDTH  * GOBLIN_SCALE_X;
 TILEMAP_GOBLIN_WORLD_HEIGHT   :: TILEMAP_GENERAL_WORLD_HEIGHT * GOBLIN_SCALE_Y;
 
+TILEMAP_SHAMAN_TILE_WIDTH     :: 128;
+TILEMAP_SHAMAN_TILE_HEIGHT    :: 32;
+TILEMAP_SHAMAN_TILE_PADDING_X :: 32; // I dont even know what this is tbh
+TILEMAP_SHAMAN_TILE_PADDING_Y :: 32; // I dont even know what this is tbh
+SHAMAN_SCALE_X                :: TILEMAP_SHAMAN_TILE_WIDTH  / TILEMAP_GENERAL_TILE_WIDTH;
+SHAMAN_SCALE_Y                :: TILEMAP_SHAMAN_TILE_HEIGHT / TILEMAP_GENERAL_TILE_HEIGHT;
+TILEMAP_SHAMAN_WORLD_WIDTH    :: TILEMAP_GENERAL_WORLD_WIDTH  * 2;
+TILEMAP_SHAMAN_WORLD_HEIGHT   :: TILEMAP_GENERAL_WORLD_HEIGHT * 2;
+
 PARTICLE_TEXT_SIZE :: 20;
 
 tilemap_texture_general : Texture;
@@ -682,6 +719,7 @@ dirt_texture            : Texture;
 dwarf_miner_texture     : Texture;
 dwarf_warrior_texture   : Texture;
 goblin_texture          : Texture;
+shaman_texture          : Texture;
 
 init_textures :: () {
     // TODO: have just one big happy atlas, maybe?
@@ -693,6 +731,7 @@ init_textures :: () {
     dwarf_miner_texture     = LoadTexture("data/dwarf-miner.png");
     dwarf_warrior_texture   = LoadTexture("data/dwarf-warrior.png");
     goblin_texture          = LoadTexture("data/goblin.png");
+    shaman_texture          = LoadTexture("data/shaman.png");
 
     SetTextureWrap(dirt_texture, .TEXTURE_WRAP_REPEAT);
 }
@@ -997,6 +1036,25 @@ Goblin :: struct {
     entity_id_attacking : s32;
 }
 
+ShamanState :: enum {
+    IDLE;
+    DECIDING;
+    ATTACKING;
+    SUMMONING;
+}
+
+Shaman :: struct {
+    #as using entity: Entity;
+    type = Shaman;
+
+    using anim: Animated;
+
+    direction           : Direction;
+    state               : ShamanState;
+    attack_cooldown_ms  : s32;
+    direction_attacking : s32; // entity_id_attacking?
+}
+
 // EntityKind :: 
 // Looking for the definition of EntityKind? It's generated from this.
 // Keep in mind that this line has to be below all subclasses of Entity.
@@ -1083,6 +1141,10 @@ dwarves_to_draw_this_frame : [..] Dwarf;
 goblins : [..] Goblin;
 goblin_id_to_index : Table(s32, s64);
 goblins_to_draw_this_frame : [..] Goblin;
+
+shamans : [..] Shaman;
+shaman_id_to_index : Table(s32, s64);
+shamans_to_draw_this_frame : [..] Shaman;
 
 particles : [..] Particle;
 particle_id_to_index : Table(s32, s64);
@@ -3077,6 +3139,20 @@ update_and_draw_frame_round :: () {
                 }
                 update_outposts();
 
+                // Update shamans
+                update_shamans :: () {
+                    for *shaman: shamans {
+                        // TODO: maintain active animation index so we don't need to search for it
+                        //
+                        // Update animations
+                        for *anim: shaman.animations {
+                            reset_anim := sprite_update(anim, context.dt_seconds);
+                            if reset_anim then shaman.did_anim_action = false;
+                        }
+                    }
+                }
+                update_shamans();
+
                 // Update liquid timers
                 should_spread_lava_this_frame := context.game_state.lava_flow_cooldown_ms <= 0;
                 if should_spread_lava_this_frame {
@@ -3681,28 +3757,6 @@ update_and_draw_frame_round :: () {
                     } else {
                         DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTPOST, dest, Vector2.{0,0}, 0.0, Color.{ 255, 255, 255, xx (255 * outpost.build_completion_percentage) });
                     }
-
-                    #if false {
-                        if outpost.cannon_perimeter_particle_ids.count > 0 {
-                            hovered_tile_rect := get_tile_rect_that_pos_is_within(get_world_width(), get_world_height(), TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, context.mouse_pos_in_world);
-                            hovered_tile_pos := get_rect_pos(hovered_tile_rect);
-
-                            dx := hovered_tile_pos.x - outpost.pos.x;
-                            dy := hovered_tile_pos.y - outpost.pos.y;
-                            distance_squared := (dx * dx) + (dy * dy);
-                            ACCEPTABLE_DISTANCE_SQUARED :: (TILEMAP_GENERAL_WORLD_WIDTH * 50) * (TILEMAP_GENERAL_WORLD_WIDTH * 50);
-                            hovering_over_tile_in_cannon_range := distance_squared <= ACCEPTABLE_DISTANCE_SQUARED;
-
-                            if hovering_over_tile_in_cannon_range {
-                                landing_tile_ids := get_cannon_landing_tile_ids(get_tile_id_by_pos(hovered_tile_pos));
-                                for tile_id: landing_tile_ids {
-                                    tile_pos := get_tile_pos_by_id(tile_id);
-                                    tile_rect := get_world_rect_from_pos(tile_pos);
-                                    DrawRectangleRec(tile_rect, PINK);
-                                }
-                            }
-                        }
-                    }
                 }
             }
             DRAW_OUTPOSTS :: true;
@@ -3848,6 +3902,35 @@ update_and_draw_frame_round :: () {
                 }
             }
             draw_goblins();
+
+            // Draw goblins
+            draw_shamans :: () {
+                for shaman: shamans_to_draw_this_frame {
+                    found := false;
+                    for anim: shaman.animations {
+                        if !anim.active continue;
+                        found = true;
+
+                        sprite_dest := Vector2.{
+                            shaman.pos.x - TILEMAP_SHAMAN_TILE_PADDING_X,
+                            shaman.pos.y - TILEMAP_SHAMAN_TILE_PADDING_Y,
+                        };
+
+                        sprite_draw(
+                            anim,
+                            sprite_dest,
+                            xx TILEMAP_SHAMAN_WORLD_WIDTH,
+                            xx TILEMAP_SHAMAN_WORLD_HEIGHT,
+                            TILEMAP_SHAMAN_TILE_WIDTH,
+                            TILEMAP_SHAMAN_TILE_HEIGHT,
+                            shaman.is_facing_left,
+                            0,0
+                        );
+                    }
+                    assert_soft(found, "Shaman % had no animation active\n", shaman.id);
+                }
+            }
+            draw_shamans();
 
             // Draw hovered tile / onion skins
             draw_hovered_tile_or_onion_skins :: () {
@@ -4218,6 +4301,14 @@ update_and_draw_frame_round :: () {
                         if context.metagame.debug_mode {
                             if CheckCollisionPointRec(context.mouse_pos_in_world, Rectangle.{ outpost.pos.x, outpost.pos.y, TILEMAP_GENERAL_WORLD_WIDTH * 3, TILEMAP_GENERAL_WORLD_HEIGHT * 3 }) {
                                 debug_with_raylib_draw_text(outpost, 10, *debug_text_y);
+                            }
+                        }
+                    }
+
+                    for shaman: shamans_to_draw_this_frame {
+                        if context.metagame.debug_mode {
+                            if CheckCollisionPointRec(context.mouse_pos_in_world, Rectangle.{ shaman.pos.x, shaman.pos.y, TILEMAP_GENERAL_WORLD_WIDTH * 2, TILEMAP_GENERAL_WORLD_HEIGHT * 2 }) {
+                                debug_with_raylib_draw_text(shaman, 10, *debug_text_y);
                             }
                         }
                     }
@@ -4632,7 +4723,7 @@ update_and_draw_frame_round :: () {
 
             if #complete context.game_state.control_mode == {
                 case .NORMAL;       // no op
-                case .ADD_OUTPOST;     DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTPOST, cursor_mode_icon_rect, Vector2.{0,0}, 0.0, WHITE);
+                case .ADD_OUTPOST;  DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTPOST, cursor_mode_icon_rect, Vector2.{0,0}, 0.0, WHITE);
                 case .ADD_DYNAMITE; DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_DYNAMITE, cursor_mode_icon_rect, Vector2.{0,0}, 0.0, WHITE);
                 case .ADD_OBSIDIAN; DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OBSIDIAN, cursor_mode_icon_rect, Vector2.{0,0}, 0.0, WHITE);
                 case .ADD_WALL;     DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_WALL, cursor_mode_icon_rect, Vector2.{0,0}, 0.0, WHITE);
@@ -4702,6 +4793,8 @@ debug_variable_runtime :: (thing: Any, thing_symbol_as_string: string, debug_tex
 debug_with_raylib_draw_text :: (c: Code, text_x: s32, text_y: *s32, render_struct_name_prefix := false) #expand {
     var_name := #run code_to_string(c);
     var_val  := #insert c;
+
+    DrawText("==============================", text_x, read_then_increment(text_y, INCREMENT_Y), 18, WHITE);
 
     ti := type_info(type_of(var_val));
     if #complete ti.type == {
@@ -4900,8 +4993,10 @@ get_dwarf_warriors_assigned_to_outpost_that_are_present_at_outpost :: (outpost: 
 get_entity_tile_id :: (entity: Entity) -> s32 {
     entity_kind := get_entity_kind_from_type(entity.type);
     if #complete entity_kind == {
+        case .Shaman; #through;
         case .Outpost;
             return get_tile_id_by_pos(entity.pos);
+
         case .Dwarf; #through;
         case .Goblin;
             entity_center := get_rect_center(get_world_rect_from_pos(entity.pos));
@@ -7129,6 +7224,7 @@ create_dwarf :: (pos: Vector2, dwarf_type: DwarfType, gold_cost: int = 0) -> Dwa
 
 create_goblin :: (pos: Vector2) -> Goblin {
     goblin_id := increment_then_read(*entity_id_counter);
+    // TODO: use this?..
     // direction := cast(Direction) cast(int) random_get_within_range(0, 3);
 
     goblin_animated_sprite_base := AnimatedSprite.{
@@ -7185,6 +7281,66 @@ create_goblin :: (pos: Vector2) -> Goblin {
     array_add(*goblins, goblin);
 
     return goblin;
+}
+
+create_shaman :: (pos: Vector2) -> Shaman {
+    shaman_id := increment_then_read(*entity_id_counter);
+    // direction := cast(Direction) cast(int) random_get_within_range(0, 3);
+
+    shaman_animated_sprite_base := AnimatedSprite.{
+        texture           = shaman_texture,
+        active            = false,
+        first_frame       = 1,
+        color             = WHITE,
+        rotation          = 0.0,
+        frame_count       = 8,
+        frame_duration_ms = 100,
+        timer_ms          = 0,
+        loops             = true,
+    };
+
+    shaman_animated_sprite_idle := shaman_animated_sprite_base;
+    shaman_animated_sprite_idle.first_frame = SHAMAN_ANIMATION_IDLE_START_FRAME;
+    shaman_animated_sprite_idle.frame_count = SHAMAN_ANIMATION_IDLE_FRAME_COUNT;
+    shaman_animated_sprite_idle.active = true;
+
+    // TODO: attack up and down
+
+    shaman_animated_sprite_attack_side := shaman_animated_sprite_base;
+    shaman_animated_sprite_attack_side.first_frame = SHAMAN_ANIMATION_ATTACK_SIDE_START_FRAME;
+    shaman_animated_sprite_attack_side.frame_count = SHAMAN_ANIMATION_ATTACK_SIDE_FRAME_COUNT;
+
+    shaman_animated_sprite_summon := shaman_animated_sprite_base;
+    shaman_animated_sprite_summon.first_frame = SHAMAN_ANIMATION_SUMMON_START_FRAME;
+    shaman_animated_sprite_summon.frame_count = SHAMAN_ANIMATION_SUMMON_FRAME_COUNT;
+
+    shaman_animated_sprite_die := shaman_animated_sprite_base;
+    shaman_animated_sprite_die.first_frame = SHAMAN_ANIMATION_DIE_START_FRAME;
+    shaman_animated_sprite_die.frame_count = SHAMAN_ANIMATION_DIE_FRAME_COUNT;
+
+    animations : [..] AnimatedSprite;
+    
+    array_add(*animations, shaman_animated_sprite_idle);
+    array_add(*animations, shaman_animated_sprite_attack_side);
+    array_add(*animations, shaman_animated_sprite_summon);
+    array_add(*animations, shaman_animated_sprite_die);
+
+    shaman := Shaman.{
+        id        = shaman_id,
+        pos       = pos,
+        hp        = SHAMAN_STARTING_HP,
+        state     = .DECIDING,
+        direction = .NORTH,
+        animations = animations,
+        attack_cooldown_ms = SHAMAN_ATTACK_COOLDOWN_MS,
+    };
+
+    tile_id := get_tile_id_by_pos(pos);
+
+    table_set(*shaman_id_to_index, shaman_id, shamans.count);
+    array_add(*shamans, shaman);
+
+    return shaman;
 }
 
 create_outpost :: (pos: Vector2, is_home_base: bool) -> Outpost {
@@ -8265,11 +8421,13 @@ get_angle_from_north :: (start_pos: Vector2, end_pos: Vector2) -> float32 {
     else return 0.0;
 }    
 
-set_cave_as_mined :: (tile_id: s32, cave_type: CaveType, grant_points: bool, grant_gold: bool) {
+set_cave_as_mined :: (tile_id: s32, cave_type: CaveType, grant_points: bool, grant_gold: bool, tile_ids_of_cave: * [..] s32) {
     tile_type : TileType;
 
     if #complete cave_type == {
         case .EMPTY;
+        case .SHAMAN;
+        case .SPIDER_QUEEN;
             
         case .WATER;
             set_tile_as_water_still(tile_id);
@@ -8285,18 +8443,17 @@ set_cave_as_mined :: (tile_id: s32, cave_type: CaveType, grant_points: bool, gra
                 is_goblin := rng <= 0.25;
                 if is_goblin create_goblin(get_tile_pos_by_id(tile_id));
             }
-        case .SHAMAN; // TODO
-        case .SPIDER_QUEEN; // TODO
     }
 
     set_tile_as_type(tile_id, .MINED, grant_points, grant_gold);
+    array_add(tile_ids_of_cave, tile_id);
 
     // Recursively go through neighbors and set them as mined as well.
     for DIRECTIONS_CARDINAL {
         neighbor_id := get_neighbor_tile_id_by_direction(tile_id, it);
 
         if is_tile_cave(neighbor_id) {
-            set_cave_as_mined(neighbor_id, cave_type, grant_points, grant_gold);
+            set_cave_as_mined(neighbor_id, cave_type, grant_points, grant_gold, tile_ids_of_cave);
         }
     }
 }
@@ -8648,6 +8805,7 @@ derive_things_to_draw :: () {
     array_reset(*outposts_to_draw_this_frame);
     array_reset(*dwarves_to_draw_this_frame);
     array_reset(*goblins_to_draw_this_frame);
+    array_reset(*shamans_to_draw_this_frame);
     array_reset(*paths_to_draw_this_frame);
     array_reset(*particles_to_draw_this_frame);
 
@@ -8711,6 +8869,22 @@ derive_things_to_draw :: () {
         }
     }
     derive_goblins_to_draw_this_frame();
+
+    // Derive viewable shamans
+    derive_shamans_to_draw_this_frame :: () {
+        for shaman: shamans {
+            pos := shaman.pos;
+
+            if pos.x + TILEMAP_GENERAL_WORLD_WIDTH < context.window_start.x continue;
+            if pos.x - TILEMAP_GENERAL_WORLD_WIDTH > context.window_end.x continue;
+            
+            if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > context.window_end.y continue;
+            if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < context.window_start.y continue;
+
+            array_add(*shamans_to_draw_this_frame, shaman);
+        }
+    }
+    derive_shamans_to_draw_this_frame();
 
     // Derive viewable paths
     derive_paths_to_draw_this_frame :: () {
@@ -8777,20 +8951,40 @@ reveal_cave_if_necessary :: (tile_id: s32, grant_points: bool, grant_gold: bool)
         // First, decide what kind of cave this will be.
         cave_type = cast(CaveType) cast(int) random_get_within_range(0, xx enum_count(CaveType));
 
-        // Second, spawn any alerts you might need
-        alert_type: AlertType;
+        // Next, recursively reveal the tiles of the cave and spawn any alerts you might need.
+        cave_tile_ids : [..] s32;
+        set_cave_as_mined(cave_tile_id, cave_type, grant_points, grant_gold, *cave_tile_ids);
+
         if #complete cave_type == {
             case .EMPTY;        // no op
-            case .WATER;        create_alert(.WATER, get_tile_pos_by_id(tile_id));
-            case .LAVA;         create_alert(.LAVA, get_tile_pos_by_id(tile_id));
-            case .TREASURE;     create_alert(.TREASURE, get_tile_pos_by_id(tile_id));
-            case .GOBLIN;       create_alert(.GOBLINS, get_tile_pos_by_id(tile_id));
-            case .SHAMAN;       create_alert(.SHAMAN, get_tile_pos_by_id(tile_id));
-            case .SPIDER_QUEEN; create_alert(.SPIDER_QUEEN, get_tile_pos_by_id(tile_id));
+            case .WATER; {
+                create_alert(.WATER, get_tile_pos_by_id(tile_id));
+            }
+            case .LAVA; {
+                create_alert(.LAVA, get_tile_pos_by_id(tile_id));
+            }
+            case .TREASURE; {
+                create_alert(.TREASURE, get_tile_pos_by_id(tile_id));
+            }
+            case .GOBLIN; {
+                create_alert(.GOBLINS, get_tile_pos_by_id(tile_id));
+            }
+            case .SHAMAN; {
+                create_alert(.SHAMAN, get_tile_pos_by_id(tile_id));
+                tile_id_index := random_int_within_range(0, cave_tile_ids.count - 1);
+                shaman_tile_id := cave_tile_ids[tile_id_index];
+                shaman_tile_pos := get_tile_pos_by_id(shaman_tile_id);
+                create_shaman(shaman_tile_pos);
+            }
+            case .SPIDER_QUEEN; {
+                create_alert(.SPIDER_QUEEN, get_tile_pos_by_id(tile_id));
+                // TODO
+                // tile_id_index := random_int_within_range(0, cave_tile_ids.count - 1);
+                // spider_queen_tile_id := cave_tile_ids[tile_id_index];
+                // spider_queen_tile_pos := get_tile_pos_by_id(spider_queen_tile_id);
+                // create_spider_queen(spider_queen_tile_pos);
+            }
         }
-
-        // Third, recursively reveal the tiles of the cave.
-        set_cave_as_mined(cave_tile_id, cave_type, grant_points, grant_gold);
     }
 
     return neighbor_is_unrevealed_cave, cave_type;
@@ -8991,6 +9185,7 @@ get_entity_by_id :: (entity_kind: EntityKind, id: s32) -> (found: bool, entity: 
         case .Outpost; entity_id_to_index = outpost_id_to_index;
         case .Dwarf;   entity_id_to_index = dwarf_id_to_index;
         case .Goblin;  entity_id_to_index = goblin_id_to_index;
+        case .Shaman;  entity_id_to_index = shaman_id_to_index;
     }
 
     found, index := table_find(*entity_id_to_index, id);
@@ -9008,5 +9203,6 @@ get_entity_by_index :: (entity_kind: EntityKind, index: s64) -> *Entity
         case .Outpost; return *(outposts[index]);
         case .Dwarf;   return *(dwarves[index]);
         case .Goblin;  return *(goblins[index]);
+        case .Shaman;  return *(shamans[index]);
     }
 }

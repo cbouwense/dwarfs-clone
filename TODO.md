@@ -2,11 +2,13 @@
 # In progress
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+- shaman
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Bugs
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+- Pretty sure get_entity_tile_id is broken for moveable entities
 - Aggro logic is fucked up. Dwarves don't seem to wait where they should when goblins coming to them.
 - Water doesn't spread immediately
 - Dwarf warrior unable to path to a goblin when standing behind a miner who is attacking that goblin.
@@ -24,12 +26,12 @@
     - apply changes
     - restore defaults
     - persist preferences
-- shaman
 - spider queen
 - Screen resolution
 - High score / local persistence
 - deteriorating arrows
 - round loading screen
+- Tune cave spawns relative to home base
 - Camera restriction within world bounds
 - don't open outpost menus when hovering while onion skin is out
 
