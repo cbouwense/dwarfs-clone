@@ -702,12 +702,13 @@ TILEMAP_GOBLIN_WORLD_HEIGHT   :: TILEMAP_GENERAL_WORLD_HEIGHT * GOBLIN_SCALE_Y;
 
 TILEMAP_SHAMAN_TILE_WIDTH     :: 128;
 TILEMAP_SHAMAN_TILE_HEIGHT    :: 32;
-TILEMAP_SHAMAN_TILE_PADDING_X :: 32; // I dont even know what this is tbh
-TILEMAP_SHAMAN_TILE_PADDING_Y :: 32; // I dont even know what this is tbh
-SHAMAN_SCALE_X                :: TILEMAP_SHAMAN_TILE_WIDTH  / TILEMAP_GENERAL_TILE_WIDTH;
-SHAMAN_SCALE_Y                :: TILEMAP_SHAMAN_TILE_HEIGHT / TILEMAP_GENERAL_TILE_HEIGHT;
-TILEMAP_SHAMAN_WORLD_WIDTH    :: TILEMAP_GENERAL_WORLD_WIDTH  * 2;
-TILEMAP_SHAMAN_WORLD_HEIGHT   :: TILEMAP_GENERAL_WORLD_HEIGHT * 2;
+TILEMAP_SHAMAN_TILE_PADDING_X :: 48;
+TILEMAP_SHAMAN_TILE_PADDING_Y :: 8;
+SHAMAN_SCALE_FACTOR           :: 2;
+SHAMAN_SCALE_X                :: SHAMAN_SCALE_FACTOR * TILEMAP_SHAMAN_TILE_WIDTH  / TILEMAP_GENERAL_TILE_WIDTH;
+SHAMAN_SCALE_Y                :: SHAMAN_SCALE_FACTOR * TILEMAP_SHAMAN_TILE_HEIGHT / TILEMAP_GENERAL_TILE_HEIGHT;
+TILEMAP_SHAMAN_WORLD_WIDTH    :: TILEMAP_GENERAL_WORLD_WIDTH  * SHAMAN_SCALE_X;
+TILEMAP_SHAMAN_WORLD_HEIGHT   :: TILEMAP_GENERAL_WORLD_HEIGHT * SHAMAN_SCALE_Y;
 
 PARTICLE_TEXT_SIZE :: 20;
 
@@ -3912,8 +3913,8 @@ update_and_draw_frame_round :: () {
                         found = true;
 
                         sprite_dest := Vector2.{
-                            shaman.pos.x - TILEMAP_SHAMAN_TILE_PADDING_X,
-                            shaman.pos.y - TILEMAP_SHAMAN_TILE_PADDING_Y,
+                            shaman.pos.x - 2 * TILEMAP_SHAMAN_TILE_PADDING_X,
+                            shaman.pos.y - 2 * TILEMAP_SHAMAN_TILE_PADDING_Y,
                         };
 
                         sprite_draw(
@@ -3924,7 +3925,7 @@ update_and_draw_frame_round :: () {
                             TILEMAP_SHAMAN_TILE_WIDTH,
                             TILEMAP_SHAMAN_TILE_HEIGHT,
                             shaman.is_facing_left,
-                            0,0
+
                         );
                     }
                     assert_soft(found, "Shaman % had no animation active\n", shaman.id);
@@ -7299,6 +7300,10 @@ create_shaman :: (pos: Vector2) -> Shaman {
         loops             = true,
     };
 
+    shaman_animated_sprite_reveal := shaman_animated_sprite_base;
+    shaman_animated_sprite_reveal.first_frame = SHAMAN_ANIMATION_REVEAL_START_FRAME;
+    shaman_animated_sprite_reveal.frame_count = SHAMAN_ANIMATION_REVEAL_FRAME_COUNT;
+    
     shaman_animated_sprite_idle := shaman_animated_sprite_base;
     shaman_animated_sprite_idle.first_frame = SHAMAN_ANIMATION_IDLE_START_FRAME;
     shaman_animated_sprite_idle.frame_count = SHAMAN_ANIMATION_IDLE_FRAME_COUNT;
@@ -7320,6 +7325,7 @@ create_shaman :: (pos: Vector2) -> Shaman {
 
     animations : [..] AnimatedSprite;
     
+    array_add(*animations, shaman_animated_sprite_reveal);
     array_add(*animations, shaman_animated_sprite_idle);
     array_add(*animations, shaman_animated_sprite_attack_side);
     array_add(*animations, shaman_animated_sprite_summon);
@@ -8971,10 +8977,17 @@ reveal_cave_if_necessary :: (tile_id: s32, grant_points: bool, grant_gold: bool)
             }
             case .SHAMAN; {
                 create_alert(.SHAMAN, get_tile_pos_by_id(tile_id));
-                tile_id_index := random_int_within_range(0, cave_tile_ids.count - 1);
-                shaman_tile_id := cave_tile_ids[tile_id_index];
-                shaman_tile_pos := get_tile_pos_by_id(shaman_tile_id);
-                create_shaman(shaman_tile_pos);
+
+                is_cave_eligible_for_shaman, shaman_tile_id := do_tile_ids_form_a_2_by_2_square_somewhere_between_them(cave_tile_ids);
+                if is_cave_eligible_for_shaman {
+                    shaman_tile_pos := get_tile_pos_by_id(shaman_tile_id);
+                    create_shaman(shaman_tile_pos);
+                } else {
+                    // TODO: Instead of picking shaman and then checking, check first.
+                    //
+                    // If this was marked to be a shaman cave but it was too small, try something else. 
+                    reveal_cave_if_necessary(tile_id, grant_points, grant_gold);
+                }
             }
             case .SPIDER_QUEEN; {
                 create_alert(.SPIDER_QUEEN, get_tile_pos_by_id(tile_id));
@@ -8988,6 +9001,42 @@ reveal_cave_if_necessary :: (tile_id: s32, grant_points: bool, grant_gold: bool)
     }
 
     return neighbor_is_unrevealed_cave, cave_type;
+}
+
+// TODO: this is the turbo retarded way of doing this
+// TODO: this only answers the question of is there a 2 by 2 square; it might be nice to know how many there are.
+do_tile_ids_form_a_2_by_2_square_somewhere_between_them :: (tile_ids: [..] s32) -> (do_they_have_the_2_by_2: bool, tile_id_of_top_left_of_2_by_2: s32) {
+    if tile_ids.count < 4 return false, 0;
+    tile_ids_to_check_as_top_left_corner := array_copy(tile_ids);
+    while tile_ids_to_check_as_top_left_corner.count > 4 {
+        // Take the last element of the ids to check as our next potential top left corner.
+        potential_top_left_tile_id := tile_ids_to_check_as_top_left_corner[tile_ids_to_check_as_top_left_corner.count - 1];
+        
+        // search for top right corner (just one to the right)
+        corresponding_top_right_tile_id_found := array_find(tile_ids, potential_top_left_tile_id + 1);
+        if !corresponding_top_right_tile_id_found {
+            tile_ids_to_check_as_top_left_corner.count -= 1;
+            continue;
+        }
+
+        // search for bottom left corner (just one below)
+        corresponding_bottom_left_tile_id_found := array_find(tile_ids, potential_top_left_tile_id + xx context.world_cols);
+        if !corresponding_bottom_left_tile_id_found {
+            tile_ids_to_check_as_top_left_corner.count -= 1;
+            continue;
+        }
+
+        // search for bottom right corner (one to the right and down)
+        corresponding_bottom_right_tile_id_found := array_find(tile_ids, potential_top_left_tile_id + xx context.world_cols + 1);
+        if !corresponding_bottom_right_tile_id_found {
+            tile_ids_to_check_as_top_left_corner.count -= 1;
+            continue;
+        }
+
+        return true, potential_top_left_tile_id;
+    }
+
+    return false, 0;
 }
 
 get_rect_center :: (rect: Rectangle) -> Vector2 {
