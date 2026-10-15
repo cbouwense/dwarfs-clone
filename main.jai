@@ -623,6 +623,16 @@ TILEMAP_SOURCE_RECT_OUTLINE_1_BY_1 := Rectangle.{
     TILEMAP_GENERAL_TILE_HEIGHT,
 };
 
+OUTLINE_SPRITE_SOURCE_ROW_2_BY_2 :: 0.0;
+OUTLINE_SPRITE_SOURCE_COL_2_BY_2 :: 13.0;
+
+TILEMAP_SOURCE_RECT_OUTLINE_2_BY_2 := Rectangle.{
+    OUTLINE_SPRITE_SOURCE_COL_2_BY_2 * TILEMAP_GENERAL_TILE_WIDTH,
+    OUTLINE_SPRITE_SOURCE_ROW_2_BY_2 * TILEMAP_GENERAL_TILE_HEIGHT,
+    TILEMAP_GENERAL_TILE_WIDTH * 2,
+    TILEMAP_GENERAL_TILE_HEIGHT * 2,
+};
+
 OUTLINE_SPRITE_SOURCE_ROW_3_BY_3 :: 1.0;
 OUTLINE_SPRITE_SOURCE_COL_3_BY_3 :: 10.0;
 
@@ -703,7 +713,7 @@ TILEMAP_GOBLIN_WORLD_HEIGHT   :: TILEMAP_GENERAL_WORLD_HEIGHT * GOBLIN_SCALE_Y;
 TILEMAP_SHAMAN_TILE_WIDTH     :: 128;
 TILEMAP_SHAMAN_TILE_HEIGHT    :: 32;
 TILEMAP_SHAMAN_TILE_PADDING_X :: 48;
-TILEMAP_SHAMAN_TILE_PADDING_Y :: 8;
+TILEMAP_SHAMAN_TILE_PADDING_Y :: 4;
 SHAMAN_SCALE_FACTOR           :: 2;
 SHAMAN_SCALE_X                :: SHAMAN_SCALE_FACTOR * TILEMAP_SHAMAN_TILE_WIDTH  / TILEMAP_GENERAL_TILE_WIDTH;
 SHAMAN_SCALE_Y                :: SHAMAN_SCALE_FACTOR * TILEMAP_SHAMAN_TILE_HEIGHT / TILEMAP_GENERAL_TILE_HEIGHT;
@@ -1160,6 +1170,7 @@ paths_to_draw_this_frame : [..] Path;
 tile_ids_to_dwarfs   : Table(s32, *Dwarf);
 tile_ids_to_goblins  : Table(s32, *Goblin);
 tile_ids_to_outposts : Table(s32, *Outpost);
+tile_ids_to_shamans  : Table(s32, *Shaman);
 
 alerts             : [..] Alert;
 alerts_to_draw_this_frame : [..] Alert;
@@ -1247,6 +1258,7 @@ initialize_round :: () {
         tile_ids_to_dwarfs.allocator          = temp;
         tile_ids_to_goblins.allocator         = temp;
         tile_ids_to_outposts.allocator        = temp;
+        tile_ids_to_shamans.allocator         = temp;
     }
 
     // TODO: parametrize
@@ -1580,6 +1592,7 @@ update_and_draw_frame_round :: () {
     table_reset(*tile_ids_to_dwarfs);
     table_reset(*tile_ids_to_goblins);
     table_reset(*tile_ids_to_outposts);
+    table_reset(*tile_ids_to_shamans);
     reset_temporary_storage();
 
     DT_MULTIPLIER_FAST_FORWARD :: 5;
@@ -1671,6 +1684,15 @@ update_and_draw_frame_round :: () {
             table_set(*tile_ids_to_outposts, xx (outpost_tile_id + 2 * context.world_cols + 0), outpost);
             table_set(*tile_ids_to_outposts, xx (outpost_tile_id + 2 * context.world_cols + 1), outpost);
             table_set(*tile_ids_to_outposts, xx (outpost_tile_id + 2 * context.world_cols + 2), outpost);
+        }
+        
+        // PERF: caching this might not even be faster
+        for *shaman: shamans {
+            shaman_tile_id := get_entity_tile_id(shaman);
+            table_set(*tile_ids_to_shamans, xx (shaman_tile_id + 0 * context.world_cols + 0), shaman);
+            table_set(*tile_ids_to_shamans, xx (shaman_tile_id + 0 * context.world_cols + 1), shaman);
+            table_set(*tile_ids_to_shamans, xx (shaman_tile_id + 1 * context.world_cols + 0), shaman);
+            table_set(*tile_ids_to_shamans, xx (shaman_tile_id + 1 * context.world_cols + 1), shaman);
         }
     }
 
@@ -2270,12 +2292,14 @@ update_and_draw_frame_round :: () {
                                 tile_has_outpost_on_it := table_contains(*tile_ids_to_outposts, tile_id);
                                 tile_has_dwarf_on_it   := table_contains(*tile_ids_to_dwarfs, tile_id);
                                 tile_has_goblin_on_it  := table_contains(*tile_ids_to_goblins, tile_id);
+                                tile_has_shaman_on_it  := table_contains(*tile_ids_to_shamans, tile_id);
 
                                 can_place_wall_on_desired_tile := (
-                                    tile_is_fully_mined   &&
-                                    !tile_has_outpost_on_it  &&
-                                    !tile_has_dwarf_on_it &&
-                                    !tile_has_goblin_on_it
+                                    tile_is_fully_mined     &&
+                                    !tile_has_outpost_on_it &&
+                                    !tile_has_dwarf_on_it   &&
+                                    !tile_has_goblin_on_it  &&
+                                    !tile_has_shaman_on_it
                                 );
 
                                 if tile_is_fully_mined && can_place_wall_on_desired_tile { 
@@ -3971,6 +3995,7 @@ update_and_draw_frame_round :: () {
                         DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_TOO_EXPENSIVE, top_left_tile_rect_outpost, Vector2.{0,0}, 0.0, TRANSPARENT_WHITE);
                     }
                 } else {
+                    hovering_over_shaman, shaman   := table_find(*tile_ids_to_shamans, hovered_tile_id);
                     hovering_over_outpost, outpost := table_find(*tile_ids_to_outposts, hovered_tile_id);
 
                     if hovering_over_outpost {
@@ -3981,9 +4006,21 @@ update_and_draw_frame_round :: () {
                             TILEMAP_GENERAL_WORLD_HEIGHT * 3,
                         };
 
-                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTLINE_3_BY_3, outpost_dest_rect, Vector2.{0,0}, 0.0, WHITE);
-                    } else {
-                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTLINE_1_BY_1, hovered_tile_rect, Vector2.{0,0}, 0.0, WHITE);
+                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTLINE_3_BY_3, outpost_dest_rect, Vector2.{0,0}, 0.0, GREEN);
+                    }
+                    else if hovering_over_shaman {
+                        shaman_dest_rect := Rectangle.{
+                            shaman.pos.x,
+                            shaman.pos.y,
+                            TILEMAP_GENERAL_WORLD_WIDTH  * 2,
+                            TILEMAP_GENERAL_WORLD_HEIGHT * 2,
+                        };
+
+                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTLINE_2_BY_2, shaman_dest_rect, Vector2.{0,0}, 0.0, RED);
+                    }
+                    else {
+                        // TODO: red over enemies and such
+                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTLINE_1_BY_1, hovered_tile_rect, Vector2.{0,0}, 0.0, GREEN);
                     }
                 }
             }
@@ -9220,6 +9257,7 @@ get_entity_kind_from_type :: (entity_type: Type) -> EntityKind {
         case Outpost; return .Outpost;
         case Dwarf;   return .Dwarf;
         case Goblin;  return .Goblin;
+        case Shaman;  return .Shaman;
         case;
             assert_soft(false, "Missed entity type, probably");
             return .Dwarf;
