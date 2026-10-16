@@ -121,6 +121,7 @@ SHAMAN_ANIMATION_ATTACK_DOWN_FRAME_DURATION_MS :: 100;
 SHAMAN_ANIMATION_SUMMON_START_FRAME       :: 33;
 SHAMAN_ANIMATION_SUMMON_FRAME_COUNT       :: 16;
 SHAMAN_ANIMATION_SUMMON_FRAME_DURATION_MS :: 100;
+SHAMAN_ANIMATION_SUMMON_FRAME_ACTION      :: 45;
 
 SHAMAN_SUMMON_COOLDOWN_MS :: 4000;
 SHAMAN_ATTACK_COOLDOWN_MS :: 1000;
@@ -1070,6 +1071,7 @@ Shaman :: struct {
     state              : ShamanState;
     attack_cooldown_ms : s32;
     summon_cooldown_ms : s32;
+    tile_id_to_spawn_plague_on : s32;
 }
 
 // EntityKind :: 
@@ -3204,7 +3206,7 @@ update_and_draw_frame_round :: () {
                                     }
                                 }
 
-                                // 2. If no dwarves nearby, then spawn goblins on cooldown
+                                // If no dwarves nearby, then spawn goblins on cooldown
                                 if !found_dwarves_to_attack then shaman_transition_state(shaman, .SUMMONING);
                             }
                             case .ATTACKING; {
@@ -3263,17 +3265,9 @@ update_and_draw_frame_round :: () {
                                     available_tile_ids := get_available_tiles_for_plague(shaman_tile_id, 10);
                                     if available_tile_ids.count > 0 {
                                         random_index := random_int_within_range(0, available_tile_ids.count - 1);
-                                        tile_id_to_spawn_plague_on := available_tile_ids[random_index];
-                                        tile_pos_to_spawn_plague_on := get_tile_pos_by_id(tile_id_to_spawn_plague_on);
-                                        
-                                        // TODO: add other goblin types and eventually water
-                                        // TODO: create the portal from which a goblin will spawn
-                                        create_goblin(tile_pos_to_spawn_plague_on);
-
+                                        shaman.tile_id_to_spawn_plague_on = available_tile_ids[random_index];
                                         entity_set_active_animation(shaman, xx ShamanAnimation.SUMMON);
                                     }
-
-                                    shaman_transition_state(shaman, .DECIDING);
                                 }
                             }
 
@@ -3286,8 +3280,27 @@ update_and_draw_frame_round :: () {
                         // Update animations
                         for *anim: shaman.animations {
                             reset_anim := sprite_update(anim, context.dt_seconds);
+
+                            // NOTE: there is a bug where, if you don't check again whether there is an entity on the tile you
+                            // want to spawn the plague on, you'll spawn a ton of them. I think this is because this check - which
+                            // I believe should limit to only once per summon state - isn't actually limited to once per summon
+                            // state. So, if you run into bugs with multiple plagues being summoned on one tile, it probably has
+                            // something to do with this if statement.
+                            if (
+                                anim.active &&
+                                it_index == xx ShamanAnimation.SUMMON &&
+                                sprite_animation_get_current_frame(anim) == SHAMAN_ANIMATION_SUMMON_FRAME_ACTION    
+                            ) {
+                                entities_on_tile := get_entities_on_tile(shaman.tile_id_to_spawn_plague_on);
+                                if entities_on_tile.count == 0 {
+                                    tile_pos_to_spawn_plague_on := get_tile_pos_by_id(shaman.tile_id_to_spawn_plague_on);
+                                    create_goblin(tile_pos_to_spawn_plague_on);
+                                    shaman_transition_state(shaman, .DECIDING);
+                                }
+                            } 
+
                             if reset_anim {
-                                // if it_index == xx ShamanAnimation.SUMMON then shaman_transition_state(shaman, .DECIDING);
+                                if it_index == xx ShamanAnimation.SUMMON then entity_set_active_animation(shaman, xx ShamanAnimation.IDLE);
                                 if shaman.state == .REVEALING then shaman_transition_state(shaman, .DECIDING);
                             }
                         }
@@ -6225,6 +6238,10 @@ reset_memory :: () {
     path_being_traced_2 = Path.{};
 
     array_reset(*alerts);
+
+    array_reset(*shamans);
+    table_reset(*shaman_id_to_index);
+    table_reset(*tile_ids_to_shamans);
 
     array_reset(*outposts);
     table_reset(*outpost_id_to_index);
