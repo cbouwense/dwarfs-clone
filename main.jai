@@ -1047,20 +1047,29 @@ Goblin :: struct {
     entity_id_attacking : s32;
 }
 
+ShamanAnimation :: enum {
+    REVEAL :: 0;
+    IDLE   :: 1;
+    WALK   :: 2;
+    ATTACK :: 3;
+    SUMMON :: 4;
+};
+
 ShamanState :: enum {
-    IDLE;
-    DECIDING;
-    ATTACKING;
-    SUMMONING;
+    REVEALING :: 0;
+    IDLE      :: 1;
+    DECIDING  :: 2;
+    ATTACKING :: 3;
+    SUMMONING :: 4;
 }
 
 Shaman :: struct {
     #as using entity: Entity;
     type = Shaman;
 
+    using move: Moveable; // TODO: remove?
     using anim: Animated;
 
-    direction           : Direction;
     state               : ShamanState;
     attack_cooldown_ms  : s32;
     direction_attacking : s32; // entity_id_attacking?
@@ -3167,12 +3176,29 @@ update_and_draw_frame_round :: () {
                 // Update shamans
                 update_shamans :: () {
                     for *shaman: shamans {
+                        if #complete shaman.state == {
+                            case .DECIDING; {
+                                
+                            }
+                            case .ATTACKING; {
+                                
+                            }
+                            case .SUMMONING; {
+                                
+                            }
+
+                            case .REVEALING;
+                            case .IDLE;
+                        } 
+
                         // TODO: maintain active animation index so we don't need to search for it
                         //
                         // Update animations
                         for *anim: shaman.animations {
                             reset_anim := sprite_update(anim, context.dt_seconds);
-                            if reset_anim then shaman.did_anim_action = false;
+                            if reset_anim {
+                                if shaman.state == .REVEALING then shaman_transition_state(shaman, .DECIDING);
+                            }
                         }
                     }
                 }
@@ -3952,7 +3978,7 @@ update_and_draw_frame_round :: () {
 
                         );
                     }
-                    assert_soft(found, "Shaman % had no animation active\n", shaman.id);
+                    assert(found, "Shaman % had no animation active\n", shaman.id);
                 }
             }
             draw_shamans();
@@ -6209,6 +6235,28 @@ goblin_transition_state :: (goblin: *Goblin, new_state: GoblinState) {
     }
 }
 
+shaman_transition_state :: (shaman: *Shaman, new_state: ShamanState) {
+    // What to do when exiting these states
+    if #complete shaman.state == {
+        case .REVEALING; entity_set_active_animation(shaman, xx ShamanAnimation.IDLE);
+        case .IDLE;
+        case .DECIDING;
+        case .ATTACKING;
+        case .SUMMONING;
+    }
+
+    shaman.state = new_state;
+
+    // What to do when entering these states
+    if #complete new_state == {
+        case .REVEALING;
+        case .IDLE;      entity_set_active_animation(shaman, xx ShamanAnimation.IDLE);
+        case .DECIDING;
+        case .ATTACKING; entity_set_active_animation(shaman, xx ShamanAnimation.ATTACK);
+        case .SUMMONING;
+    }
+}
+
 SetDwarfRandomNewTargetReturnStatus :: enum {
     DIRECTION_FOUND;
     NO_DIRECTION_FOUND;
@@ -7332,7 +7380,7 @@ create_shaman :: (pos: Vector2) -> Shaman {
         color             = WHITE,
         rotation          = 0.0,
         frame_count       = 8,
-        frame_duration_ms = 100,
+        frame_duration_ms = 150,
         timer_ms          = 0,
         loops             = true,
     };
@@ -7340,11 +7388,11 @@ create_shaman :: (pos: Vector2) -> Shaman {
     shaman_animated_sprite_reveal := shaman_animated_sprite_base;
     shaman_animated_sprite_reveal.first_frame = SHAMAN_ANIMATION_REVEAL_START_FRAME;
     shaman_animated_sprite_reveal.frame_count = SHAMAN_ANIMATION_REVEAL_FRAME_COUNT;
+    shaman_animated_sprite_reveal.active = true;
     
     shaman_animated_sprite_idle := shaman_animated_sprite_base;
     shaman_animated_sprite_idle.first_frame = SHAMAN_ANIMATION_IDLE_START_FRAME;
     shaman_animated_sprite_idle.frame_count = SHAMAN_ANIMATION_IDLE_FRAME_COUNT;
-    shaman_animated_sprite_idle.active = true;
 
     // TODO: attack up and down
 
@@ -7372,7 +7420,7 @@ create_shaman :: (pos: Vector2) -> Shaman {
         id        = shaman_id,
         pos       = pos,
         hp        = SHAMAN_STARTING_HP,
-        state     = .DECIDING,
+        state     = .REVEALING,
         direction = .NORTH,
         animations = animations,
         attack_cooldown_ms = SHAMAN_ATTACK_COOLDOWN_MS,
@@ -8992,7 +9040,8 @@ reveal_cave_if_necessary :: (tile_id: s32, grant_points: bool, grant_gold: bool)
         // TODO: tweak these chances
         //
         // First, decide what kind of cave this will be.
-        cave_type = cast(CaveType) cast(int) random_get_within_range(0, xx enum_count(CaveType));
+        // cave_type = cast(CaveType) cast(int) random_get_within_range(0, xx enum_count(CaveType));
+        cave_type = .SHAMAN;
 
         // Next, recursively reveal the tiles of the cave and spawn any alerts you might need.
         cave_tile_ids : [..] s32;
