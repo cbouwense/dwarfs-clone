@@ -106,9 +106,9 @@ DWARF_WARRIOR_ANIMATION_DIE_FRAME_DURATION_MS   :: 100;
 SHAMAN_ANIMATION_REVEAL_START_FRAME       :: 1;
 SHAMAN_ANIMATION_REVEAL_FRAME_COUNT       :: 8;
 SHAMAN_ANIMATION_REVEAL_FRAME_DURATION_MS :: 100;
-SHAMAN_ANIMATION_IDLE_START_FRAME         :: 9;
-SHAMAN_ANIMATION_IDLE_FRAME_COUNT         :: 8;
-SHAMAN_ANIMATION_IDLE_FRAME_DURATION_MS   :: 100;
+SHAMAN_ANIMATION_IDLE_START_FRAME       :: 9;
+SHAMAN_ANIMATION_IDLE_FRAME_COUNT       :: 8;
+SHAMAN_ANIMATION_IDLE_FRAME_DURATION_MS :: 100;
 SHAMAN_ANIMATION_ATTACK_UP_START_FRAME       :: 9; // TODO
 SHAMAN_ANIMATION_ATTACK_UP_FRAME_COUNT       :: 8;
 SHAMAN_ANIMATION_ATTACK_UP_FRAME_DURATION_MS :: 100;
@@ -118,13 +118,11 @@ SHAMAN_ANIMATION_ATTACK_SIDE_FRAME_DURATION_MS :: 100;
 SHAMAN_ANIMATION_ATTACK_DOWN_START_FRAME       :: 9; // TODO
 SHAMAN_ANIMATION_ATTACK_DOWN_FRAME_COUNT       :: 8;
 SHAMAN_ANIMATION_ATTACK_DOWN_FRAME_DURATION_MS :: 100;
-SHAMAN_ANIMATION_SUMMON_START_FRAME       :: 33; // TODO
+SHAMAN_ANIMATION_SUMMON_START_FRAME       :: 33;
 SHAMAN_ANIMATION_SUMMON_FRAME_COUNT       :: 16;
 SHAMAN_ANIMATION_SUMMON_FRAME_DURATION_MS :: 100;
-SHAMAN_ANIMATION_DIE_START_FRAME       :: 57; // TODO
-SHAMAN_ANIMATION_DIE_FRAME_COUNT       :: 8;
-SHAMAN_ANIMATION_DIE_FRAME_DURATION_MS :: 100;
 
+SHAMAN_SUMMON_COOLDOWN_MS :: 4000;
 SHAMAN_ATTACK_COOLDOWN_MS :: 1000;
 SHAMAN_ATTACK_DAMAGE_PER_SWING :: 25;
 SHAMAN_HIT_CHANCE :: 0.80; // TODO: will have to be based on level
@@ -1050,9 +1048,8 @@ Goblin :: struct {
 ShamanAnimation :: enum {
     REVEAL :: 0;
     IDLE   :: 1;
-    WALK   :: 2;
-    ATTACK :: 3;
-    SUMMON :: 4;
+    ATTACK :: 2;
+    SUMMON :: 3;
 };
 
 ShamanState :: enum {
@@ -1070,9 +1067,9 @@ Shaman :: struct {
     using move: Moveable; // TODO: remove?
     using anim: Animated;
 
-    state               : ShamanState;
-    attack_cooldown_ms  : s32;
-    direction_attacking : s32; // entity_id_attacking?
+    state              : ShamanState;
+    attack_cooldown_ms : s32;
+    summon_cooldown_ms : s32;
 }
 
 // EntityKind :: 
@@ -2298,17 +2295,11 @@ update_and_draw_frame_round :: () {
                                 // Try to turn the selected tile into a wall
                                 tile_id := get_tile_id_by_pos(context.mouse_pos_in_world);
                                 tile_is_fully_mined    := is_tile_fully_mined(tile_id);
-                                tile_has_outpost_on_it := table_contains(*tile_ids_to_outposts, tile_id);
-                                tile_has_dwarf_on_it   := table_contains(*tile_ids_to_dwarfs, tile_id);
-                                tile_has_goblin_on_it  := table_contains(*tile_ids_to_goblins, tile_id);
-                                tile_has_shaman_on_it  := table_contains(*tile_ids_to_shamans, tile_id);
+                                entities_on_tile := get_entities_on_tile(tile_id);
 
                                 can_place_wall_on_desired_tile := (
                                     tile_is_fully_mined     &&
-                                    !tile_has_outpost_on_it &&
-                                    !tile_has_dwarf_on_it   &&
-                                    !tile_has_goblin_on_it  &&
-                                    !tile_has_shaman_on_it
+                                    entities_on_tile.count == 0
                                 );
 
                                 if tile_is_fully_mined && can_place_wall_on_desired_tile { 
@@ -3176,15 +3167,114 @@ update_and_draw_frame_round :: () {
                 // Update shamans
                 update_shamans :: () {
                     for *shaman: shamans {
+                        shaman_tile_id := get_tile_id_by_pos(shaman.pos);
+
                         if #complete shaman.state == {
                             case .DECIDING; {
-                                
+                                // 1. If there are dwarves neighboring you, turn and attack them
+                                tile_id_deltas_to_check_for_dwarves_relative_to_shaman_tile := Vector2.[
+                                    // NORTH
+                                    Vector2.{  0, xx (-1 * context.world_cols) },
+                                    Vector2.{  1, xx (-1 * context.world_cols) },
+                                    // SOUTH
+                                    Vector2.{  1, xx ( 2 * context.world_cols) },
+                                    Vector2.{  0, xx ( 2 * context.world_cols) },
+                                    // EAST
+                                    Vector2.{  2, xx ( 0 * context.world_cols) },
+                                    Vector2.{  2, xx ( 1 * context.world_cols) },
+                                    // WEST
+                                    Vector2.{ -1, xx ( 0 * context.world_cols) },
+                                    Vector2.{ -1, xx ( 1 * context.world_cols) },
+                                ];
+
+                                found_dwarves_to_attack := false;
+
+                                for tile_id_deltas_to_check_for_dwarves_relative_to_shaman_tile {
+                                    neighbor_tile_id := shaman_tile_id + cast(s32) it.x + cast(s32) it.y;
+                                    neighbor_has_dwarf := table_find(*tile_ids_to_dwarfs, neighbor_tile_id);
+                                    if neighbor_has_dwarf {
+                                        found_dwarves_to_attack = true;
+
+                                        if it_index == 0 || it_index == 1 then shaman.direction = .NORTH;
+                                        if it_index == 2 || it_index == 3 then shaman.direction = .SOUTH;
+                                        if it_index == 4 || it_index == 5 then shaman.direction = .EAST;
+                                        if it_index == 6 || it_index == 7 then shaman.direction = .WEST;
+
+                                        shaman_transition_state(shaman, .ATTACKING);
+                                    }
+                                }
+
+                                // 2. If no dwarves nearby, then spawn goblins on cooldown
+                                if !found_dwarves_to_attack then shaman_transition_state(shaman, .SUMMONING);
                             }
                             case .ATTACKING; {
                                 
                             }
                             case .SUMMONING; {
-                                
+                                // TODO: don't I need to check if dwarves are attacking? or perhaps, do that outside of the #complete state if?
+                                if shaman.summon_cooldown_ms > 0 {
+                                    shaman.summon_cooldown_ms -= xx (context.dt_seconds * 1000);
+                                } else {
+                                    // Determine where to spawn the plague. Do a DFS, searching for all available tiles.
+                                    // Then pick a random one.
+                                    get_available_tiles_for_plague_step :: (tile_id: s32, depth: int, searched_tile_ids_set: *Table, available_tile_ids: * [..] s32) {
+                                        if depth < 0 return;
+
+                                        tile_id_already_searched := table_find(searched_tile_ids_set, tile_id);
+                                        if tile_id_already_searched return;
+
+                                        table_set(searched_tile_ids_set, tile_id, 1738);
+
+                                        tile := get_tile_by_id(tile_id);
+                                        entities_on_tile := get_entities_on_tile(tile_id);
+
+                                        if ( 
+                                            tile != null &&
+                                            tile.type == .MINED &&
+                                            !tile_has_property(tile, .ENCASED) &&
+                                            !tile_has_property(tile, .WATER_STILL) &&
+                                            !tile_has_property(tile, .WATER_FLOWING) &&
+                                            !tile_has_property(tile, .LAVA_STILL) &&
+                                            !tile_has_property(tile, .LAVA_FLOWING) &&
+                                            entities_on_tile.count == 0
+                                        ) {
+                                            array_add(available_tile_ids, tile_id);
+                                        }
+
+                                        for DIRECTIONS_CARDINAL {
+                                            deltas := get_tile_direction_id_deltas(it);
+                                            dx := deltas[0];
+                                            dy := deltas[1];
+                                            get_available_tiles_for_plague_step(tile_id + dx + dy, depth - 1, searched_tile_ids_set, available_tile_ids);
+                                        }
+                                    }
+
+                                    get_available_tiles_for_plague :: (starting_tile_id: s32, desired_depth: int) -> available_tile_ids: [..] s32 {
+                                        available_tile_ids: [..] s32;
+                                        available_tile_ids.allocator = temp;
+                                        
+                                        searched_tile_ids : Table(s32, Any);
+                                        searched_tile_ids.allocator = temp;
+
+                                        get_available_tiles_for_plague_step(starting_tile_id, desired_depth, *searched_tile_ids, *available_tile_ids);
+                                        return available_tile_ids;
+                                    }
+
+                                    available_tile_ids := get_available_tiles_for_plague(shaman_tile_id, 10);
+                                    if available_tile_ids.count > 0 {
+                                        random_index := random_int_within_range(0, available_tile_ids.count - 1);
+                                        tile_id_to_spawn_plague_on := available_tile_ids[random_index];
+                                        tile_pos_to_spawn_plague_on := get_tile_pos_by_id(tile_id_to_spawn_plague_on);
+                                        
+                                        // TODO: add other goblin types and eventually water
+                                        // TODO: create the portal from which a goblin will spawn
+                                        create_goblin(tile_pos_to_spawn_plague_on);
+
+                                        entity_set_active_animation(shaman, xx ShamanAnimation.SUMMON);
+                                    }
+
+                                    shaman_transition_state(shaman, .DECIDING);
+                                }
                             }
 
                             case .REVEALING;
@@ -3197,6 +3287,7 @@ update_and_draw_frame_round :: () {
                         for *anim: shaman.animations {
                             reset_anim := sprite_update(anim, context.dt_seconds);
                             if reset_anim {
+                                // if it_index == xx ShamanAnimation.SUMMON then shaman_transition_state(shaman, .DECIDING);
                                 if shaman.state == .REVEALING then shaman_transition_state(shaman, .DECIDING);
                             }
                         }
@@ -4800,6 +4891,25 @@ update_and_draw_frame_round :: () {
     draw();
 }
 
+get_entities_on_tile :: (tile_id: s32) -> [..] *Entity {
+    entities_on_tile: [..] *Entity;
+    entities_on_tile.allocator = temp;
+
+    tile_has_outpost_on_it, outpost := table_find(*tile_ids_to_outposts, tile_id);
+    if tile_has_outpost_on_it then array_add(*entities_on_tile, outpost);
+
+    tile_has_dwarf_on_it, dwarf := table_find(*tile_ids_to_dwarfs, tile_id);
+    if tile_has_dwarf_on_it then array_add(*entities_on_tile, dwarf);
+
+    tile_has_goblin_on_it, goblin:= table_find(*tile_ids_to_goblins, tile_id);
+    if tile_has_goblin_on_it then array_add(*entities_on_tile, goblin);
+
+    tile_has_shaman_on_it, shaman := table_find(*tile_ids_to_shamans, tile_id);
+    if tile_has_shaman_on_it then array_add(*entities_on_tile, shaman);
+
+    return entities_on_tile;
+}
+
 close_outpost_cannon_shooting_mode :: (outpost: *Outpost) {
     for particle_id: outpost.cannon_perimeter_particle_ids {
         kill_particle_by_id(particle_id);
@@ -6253,7 +6363,7 @@ shaman_transition_state :: (shaman: *Shaman, new_state: ShamanState) {
         case .IDLE;      entity_set_active_animation(shaman, xx ShamanAnimation.IDLE);
         case .DECIDING;
         case .ATTACKING; entity_set_active_animation(shaman, xx ShamanAnimation.ATTACK);
-        case .SUMMONING;
+        case .SUMMONING; shaman.summon_cooldown_ms = SHAMAN_SUMMON_COOLDOWN_MS;
     }
 }
 
@@ -7371,7 +7481,6 @@ create_goblin :: (pos: Vector2) -> Goblin {
 
 create_shaman :: (pos: Vector2) -> Shaman {
     shaman_id := increment_then_read(*entity_id_counter);
-    // direction := cast(Direction) cast(int) random_get_within_range(0, 3);
 
     shaman_animated_sprite_base := AnimatedSprite.{
         texture           = shaman_texture,
@@ -7404,17 +7513,12 @@ create_shaman :: (pos: Vector2) -> Shaman {
     shaman_animated_sprite_summon.first_frame = SHAMAN_ANIMATION_SUMMON_START_FRAME;
     shaman_animated_sprite_summon.frame_count = SHAMAN_ANIMATION_SUMMON_FRAME_COUNT;
 
-    shaman_animated_sprite_die := shaman_animated_sprite_base;
-    shaman_animated_sprite_die.first_frame = SHAMAN_ANIMATION_DIE_START_FRAME;
-    shaman_animated_sprite_die.frame_count = SHAMAN_ANIMATION_DIE_FRAME_COUNT;
-
     animations : [..] AnimatedSprite;
     
     array_add(*animations, shaman_animated_sprite_reveal);
     array_add(*animations, shaman_animated_sprite_idle);
     array_add(*animations, shaman_animated_sprite_attack_side);
     array_add(*animations, shaman_animated_sprite_summon);
-    array_add(*animations, shaman_animated_sprite_die);
 
     shaman := Shaman.{
         id        = shaman_id,
@@ -8760,7 +8864,7 @@ find_cardinal_neighbor_entity :: (tile_id: s32, $T: Type) -> found_entity: bool,
         neighbor_id := get_neighbor_tile_id_by_direction(tile_id, it);
 
         set_tile_ids_to_entity(T);
-
+        
         neighbor_has_entity, entity := table_find(*tile_ids_to_entity, neighbor_id);
         if neighbor_has_entity return true, entity, it;
     }
@@ -9288,6 +9392,7 @@ set_tile_ids_to_entity :: (T: Type) #expand
     #if      T == Dwarf   `tile_ids_to_entity = tile_ids_to_dwarfs;
     else #if T == Goblin  `tile_ids_to_entity = tile_ids_to_goblins;
     else #if T == Outpost `tile_ids_to_entity = tile_ids_to_outposts;
+    else #if T == Shaman  `tile_ids_to_entity = tile_ids_to_shamans;
     else assert(false); // TODO: what if we didn't need this somehow
 }
 
@@ -9298,6 +9403,7 @@ set_entity_id_to_index :: ($T: Type) #expand
     #if      T == Dwarf   `entity_id_to_index = dwarf_id_to_index;
     else #if T == Goblin  `entity_id_to_index = goblin_id_to_index;
     else #if T == Outpost `entity_id_to_index = outpost_id_to_index;
+    else #if T == Shaman `entity_id_to_index = shaman_id_to_index;
     else assert(false); // TODO: what if we didn't need this somehow
 }
 
