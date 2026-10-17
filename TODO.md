@@ -22,6 +22,7 @@
 - In addition to control modes, allow users to hold down controls
 - Death particles, aggro particles, and hit star particles need TLC
 - Death poof particles
+- Shaman death particle
 - options menu
     - apply changes
     - restore defaults
