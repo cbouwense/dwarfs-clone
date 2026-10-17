@@ -115,6 +115,7 @@ SHAMAN_ANIMATION_ATTACK_UP_FRAME_DURATION_MS :: 100;
 SHAMAN_ANIMATION_ATTACK_SIDE_START_FRAME       :: 25;
 SHAMAN_ANIMATION_ATTACK_SIDE_FRAME_COUNT       :: 8;
 SHAMAN_ANIMATION_ATTACK_SIDE_FRAME_DURATION_MS :: 100;
+SHAMAN_ANIMATION_ATTACK_SIDE_FRAME_ACTION      :: 28;
 SHAMAN_ANIMATION_ATTACK_DOWN_START_FRAME       :: 9; // TODO
 SHAMAN_ANIMATION_ATTACK_DOWN_FRAME_COUNT       :: 8;
 SHAMAN_ANIMATION_ATTACK_DOWN_FRAME_DURATION_MS :: 100;
@@ -123,9 +124,9 @@ SHAMAN_ANIMATION_SUMMON_FRAME_COUNT       :: 16;
 SHAMAN_ANIMATION_SUMMON_FRAME_DURATION_MS :: 100;
 SHAMAN_ANIMATION_SUMMON_FRAME_ACTION      :: 45;
 
-SHAMAN_SUMMON_COOLDOWN_MS :: 4000;
+SHAMAN_SUMMON_COOLDOWN_MS :: 40000;
 SHAMAN_ATTACK_COOLDOWN_MS :: 1000;
-SHAMAN_ATTACK_DAMAGE_PER_SWING :: 25;
+SHAMAN_ATTACK_DAMAGE_PER_SWING :: 75;
 SHAMAN_HIT_CHANCE :: 0.80; // TODO: will have to be based on level
 SHAMAN_SPAWN_ENABLED :: true;
 SHAMAN_STARTING_HP :: 1000;
@@ -1056,9 +1057,8 @@ ShamanAnimation :: enum {
 ShamanState :: enum {
     REVEALING :: 0;
     IDLE      :: 1;
-    DECIDING  :: 2;
-    ATTACKING :: 3;
-    SUMMONING :: 4;
+    ATTACKING :: 2;
+    SUMMONING :: 3;
 }
 
 Shaman :: struct {
@@ -2821,6 +2821,8 @@ update_and_draw_frame_round :: () {
                             //
                             // Update animations
                             for *anim: dwarf.animations {
+                                if !anim.active continue;
+
                                 reset_anim := sprite_update(anim, context.dt_seconds);
                                 if reset_anim then dwarf.did_anim_action = false;
                             }
@@ -3079,6 +3081,8 @@ update_and_draw_frame_round :: () {
                         //
                         // Update animations
                         for *anim: goblin.animations {
+                            if !anim.active continue;
+
                             reset_anim := sprite_update(anim, context.dt_seconds);
                             if reset_anim then goblin.did_anim_action = false;
                         }
@@ -3171,96 +3175,58 @@ update_and_draw_frame_round :: () {
                     for *shaman: shamans {
                         shaman_tile_id := get_tile_id_by_pos(shaman.pos);
 
-                        if #complete shaman.state == {
-                            case .DECIDING; {
-                                // 1. If there are dwarves neighboring you, turn and attack them
-                                tile_id_deltas_to_check_for_dwarves_relative_to_shaman_tile := Vector2.[
-                                    // NORTH
-                                    Vector2.{  0, xx (-1 * context.world_cols) },
-                                    Vector2.{  1, xx (-1 * context.world_cols) },
-                                    // SOUTH
-                                    Vector2.{  1, xx ( 2 * context.world_cols) },
-                                    Vector2.{  0, xx ( 2 * context.world_cols) },
-                                    // EAST
-                                    Vector2.{  2, xx ( 0 * context.world_cols) },
-                                    Vector2.{  2, xx ( 1 * context.world_cols) },
-                                    // WEST
-                                    Vector2.{ -1, xx ( 0 * context.world_cols) },
-                                    Vector2.{ -1, xx ( 1 * context.world_cols) },
-                                ];
+                        // Regardless of state, if there are dwarves neighboring you, turn and attack them,
+                        // with the one exception of revealing.
+                        if shaman.state != .REVEALING {
+                            tile_id_deltas_to_check_for_dwarves_relative_to_shaman_tile := Vector2.[
+                                // NORTH
+                                Vector2.{  0, xx (-1 * context.world_cols) },
+                                Vector2.{  1, xx (-1 * context.world_cols) },
+                                // SOUTH
+                                Vector2.{  1, xx ( 2 * context.world_cols) },
+                                Vector2.{  0, xx ( 2 * context.world_cols) },
+                                // EAST
+                                Vector2.{  2, xx ( 0 * context.world_cols) },
+                                Vector2.{  2, xx ( 1 * context.world_cols) },
+                                // WEST
+                                Vector2.{ -1, xx ( 0 * context.world_cols) },
+                                Vector2.{ -1, xx ( 1 * context.world_cols) },
+                            ];
 
-                                found_dwarves_to_attack := false;
+                            found_dwarves_to_attack := false;
 
-                                for tile_id_deltas_to_check_for_dwarves_relative_to_shaman_tile {
-                                    neighbor_tile_id := shaman_tile_id + cast(s32) it.x + cast(s32) it.y;
-                                    neighbor_has_dwarf := table_find(*tile_ids_to_dwarfs, neighbor_tile_id);
-                                    if neighbor_has_dwarf {
-                                        found_dwarves_to_attack = true;
+                            for tile_id_deltas_to_check_for_dwarves_relative_to_shaman_tile {
+                                neighbor_tile_id := shaman_tile_id + cast(s32) it.x + cast(s32) it.y;
+                                neighbor_has_dwarf := table_find(*tile_ids_to_dwarfs, neighbor_tile_id);
+                                if neighbor_has_dwarf {
+                                    found_dwarves_to_attack = true;
 
-                                        if it_index == 0 || it_index == 1 then shaman.direction = .NORTH;
-                                        if it_index == 2 || it_index == 3 then shaman.direction = .SOUTH;
-                                        if it_index == 4 || it_index == 5 then shaman.direction = .EAST;
-                                        if it_index == 6 || it_index == 7 then shaman.direction = .WEST;
+                                    if it_index == 0 || it_index == 1 then shaman.direction = .NORTH;
+                                    if it_index == 2 || it_index == 3 then shaman.direction = .SOUTH;
+                                    if it_index == 4 || it_index == 5 then shaman.direction = .EAST;
+                                    if it_index == 6 || it_index == 7 then shaman.direction = .WEST;
 
-                                        shaman_transition_state(shaman, .ATTACKING);
-                                    }
+                                    shaman_transition_state(shaman, .ATTACKING);
                                 }
-
-                                // If no dwarves nearby, then spawn goblins on cooldown
-                                if !found_dwarves_to_attack then shaman_transition_state(shaman, .SUMMONING);
                             }
+                            // // If no dwarves nearby, then spawn goblins on cooldown
+                            // if !found_dwarves_to_attack then shaman_transition_state(shaman, .SUMMONING);
+                        }
+
+                        if #complete shaman.state == {
                             case .ATTACKING; {
-                                
+                                if shaman.attack_cooldown_ms > 0 {
+                                    shaman.attack_cooldown_ms -= xx (context.dt_seconds * 1000);
+                                } else {
+                                    shaman.attack_cooldown_ms = SHAMAN_ATTACK_COOLDOWN_MS;
+                                    entity_set_active_animation(shaman, xx ShamanAnimation.ATTACK);
+                                }
                             }
                             case .SUMMONING; {
-                                // TODO: don't I need to check if dwarves are attacking? or perhaps, do that outside of the #complete state if?
                                 if shaman.summon_cooldown_ms > 0 {
                                     shaman.summon_cooldown_ms -= xx (context.dt_seconds * 1000);
                                 } else {
-                                    // Determine where to spawn the plague. Do a DFS, searching for all available tiles.
-                                    // Then pick a random one.
-                                    get_available_tiles_for_plague_step :: (tile_id: s32, depth: int, searched_tile_ids_set: *Table, available_tile_ids: * [..] s32) {
-                                        if depth < 0 return;
-
-                                        tile_id_already_searched := table_find(searched_tile_ids_set, tile_id);
-                                        if tile_id_already_searched return;
-
-                                        table_set(searched_tile_ids_set, tile_id, 1738);
-
-                                        tile := get_tile_by_id(tile_id);
-                                        entities_on_tile := get_entities_on_tile(tile_id);
-
-                                        if ( 
-                                            tile != null &&
-                                            tile.type == .MINED &&
-                                            !tile_has_property(tile, .ENCASED) &&
-                                            !tile_has_property(tile, .WATER_STILL) &&
-                                            !tile_has_property(tile, .WATER_FLOWING) &&
-                                            !tile_has_property(tile, .LAVA_STILL) &&
-                                            !tile_has_property(tile, .LAVA_FLOWING) &&
-                                            entities_on_tile.count == 0
-                                        ) {
-                                            array_add(available_tile_ids, tile_id);
-                                        }
-
-                                        for DIRECTIONS_CARDINAL {
-                                            deltas := get_tile_direction_id_deltas(it);
-                                            dx := deltas[0];
-                                            dy := deltas[1];
-                                            get_available_tiles_for_plague_step(tile_id + dx + dy, depth - 1, searched_tile_ids_set, available_tile_ids);
-                                        }
-                                    }
-
-                                    get_available_tiles_for_plague :: (starting_tile_id: s32, desired_depth: int) -> available_tile_ids: [..] s32 {
-                                        available_tile_ids: [..] s32;
-                                        available_tile_ids.allocator = temp;
-                                        
-                                        searched_tile_ids : Table(s32, Any);
-                                        searched_tile_ids.allocator = temp;
-
-                                        get_available_tiles_for_plague_step(starting_tile_id, desired_depth, *searched_tile_ids, *available_tile_ids);
-                                        return available_tile_ids;
-                                    }
+                                    shaman.summon_cooldown_ms = SHAMAN_SUMMON_COOLDOWN_MS;
 
                                     available_tile_ids := get_available_tiles_for_plague(shaman_tile_id, 10);
                                     if available_tile_ids.count > 0 {
@@ -3279,29 +3245,136 @@ update_and_draw_frame_round :: () {
                         //
                         // Update animations
                         for *anim: shaman.animations {
-                            reset_anim := sprite_update(anim, context.dt_seconds);
+                            if !anim.active continue;
 
-                            // NOTE: there is a bug where, if you don't check again whether there is an entity on the tile you
-                            // want to spawn the plague on, you'll spawn a ton of them. I think this is because this check - which
-                            // I believe should limit to only once per summon state - isn't actually limited to once per summon
-                            // state. So, if you run into bugs with multiple plagues being summoned on one tile, it probably has
-                            // something to do with this if statement.
-                            if (
-                                anim.active &&
-                                it_index == xx ShamanAnimation.SUMMON &&
-                                sprite_animation_get_current_frame(anim) == SHAMAN_ANIMATION_SUMMON_FRAME_ACTION    
-                            ) {
-                                entities_on_tile := get_entities_on_tile(shaman.tile_id_to_spawn_plague_on);
-                                if entities_on_tile.count == 0 {
-                                    tile_pos_to_spawn_plague_on := get_tile_pos_by_id(shaman.tile_id_to_spawn_plague_on);
-                                    create_goblin(tile_pos_to_spawn_plague_on);
-                                    shaman_transition_state(shaman, .DECIDING);
+                            animation_will_play_last_frame_this_frame := sprite_update(anim, context.dt_seconds);
+
+                            if it_index == xx ShamanAnimation.REVEAL {
+                                if animation_will_play_last_frame_this_frame {
+                                    shaman_transition_state(shaman, .SUMMONING);
+                                    entity_set_active_animation(shaman, xx ShamanAnimation.IDLE);
                                 }
-                            } 
+                            }
+                            else if (
+                                it_index == xx ShamanAnimation.SUMMON &&
+                                sprite_animation_get_current_frame(anim) == SHAMAN_ANIMATION_SUMMON_FRAME_ACTION &&
+                                !shaman.did_anim_action
+                            ) {
+                                shaman.did_anim_action = true;
 
-                            if reset_anim {
-                                if it_index == xx ShamanAnimation.SUMMON then entity_set_active_animation(shaman, xx ShamanAnimation.IDLE);
-                                if shaman.state == .REVEALING then shaman_transition_state(shaman, .DECIDING);
+                                tile_pos_to_spawn_plague_on := get_tile_pos_by_id(shaman.tile_id_to_spawn_plague_on);
+                                create_goblin(tile_pos_to_spawn_plague_on);
+
+                                if animation_will_play_last_frame_this_frame {
+                                    entity_set_active_animation(shaman, xx ShamanAnimation.IDLE);
+                                }
+                            }
+                            else if (
+                                it_index == xx ShamanAnimation.ATTACK &&
+                                sprite_animation_get_current_frame(anim) == SHAMAN_ANIMATION_ATTACK_SIDE_FRAME_ACTION &&
+                                !shaman.did_anim_action
+                            ) {
+                                shaman.did_anim_action = true;
+
+                                tile_id_to_damage_1: s32;
+                                tile_id_to_damage_2: s32;
+
+                                if shaman.direction == {
+                                    case .NORTH;
+                                        tile_id_to_damage_1 = shaman_tile_id - cast(s32) context.world_cols;
+                                        tile_id_to_damage_2 = tile_id_to_damage_2 + 1;
+
+                                    case .SOUTH;
+                                        tile_id_to_damage_1 = shaman_tile_id + cast(s32) (2 * context.world_cols);
+                                        tile_id_to_damage_2 = tile_id_to_damage_2 + 1;
+
+                                    case .EAST;
+                                        tile_id_to_damage_1 = shaman_tile_id + 2;
+                                        tile_id_to_damage_2 = tile_id_to_damage_2 + cast(s32) context.world_cols;
+
+                                    case .WEST;
+                                        tile_id_to_damage_1 = shaman_tile_id - 1;
+                                        tile_id_to_damage_2 = tile_id_to_damage_2 + cast(s32) context.world_cols;
+                                }
+
+                                dwarf_to_damage_1_found, dwarf_to_damage_1 := table_find(*tile_ids_to_dwarfs, tile_id_to_damage_1);
+                                dwarf_to_damage_2_found, dwarf_to_damage_2 := table_find(*tile_ids_to_dwarfs, tile_id_to_damage_2);
+                                
+                                // assert_soft(dwarf_to_damage_1_found || dwarf_to_damage_2_found, "Expected at least one dwarf to be attacked by shaman, but found none. This might not actually be a problem, but it seems like a reasonable assumption as I am writing this. If this is not a problem, remove this assesrtion.");
+
+                                // TODO: function
+                                if dwarf_to_damage_1_found then {
+                                    // Hit check
+                                    rng := random_get_within_range(0, 1);
+                                    swing_connected := rng <= SHAMAN_HIT_CHANCE;
+
+                                    if swing_connected {
+                                        target_entity_tile_id := get_entity_tile_id(dwarf_to_damage_1);
+
+                                        direction_stars_should_fly: Direction;
+                                        found_direction := false;
+                                        for DIRECTIONS_CARDINAL {
+                                            neighbor_tile_id := get_neighbor_tile_id_by_direction(shaman_tile_id, it);
+                                            if neighbor_tile_id == target_entity_tile_id {
+                                                direction_stars_should_fly = it;
+                                                found_direction = true;
+                                                break;
+                                            }
+                                        }
+                                        assert_soft(found_direction, "Was trying to figure out what direction the damage star should fly when goblin % connected an attack on entity %, but didn't detect the entity as a cardinal neighbor of the dwarf\n", shaman.id, dwarf_to_damage_1.id);
+
+                                        create_damage_particles(dwarf_to_damage_1.pos, SHAMAN_ATTACK_DAMAGE_PER_SWING, direction_stars_should_fly);
+
+                                        dwarf_to_damage_1.hp -= SHAMAN_ATTACK_DAMAGE_PER_SWING;
+
+                                        if dwarf_to_damage_1.hp <= 0 {
+                                            kill_dwarf_by_id(dwarf_to_damage_1.id);
+
+                                            shaman_transition_state(shaman, .SUMMONING);
+                                        }
+                                    } else {
+                                        create_miss_particle(Vector2.{ dwarf_to_damage_1.pos.x, dwarf_to_damage_1.pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 });
+                                    }
+                                }
+
+                                // TODO: function
+                                if dwarf_to_damage_2_found then {
+                                    // Hit check
+                                    rng := random_get_within_range(0, 1);
+                                    swing_connected := rng <= SHAMAN_HIT_CHANCE;
+
+                                    if swing_connected {
+                                        target_entity_tile_id := get_entity_tile_id(dwarf_to_damage_2);
+
+                                        direction_stars_should_fly: Direction;
+                                        found_direction := false;
+                                        for DIRECTIONS_CARDINAL {
+                                            neighbor_tile_id := get_neighbor_tile_id_by_direction(shaman_tile_id, it);
+                                            if neighbor_tile_id == target_entity_tile_id {
+                                                direction_stars_should_fly = it;
+                                                found_direction = true;
+                                                break;
+                                            }
+                                        }
+                                        assert_soft(found_direction, "Was trying to figure out what direction the damage star should fly when goblin % connected an attack on entity %, but didn't detect the entity as a cardinal neighbor of the dwarf\n", shaman.id, dwarf_to_damage_2.id);
+
+                                        create_damage_particles(dwarf_to_damage_2.pos, SHAMAN_ATTACK_DAMAGE_PER_SWING, direction_stars_should_fly);
+
+                                        dwarf_to_damage_2.hp -= SHAMAN_ATTACK_DAMAGE_PER_SWING;
+
+                                        if dwarf_to_damage_2.hp <= 0 {
+                                            kill_dwarf_by_id(dwarf_to_damage_2.id);
+
+                                            shaman_transition_state(shaman, .SUMMONING);
+                                        }
+                                    } else {
+                                        create_miss_particle(Vector2.{ dwarf_to_damage_2.pos.x, dwarf_to_damage_2.pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 });
+                                    }
+                                }
+                            }
+
+                            if animation_will_play_last_frame_this_frame {
+                                shaman.did_anim_action = false;
                             }
                         }
                     }
@@ -4070,6 +4143,16 @@ update_and_draw_frame_round :: () {
                             shaman.pos.x - 2 * TILEMAP_SHAMAN_TILE_PADDING_X,
                             shaman.pos.y - 2 * TILEMAP_SHAMAN_TILE_PADDING_Y,
                         };
+
+                        if context.metagame.debug_mode {
+                            shaman_tile_id := get_tile_id_by_pos(shaman.pos);
+                            tile_ids := get_available_tiles_for_plague(shaman_tile_id, 5);
+                            for tile_ids {
+                                tile_pos := get_tile_pos_by_id(it);
+                                tile_center_pos := Vector2.{ tile_pos.x + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, tile_pos.y + TILEMAP_GENERAL_TILE_HEIGHT * 0.5 };
+                                DrawCircleV(tile_center_pos, 3.0, PURPLE);
+                            }
+                        }
 
                         sprite_draw(
                             anim,
@@ -4904,6 +4987,62 @@ update_and_draw_frame_round :: () {
     draw();
 }
 
+// Determine where to spawn the plague. Do a DFS, searching for all available tiles.
+// Then pick a random one.
+get_available_tiles_for_plague_step :: (tile_id: s32, depth: int, searched_tile_ids_set: *Table, available_tile_ids: * [..] s32) {
+    if depth < 0 return;
+
+    // tile_id_already_searched := table_find(searched_tile_ids_set, tile_id);
+    // if tile_id_already_searched return;
+
+    // table_set(searched_tile_ids_set, tile_id, 1738);
+
+    
+
+     {
+        array_add(available_tile_ids, tile_id);
+    }
+
+    for DIRECTIONS_CARDINAL {
+        deltas := get_tile_direction_id_deltas(it);
+        dx := deltas[0];
+        dy := deltas[1];
+        get_available_tiles_for_plague_step(tile_id + dx + dy, depth - 1, searched_tile_ids_set, available_tile_ids);
+    }
+}
+
+get_available_tiles_for_plague :: (starting_tile_id: s32, desired_depth: int) -> available_tile_ids: [..] s32 {
+    available_tile_ids: [..] s32;
+    available_tile_ids.allocator = temp;
+
+    top_left_tile_id := starting_tile_id;
+    for 0..12 {
+        top_left_tile_id = get_neighbor_tile_id_by_direction(top_left_tile_id, .NORTH_WEST);
+    }
+    for row: 0..25 {
+        for col: 0..25 {
+            tile_id := cast(s32) (top_left_tile_id + col + context.world_cols * row);
+            tile := get_tile_by_id(tile_id);
+            entities_on_tile := get_entities_on_tile(tile_id);
+
+            if ( 
+                tile != null &&
+                tile.type == .MINED &&
+                !tile_has_property(tile, .ENCASED) &&
+                !tile_has_property(tile, .WATER_STILL) &&
+                !tile_has_property(tile, .WATER_FLOWING) &&
+                !tile_has_property(tile, .LAVA_STILL) &&
+                !tile_has_property(tile, .LAVA_FLOWING) &&
+                entities_on_tile.count == 0
+            ) {
+                array_add(*available_tile_ids, tile_id);
+            }
+        }
+    }
+
+    return available_tile_ids;
+}
+
 get_entities_on_tile :: (tile_id: s32) -> [..] *Entity {
     entities_on_tile: [..] *Entity;
     entities_on_tile.allocator = temp;
@@ -5334,6 +5473,7 @@ dwarf_maybe_set_active_animation :: (dwarf: *Dwarf, active_animation_index: s64)
 entity_set_active_animation :: (entity: *$T/interface Moveable, active_animation_index: s64) {
     for * anim: entity.animations {
         anim.active = active_animation_index == it_index;
+        anim.timer_ms = 0;
     }
 }
 
@@ -6365,9 +6505,8 @@ goblin_transition_state :: (goblin: *Goblin, new_state: GoblinState) {
 shaman_transition_state :: (shaman: *Shaman, new_state: ShamanState) {
     // What to do when exiting these states
     if #complete shaman.state == {
-        case .REVEALING; entity_set_active_animation(shaman, xx ShamanAnimation.IDLE);
+        case .REVEALING;
         case .IDLE;
-        case .DECIDING;
         case .ATTACKING;
         case .SUMMONING;
     }
@@ -6377,10 +6516,10 @@ shaman_transition_state :: (shaman: *Shaman, new_state: ShamanState) {
     // What to do when entering these states
     if #complete new_state == {
         case .REVEALING;
-        case .IDLE;      entity_set_active_animation(shaman, xx ShamanAnimation.IDLE);
-        case .DECIDING;
-        case .ATTACKING; entity_set_active_animation(shaman, xx ShamanAnimation.ATTACK);
-        case .SUMMONING; shaman.summon_cooldown_ms = SHAMAN_SUMMON_COOLDOWN_MS;
+        case .IDLE;
+            entity_set_active_animation(shaman, xx ShamanAnimation.IDLE);
+        case .ATTACKING;
+        case .SUMMONING;
     }
 }
 
@@ -7545,6 +7684,7 @@ create_shaman :: (pos: Vector2) -> Shaman {
         direction = .NORTH,
         animations = animations,
         attack_cooldown_ms = SHAMAN_ATTACK_COOLDOWN_MS,
+        summon_cooldown_ms = SHAMAN_SUMMON_COOLDOWN_MS,
     };
 
     tile_id := get_tile_id_by_pos(pos);

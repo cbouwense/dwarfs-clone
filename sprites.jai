@@ -53,16 +53,15 @@ sprite_draw :: (
 }
 
 sprite_update :: (sprite: *AnimatedSprite, dt_seconds: float) -> reset_anim: bool {
-    if sprite.active {
-        sprite.timer_ms += xx (dt_seconds * 1000);
+    assert(sprite.active);
 
-        if sprite.timer_ms > sprite_animation_get_total_duration_ms(sprite) {
-            sprite.timer_ms = 0;
-            sprite.active = sprite.loops;
-            return true;
-        }
-    } else {
+    sprite.timer_ms += xx (dt_seconds * 1000);
+
+    if sprite.timer_ms > sprite_animation_get_total_duration_ms(sprite) {
         sprite.timer_ms = 0;
+        sprite.active = sprite.loops;
+        return true;
     }
+    
     return false;
 }
