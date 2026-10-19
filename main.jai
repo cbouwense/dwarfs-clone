@@ -1682,7 +1682,7 @@ update_and_draw_frame_round :: () {
 
         // PERF: caching this might not even be faster
         for *outpost: outposts {
-            outpost_tile_id := get_entity_tile_id(outpost);
+            outpost_tile_id := get_entity_canonical_tile_id(outpost);
             table_set(*tile_ids_to_outposts, xx (outpost_tile_id + 0 * context.world_cols + 0), outpost);
             table_set(*tile_ids_to_outposts, xx (outpost_tile_id + 0 * context.world_cols + 1), outpost);
             table_set(*tile_ids_to_outposts, xx (outpost_tile_id + 0 * context.world_cols + 2), outpost);
@@ -1696,7 +1696,7 @@ update_and_draw_frame_round :: () {
         
         // PERF: caching this might not even be faster
         for *shaman: shamans {
-            shaman_tile_id := get_entity_tile_id(shaman);
+            shaman_tile_id := get_entity_canonical_tile_id(shaman);
             table_set(*tile_ids_to_shamans, xx (shaman_tile_id + 0 * context.world_cols + 0), shaman);
             table_set(*tile_ids_to_shamans, xx (shaman_tile_id + 0 * context.world_cols + 1), shaman);
             table_set(*tile_ids_to_shamans, xx (shaman_tile_id + 1 * context.world_cols + 0), shaman);
@@ -2405,12 +2405,15 @@ update_and_draw_frame_round :: () {
                                     // under strict orders to stand down.
                                     if !is_dwarf_done_deciding {
                                         if dwarf.ignore_goblins_for == 0 {
-                                            detected, goblin, direction_of_goblin := detect_neighbor_cardinal(dwarf_tile_id, Goblin);
+                                            detected_goblin, goblin, direction_of_goblin := detect_neighbor_cardinal(dwarf_tile_id, Goblin);
+                                            detected_shaman, shaman, direction_of_shaman := detect_neighbor_cardinal(dwarf_tile_id, Shaman);
+                                            detected := detected_goblin || detected_shaman;
+                                            
                                             if detected {
                                                 create_dwarf_aggro_particle(dwarf.pos, dwarf.id);
 
-                                                dwarf.entity_id_attacking = goblin.id;
-                                                dwarf.direction = direction_of_goblin;
+                                                dwarf.entity_id_attacking = ifx detected_goblin then goblin.id else shaman.id;
+                                                dwarf.direction = ifx detected_goblin then direction_of_goblin else direction_of_shaman;
                                                 dwarf_transition_state(dwarf, .ATTACKING);
 
                                                 is_dwarf_done_deciding = true;
@@ -2453,7 +2456,7 @@ update_and_draw_frame_round :: () {
                                             nearby_goblin_status := deal_with_nearby_enemies(dwarf);
 
                                             dwarf_warrior_patrol :: (dwarf: *Dwarf) -> continued_patrol: bool {
-                                                dwarf_tile_id := get_entity_tile_id(dwarf);
+                                                dwarf_tile_id := get_entity_canonical_tile_id(dwarf);
                                                 tile_id_one_ahead := get_tile_id_one_ahead_in_direction(dwarf_tile_id, dwarf.direction);
                                                 tile_id_to_move_to: s32 = 0;
 
@@ -2724,31 +2727,20 @@ update_and_draw_frame_round :: () {
                                     shaman_found, shaman_index := table_find(*shaman_id_to_index, dwarf.entity_id_attacking);
                                     found := goblin_found || shaman_found;
 
-                                    entity: Entity;
-                                    if goblin_found {
-                                        goblin := *goblins[goblin_index];
-                                        entity.id   = goblin.id;
-                                        entity.pos  = goblin.pos;
-                                        entity.hp   = goblin.hp;
-                                        entity.type = goblin.type;
-                                    }
-                                    else if shaman_found {
-                                        shaman := *shamans[shaman_index];
-                                        entity.id   = shaman.id;
-                                        entity.pos  = shaman.pos;
-                                        entity.hp   = shaman.hp;
-                                        entity.type = shaman.type;
-                                    }
-
                                     if found {
-                                        entity_tile_id := get_entity_tile_id(entity);
+                                        entity : *Entity = ifx goblin_found
+                                            then cast(*Entity) *(goblins[goblin_index])
+                                            else cast(*Entity) *(shamans[shaman_index]);
+
+                                        entity_canonical_tile_id := get_entity_canonical_tile_id(entity);
+                                        entity_tile_ids := get_entity_tile_ids(entity);
 
                                         // Turn the dwarf to face whichever way it should be.
                                         if dwarf.is_facing_left  && entity.pos.x > dwarf_tile.pos.x then dwarf.is_facing_left = false;
                                         if !dwarf.is_facing_left && entity.pos.x < dwarf_tile.pos.x then dwarf.is_facing_left = true;
 
-                                        if is_tile_id_neighbor_of_tile_id_cardinal(dwarf_tile_id, entity_tile_id) {
-                                            assert_soft(dwarf.entity_id_attacking == entity.id, "Dwarf % thinks he's attacking entity % but really found goblin %", dwarf.id, dwarf.entity_id_attacking, entity.id);
+                                        if is_entity_cardinal_neighbor_of_other_entity(dwarf, entity) {
+                                            assert_soft(dwarf.entity_id_attacking == entity.id, "Dwarf % thinks he's attacking entity % but really found entity %", dwarf.id, dwarf.entity_id_attacking, entity.id);
 
                                             if did_dwarf_do_action_this_animation_frame(dwarf) {
                                                 dwarf.did_anim_action = true;
@@ -2759,21 +2751,7 @@ update_and_draw_frame_round :: () {
 
                                                 if swing_connected {
                                                     damage := dwarf_get_attack_damage(dwarf);
-
-                                                    // TODO: probably extract this
-                                                    direction_stars_should_fly: Direction;
-                                                    found_direction := false;
-                                                    for DIRECTIONS_CARDINAL {
-                                                        neighbor_tile_id := get_neighbor_tile_id_by_direction(dwarf_tile_id, it);
-                                                        if neighbor_tile_id == entity_tile_id {
-                                                            direction_stars_should_fly = it;
-                                                            found_direction = true;
-                                                            break;
-                                                        }
-                                                    }
-                                                    assert_soft(found_direction, "Was trying to figure out what direction the damage star should fly when dwarf % connected an attack on goblin %, but didn't detect the goblin as a cardinal neighbor of the dwarf\n", dwarf.id, entity.id);
-
-                                                    create_damage_particles(entity.pos, damage, direction_stars_should_fly);
+                                                    create_damage_particles(entity.pos, damage, dwarf.direction);
 
                                                     entity.hp -= damage;
 
@@ -2861,7 +2839,7 @@ update_and_draw_frame_round :: () {
 
                         is_goblin_done_updating := false;
 
-                        goblin_tile_id := get_entity_tile_id(goblin);
+                        goblin_tile_id := get_entity_canonical_tile_id(goblin);
                         goblin_tile    := get_tile_by_id(goblin_tile_id);
 
                         // Kill goblin if touching liquid
@@ -3058,13 +3036,13 @@ update_and_draw_frame_round :: () {
                                                 swing_connected := rng <= GOBLIN_HIT_CHANCE;
 
                                                 if swing_connected {
-                                                    target_entity_tile_id := get_entity_tile_id(entity);
+                                                    target_entity_canonical_tile_id := get_entity_canonical_tile_id(entity);
 
                                                     direction_stars_should_fly: Direction;
                                                     found_direction := false;
                                                     for DIRECTIONS_CARDINAL {
                                                         neighbor_tile_id := get_neighbor_tile_id_by_direction(goblin_tile_id, it);
-                                                        if neighbor_tile_id == target_entity_tile_id {
+                                                        if neighbor_tile_id == target_entity_canonical_tile_id {
                                                             direction_stars_should_fly = it;
                                                             found_direction = true;
                                                             break;
@@ -3325,7 +3303,7 @@ update_and_draw_frame_round :: () {
                                     swing_connected := rng <= SHAMAN_HIT_CHANCE;
 
                                     if swing_connected {
-                                        target_entity_tile_id := get_entity_tile_id(dwarf_to_damage_1);
+                                        target_entity_canonical_tile_id := get_entity_canonical_tile_id(dwarf_to_damage_1);
 
                                         // TODO: damage particles
 
@@ -3348,13 +3326,13 @@ update_and_draw_frame_round :: () {
                                     swing_connected := rng <= SHAMAN_HIT_CHANCE;
 
                                     if swing_connected {
-                                        target_entity_tile_id := get_entity_tile_id(dwarf_to_damage_2);
+                                        target_entity_canonical_tile_id := get_entity_canonical_tile_id(dwarf_to_damage_2);
 
                                         direction_stars_should_fly: Direction;
                                         found_direction := false;
                                         for DIRECTIONS_CARDINAL {
                                             neighbor_tile_id := get_neighbor_tile_id_by_direction(shaman_tile_id, it);
-                                            if neighbor_tile_id == target_entity_tile_id {
+                                            if neighbor_tile_id == target_entity_canonical_tile_id {
                                                 direction_stars_should_fly = it;
                                                 found_direction = true;
                                                 break;
@@ -4252,7 +4230,7 @@ update_and_draw_frame_round :: () {
                 if dwarf.state == .FIRED_BY_CANNON continue;
                 // Draw warnings onscreen
                 draw_warnings_onscreen :: (dwarf: Dwarf) {
-                    dwarf_tile_id := get_entity_tile_id(dwarf);
+                    dwarf_tile_id := get_entity_canonical_tile_id(dwarf);
 
                     dest     := get_world_rect_from_pos(dwarf.pos);
                     dest_pos := Vector2.{ dest.x, dest.y };
@@ -5310,7 +5288,7 @@ get_dwarf_warriors_assigned_to_outpost_that_are_present_at_outpost :: (outpost: 
     return dwarf_warriors_present;
 }
 
-get_entity_tile_id :: (entity: Entity) -> s32 {
+get_entity_canonical_tile_id :: (entity: Entity) -> s32 {
     entity_kind := get_entity_kind_from_type(entity.type);
     if #complete entity_kind == {
         case .Shaman; #through;
@@ -5324,11 +5302,42 @@ get_entity_tile_id :: (entity: Entity) -> s32 {
     }
 }
 
+get_entity_tile_ids :: (entity: Entity) -> [..] s32 {
+    entity_tile_ids: [..] s32;
+    entity_kind := get_entity_kind_from_type(entity.type);
+    canonical_tile_id := get_entity_canonical_tile_id(entity);
+
+    if #complete entity_kind == {
+        case .Shaman;
+            array_add(*entity_tile_ids, canonical_tile_id);
+            array_add(*entity_tile_ids, canonical_tile_id + 1);
+            array_add(*entity_tile_ids, canonical_tile_id + (cast(s32) context.world_cols));
+            array_add(*entity_tile_ids, canonical_tile_id + (cast(s32) context.world_cols) + 1);
+
+        case .Outpost;
+            array_add(*entity_tile_ids, canonical_tile_id);
+            array_add(*entity_tile_ids, canonical_tile_id + 1);
+            array_add(*entity_tile_ids, canonical_tile_id + 2);
+            array_add(*entity_tile_ids, canonical_tile_id + (cast(s32) context.world_cols));
+            array_add(*entity_tile_ids, canonical_tile_id + (cast(s32) context.world_cols) + 1);
+            array_add(*entity_tile_ids, canonical_tile_id + (cast(s32) context.world_cols) + 2);
+            array_add(*entity_tile_ids, canonical_tile_id + cast(s32) (2 * context.world_cols));
+            array_add(*entity_tile_ids, canonical_tile_id + cast(s32) (2 * context.world_cols) + 1);
+            array_add(*entity_tile_ids, canonical_tile_id + cast(s32) (2 * context.world_cols) + 2);
+            
+        case .Dwarf; #through;
+        case .Goblin;
+            array_add(*entity_tile_ids, canonical_tile_id);
+    }
+
+    return entity_tile_ids;
+}
+
 did_dwarf_do_action_this_animation_frame :: (dwarf: Dwarf) -> bool {
     anim_index   : s64;
     action_frame : int;
 
-    dwarf_tile_id := get_entity_tile_id(dwarf);
+    dwarf_tile_id := get_entity_canonical_tile_id(dwarf);
 
     if dwarf.tile_id_mining == dwarf_tile_id + context.world_cols {
         if #complete dwarf.dwarf_type == {
@@ -6228,7 +6237,7 @@ DealWithNearbyEnemyResult :: enum {
 
 deal_with_nearby_enemies :: (dwarf: *Dwarf) -> DealWithNearbyEnemyResult {
     // TODO: assert dwarf is directly on tile, I think
-    dwarf_tile_id := get_entity_tile_id(dwarf);
+    dwarf_tile_id := get_entity_canonical_tile_id(dwarf);
 
     tile_ids_to_target: [] s32;
 
@@ -6833,11 +6842,24 @@ is_tile_id_neighbor_of_tile_id_cardinal :: (my_tile_id: s32, your_tile_id: s32) 
     );
 }
 
+is_entity_cardinal_neighbor_of_other_entity :: (entity_1: Entity, entity_2: Entity) -> bool {
+    entity_1_tile_ids := get_entity_tile_ids(entity_1);
+    entity_2_tile_ids := get_entity_tile_ids(entity_2);
+    for entity_1_tile_id: entity_1_tile_ids {
+        for entity_2_tile_id: entity_2_tile_ids {
+            if is_tile_id_neighbor_of_tile_id_cardinal(entity_1_tile_id, entity_2_tile_id) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 taunt_dwarf :: (dwarf_id: s32, taunter_tile_id: s32) {
     found, dwarf_index := table_find(*dwarf_id_to_index, dwarf_id);
     assert(found);
     
-    dwarf_tile_id := get_entity_tile_id(dwarves[dwarf_index]);
+    dwarf_tile_id := get_entity_canonical_tile_id(dwarves[dwarf_index]);
     direction_to_face_taunter : Direction;
     if      taunter_tile_id == dwarf_tile_id - xx context.world_rows direction_to_face_taunter = .NORTH;
     else if taunter_tile_id == dwarf_tile_id + xx context.world_rows direction_to_face_taunter = .SOUTH;
