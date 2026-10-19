@@ -3274,15 +3274,12 @@ update_and_draw_frame_round :: () {
                                     entity_set_active_animation(shaman, xx ShamanAnimation.IDLE);
                                 }
                             }
-                            else if (
-                                it_index == xx ShamanAnimation.SUMMON &&
-                                sprite_animation_get_current_frame(anim) == SHAMAN_ANIMATION_SUMMON_FRAME_ACTION &&
-                                !shaman.did_anim_action
-                            ) {
-                                shaman.did_anim_action = true;
-
-                                tile_pos_to_spawn_plague_on := get_tile_pos_by_id(shaman.tile_id_to_spawn_plague_on);
-                                create_goblin(tile_pos_to_spawn_plague_on);
+                            else if it_index == xx ShamanAnimation.SUMMON {
+                                if sprite_animation_get_current_frame(anim) == SHAMAN_ANIMATION_SUMMON_FRAME_ACTION && !shaman.did_anim_action {
+                                    shaman.did_anim_action = true;
+                                    tile_pos_to_spawn_plague_on := get_tile_pos_by_id(shaman.tile_id_to_spawn_plague_on);
+                                    create_goblin(tile_pos_to_spawn_plague_on);
+                                }
 
                                 if animation_will_play_last_frame_this_frame {
                                     entity_set_active_animation(shaman, xx ShamanAnimation.IDLE);
@@ -3330,19 +3327,7 @@ update_and_draw_frame_round :: () {
                                     if swing_connected {
                                         target_entity_tile_id := get_entity_tile_id(dwarf_to_damage_1);
 
-                                        direction_stars_should_fly: Direction;
-                                        found_direction := false;
-                                        for DIRECTIONS_CARDINAL {
-                                            neighbor_tile_id := get_neighbor_tile_id_by_direction(shaman_tile_id, it);
-                                            if neighbor_tile_id == target_entity_tile_id {
-                                                direction_stars_should_fly = it;
-                                                found_direction = true;
-                                                break;
-                                            }
-                                        }
-                                        assert_soft(found_direction, "Was trying to figure out what direction the damage star should fly when goblin % connected an attack on entity %, but didn't detect the entity as a cardinal neighbor of the dwarf\n", shaman.id, dwarf_to_damage_1.id);
-
-                                        create_damage_particles(dwarf_to_damage_1.pos, SHAMAN_ATTACK_DAMAGE_PER_SWING, direction_stars_should_fly);
+                                        // TODO: damage particles
 
                                         dwarf_to_damage_1.hp -= SHAMAN_ATTACK_DAMAGE_PER_SWING;
 
