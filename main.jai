@@ -125,7 +125,7 @@ SHAMAN_ANIMATION_SUMMON_FRAME_DURATION_MS :: 100;
 SHAMAN_ANIMATION_SUMMON_FRAME_ACTION      :: 45;
 
 SHAMAN_SUMMON_COOLDOWN_MS :: 40000;
-SHAMAN_ATTACK_COOLDOWN_MS :: 1000;
+SHAMAN_ATTACK_COOLDOWN_MS :: 3000;
 SHAMAN_ATTACK_DAMAGE_PER_SWING :: 75;
 SHAMAN_HIT_CHANCE :: 0.80; // TODO: will have to be based on level
 SHAMAN_SPAWN_ENABLED :: true;
@@ -2722,7 +2722,7 @@ update_and_draw_frame_round :: () {
                                     }
 
                                 case .ATTACKING;
-                                    // Make sure the goblin is still alive, it's possible that other dwarves have killed it this frame.
+                                    // Make sure the entity is still alive, it's possible that other dwarves have killed it this frame.
                                     goblin_found, goblin_index := table_find(*goblin_id_to_index, dwarf.entity_id_attacking);
                                     shaman_found, shaman_index := table_find(*shaman_id_to_index, dwarf.entity_id_attacking);
                                     found := goblin_found || shaman_found;
@@ -3263,95 +3263,97 @@ update_and_draw_frame_round :: () {
                                     entity_set_active_animation(shaman, xx ShamanAnimation.IDLE);
                                 }
                             }
-                            else if (
-                                it_index == xx ShamanAnimation.ATTACK &&
-                                sprite_animation_get_current_frame(anim) == SHAMAN_ANIMATION_ATTACK_SIDE_FRAME_ACTION &&
-                                !shaman.did_anim_action
-                            ) {
-                                shaman.did_anim_action = true;
+                            else if it_index == xx ShamanAnimation.ATTACK {
+                                if sprite_animation_get_current_frame(anim) == SHAMAN_ANIMATION_ATTACK_SIDE_FRAME_ACTION && !shaman.did_anim_action {
+                                    shaman.did_anim_action = true;
 
-                                tile_id_to_damage_1: s32;
-                                tile_id_to_damage_2: s32;
+                                    tile_id_to_damage_1: s32;
+                                    tile_id_to_damage_2: s32;
 
-                                if shaman.direction == {
-                                    case .NORTH;
-                                        tile_id_to_damage_1 = shaman_tile_id - cast(s32) context.world_cols;
-                                        tile_id_to_damage_2 = tile_id_to_damage_2 + 1;
+                                    if shaman.direction == {
+                                        case .NORTH;
+                                            tile_id_to_damage_1 = shaman_tile_id - cast(s32) context.world_cols;
+                                            tile_id_to_damage_2 = tile_id_to_damage_1 + 1;
 
-                                    case .SOUTH;
-                                        tile_id_to_damage_1 = shaman_tile_id + cast(s32) (2 * context.world_cols);
-                                        tile_id_to_damage_2 = tile_id_to_damage_2 + 1;
+                                        case .SOUTH;
+                                            tile_id_to_damage_1 = shaman_tile_id + cast(s32) (2 * context.world_cols);
+                                            tile_id_to_damage_2 = tile_id_to_damage_1 + 1;
 
-                                    case .EAST;
-                                        tile_id_to_damage_1 = shaman_tile_id + 2;
-                                        tile_id_to_damage_2 = tile_id_to_damage_2 + cast(s32) context.world_cols;
+                                        case .EAST;
+                                            tile_id_to_damage_1 = shaman_tile_id + 2;
+                                            tile_id_to_damage_2 = tile_id_to_damage_1 + cast(s32) context.world_cols;
 
-                                    case .WEST;
-                                        tile_id_to_damage_1 = shaman_tile_id - 1;
-                                        tile_id_to_damage_2 = tile_id_to_damage_2 + cast(s32) context.world_cols;
-                                }
-
-                                dwarf_to_damage_1_found, dwarf_to_damage_1 := table_find(*tile_ids_to_dwarfs, tile_id_to_damage_1);
-                                dwarf_to_damage_2_found, dwarf_to_damage_2 := table_find(*tile_ids_to_dwarfs, tile_id_to_damage_2);
-                                
-                                // assert_soft(dwarf_to_damage_1_found || dwarf_to_damage_2_found, "Expected at least one dwarf to be attacked by shaman, but found none. This might not actually be a problem, but it seems like a reasonable assumption as I am writing this. If this is not a problem, remove this assesrtion.");
-
-                                // TODO: function
-                                if dwarf_to_damage_1_found then {
-                                    // Hit check
-                                    rng := random_get_within_range(0, 1);
-                                    swing_connected := rng <= SHAMAN_HIT_CHANCE;
-
-                                    if swing_connected {
-                                        target_entity_canonical_tile_id := get_entity_canonical_tile_id(dwarf_to_damage_1);
-
-                                        // TODO: damage particles
-
-                                        dwarf_to_damage_1.hp -= SHAMAN_ATTACK_DAMAGE_PER_SWING;
-
-                                        if dwarf_to_damage_1.hp <= 0 {
-                                            kill_dwarf_by_id(dwarf_to_damage_1.id);
-
-                                            shaman_transition_state(shaman, .SUMMONING);
-                                        }
-                                    } else {
-                                        create_miss_particle(Vector2.{ dwarf_to_damage_1.pos.x, dwarf_to_damage_1.pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 });
+                                        case .WEST;
+                                            tile_id_to_damage_1 = shaman_tile_id - 1;
+                                            tile_id_to_damage_2 = tile_id_to_damage_1 + cast(s32) context.world_cols;
                                     }
-                                }
 
-                                // TODO: function
-                                if dwarf_to_damage_2_found then {
-                                    // Hit check
-                                    rng := random_get_within_range(0, 1);
-                                    swing_connected := rng <= SHAMAN_HIT_CHANCE;
+                                    dwarf_to_damage_1_found, dwarf_to_damage_1 := table_find(*tile_ids_to_dwarfs, tile_id_to_damage_1);
+                                    dwarf_to_damage_2_found, dwarf_to_damage_2 := table_find(*tile_ids_to_dwarfs, tile_id_to_damage_2);
+                                    
+                                    // assert_soft(dwarf_to_damage_1_found || dwarf_to_damage_2_found, "Expected at least one dwarf to be attacked by shaman, but found none. This might not actually be a problem, but it seems like a reasonable assumption as I am writing this. If this is not a problem, remove this assesrtion.");
 
-                                    if swing_connected {
-                                        target_entity_canonical_tile_id := get_entity_canonical_tile_id(dwarf_to_damage_2);
+                                    // TODO: function
+                                    if dwarf_to_damage_1_found then {
+                                        // Hit check
+                                        rng := random_get_within_range(0, 1);
+                                        swing_connected := rng <= SHAMAN_HIT_CHANCE;
 
-                                        direction_stars_should_fly: Direction;
-                                        found_direction := false;
-                                        for DIRECTIONS_CARDINAL {
-                                            neighbor_tile_id := get_neighbor_tile_id_by_direction(shaman_tile_id, it);
-                                            if neighbor_tile_id == target_entity_canonical_tile_id {
-                                                direction_stars_should_fly = it;
-                                                found_direction = true;
-                                                break;
+                                        if swing_connected {
+                                            target_entity_canonical_tile_id := get_entity_canonical_tile_id(dwarf_to_damage_1);
+
+                                            // TODO: damage particles
+
+                                            dwarf_to_damage_1.hp -= SHAMAN_ATTACK_DAMAGE_PER_SWING;
+
+                                            if dwarf_to_damage_1.hp <= 0 {
+                                                kill_dwarf_by_id(dwarf_to_damage_1.id);
+
+                                                shaman_transition_state(shaman, .SUMMONING);
                                             }
+                                        } else {
+                                            create_miss_particle(Vector2.{ dwarf_to_damage_1.pos.x, dwarf_to_damage_1.pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 });
                                         }
-                                        assert_soft(found_direction, "Was trying to figure out what direction the damage star should fly when goblin % connected an attack on entity %, but didn't detect the entity as a cardinal neighbor of the dwarf\n", shaman.id, dwarf_to_damage_2.id);
-
-                                        create_damage_particles(dwarf_to_damage_2.pos, SHAMAN_ATTACK_DAMAGE_PER_SWING, direction_stars_should_fly);
-
-                                        dwarf_to_damage_2.hp -= SHAMAN_ATTACK_DAMAGE_PER_SWING;
-
-                                        if dwarf_to_damage_2.hp <= 0 {
-                                            kill_dwarf_by_id(dwarf_to_damage_2.id);
-
-                                            shaman_transition_state(shaman, .SUMMONING);
-                                        }
-                                    } else {
-                                        create_miss_particle(Vector2.{ dwarf_to_damage_2.pos.x, dwarf_to_damage_2.pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 });
                                     }
+
+                                    // TODO: function
+                                    if dwarf_to_damage_2_found then {
+                                        // Hit check
+                                        rng := random_get_within_range(0, 1);
+                                        swing_connected := rng <= SHAMAN_HIT_CHANCE;
+
+                                        if swing_connected {
+                                            target_entity_canonical_tile_id := get_entity_canonical_tile_id(dwarf_to_damage_2);
+
+                                            direction_stars_should_fly: Direction;
+                                            found_direction := false;
+                                            for DIRECTIONS_CARDINAL {
+                                                neighbor_tile_id := get_neighbor_tile_id_by_direction(shaman_tile_id, it);
+                                                if neighbor_tile_id == target_entity_canonical_tile_id {
+                                                    direction_stars_should_fly = it;
+                                                    found_direction = true;
+                                                    break;
+                                                }
+                                            }
+                                            assert_soft(found_direction, "Was trying to figure out what direction the damage star should fly when goblin % connected an attack on entity %, but didn't detect the entity as a cardinal neighbor of the dwarf\n", shaman.id, dwarf_to_damage_2.id);
+
+                                            create_damage_particles(dwarf_to_damage_2.pos, SHAMAN_ATTACK_DAMAGE_PER_SWING, direction_stars_should_fly);
+
+                                            dwarf_to_damage_2.hp -= SHAMAN_ATTACK_DAMAGE_PER_SWING;
+
+                                            if dwarf_to_damage_2.hp <= 0 {
+                                                kill_dwarf_by_id(dwarf_to_damage_2.id);
+
+                                                shaman_transition_state(shaman, .SUMMONING);
+                                            }
+                                        } else {
+                                            create_miss_particle(Vector2.{ dwarf_to_damage_2.pos.x, dwarf_to_damage_2.pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 });
+                                        }
+                                    }
+                                }
+
+                                if animation_will_play_last_frame_this_frame {
+                                    entity_set_active_animation(shaman, xx ShamanAnimation.IDLE);
                                 }
                             }
 
@@ -4125,6 +4127,38 @@ update_and_draw_frame_round :: () {
                             shaman.pos.x - 2 * TILEMAP_SHAMAN_TILE_PADDING_X,
                             shaman.pos.y - 2 * TILEMAP_SHAMAN_TILE_PADDING_Y,
                         };
+
+                        shaman_tile_id := get_tile_id_by_pos(shaman.pos);
+
+                        tile_id_to_damage_1: s32;
+                        tile_id_to_damage_2: s32;
+
+                        if shaman.direction == {
+                            case .NORTH;
+                                tile_id_to_damage_1 = shaman_tile_id - cast(s32) context.world_cols;
+                                tile_id_to_damage_2 = tile_id_to_damage_1 + 1;
+
+                            case .SOUTH;
+                                tile_id_to_damage_1 = shaman_tile_id + cast(s32) (2 * context.world_cols);
+                                tile_id_to_damage_2 = tile_id_to_damage_1 + 1;
+
+                            case .EAST;
+                                tile_id_to_damage_1 = shaman_tile_id + 2;
+                                tile_id_to_damage_2 = tile_id_to_damage_1 + cast(s32) context.world_cols;
+
+                            case .WEST;
+                                tile_id_to_damage_1 = shaman_tile_id - 1;
+                                tile_id_to_damage_2 = tile_id_to_damage_1 + cast(s32) context.world_cols;
+                        }
+
+                        tile_pos_to_damage_1 := get_tile_pos_by_id(tile_id_to_damage_1);
+                        tile_pos_to_damage_2 := get_tile_pos_by_id(tile_id_to_damage_2);
+
+                        tile_center_pos_to_damage_1 := get_rect_center(get_world_rect_from_pos(tile_pos_to_damage_1));
+                        tile_center_pos_to_damage_2 := get_rect_center(get_world_rect_from_pos(tile_pos_to_damage_2));
+
+                        DrawCircleV(tile_center_pos_to_damage_1, 3.0, RED);
+                        DrawCircleV(tile_center_pos_to_damage_2, 3.0, RED);
 
                         sprite_draw(
                             anim,
@@ -7758,7 +7792,7 @@ create_shaman :: (pos: Vector2) -> Shaman {
         state     = .REVEALING,
         direction = .NORTH,
         animations = animations,
-        attack_cooldown_ms = SHAMAN_ATTACK_COOLDOWN_MS,
+        attack_cooldown_ms = 0,
         summon_cooldown_ms = SHAMAN_SUMMON_COOLDOWN_MS,
     };
 
