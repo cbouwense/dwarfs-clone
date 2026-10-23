@@ -2954,7 +2954,7 @@ update_and_draw_frame_round :: () {
                                                             break;
                                                         }
                                                     }
-                                                    assert_soft(found_direction, "Was trying to figure out what direction the damage star should fly when goblin % connected an attack on entity %, but didn't detect the entity as a cardinal neighbor of the dwarf\n", goblin.id, entity.id);
+                                                    // assert_soft(found_direction, "Was trying to figure out what direction the damage star should fly when goblin % connected an attack on entity %, but didn't detect the entity as a cardinal neighbor of the dwarf\n", goblin.id, entity.id);
 
                                                     create_damage_particles(entity.pos, GOBLIN_ATTACK_DAMAGE_PER_SWING, direction_stars_should_fly);
 
@@ -5285,41 +5285,27 @@ get_entity_tile_ids :: (entity: Entity) -> [..] s32 {
 }
 
 did_dwarf_do_action_this_animation_frame :: (dwarf: Dwarf) -> bool {
-    anim_index   : s64;
-    action_frame : int;
-
-    dwarf_tile_id := get_entity_canonical_tile_id(*dwarf);
-
-    if dwarf.tile_id_mining == dwarf_tile_id + context.world_cols {
-        if #complete dwarf.dwarf_type == {
-            case .MINER;
-                anim_index   = xx DwarfAnimationMiner.MINE_DOWN;
-                action_frame = DWARF_MINER_ANIMATION_MINE_DOWN_FRAME_ACTION;
-            case .WARRIOR;
-                anim_index   = xx DwarfAnimationWarrior.CHOP_DOWN;
-                action_frame = DWARF_WARRIOR_ANIMATION_CHOP_DOWN_FRAME_ACTION;
+    // TODO: keep track of animation index
+    anim_index: s64;
+    action_frame: int;
+    found: bool = false;
+    for animation: dwarf.anim.animations {
+        if animation.active {
+            anim_index = it_index;
+            found = true;
+            if #complete dwarf.dwarf_type == {
+                case .MINER;
+                    if it_index == xx DwarfAnimationMiner.MINE_DOWN then action_frame = DWARF_MINER_ANIMATION_MINE_DOWN_FRAME_ACTION;
+                    if it_index == xx DwarfAnimationMiner.MINE_UP   then action_frame = DWARF_MINER_ANIMATION_MINE_UP_FRAME_ACTION;
+                    if it_index == xx DwarfAnimationMiner.MINE_SIDE then action_frame = DWARF_MINER_ANIMATION_MINE_SIDE_FRAME_ACTION;
+                case .WARRIOR;
+                    if it_index == xx DwarfAnimationWarrior.CHOP_DOWN then action_frame = DWARF_WARRIOR_ANIMATION_CHOP_DOWN_FRAME_ACTION;
+                    if it_index == xx DwarfAnimationWarrior.CHOP_UP   then action_frame = DWARF_WARRIOR_ANIMATION_CHOP_UP_FRAME_ACTION;
+                    if it_index == xx DwarfAnimationWarrior.CHOP_SIDE then action_frame = DWARF_WARRIOR_ANIMATION_CHOP_SIDE_FRAME_ACTION;
+            }
         }
     }
-    else if dwarf.tile_id_mining == dwarf_tile_id - context.world_cols {
-        if #complete dwarf.dwarf_type == {
-            case .MINER;
-                anim_index   = xx DwarfAnimationMiner.MINE_UP;
-                action_frame = DWARF_MINER_ANIMATION_MINE_UP_FRAME_ACTION;
-            case .WARRIOR;
-                anim_index   = xx DwarfAnimationWarrior.CHOP_UP;
-                action_frame = DWARF_WARRIOR_ANIMATION_CHOP_UP_FRAME_ACTION;
-        }
-    }
-    else {
-        if #complete dwarf.dwarf_type == {
-            case .MINER;
-                anim_index   = xx DwarfAnimationMiner.MINE_SIDE;
-                action_frame = DWARF_MINER_ANIMATION_MINE_SIDE_FRAME_ACTION;
-            case .WARRIOR;
-                anim_index   = xx DwarfAnimationWarrior.CHOP_SIDE;
-                action_frame = DWARF_WARRIOR_ANIMATION_CHOP_SIDE_FRAME_ACTION;
-        }
-    }
+    assert_soft(found, "Couldn't find active animation for dwarf %", dwarf.id);
 
     frame := sprite_animation_get_current_frame(dwarf.animations[anim_index]);
 

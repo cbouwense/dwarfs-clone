@@ -10,7 +10,6 @@
 
 - Water doesn't spread immediately
 - Dwarf warrior unable to path to a goblin when standing behind a miner who is attacking that goblin.
-- Dwarf warriors who start attacking a goblin before the goblin has reached its destination never seem to do damange to the goblin even once the goblin has arrived.
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Core gameplay
