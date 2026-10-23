@@ -8,10 +8,9 @@
 # Bugs
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- Pretty sure get_entity_tile_id is broken for moveable entities
-- Aggro logic is fucked up. Dwarves don't seem to wait where they should when goblins coming to them.
 - Water doesn't spread immediately
 - Dwarf warrior unable to path to a goblin when standing behind a miner who is attacking that goblin.
+- Dwarf warriors who start attacking a goblin before the goblin has reached its destination never seem to do damange to the goblin even once the goblin has arrived.
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Core gameplay

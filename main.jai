@@ -1627,61 +1627,21 @@ update_and_draw_frame_round :: () {
 
     // Populate caches
     {
-        for *dwarf: dwarves {
-            dwarf_tile_id: s32;
-
-            if #complete dwarf.state == {
-                // If the dwarf is dead center on a tile and not moving, it's on that tile.
-                case .IDLE;      #through;
-                case .DECIDING;  #through;
-                case .ATTACKING; #through;
-                case .FIRED_BY_CANNON; #through; // TODO: is this right for FIRED_BY_CANNON?
-                case .MINING;
-                    dwarf_tile_id = get_tile_id_by_pos(dwarf.pos);
-
-                // If the dwarf is moving, then they're "on" the tile that they're moving to.
-                case .MOVING;
-                    assert_soft(dwarf.tile_ids_on_path.count > 0, "Dwarf was in move state but had nowhere to go\n");
-                    dwarf_tile_id = dwarf.tile_ids_on_path[0];
-            }
-
-            assert_soft(dwarf_tile_id > 0, "Expected dwarf_tile_id to have been set, but got %\n", dwarf_tile_id);
-            table_set(*tile_ids_to_dwarfs, dwarf_tile_id, dwarf);
-
-            if      dwarf.dwarf_type == .MINER   context.dwarf_miner_count += 1;
-            else if dwarf.dwarf_type == .WARRIOR context.dwarf_warrior_count += 1;
-            else    assert_soft(false, "Dwarf % was neither a miner nor warrior\n", dwarf.id);
+        for * dwarf: dwarves {
+            table_set(*tile_ids_to_dwarfs, get_entity_canonical_tile_id(dwarf), dwarf);
         }
-
-        for *goblin: goblins {
-            if #complete goblin.state == {
-                // If the goblin is dead center on a tile and not moving, it's on that tile.
-                case .IDLE;     #through;
-                case .DECIDING; #through;
-                case .ATTACKING;
-                    goblin_tile_id := get_tile_id_by_pos(goblin.pos);
-
-                    assert_soft(goblin_tile_id > 0, "Expected goblin_tile_id to have been set, but got % \n", goblin_tile_id);
-
-                    table_set(*tile_ids_to_goblins, goblin_tile_id, goblin);
-
-                // If the goblin is moving, then count both the tile they're moving from and to.
-                case .MOVING;
-                    assert_soft(goblin.tile_ids_on_path.count > 0, "Goblin was in move state but had nowhere to go\n");
-
-                    goblin_tile_id_from := get_previous_tile_id(goblin);
-                    goblin_tile_id_to   := goblin.tile_ids_on_path[0];
-
-                    assert_soft(goblin_tile_id_from > 0, "Expected goblin_tile_id_from to have been set, but got % \n", goblin_tile_id_from);
-                    assert_soft(goblin_tile_id_to > 0,   "Expected goblin_tile_id_to to have been set, but got % \n",   goblin_tile_id_to);
-
-                    table_set(*tile_ids_to_goblins, goblin_tile_id_to,   goblin);
-                    table_set(*tile_ids_to_goblins, goblin_tile_id_from, goblin);
-            }
+        
+        for * goblin: goblins {
+            // NOTE: this used to include the tile the goblin was coming from, because that
+            // is the behavior I noticed in the real game, at least when it came to the ability for other goblins to move to adjacent
+            // tile (i.e. goblins couldn't move to tiles that another goblin was either moving from or to). However, I believe this is
+            // causing problems with dwarf pathing. I'm going to make it only count the tiles that the goblins are moving to, like it
+            // does for dwarves, and see how it goes.
+            table_set(*tile_ids_to_goblins, get_entity_canonical_tile_id(goblin), goblin);
         }
 
         // PERF: caching this might not even be faster
-        for *outpost: outposts {
+        for * outpost: outposts {
             outpost_tile_id := get_entity_canonical_tile_id(outpost);
             table_set(*tile_ids_to_outposts, xx (outpost_tile_id + 0 * context.world_cols + 0), outpost);
             table_set(*tile_ids_to_outposts, xx (outpost_tile_id + 0 * context.world_cols + 1), outpost);
@@ -1695,7 +1655,7 @@ update_and_draw_frame_round :: () {
         }
         
         // PERF: caching this might not even be faster
-        for *shaman: shamans {
+        for * shaman: shamans {
             shaman_tile_id := get_entity_canonical_tile_id(shaman);
             table_set(*tile_ids_to_shamans, xx (shaman_tile_id + 0 * context.world_cols + 0), shaman);
             table_set(*tile_ids_to_shamans, xx (shaman_tile_id + 0 * context.world_cols + 1), shaman);
@@ -2370,10 +2330,11 @@ update_and_draw_frame_round :: () {
                                         unset_tile_property(tile, .HAS_TREASURE);
 
                                         // Look for more treasure
-                                        found, _, tile_ids_to_new_treasure := detect_tile_within_radius(dwarf_tile_id, 10, is_tile_treasure);
+                                        found, _, tile_ids_to_new_treasure := detect_tile_within_radius(dwarf_tile_id, 10, is_tile_treasure, true, dwarf.id);
                                         if found {
                                             array_reset(*dwarf.tile_ids_on_path);
                                             array_copy(*dwarf.tile_ids_on_path, tile_ids_to_new_treasure);
+                                            table_set(*tile_ids_to_dwarfs, tile_ids_to_new_treasure[0], dwarf);
                                             set_entity_direction_to_face_next_target(dwarf);
 
                                             // Shouldn't this be moving?... or nothing?
@@ -2401,7 +2362,7 @@ update_and_draw_frame_round :: () {
                                         dwarf_can_remain_undecided = true;
                                     }
 
-                                    // Regardless of the type of dwarf, if there's a goblin right on your ass, defend yourself unless you're
+                                    // Regardless of the type of dwarf, if there's an enemy right on your ass, defend yourself unless you're
                                     // under strict orders to stand down.
                                     if !is_dwarf_done_deciding {
                                         if dwarf.ignore_goblins_for == 0 {
@@ -2430,6 +2391,7 @@ update_and_draw_frame_round :: () {
                                         for path: paths {
                                             if dwarf_tile_id == path.start_tile_id {
                                                 tile_ids_on_path := get_tile_ids_on_path(path);
+                                                assert_soft(tile_ids_on_path.count > 0, "Dwarf % was trying to follow arrow but it went nowhere?\n", dwarf.id);
 
                                                 // Don't include the start tile, because then we softlock.
                                                 tile_ids_on_path.data  += 1;
@@ -2438,6 +2400,7 @@ update_and_draw_frame_round :: () {
                                                 // TODO: extract this
                                                 array_reset(*(dwarf.tile_ids_on_path));
                                                 array_copy(*(dwarf.tile_ids_on_path), tile_ids_on_path);
+                                                table_set(*tile_ids_to_dwarfs, tile_ids_on_path[0], dwarf);
                                                 set_entity_direction_to_face_next_target(dwarf);
 
                                                 dwarf.is_moving_quickly = true;
@@ -2448,71 +2411,13 @@ update_and_draw_frame_round :: () {
                                         }
                                     }
 
+                                    // Dwarf warrior decisions
                                     if !is_dwarf_done_deciding {
                                         // PERF: is this too expensive to do every frame?
                                         //
                                         // If the dwarf is a warrior, actively seek out enemies
                                         if dwarf.dwarf_type == .WARRIOR {
                                             nearby_goblin_status := deal_with_nearby_enemies(dwarf);
-
-                                            dwarf_warrior_patrol :: (dwarf: *Dwarf) -> continued_patrol: bool {
-                                                dwarf_tile_id := get_entity_canonical_tile_id(dwarf);
-                                                tile_id_one_ahead := get_tile_id_one_ahead_in_direction(dwarf_tile_id, dwarf.direction);
-                                                tile_id_to_move_to: s32 = 0;
-
-                                                // If we are on the outpost floor to which we are assigned, then go straight
-                                                // for as long as you can. If you run into another dwarf, turn around. If you
-                                                // run into a tile that is not the outpost floor, then check left and right
-                                                // for more outpost floor.
-                                                if is_tile_outpost_floor(tile_id_one_ahead) || is_tile_home_base_floor(tile_id_one_ahead) {
-                                                    array_reset(*dwarf.tile_ids_on_path); // We probably don't need to reset this here, but let's do it anyways.
-                                                    tile_has_dwarf_on_it := table_contains(*tile_ids_to_dwarfs, tile_id_one_ahead);
-
-                                                    if tile_has_dwarf_on_it {
-                                                        direction_behind_dwarf := opposite_cardinal_direction(dwarf.direction);
-                                                        tile_id_one_behind := get_tile_id_one_ahead_in_direction(dwarf_tile_id, direction_behind_dwarf);
-                                                        tile_id_to_move_to = tile_id_one_behind;
-                                                    } else {
-                                                        tile_id_to_move_to = tile_id_one_ahead;
-                                                    }
-                                                } else {
-                                                    direction_to_the_left  := get_direction_to_the_left(dwarf.direction);
-                                                    direction_to_the_right := get_direction_to_the_right(dwarf.direction);
-
-                                                    tile_id_to_the_left  := get_tile_id_one_ahead_in_direction(dwarf_tile_id, direction_to_the_left);
-                                                    tile_id_to_the_right := get_tile_id_one_ahead_in_direction(dwarf_tile_id, direction_to_the_right);
-
-                                                    if is_tile_outpost_floor(tile_id_to_the_left) || is_tile_home_base_floor(tile_id_to_the_left) {
-                                                        tile_to_the_left_has_dwarf_on_it := table_contains(*tile_ids_to_dwarfs, tile_id_to_the_left);
-                                                        if tile_to_the_left_has_dwarf_on_it {
-                                                            direction_behind_dwarf := opposite_cardinal_direction(dwarf.direction);
-                                                            tile_id_one_behind := get_tile_id_one_ahead_in_direction(dwarf_tile_id, direction_behind_dwarf);
-                                                            tile_id_to_move_to = tile_id_one_behind;
-                                                        } else {
-                                                            tile_id_to_move_to = tile_id_to_the_left;
-                                                        }
-                                                    }
-                                                    else if is_tile_outpost_floor(tile_id_to_the_right) || is_tile_home_base_floor(tile_id_to_the_right) {
-                                                        tile_to_the_right_has_dwarf_on_it := table_contains(*tile_ids_to_dwarfs, tile_id_to_the_right);
-                                                        if tile_to_the_right_has_dwarf_on_it {
-                                                            direction_behind_dwarf := opposite_cardinal_direction(dwarf.direction);
-                                                            tile_id_one_behind := get_tile_id_one_ahead_in_direction(dwarf_tile_id, direction_behind_dwarf);
-                                                            tile_id_to_move_to = tile_id_one_behind;
-                                                        } else {
-                                                            tile_id_to_move_to = tile_id_to_the_right;
-                                                        }
-                                                    }
-                                                }
-
-                                                // If there we no outpost floors, you're not on patrol. This means that you
-                                                // just need to wander like a normal miner dwarf, with the exception that
-                                                // you shouldn't try to mine through walls. This is handled elsewhere.
-                                                if tile_id_to_move_to == 0 return false;
-
-                                                array_add(*dwarf.tile_ids_on_path, tile_id_to_move_to);
-                                                dwarf_transition_state(dwarf, .MOVING);
-                                                return true;
-                                            }
 
                                             if nearby_goblin_status == .NEARBY_ENEMY_NOT_FOUND {
                                                 // TODO: probably need more here
@@ -2603,9 +2508,7 @@ update_and_draw_frame_round :: () {
 
                                     // assert_soft(dwarf.pos.x == target_tile_pos.x || dwarf.pos.y == target_tile_pos.y, "Dwarf % is going at an angle", dwarf.id);
 
-                                    // TODO: #if DEBUG
                                     if !is_tile_id_walkable_for_entity(target_tile_id, dwarf.id) {
-                                        // print_vars(get_tile_by_id(target_tile_id));
                                         assert_soft(false, "Dwarf % is trying to move into the invalid tile %\n", dwarf.id, target_tile_id);
                                     }
 
@@ -2694,15 +2597,17 @@ update_and_draw_frame_round :: () {
                                                 // cave.
                                                 if dwarf.dwarf_type == .MINER {
                                                     if just_mined_iron {
-                                                        found_next_iron_in_deposit, _, tile_ids_to_next_iron_tile := detect_tile_within_radius(dwarf_tile_id, 3, is_tile_iron);
+                                                        found_next_iron_in_deposit, _, tile_ids_to_next_iron_tile :=
+                                                            detect_tile_within_radius(dwarf_tile_id, 3, is_tile_iron, false, dwarf.id);
                                                         if found_next_iron_in_deposit {
                                                             array_reset(*dwarf.tile_ids_on_path);
                                                             array_copy(*dwarf.tile_ids_on_path, tile_ids_to_next_iron_tile);
+                                                            table_set(*tile_ids_to_dwarfs, tile_ids_to_next_iron_tile[0], dwarf);
                                                         }
                                                     }
 
                                                     if revealed_cave && cave_type == .TREASURE {
-                                                        found, _, tile_ids_to_next_treasure_tile := detect_tile_within_radius(dwarf.tile_id_mining, 10, is_tile_treasure);
+                                                        found, _, tile_ids_to_next_treasure_tile := detect_tile_within_radius(dwarf.tile_id_mining, 10, is_tile_treasure, true, dwarf.id);
                                                         if found {
                                                             // Teleport dwarf to the center of the tile he's standing on before changing his pathing.
                                                             // Without doing this, the dwarf can end up being misaligned.
@@ -2710,6 +2615,7 @@ update_and_draw_frame_round :: () {
 
                                                             array_reset(*dwarf.tile_ids_on_path);
                                                             array_copy(*dwarf.tile_ids_on_path, tile_ids_to_next_treasure_tile);
+                                                            table_set(*tile_ids_to_dwarfs, tile_ids_to_next_treasure_tile[0], dwarf);
                                                         }
                                                     }
                                                 }
@@ -2894,7 +2800,7 @@ update_and_draw_frame_round :: () {
 
                                     // If there are any dwarves within 3 tiles, move towards them.
                                     if !is_goblin_done_deciding {
-                                        detected, dwarf, tile_ids_path := detect_entity_within_radius(Dwarf, goblin_tile_id, 3);
+                                        detected, dwarf, tile_ids_path := detect_entity_within_radius(Dwarf, goblin_tile_id, 3, true, goblin.id);
 
                                         if detected {
                                             if goblin_tile_id != get_tile_id_by_pos(dwarf.pos) {
@@ -2916,7 +2822,7 @@ update_and_draw_frame_round :: () {
 
                                     // If there are any outposts within 10 tiles, move towards them.
                                     if !is_goblin_done_deciding {
-                                        detected, outpost, tile_ids_path := detect_entity_within_radius(Outpost, goblin_tile_id, 10);
+                                        detected, outpost, tile_ids_path := detect_entity_within_radius(Outpost, goblin_tile_id, 10, true, goblin.id);
 
                                         if detected {
                                             if goblin_tile_id != get_tile_id_by_pos(outpost.pos) {
@@ -4264,7 +4170,7 @@ update_and_draw_frame_round :: () {
                 if dwarf.state == .FIRED_BY_CANNON continue;
                 // Draw warnings onscreen
                 draw_warnings_onscreen :: (dwarf: Dwarf) {
-                    dwarf_tile_id := get_entity_canonical_tile_id(dwarf);
+                    dwarf_tile_id := get_entity_canonical_tile_id(*dwarf);
 
                     dest     := get_world_rect_from_pos(dwarf.pos);
                     dest_pos := Vector2.{ dest.x, dest.y };
@@ -5322,24 +5228,35 @@ get_dwarf_warriors_assigned_to_outpost_that_are_present_at_outpost :: (outpost: 
     return dwarf_warriors_present;
 }
 
-get_entity_canonical_tile_id :: (entity: Entity) -> s32 {
+get_entity_canonical_tile_id :: (entity: *Entity) -> s32 {
     entity_kind := get_entity_kind_from_type(entity.type);
     if #complete entity_kind == {
         case .Shaman; #through;
         case .Outpost;
             return get_tile_id_by_pos(entity.pos);
 
-        case .Dwarf; #through;
+        case .Dwarf;
+            dwarf: Dwarf = cast(*Dwarf) entity;
+            if dwarf.state == .MOVING {
+                return dwarf.tile_ids_on_path[0];
+            } else {
+                return get_tile_id_by_pos(entity.pos);
+            }
+            
         case .Goblin;
-            entity_center := get_rect_center(get_world_rect_from_pos(entity.pos));
-            return get_tile_id_by_pos(entity_center);
+            goblin: Goblin = cast(*Goblin) entity;
+            if goblin.state == .MOVING {
+                return goblin.tile_ids_on_path[0];
+            } else {
+                return get_tile_id_by_pos(entity.pos);
+            }
     }
 }
 
 get_entity_tile_ids :: (entity: Entity) -> [..] s32 {
     entity_tile_ids: [..] s32;
     entity_kind := get_entity_kind_from_type(entity.type);
-    canonical_tile_id := get_entity_canonical_tile_id(entity);
+    canonical_tile_id := get_entity_canonical_tile_id(*entity);
 
     if #complete entity_kind == {
         case .Shaman;
@@ -5371,7 +5288,7 @@ did_dwarf_do_action_this_animation_frame :: (dwarf: Dwarf) -> bool {
     anim_index   : s64;
     action_frame : int;
 
-    dwarf_tile_id := get_entity_canonical_tile_id(dwarf);
+    dwarf_tile_id := get_entity_canonical_tile_id(*dwarf);
 
     if dwarf.tile_id_mining == dwarf_tile_id + context.world_cols {
         if #complete dwarf.dwarf_type == {
@@ -6264,6 +6181,66 @@ set_tile_ids_on_path :: (entity: *$T/interface Moveable, tile_ids: *[] s32) {
     array_copy(*entity.tile_ids_on_path, tile_ids.*);
 }
 
+dwarf_warrior_patrol :: (dwarf: *Dwarf) -> continued_patrol: bool {
+    dwarf_tile_id := get_entity_canonical_tile_id(dwarf);
+    tile_id_one_ahead := get_tile_id_one_ahead_in_direction(dwarf_tile_id, dwarf.direction);
+    tile_id_to_move_to: s32 = 0;
+
+    // If we are on the outpost floor to which we are assigned, then go straight
+    // for as long as you can. If you run into another dwarf, turn around. If you
+    // run into a tile that is not the outpost floor, then check left and right
+    // for more outpost floor.
+    if is_tile_outpost_floor(tile_id_one_ahead) || is_tile_home_base_floor(tile_id_one_ahead) {
+        array_reset(*dwarf.tile_ids_on_path); // We probably don't need to reset this here, but let's do it anyways.
+        tile_has_dwarf_on_it := table_contains(*tile_ids_to_dwarfs, tile_id_one_ahead);
+
+        if tile_has_dwarf_on_it {
+            direction_behind_dwarf := opposite_cardinal_direction(dwarf.direction);
+            tile_id_one_behind := get_tile_id_one_ahead_in_direction(dwarf_tile_id, direction_behind_dwarf);
+            tile_id_to_move_to = tile_id_one_behind;
+        } else {
+            tile_id_to_move_to = tile_id_one_ahead;
+        }
+    } else {
+        direction_to_the_left  := get_direction_to_the_left(dwarf.direction);
+        direction_to_the_right := get_direction_to_the_right(dwarf.direction);
+
+        tile_id_to_the_left  := get_tile_id_one_ahead_in_direction(dwarf_tile_id, direction_to_the_left);
+        tile_id_to_the_right := get_tile_id_one_ahead_in_direction(dwarf_tile_id, direction_to_the_right);
+
+        if is_tile_outpost_floor(tile_id_to_the_left) || is_tile_home_base_floor(tile_id_to_the_left) {
+            tile_to_the_left_has_dwarf_on_it := table_contains(*tile_ids_to_dwarfs, tile_id_to_the_left);
+            if tile_to_the_left_has_dwarf_on_it {
+                direction_behind_dwarf := opposite_cardinal_direction(dwarf.direction);
+                tile_id_one_behind := get_tile_id_one_ahead_in_direction(dwarf_tile_id, direction_behind_dwarf);
+                tile_id_to_move_to = tile_id_one_behind;
+            } else {
+                tile_id_to_move_to = tile_id_to_the_left;
+            }
+        }
+        else if is_tile_outpost_floor(tile_id_to_the_right) || is_tile_home_base_floor(tile_id_to_the_right) {
+            tile_to_the_right_has_dwarf_on_it := table_contains(*tile_ids_to_dwarfs, tile_id_to_the_right);
+            if tile_to_the_right_has_dwarf_on_it {
+                direction_behind_dwarf := opposite_cardinal_direction(dwarf.direction);
+                tile_id_one_behind := get_tile_id_one_ahead_in_direction(dwarf_tile_id, direction_behind_dwarf);
+                tile_id_to_move_to = tile_id_one_behind;
+            } else {
+                tile_id_to_move_to = tile_id_to_the_right;
+            }
+        }
+    }
+
+    // If there we no outpost floors, you're not on patrol. This means that you
+    // just need to wander like a normal miner dwarf, with the exception that
+    // you shouldn't try to mine through walls. This is handled elsewhere.
+    if tile_id_to_move_to == 0 return false;
+
+    array_add(*dwarf.tile_ids_on_path, tile_id_to_move_to);
+    table_set(*tile_ids_to_dwarfs, tile_id_to_move_to, dwarf);
+    dwarf_transition_state(dwarf, .MOVING);
+    return true;
+}
+
 DealWithNearbyEnemyResult :: enum {
     NEARBY_ENEMY_FOUND;
     NEARBY_ENEMY_NOT_FOUND;
@@ -6272,34 +6249,15 @@ DealWithNearbyEnemyResult :: enum {
 deal_with_nearby_enemies :: (dwarf: *Dwarf) -> DealWithNearbyEnemyResult {
     // TODO: assert dwarf is directly on tile, I think
     dwarf_tile_id := get_entity_canonical_tile_id(dwarf);
-
-    tile_ids_to_target: [] s32;
-
-    detected_goblin, goblin, tile_ids_to_goblin_target := detect_entity_within_radius(Goblin, dwarf_tile_id, 3);
-    detected_shaman, shaman, tile_ids_to_shaman_target := detect_entity_within_radius(Shaman, dwarf_tile_id, 3);
-
-    // TODO: function for this or something
-    entity: Entity;
-    if detected_goblin {
-        entity.id   = goblin.id;
-        entity.pos  = goblin.pos;
-        entity.hp   = goblin.hp;
-        entity.type = goblin.type;
-
-        tile_ids_to_target = array_copy(tile_ids_to_goblin_target);
-    }
-    else if detected_shaman {
-        entity.id   = shaman.id;
-        entity.pos  = shaman.pos;
-        entity.hp   = shaman.hp;
-        entity.type = shaman.type;
-
-        tile_ids_to_target = array_copy(tile_ids_to_shaman_target);
-    }
-
+    
+    detected_goblin, goblin, tile_ids_to_goblin_target := detect_entity_within_radius(Goblin, dwarf_tile_id, 3, true, dwarf.id);
+    detected_shaman, shaman, tile_ids_to_shaman_target := detect_entity_within_radius(Shaman, dwarf_tile_id, 3, true, dwarf.id);
     detected := detected_goblin || detected_shaman;
-
+    
     if detected {
+        entity: *Entity = ifx detected_goblin then cast(*Entity) *goblin else cast(*Entity) *shaman;
+        tile_ids_to_target := ifx detected_goblin then tile_ids_to_goblin_target else tile_ids_to_shaman_target;
+
         create_dwarf_aggro_particle(dwarf.pos, dwarf.id);
 
         dwarf.entity_id_attacking = entity.id;
@@ -6315,6 +6273,7 @@ deal_with_nearby_enemies :: (dwarf: *Dwarf) -> DealWithNearbyEnemyResult {
             } else if dwarf.dwarf_type == .WARRIOR {
                 array_reset(*dwarf.tile_ids_on_path);
                 array_copy(*dwarf.tile_ids_on_path, tile_ids_to_target);
+                table_set(*tile_ids_to_dwarfs, tile_ids_to_target[0], dwarf);
 
                 dwarf_transition_state(dwarf, .MOVING);
                 dwarf.is_moving_quickly = true;
@@ -6500,6 +6459,8 @@ dwarf_transition_state :: (dwarf: *Dwarf, new_state: DwarfState) {
     // What to do when entering these states
     if #complete new_state == {
         case .ATTACKING;
+            array_reset(*dwarf.tile_ids_on_path);
+            
             if #complete dwarf.dwarf_type == {
                 case .MINER;
                     if dwarf.direction == .NORTH then entity_set_active_animation(dwarf, xx DwarfAnimationMiner.MINE_UP);
@@ -6692,6 +6653,7 @@ try_to_set_dwarf_random_new_target :: (dwarf: *Dwarf, force: bool) -> SetDwarfRa
     // TODO: extract
     array_reset(*dwarf.tile_ids_on_path);
     array_add(*dwarf.tile_ids_on_path, new_target_tile_id);
+    table_set(*tile_ids_to_dwarfs, new_target_tile_id, dwarf);
     set_entity_direction_to_face_next_target(dwarf);
 
     return .DIRECTION_FOUND;
@@ -6710,6 +6672,7 @@ try_to_set_dwarf_target_to_one_block_in_the_direction_its_facing :: (dwarf: *Dwa
     // TODO: extract
     array_reset(*dwarf.tile_ids_on_path);
     array_add(*dwarf.tile_ids_on_path, new_target_tile_id);
+    table_set(*tile_ids_to_dwarfs, new_target_tile_id, dwarf);
 
     return .DIRECTION_FOUND;
 }
@@ -6893,7 +6856,7 @@ taunt_dwarf :: (dwarf_id: s32, taunter_tile_id: s32) {
     found, dwarf_index := table_find(*dwarf_id_to_index, dwarf_id);
     assert(found);
     
-    dwarf_tile_id := get_entity_canonical_tile_id(dwarves[dwarf_index]);
+    dwarf_tile_id := get_entity_canonical_tile_id(*(dwarves[dwarf_index]));
     direction_to_face_taunter : Direction;
     if      taunter_tile_id == dwarf_tile_id - xx context.world_rows direction_to_face_taunter = .NORTH;
     else if taunter_tile_id == dwarf_tile_id + xx context.world_rows direction_to_face_taunter = .SOUTH;
@@ -9070,7 +9033,13 @@ spawn_iron :: (starting_tile_id: s32) {
     }
 }
 
-detect_entity_within_radius :: ($T: Type, starting_tile_id: s32, max_depth: s32) -> found: bool, entity: T, tile_id_path_to_dwarf: [..] s32
+detect_entity_within_radius :: (
+    $T: Type,
+    starting_tile_id: s32,
+    max_depth: s32,
+    tile_must_be_walkable: bool,
+    entity_id_doing_the_searching: s32
+) -> found: bool, entity: T, tile_id_path_to_dwarf: [..] s32
 #modify { return uses_entity_with_as(cast(*Type_Info) T, Entity); }
 {
     max_tile_id := context.world_cols * context.world_rows;
@@ -9101,6 +9070,7 @@ detect_entity_within_radius :: ($T: Type, starting_tile_id: s32, max_depth: s32)
         if id <= 0                  continue;
         if id > max_tile_id         continue;
         if !is_tile_fully_mined(id) continue;
+        if tile_must_be_walkable && !is_tile_id_walkable_for_entity(id, entity_id_doing_the_searching) continue;
 
         detected, entity := table_find(*tile_ids_to_entity, id);
         if detected {
@@ -9186,7 +9156,9 @@ find_line_of_sight_entity :: (tile_id: s32, $T: Type, line_of_sight_tile_count: 
 detect_tile_within_radius :: (
     starting_tile_id: s32,
     max_radius: s32,
-    fn_that_determines_if_we_found_the_tile: (s32) -> bool
+    fn_that_determines_if_we_found_the_tile: (s32) -> bool,
+    tile_must_be_walkable: bool,
+    entity_id_doing_the_searching: s32
 ) -> found: bool, tile_id: s32, path: [] s32 {
     max_tile_id := context.world_cols * context.world_rows;
 
@@ -9209,6 +9181,7 @@ detect_tile_within_radius :: (
         if table_contains(*ids_processed_set, id) continue;
         if id <= 0 continue;
         if id > max_tile_id continue;
+        if tile_must_be_walkable && !is_tile_id_walkable_for_entity(id, entity_id_doing_the_searching) continue;
         if get_steps_between_tiles(id, starting_tile_id) > max_radius continue;
 
         // If thing is found, return
