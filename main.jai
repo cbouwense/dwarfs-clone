@@ -349,16 +349,17 @@ Level :: enum {
 }
 
 Metagame :: struct {
-    state            : MetagameState;
-    thing_running    : MetagameThingRunning;
-    main_menu_screen : MainMenuScreen;
-    initialized      : bool;
-    should_quit_game : bool;
-    debug_mode       : bool;
-    pause_state      : PauseState;
-    game_over_state  : GameOverState;
-    controls         : Controls;
-    level            : Level;
+    state                   : MetagameState;
+    thing_running           : MetagameThingRunning;
+    main_menu_screen        : MainMenuScreen;
+    initialized             : bool;
+    should_quit_game        : bool;
+    debug_mode              : bool;
+    pause_state             : PauseState;
+    game_over_state         : GameOverState;
+    controls                : Controls;
+    level                   : Level;
+    music_currently_playing : Music;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -784,6 +785,7 @@ ControlsState :: struct {
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 MUSIC_VINDKALDR_AMBIENT_I_MOON_SNATCHER_FILE_PATH :: "C:\\bin\\Vindkaldr - Ambient I ogg\\Vindkaldr - Ambient I - 01 Moon Snatcher.ogg";
+MUSIC_VINDKALDR_AMBIENT_I_THE_FAIRY_THAT_DISAPPEARED_FILE_PATH :: "C:\\bin\\Vindkaldr - Ambient I ogg\\Vindkaldr - Ambient I - 04 The Fairy That Disappeared.ogg";
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Other
@@ -1195,7 +1197,8 @@ INITIAL_SCREEN_WIDTH  :: 1600;
 INITIAL_SCREEN_HEIGHT :: 900;
 
 // TODO: keep this here?.. or?..
-music: Music;
+music_vindkaldr_ambient_i_moon_snatcher: Music;
+music_vindkaldr_ambient_i_the_fairy_that_disappeared: Music;
 
 main :: () {
     // SetConfigFlags(.FLAG_WINDOW_RESIZABLE | .FLAG_FULLSCREEN_MODE);
@@ -1207,8 +1210,11 @@ main :: () {
     InitAudioDevice();
     defer CloseAudioDevice();
 
-    music = LoadMusicStream(MUSIC_VINDKALDR_AMBIENT_I_MOON_SNATCHER_FILE_PATH);
-    PlayMusicStream(music);
+    music_vindkaldr_ambient_i_moon_snatcher = LoadMusicStream(MUSIC_VINDKALDR_AMBIENT_I_MOON_SNATCHER_FILE_PATH);
+    music_vindkaldr_ambient_i_the_fairy_that_disappeared = LoadMusicStream(MUSIC_VINDKALDR_AMBIENT_I_THE_FAIRY_THAT_DISAPPEARED_FILE_PATH);
+
+    context.metagame.music_currently_playing = music_vindkaldr_ambient_i_moon_snatcher;
+    PlayMusicStream(context.metagame.music_currently_playing);
 
     // HideCursor(); // TODO: render a custom one from a texture.
     SetTargetFPS(144);
@@ -1227,7 +1233,7 @@ main :: () {
     }
 
     while !context.metagame.should_quit_game {
-        UpdateMusicStream(music);
+        UpdateMusicStream(context.metagame.music_currently_playing);
 
         if #complete context.metagame.thing_running == {
             case .MAIN_MENU;
@@ -1249,8 +1255,6 @@ main :: () {
 
 initialize_round :: () {
     reset_memory();
-
-    // StopMusicStream(music);
 
     GAME_TIME_REMAINING_MS    :: 900_000; // 15 minutes
     GAME_STARTING_GOLD_HARD   :: 0;
@@ -1422,6 +1426,9 @@ initialize_round :: () {
     context.metagame.game_over_state  = .MENU;
     context.metagame.main_menu_screen = .ROOT;
     context.metagame.controls         = controls;
+    context.metagame.music_currently_playing = music_vindkaldr_ambient_i_the_fairy_that_disappeared;
+    StopMusicStream(context.metagame.music_currently_playing);
+    PlayMusicStream(context.metagame.music_currently_playing);
 
     GENERATE_CAVES_ENABLED :: true;
 
@@ -1883,7 +1890,7 @@ update_and_draw_frame_round :: () {
     //
     update :: () {
         // Update music
-        UpdateMusicStream(music);
+        UpdateMusicStream(context.metagame.music_currently_playing);
 
         // Update unpausable things
         update_unpausable_things :: () {
