@@ -778,6 +778,13 @@ ControlsState :: struct {
     close_outpost_cannon_perimeter : bool;
 }
 
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Music
+////////////////////////////////////////////////////////////////////////////////////////////////////
+
+MUSIC_VINDKALDR_AMBIENT_I_MOON_SNATCHER_FILE_PATH :: "C:\\bin\\Vindkaldr - Ambient I ogg\\Vindkaldr - Ambient I - 01 Moon Snatcher.ogg";
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Other
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1187,12 +1194,21 @@ alerts_to_draw_this_frame : [..] Alert;
 INITIAL_SCREEN_WIDTH  :: 1600;
 INITIAL_SCREEN_HEIGHT :: 900;
 
+// TODO: keep this here?.. or?..
+music: Music;
+
 main :: () {
     // SetConfigFlags(.FLAG_WINDOW_RESIZABLE | .FLAG_FULLSCREEN_MODE);
     SetConfigFlags(.FLAG_WINDOW_RESIZABLE);
 
     InitWindow(INITIAL_SCREEN_WIDTH, INITIAL_SCREEN_HEIGHT, "Dwarfs?! Clone");
     defer CloseWindow();
+
+    InitAudioDevice();
+    defer CloseAudioDevice();
+
+    music = LoadMusicStream(MUSIC_VINDKALDR_AMBIENT_I_MOON_SNATCHER_FILE_PATH);
+    PlayMusicStream(music);
 
     // HideCursor(); // TODO: render a custom one from a texture.
     SetTargetFPS(144);
@@ -1211,6 +1227,8 @@ main :: () {
     }
 
     while !context.metagame.should_quit_game {
+        UpdateMusicStream(music);
+
         if #complete context.metagame.thing_running == {
             case .MAIN_MENU;
                 update_and_draw_frame_main_menu();
@@ -1231,6 +1249,8 @@ main :: () {
 
 initialize_round :: () {
     reset_memory();
+
+    // StopMusicStream(music);
 
     GAME_TIME_REMAINING_MS    :: 900_000; // 15 minutes
     GAME_STARTING_GOLD_HARD   :: 0;
@@ -1862,6 +1882,9 @@ update_and_draw_frame_round :: () {
     // Update
     //
     update :: () {
+        // Update music
+        UpdateMusicStream(music);
+
         // Update unpausable things
         update_unpausable_things :: () {
             // Debug break tiles
