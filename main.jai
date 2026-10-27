@@ -781,11 +781,13 @@ ControlsState :: struct {
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-// Music
+// Music / sound effects
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 MUSIC_VINDKALDR_AMBIENT_I_MOON_SNATCHER_FILE_PATH :: "C:\\bin\\Vindkaldr - Ambient I ogg\\Vindkaldr - Ambient I - 01 Moon Snatcher.ogg";
 MUSIC_VINDKALDR_AMBIENT_I_THE_FAIRY_THAT_DISAPPEARED_FILE_PATH :: "C:\\bin\\Vindkaldr - Ambient I ogg\\Vindkaldr - Ambient I - 04 The Fairy That Disappeared.ogg";
+
+SOUND_DIGGING_FILE_PATH :: ".\\data\\digging.wav";
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Other
@@ -1200,6 +1202,8 @@ INITIAL_SCREEN_HEIGHT :: 900;
 music_vindkaldr_ambient_i_moon_snatcher: Music;
 music_vindkaldr_ambient_i_the_fairy_that_disappeared: Music;
 
+sound_digging: Sound;
+
 main :: () {
     // SetConfigFlags(.FLAG_WINDOW_RESIZABLE | .FLAG_FULLSCREEN_MODE);
     SetConfigFlags(.FLAG_WINDOW_RESIZABLE);
@@ -1212,6 +1216,7 @@ main :: () {
 
     music_vindkaldr_ambient_i_moon_snatcher = LoadMusicStream(MUSIC_VINDKALDR_AMBIENT_I_MOON_SNATCHER_FILE_PATH);
     music_vindkaldr_ambient_i_the_fairy_that_disappeared = LoadMusicStream(MUSIC_VINDKALDR_AMBIENT_I_THE_FAIRY_THAT_DISAPPEARED_FILE_PATH);
+    sound_digging = LoadSound(SOUND_DIGGING_FILE_PATH);
 
     context.metagame.music_currently_playing = music_vindkaldr_ambient_i_moon_snatcher;
     PlayMusicStream(context.metagame.music_currently_playing);
@@ -2607,6 +2612,8 @@ update_and_draw_frame_round :: () {
                                             }
 
                                             create_mine_chip_particles(dwarf_center, 5, direction_to_spawn_particles);
+
+                                            PlaySound(sound_digging);
 
                                             // Decrease the tile health by the dwarf mining damage
                                             new_health := tile_to_mine.health - dwarf_get_dig_damage(dwarf);
