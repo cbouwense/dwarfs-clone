@@ -269,6 +269,15 @@ code_to_string :: (c: Code) -> string {
     return builder_to_string(*builder);
 }
 
+enum_get_member_count :: ($the_enum: Type) -> string #compile_time {
+    ti := type_info(the_enum);
+    assert(ti.type == .ENUM);
+    type_info_enum := cast(*Type_Info_Enum) ti;
+    builder: String_Builder;
+    print_to_builder(*builder, "%", ti.names.count);
+    return builder_to_string(*builder);
+}
+
 #import "Basic";
 #import "Compiler";
 #import "Hash_Table";

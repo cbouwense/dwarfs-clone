@@ -348,6 +348,18 @@ Level :: enum {
     TUTORIAL_CONTROLS;
 }
 
+SoundEffect :: enum {
+    DIGGING :: 0;
+}
+
+// SOUND_EFFECT_MEMBER_COUNT :: #insert #run enum_get_member_count(SoundEffect);
+SOUND_EFFECT_MEMBER_COUNT :: 42;
+
+// TODO: #specified?
+SoundEffectMaxCurrentlyPlaying :: enum {
+    DIGGING :: 5;
+}
+
 Metagame :: struct {
     state                   : MetagameState;
     thing_running           : MetagameThingRunning;
@@ -361,6 +373,11 @@ Metagame :: struct {
     level                   : Level;
     music_currently_playing : Music;
 }
+
+// TODO: name?
+sounds : [SOUND_EFFECT_MEMBER_COUNT] Sound;
+sound_currently_playing_counts   : [SOUND_EFFECT_MEMBER_COUNT] int;
+sound_currently_playing_maximums : [SOUND_EFFECT_MEMBER_COUNT] int;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Textures
@@ -1216,10 +1233,14 @@ main :: () {
 
     music_vindkaldr_ambient_i_moon_snatcher = LoadMusicStream(MUSIC_VINDKALDR_AMBIENT_I_MOON_SNATCHER_FILE_PATH);
     music_vindkaldr_ambient_i_the_fairy_that_disappeared = LoadMusicStream(MUSIC_VINDKALDR_AMBIENT_I_THE_FAIRY_THAT_DISAPPEARED_FILE_PATH);
-    sound_digging = LoadSound(SOUND_DIGGING_FILE_PATH);
-
+    
     context.metagame.music_currently_playing = music_vindkaldr_ambient_i_moon_snatcher;
     PlayMusicStream(context.metagame.music_currently_playing);
+
+    sound_digging = LoadSound(SOUND_DIGGING_FILE_PATH);
+    sounds[SoundEffect.DIGGING] = sound_digging;
+    sound_currently_playing_counts[SoundEffect.DIGGING] = 0;
+    sound_currently_playing_maximums[SoundEffect.DIGGING] = xx SoundEffectMaxCurrentlyPlaying.DIGGING;
 
     // HideCursor(); // TODO: render a custom one from a texture.
     SetTargetFPS(144);
@@ -1896,6 +1917,10 @@ update_and_draw_frame_round :: () {
     update :: () {
         // Update music
         UpdateMusicStream(context.metagame.music_currently_playing);
+
+        // Update sound effect pool
+        // YOU WERE ABOUT THE DECREMENT THE SOUND POOL BY CHECKING IF THE SOUNDS WERE OVER, IMPLEMENT A FUNCTION TO GET THE TIME IT'D TAKE 
+        // TO PLAY A SOUND
 
         // Update unpausable things
         update_unpausable_things :: () {
@@ -2613,7 +2638,7 @@ update_and_draw_frame_round :: () {
 
                                             create_mine_chip_particles(dwarf_center, 5, direction_to_spawn_particles);
 
-                                            PlaySound(sound_digging);
+                                            try_to_play_sound(SoundEffect.DIGGING);
 
                                             // Decrease the tile health by the dwarf mining damage
                                             new_health := tile_to_mine.health - dwarf_get_dig_damage(dwarf);
@@ -4934,6 +4959,15 @@ update_and_draw_frame_round :: () {
         #if DRAW_UI then draw_ui();
     }
     draw();
+}
+
+try_to_play_sound :: (sound_enum_member: SoundEffect) -> played_sound: bool {
+    if sound_currently_playing_counts[sound_enum_member] < sound_currently_playing_maximums[sound_enum_member] {
+        PlaySound(sound_digging);
+        sound_currently_playing_counts[sound_enum_member] += 1;
+        return true;
+    }
+    return false;
 }
 
 // Determine where to spawn the plague. Do a DFS, searching for all available tiles.
