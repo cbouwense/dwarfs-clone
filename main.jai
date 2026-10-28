@@ -356,7 +356,7 @@ SOUND_EFFECT_TYPE_COUNT :: #run (cast(*Type_Info_Enum) type_info(SoundEffectType
 
 // TODO: #specified?
 SoundEffectTypeMaxCurrentlyPlaying :: enum {
-    DIGGING :: 5;
+    DIGGING :: 3;
 }
 
 SoundEffect :: struct {
@@ -810,6 +810,8 @@ MUSIC_VINDKALDR_AMBIENT_I_THE_FAIRY_THAT_DISAPPEARED_FILE_PATH :: "C:\\bin\\Vind
 
 SOUND_DIGGING_FILE_PATH :: ".\\data\\digging.wav";
 
+PLAY_MUSIC :: true;
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Other
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1239,7 +1241,7 @@ main :: () {
     music_vindkaldr_ambient_i_the_fairy_that_disappeared = LoadMusicStream(MUSIC_VINDKALDR_AMBIENT_I_THE_FAIRY_THAT_DISAPPEARED_FILE_PATH);
     
     context.metagame.music_currently_playing = music_vindkaldr_ambient_i_moon_snatcher;
-    // PlayMusicStream(context.metagame.music_currently_playing);
+    #if PLAY_MUSIC PlayMusicStream(context.metagame.music_currently_playing);
 
     sound_digging = LoadSound(SOUND_DIGGING_FILE_PATH);
     sounds[SoundEffectType.DIGGING] = sound_digging;
@@ -1457,8 +1459,8 @@ initialize_round :: () {
     context.metagame.main_menu_screen = .ROOT;
     context.metagame.controls         = controls;
     context.metagame.music_currently_playing = music_vindkaldr_ambient_i_the_fairy_that_disappeared;
-    // StopMusicStream(context.metagame.music_currently_playing);
-    // PlayMusicStream(context.metagame.music_currently_playing);
+    #if PLAY_MUSIC StopMusicStream(context.metagame.music_currently_playing);
+    #if PLAY_MUSIC PlayMusicStream(context.metagame.music_currently_playing);
 
     GENERATE_CAVES_ENABLED :: true;
 
