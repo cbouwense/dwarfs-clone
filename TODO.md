@@ -16,16 +16,16 @@
 # Core gameplay
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+- Death poof particles
+- Shaman death particle
+- spider queen
 - Draw outpost health on hover
 - Don't move camera if outpost menu open
 - In addition to control modes, allow users to hold down controls
-- Death poof particles
-- Shaman death particle
 - options menu
     - apply changes
     - restore defaults
     - persist preferences
-- spider queen
 - Screen resolution
 - High score / local persistence
 - deteriorating arrows
