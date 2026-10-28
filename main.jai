@@ -348,16 +348,20 @@ Level :: enum {
     TUTORIAL_CONTROLS;
 }
 
-SoundEffect :: enum {
+SoundEffectType :: enum {
     DIGGING :: 0;
 }
 
-// SOUND_EFFECT_MEMBER_COUNT :: #insert #run enum_get_member_count(SoundEffect);
-SOUND_EFFECT_MEMBER_COUNT :: 42;
+SOUND_EFFECT_TYPE_COUNT :: #run (cast(*Type_Info_Enum) type_info(SoundEffectType)).values.count;
 
 // TODO: #specified?
-SoundEffectMaxCurrentlyPlaying :: enum {
+SoundEffectTypeMaxCurrentlyPlaying :: enum {
     DIGGING :: 5;
+}
+
+SoundEffect :: struct {
+    type: SoundEffectType;
+    duration_remaining_ms: int;
 }
 
 Metagame :: struct {
@@ -374,10 +378,10 @@ Metagame :: struct {
     music_currently_playing : Music;
 }
 
-// TODO: name?
-sounds : [SOUND_EFFECT_MEMBER_COUNT] Sound;
-sound_currently_playing_counts   : [SOUND_EFFECT_MEMBER_COUNT] int;
-sound_currently_playing_maximums : [SOUND_EFFECT_MEMBER_COUNT] int;
+sounds : [SOUND_EFFECT_TYPE_COUNT] Sound;
+sound_effects_currently_playing : [..] SoundEffect;
+sound_effect_currently_playing_counts : [SOUND_EFFECT_TYPE_COUNT] int;
+sound_effect_maximums : [SOUND_EFFECT_TYPE_COUNT] int;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Textures
@@ -1235,12 +1239,12 @@ main :: () {
     music_vindkaldr_ambient_i_the_fairy_that_disappeared = LoadMusicStream(MUSIC_VINDKALDR_AMBIENT_I_THE_FAIRY_THAT_DISAPPEARED_FILE_PATH);
     
     context.metagame.music_currently_playing = music_vindkaldr_ambient_i_moon_snatcher;
-    PlayMusicStream(context.metagame.music_currently_playing);
+    // PlayMusicStream(context.metagame.music_currently_playing);
 
     sound_digging = LoadSound(SOUND_DIGGING_FILE_PATH);
-    sounds[SoundEffect.DIGGING] = sound_digging;
-    sound_currently_playing_counts[SoundEffect.DIGGING] = 0;
-    sound_currently_playing_maximums[SoundEffect.DIGGING] = xx SoundEffectMaxCurrentlyPlaying.DIGGING;
+    sounds[SoundEffectType.DIGGING] = sound_digging;
+    sound_effect_currently_playing_counts[SoundEffectType.DIGGING] = 0;
+    sound_effect_maximums[SoundEffectType.DIGGING] = xx SoundEffectTypeMaxCurrentlyPlaying.DIGGING;
 
     // HideCursor(); // TODO: render a custom one from a texture.
     SetTargetFPS(144);
@@ -1453,8 +1457,8 @@ initialize_round :: () {
     context.metagame.main_menu_screen = .ROOT;
     context.metagame.controls         = controls;
     context.metagame.music_currently_playing = music_vindkaldr_ambient_i_the_fairy_that_disappeared;
-    StopMusicStream(context.metagame.music_currently_playing);
-    PlayMusicStream(context.metagame.music_currently_playing);
+    // StopMusicStream(context.metagame.music_currently_playing);
+    // PlayMusicStream(context.metagame.music_currently_playing);
 
     GENERATE_CAVES_ENABLED :: true;
 
@@ -1918,9 +1922,27 @@ update_and_draw_frame_round :: () {
         // Update music
         UpdateMusicStream(context.metagame.music_currently_playing);
 
+        // Sound effect sanity check
+        for sound_effect_currently_playing_counts {
+            assert_soft(it <= sound_effect_maximums[it_index], "Expected sound effect count for type % to be less than or equal to %, but found it to be %\n", it_index, sound_effect_maximums[it_index], it);
+            print_vars(it);
+        }
+        
         // Update sound effect pool
-        // YOU WERE ABOUT THE DECREMENT THE SOUND POOL BY CHECKING IF THE SOUNDS WERE OVER, IMPLEMENT A FUNCTION TO GET THE TIME IT'D TAKE 
-        // TO PLAY A SOUND
+        sound_effect_indices_to_remove: [..] s64;
+        for *sound_effect: sound_effects_currently_playing {
+            if sound_effect.duration_remaining_ms > 0 {
+                sound_effect.duration_remaining_ms -= xx (context.dt_seconds * 1000);
+            } else {
+                array_add(*sound_effect_indices_to_remove, it_index);
+                assert_soft(sound_effect_currently_playing_counts[sound_effect.type] > 0, "Tried to remove a sound effect count (%) from sound_effect_currently_playing_counts but found a count of %!\n", sound_effect.type, sound_effect_currently_playing_counts[sound_effect.type]);
+                sound_effect_currently_playing_counts[sound_effect.type] -= 1;
+            }
+        }
+
+        for sound_effect_indices_to_remove {
+            array_unordered_remove_by_index(*sound_effects_currently_playing, it);
+        }
 
         // Update unpausable things
         update_unpausable_things :: () {
@@ -2638,7 +2660,7 @@ update_and_draw_frame_round :: () {
 
                                             create_mine_chip_particles(dwarf_center, 5, direction_to_spawn_particles);
 
-                                            try_to_play_sound(SoundEffect.DIGGING);
+                                            try_to_play_sound(SoundEffectType.DIGGING);
 
                                             // Decrease the tile health by the dwarf mining damage
                                             new_health := tile_to_mine.health - dwarf_get_dig_damage(dwarf);
@@ -4961,10 +4983,18 @@ update_and_draw_frame_round :: () {
     draw();
 }
 
-try_to_play_sound :: (sound_enum_member: SoundEffect) -> played_sound: bool {
-    if sound_currently_playing_counts[sound_enum_member] < sound_currently_playing_maximums[sound_enum_member] {
-        PlaySound(sound_digging);
-        sound_currently_playing_counts[sound_enum_member] += 1;
+try_to_play_sound :: (sound_effect_type: SoundEffectType) -> played_sound: bool {
+    if sound_effect_currently_playing_counts[sound_effect_type] < sound_effect_maximums[sound_effect_type] {
+        sound := sounds[sound_effect_type];
+        sound_effect_currently_playing_counts[sound_effect_type] += 1;
+
+        array_add(*sound_effects_currently_playing, SoundEffect.{
+            sound_effect_type,
+            sound_get_duration_ms(sound),
+        });
+        
+        PlaySound(sound);
+        
         return true;
     }
     return false;

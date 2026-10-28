@@ -57,3 +57,7 @@ draw_outlined_text :: (text: *u8, posX: s32, posY: s32, fontSize: s32, color: Co
     
 //     debug_struct_runtime(var_val, var_name);
 // }
+
+sound_get_duration_ms :: (sound: Sound) -> int {
+    return cast(int) (sound.frameCount * 1000.0 / sound.stream.sampleRate);
+}
