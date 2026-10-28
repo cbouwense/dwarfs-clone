@@ -349,19 +349,25 @@ Level :: enum {
 }
 
 SoundEffectType :: enum {
-    DIGGING :: 0;
+    DIGGING       :: 0;
+    SHAMAN_REVEAL :: 1;
 }
 
 SOUND_EFFECT_TYPE_COUNT :: #run (cast(*Type_Info_Enum) type_info(SoundEffectType)).values.count;
 
 // TODO: #specified?
 SoundEffectTypeMaxCurrentlyPlaying :: enum {
-    DIGGING :: 3;
+    DIGGING       :: 3;
+    SHAMAN_REVEAL :: 2;
 }
 
+
+
 SoundEffect :: struct {
+    id: int;
     type: SoundEffectType;
     duration_remaining_ms: int;
+    resume_playing_music_after_done: bool;
 }
 
 Metagame :: struct {
@@ -808,6 +814,7 @@ MUSIC_VINDKALDR_AMBIENT_I_MOON_SNATCHER_FILE_PATH :: "C:\\bin\\Vindkaldr - Ambie
 MUSIC_VINDKALDR_AMBIENT_I_THE_FAIRY_THAT_DISAPPEARED_FILE_PATH :: "C:\\bin\\Vindkaldr - Ambient I ogg\\Vindkaldr - Ambient I - 04 The Fairy That Disappeared.ogg";
 
 SOUND_DIGGING_FILE_PATH :: ".\\data\\digging.wav";
+SOUND_SHAMAN_REVEAL_FILE_PATH :: ".\\data\\shaman_reveal.wav";
 
 PLAY_MUSIC :: true;
 
@@ -1181,6 +1188,7 @@ tiles_to_draw_this_frame : [..] Tile;
 entity_id_counter   : s32 = 0;
 control_id_counter  : s32 = 0;
 particle_id_counter : s32 = 0;
+sound_effect_id_counter : s32 = 0;
 
 outposts : [..] Outpost;
 outpost_id_to_index : Table(s32, s64);
@@ -1225,6 +1233,7 @@ music_vindkaldr_ambient_i_moon_snatcher: Music;
 music_vindkaldr_ambient_i_the_fairy_that_disappeared: Music;
 
 sound_digging: Sound;
+sound_shaman_reveal: Sound;
 
 main :: () {
     // SetConfigFlags(.FLAG_WINDOW_RESIZABLE | .FLAG_FULLSCREEN_MODE);
@@ -1246,6 +1255,11 @@ main :: () {
     sounds[SoundEffectType.DIGGING] = sound_digging;
     sound_effect_currently_playing_counts[SoundEffectType.DIGGING] = 0;
     sound_effect_maximums[SoundEffectType.DIGGING] = xx SoundEffectTypeMaxCurrentlyPlaying.DIGGING;
+
+    sound_shaman_reveal = LoadSound(SOUND_SHAMAN_REVEAL_FILE_PATH);
+    sounds[SoundEffectType.SHAMAN_REVEAL] = sound_shaman_reveal;
+    sound_effect_currently_playing_counts[SoundEffectType.SHAMAN_REVEAL] = 0;
+    sound_effect_maximums[SoundEffectType.SHAMAN_REVEAL] = xx SoundEffectTypeMaxCurrentlyPlaying.SHAMAN_REVEAL;
 
     // HideCursor(); // TODO: render a custom one from a texture.
     SetTargetFPS(144);
@@ -1930,19 +1944,26 @@ update_and_draw_frame_round :: () {
         }
         
         // Update sound effect pool
-        sound_effect_indices_to_remove: [..] s64;
         for *sound_effect: sound_effects_currently_playing {
             if sound_effect.duration_remaining_ms > 0 {
                 sound_effect.duration_remaining_ms -= xx (context.dt_seconds * 1000);
             } else {
-                array_add(*sound_effect_indices_to_remove, it_index);
-                assert_soft(sound_effect_currently_playing_counts[sound_effect.type] > 0, "Tried to remove a sound effect count (%) from sound_effect_currently_playing_counts but found a count of %!\n", sound_effect.type, sound_effect_currently_playing_counts[sound_effect.type]);
-                sound_effect_currently_playing_counts[sound_effect.type] -= 1;
-            }
-        }
+                assert_soft(
+                    sound_effect_currently_playing_counts[sound_effect.type] > 0,
+                    "Tried to remove a sound effect count (%) from sound_effect_currently_playing_counts but found a count of %!\n",
+                    sound_effect.type,
+                    sound_effect_currently_playing_counts[sound_effect.type]
+                );
 
-        for sound_effect_indices_to_remove {
-            array_unordered_remove_by_index(*sound_effects_currently_playing, it);
+                sound_effect_currently_playing_counts[sound_effect.type] -= 1;
+
+                // TODO: this doesn't quite work, the 
+                if sound_effect.resume_playing_music_after_done {
+                    PlayMusicStream(context.metagame.music_currently_playing);
+                }
+
+                remove sound_effect;
+            }
         }
 
         // Update unpausable things
@@ -2661,7 +2682,7 @@ update_and_draw_frame_round :: () {
 
                                             create_mine_chip_particles(dwarf_center, 5, direction_to_spawn_particles);
 
-                                            try_to_play_sound(SoundEffectType.DIGGING);
+                                            try_to_play_sound(SoundEffectType.DIGGING, false);
 
                                             // Decrease the tile health by the dwarf mining damage
                                             new_health := tile_to_mine.health - dwarf_get_dig_damage(dwarf);
@@ -4984,15 +5005,21 @@ update_and_draw_frame_round :: () {
     draw();
 }
 
-try_to_play_sound :: (sound_effect_type: SoundEffectType) -> played_sound: bool {
+try_to_play_sound :: (sound_effect_type: SoundEffectType, pause_currently_playing_music_while_playing: bool) -> played_sound: bool {
     if sound_effect_currently_playing_counts[sound_effect_type] < sound_effect_maximums[sound_effect_type] {
         sound := sounds[sound_effect_type];
         sound_effect_currently_playing_counts[sound_effect_type] += 1;
 
         array_add(*sound_effects_currently_playing, SoundEffect.{
+            increment_then_read(*sound_effect_id_counter),
             sound_effect_type,
             sound_get_duration_ms(sound),
+            pause_currently_playing_music_while_playing,
         });
+        
+        if pause_currently_playing_music_while_playing {
+            PauseMusicStream(context.metagame.music_currently_playing);
+        }
         
         PlaySound(sound);
         
@@ -7851,6 +7878,8 @@ create_shaman :: (pos: Vector2) -> Shaman {
 
     table_set(*shaman_id_to_index, shaman_id, shamans.count);
     array_add(*shamans, shaman);
+
+    try_to_play_sound(SoundEffectType.SHAMAN_REVEAL, true);
 
     return shaman;
 }

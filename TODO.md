@@ -2,12 +2,13 @@
 # In progress
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-- Sound effects blow your fucking ear drums out
+
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 # Bugs
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+- Pausing and resuming music for sound effects starts music too soon
 - Water doesn't spread immediately
 - Death particles, aggro particles, and hit star particles need TLC
 
@@ -70,7 +71,6 @@
 - Sound effect: Goblins encountered
 - Sound effect: Water / lava encountered
 - Sound effect: Treasure encountered
-- Sound effect: Shaman encountered
 - Sound effect: Spider queen encountered
 - Sound effect: Panic pause pressed
 - Sound effect: Treasure get
