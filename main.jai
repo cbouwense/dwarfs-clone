@@ -239,7 +239,7 @@ PARTICLE_DWARF_SELECTED_SPRITE_SOURCE_COL :: 7;
 PARTICLE_DAMAGE_STAR_TIME_TO_LIVE_MS   :: 750;
 PARTICLE_DAMAGE_STAR_SPRITE_SOURCE_ROW :: 1;
 PARTICLE_DAMAGE_STAR_SPRITE_SOURCE_COL :: 6;
-PARTICLE_DAMAGE_STAR_STARTING_SPEED    :: 250;
+PARTICLE_DAMAGE_STAR_STARTING_SPEED    :: 50;
 
 PARTICLE_DAMAGE_TIME_TO_LIVE_MS :: 1500;
 
@@ -1966,7 +1966,7 @@ update_and_draw_frame_round :: () {
 
                 // TODO: this doesn't quite work, the 
                 if sound_effect.resume_playing_music_after_done {
-                    PlayMusicStream(context.metagame.music_currently_playing);
+                    #if PLAY_MUSIC PlayMusicStream(context.metagame.music_currently_playing);
                 }
 
                 remove sound_effect;
@@ -2880,10 +2880,9 @@ update_and_draw_frame_round :: () {
 
                                     // If there are any cardinal neighbor dwarves, turn and attack them.
                                     if !is_goblin_done_deciding {
-                                        detected, dwarf := find_cardinal_neighbor_entity(goblin_tile_id, Dwarf);
-
+                                        detected, dwarf, direction_of_dwarf := find_cardinal_neighbor_entity(goblin_tile_id, Dwarf);
                                         if detected {
-                                            // TODO: set goblin direction
+                                            goblin.direction = direction_of_dwarf;
                                             goblin_transition_state(goblin, .ATTACKING);
                                             goblin.entity_id_attacking = dwarf.id;
 
@@ -3060,19 +3059,7 @@ update_and_draw_frame_round :: () {
                                                 if swing_connected {
                                                     target_entity_canonical_tile_id := get_entity_canonical_tile_id(entity);
 
-                                                    direction_stars_should_fly: Direction;
-                                                    found_direction := false;
-                                                    for DIRECTIONS_CARDINAL {
-                                                        neighbor_tile_id := get_neighbor_tile_id_by_direction(goblin_tile_id, it);
-                                                        if neighbor_tile_id == target_entity_canonical_tile_id {
-                                                            direction_stars_should_fly = it;
-                                                            found_direction = true;
-                                                            break;
-                                                        }
-                                                    }
-                                                    // assert_soft(found_direction, "Was trying to figure out what direction the damage star should fly when goblin % connected an attack on entity %, but didn't detect the entity as a cardinal neighbor of the dwarf\n", goblin.id, entity.id);
-
-                                                    create_damage_particles(entity.pos, GOBLIN_ATTACK_DAMAGE_PER_SWING, direction_stars_should_fly);
+                                                    create_damage_particles(entity.pos, GOBLIN_ATTACK_DAMAGE_PER_SWING, goblin.direction);
 
                                                     entity.hp -= GOBLIN_ATTACK_DAMAGE_PER_SWING;
 
@@ -3347,19 +3334,7 @@ update_and_draw_frame_round :: () {
                                         if swing_connected {
                                             target_entity_canonical_tile_id := get_entity_canonical_tile_id(dwarf_to_damage_2);
 
-                                            direction_stars_should_fly: Direction;
-                                            found_direction := false;
-                                            for DIRECTIONS_CARDINAL {
-                                                neighbor_tile_id := get_neighbor_tile_id_by_direction(shaman_tile_id, it);
-                                                if neighbor_tile_id == target_entity_canonical_tile_id {
-                                                    direction_stars_should_fly = it;
-                                                    found_direction = true;
-                                                    break;
-                                                }
-                                            }
-                                            assert_soft(found_direction, "Was trying to figure out what direction the damage star should fly when goblin % connected an attack on entity %, but didn't detect the entity as a cardinal neighbor of the dwarf\n", shaman.id, dwarf_to_damage_2.id);
-
-                                            create_damage_particles(dwarf_to_damage_2.pos, SHAMAN_ATTACK_DAMAGE_PER_SWING, direction_stars_should_fly);
+                                            create_damage_particles(dwarf_to_damage_2.pos, SHAMAN_ATTACK_DAMAGE_PER_SWING, shaman.direction);
 
                                             dwarf_to_damage_2.hp -= SHAMAN_ATTACK_DAMAGE_PER_SWING;
 
@@ -7497,56 +7472,81 @@ create_damage_particles :: (pos: Vector2, amount: int, direction_stars_should_fl
         array_add(*particles, particle);
     }
 
-    // Damage star 1
-    {
-        particle_id  := increment_then_read(*particle_id_counter);
+    damage_star_pos := Vector2.{
+        pos.x + TILEMAP_GENERAL_WORLD_WIDTH  * 0.5,
+        pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5
+    };
 
-        particle_sprite := ParticleSprite.{
-            texture            = tilemap_texture_general,
-            texture_source_row = PARTICLE_DAMAGE_STAR_SPRITE_SOURCE_ROW,
-            texture_source_col = PARTICLE_DAMAGE_STAR_SPRITE_SOURCE_COL,
-            tint               = WHITE,
-        };
+    DAMAGE_STAR_Y_ACCELERATION :: 2.0;
+    DAMAGE_STAR_FIGHT_ACCELERATION_MODIFIER :: 3;
 
-        particle_sprites : [..] ParticleSprite;
-        array_add(*particle_sprites, particle_sprite);
+    velocity : Vector2;
+    acceleration_y : float;
+    get_left_or_right_speed_modifier :: () -> float {
+        return random_get_within_range(-1.0, 1.0);
+    }
+    get_only_up_speed_modifier :: () -> float {
+        return random_get_within_range(
+            -0.5 * DAMAGE_STAR_FIGHT_ACCELERATION_MODIFIER,
+            -2.0 * DAMAGE_STAR_FIGHT_ACCELERATION_MODIFIER
+        );
+    };
+    STAR_PARTICLE_SIZE :: PARTICLE_SIZE_IN_WORLD * 1.75;
 
-        secondary_speed_modifier := random_get_within_range(-0.1, 0.1);
+    particle_sprite := ParticleSprite.{
+        texture            = tilemap_texture_general,
+        texture_source_row = PARTICLE_DAMAGE_STAR_SPRITE_SOURCE_ROW,
+        texture_source_col = PARTICLE_DAMAGE_STAR_SPRITE_SOURCE_COL,
+        tint               = WHITE,
+    };
 
-        velocity     : Vector2;
-        acceleration : Vector2;
+    particle_sprites : [..] ParticleSprite;
+    array_add(*particle_sprites, particle_sprite);
+
+    get_star_particle_velocity_and_acceleration_y :: (direction_stars_should_fly: Direction) -> Vector2, float {
+        velocity: Vector2;
+        acceleration_y := DAMAGE_STAR_Y_ACCELERATION;
         if direction_stars_should_fly == {
             case .NORTH;
                 velocity = Vector2.{
-                    PARTICLE_DAMAGE_STAR_STARTING_SPEED * secondary_speed_modifier,
-                    PARTICLE_DAMAGE_STAR_STARTING_SPEED * -1,
+                    PARTICLE_DAMAGE_STAR_STARTING_SPEED * get_left_or_right_speed_modifier(),
+                    PARTICLE_DAMAGE_STAR_STARTING_SPEED * -DAMAGE_STAR_FIGHT_ACCELERATION_MODIFIER,
                 };
             case .SOUTH;
                 velocity = Vector2.{
-                    PARTICLE_DAMAGE_STAR_STARTING_SPEED * secondary_speed_modifier,
-                    PARTICLE_DAMAGE_STAR_STARTING_SPEED * 1,
+                    PARTICLE_DAMAGE_STAR_STARTING_SPEED * get_left_or_right_speed_modifier(),
+                    PARTICLE_DAMAGE_STAR_STARTING_SPEED * DAMAGE_STAR_FIGHT_ACCELERATION_MODIFIER,
                 };
+                acceleration_y = -DAMAGE_STAR_Y_ACCELERATION;
             case .EAST; 
                 velocity = Vector2.{
-                    PARTICLE_DAMAGE_STAR_STARTING_SPEED * 1,
-                    PARTICLE_DAMAGE_STAR_STARTING_SPEED * secondary_speed_modifier,
+                    PARTICLE_DAMAGE_STAR_STARTING_SPEED,
+                    PARTICLE_DAMAGE_STAR_STARTING_SPEED * get_only_up_speed_modifier(),
                 };
             case .WEST; 
                 velocity = Vector2.{
-                    PARTICLE_DAMAGE_STAR_STARTING_SPEED * -1,
-                    PARTICLE_DAMAGE_STAR_STARTING_SPEED * secondary_speed_modifier,
+                    -PARTICLE_DAMAGE_STAR_STARTING_SPEED,
+                    PARTICLE_DAMAGE_STAR_STARTING_SPEED * get_only_up_speed_modifier(),
                 };
             case;
                 assert_soft(false, "When creating damage star particles, got a weird direction for them to fly. Expected a cardinal direction, but got %\n", direction_stars_should_fly);
         }
+        return velocity, acceleration_y;
+    }
+
+    // Damage star 1
+    {
+        particle_id  := increment_then_read(*particle_id_counter);
+        velocity, acceleration_y := get_star_particle_velocity_and_acceleration_y(direction_stars_should_fly);     
 
         particle := Particle.{
             id            = particle_id,
-            position      = pos,
+            position      = damage_star_pos,
             velocity      = velocity,
-            acceleration  = Vector2.{ 0.95, 0.95 },
+            acceleration  = Vector2.{ 0.0, acceleration_y },
+            rotational_velocity = random_get_within_range(1000, 1500),
             fade          = true,
-            size          = PARTICLE_SIZE_IN_WORLD,
+            size          = STAR_PARTICLE_SIZE,
             opacity       = 1,
             auto_remove   = true,
             time_left_ms  = PARTICLE_DAMAGE_STAR_TIME_TO_LIVE_MS,
@@ -7562,52 +7562,41 @@ create_damage_particles :: (pos: Vector2, amount: int, direction_stars_should_fl
     // Damage star 2
     {
         particle_id  := increment_then_read(*particle_id_counter);
-
-        particle_sprite := ParticleSprite.{
-            texture            = tilemap_texture_general,
-            texture_source_row = PARTICLE_DAMAGE_STAR_SPRITE_SOURCE_ROW,
-            texture_source_col = PARTICLE_DAMAGE_STAR_SPRITE_SOURCE_COL,
-            tint               = WHITE,
-        };
-
-        particle_sprites : [..] ParticleSprite;
-        array_add(*particle_sprites, particle_sprite);
-
-        secondary_speed_modifier := random_get_within_range(-0.2, 0.2);
-
-        velocity : Vector2;
-        if direction_stars_should_fly == {
-            case .NORTH;
-                velocity = Vector2.{
-                    PARTICLE_DAMAGE_STAR_STARTING_SPEED * secondary_speed_modifier,
-                    PARTICLE_DAMAGE_STAR_STARTING_SPEED * -1,
-                };
-            case .SOUTH;
-                velocity = Vector2.{
-                    PARTICLE_DAMAGE_STAR_STARTING_SPEED * secondary_speed_modifier,
-                    PARTICLE_DAMAGE_STAR_STARTING_SPEED * 1,
-                };
-            case .EAST; 
-                velocity = Vector2.{
-                    PARTICLE_DAMAGE_STAR_STARTING_SPEED * 1,
-                    PARTICLE_DAMAGE_STAR_STARTING_SPEED * secondary_speed_modifier,
-                };
-            case .WEST; 
-                velocity = Vector2.{
-                    PARTICLE_DAMAGE_STAR_STARTING_SPEED * -1,
-                    PARTICLE_DAMAGE_STAR_STARTING_SPEED * secondary_speed_modifier,
-                };
-            case;
-                assert_soft(false, "When creating damage star particles, got a weird direction for them to fly. Expected a cardinal direction, but got %\n", direction_stars_should_fly);
-        }
+        velocity, acceleration_y := get_star_particle_velocity_and_acceleration_y(direction_stars_should_fly);   
 
         particle := Particle.{
             id            = particle_id,
-            position      = pos,
+            position      = damage_star_pos,
             velocity      = velocity,
-            acceleration  = Vector2.{ 0.95, 0.95 },
+            acceleration  = Vector2.{ 0.0, acceleration_y },
+            rotational_velocity = random_get_within_range(1000, 1500),
             fade          = true,
-            size          = PARTICLE_SIZE_IN_WORLD,
+            size          = STAR_PARTICLE_SIZE,
+            opacity       = 1,
+            auto_remove   = true,
+            time_left_ms  = PARTICLE_DAMAGE_STAR_TIME_TO_LIVE_MS,
+            time_left_max = PARTICLE_DAMAGE_STAR_TIME_TO_LIVE_MS,
+            sprites       = particle_sprites,
+            step_function = steepstep,
+        };
+
+        table_set(*particle_id_to_index, particle_id, particles.count);
+        array_add(*particles, particle);
+    }
+
+    // Damage star 3
+    {
+        particle_id  := increment_then_read(*particle_id_counter);
+        velocity, acceleration_y := get_star_particle_velocity_and_acceleration_y(direction_stars_should_fly);   
+
+        particle := Particle.{
+            id            = particle_id,
+            position      = damage_star_pos,
+            velocity      = velocity,
+            acceleration  = Vector2.{ 0.0, acceleration_y },
+            rotational_velocity = random_get_within_range(1000, 1500),
+            fade          = true,
+            size          = STAR_PARTICLE_SIZE,
             opacity       = 1,
             auto_remove   = true,
             time_left_ms  = PARTICLE_DAMAGE_STAR_TIME_TO_LIVE_MS,

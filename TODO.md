@@ -8,6 +8,7 @@
 # Bugs
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+- Goblins don't face west when walking west
 - Pausing and resuming music for sound effects starts music too soon
 - Water doesn't spread immediately
 
