@@ -1157,6 +1157,7 @@ Particle :: struct {
     time_left_max         : int;
     entity_id_to_follow   : s32;
     entity_kind_to_follow : EntityKind;
+    entity_to_follow_pos_delta : Vector2;
     step_function         : #type (x: float) -> float;
     follow_mouse          : bool;
 }
@@ -1898,28 +1899,30 @@ update_and_draw_frame_round :: () {
 
         // Clear any open menus
         hovered_tile_rect := get_tile_rect_that_pos_is_within(get_world_width(), get_world_height(), TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, context.mouse_pos_in_world);
-        hovered_tile_id := get_tile_id_by_pos(get_rect_pos(hovered_tile_rect));
-        selected_an_outpost, outpost := table_find(*tile_ids_to_outposts, hovered_tile_id);
+        found, hovered_tile_id := find_tile_id_by_pos(get_rect_pos(hovered_tile_rect));
+        if found {
+            selected_an_outpost, outpost := table_find(*tile_ids_to_outposts, hovered_tile_id);
 
-        if selected_an_outpost {
-            if context.game_state.controls_state_this_frame.select_is_pressed_once && !outpost.is_menu_open {
-                // Just because the menu is open does not mean it's enabled. This is because if it is enabled immediately
-                // then if you are hovering over one of the menu buttons and release the select control, then you actually
-                // click the button even though that was not your intention.
-                outpost.is_menu_open = true;
-                context.is_user_still_holding_select_down_from_opening_outpost_menu = true;
-                assert_soft(!outpost.is_menu_enabled, "Expected menu to be disabled");
-            }
-        } else {
-            if context.game_state.controls_state_this_frame.close_outpost_menu {
-                for *outpost: outposts {
-                    outpost_menu_rect_in_ui_space := get_outpost_menu_rect_in_ui_space(outpost);
-                    clicked_on_outpost_menu := CheckCollisionPointRec(context.mouse_pos_in_ui, outpost_menu_rect_in_ui_space);
+            if selected_an_outpost {
+                if context.game_state.controls_state_this_frame.select_is_pressed_once && !outpost.is_menu_open {
+                    // Just because the menu is open does not mean it's enabled. This is because if it is enabled immediately
+                    // then if you are hovering over one of the menu buttons and release the select control, then you actually
+                    // click the button even though that was not your intention.
+                    outpost.is_menu_open = true;
+                    context.is_user_still_holding_select_down_from_opening_outpost_menu = true;
+                    assert_soft(!outpost.is_menu_enabled, "Expected menu to be disabled");
+                }
+            } else {
+                if context.game_state.controls_state_this_frame.close_outpost_menu {
+                    for *outpost: outposts {
+                        outpost_menu_rect_in_ui_space := get_outpost_menu_rect_in_ui_space(outpost);
+                        clicked_on_outpost_menu := CheckCollisionPointRec(context.mouse_pos_in_ui, outpost_menu_rect_in_ui_space);
 
-                    if !clicked_on_outpost_menu && outpost.is_menu_open {
-                        outpost.is_menu_open = false;
-                        outpost.is_menu_enabled = false;
-                        break;
+                        if !clicked_on_outpost_menu && outpost.is_menu_open {
+                            outpost.is_menu_open = false;
+                            outpost.is_menu_enabled = false;
+                            break;
+                        }
                     }
                 }
             }
@@ -1945,7 +1948,6 @@ update_and_draw_frame_round :: () {
         // Sound effect sanity check
         for sound_effect_currently_playing_counts {
             assert_soft(it <= sound_effect_maximums[it_index], "Expected sound effect count for type % to be less than or equal to %, but found it to be %\n", it_index, sound_effect_maximums[it_index], it);
-            print_vars(it);
         }
         
         // Update sound effect pool
@@ -2099,14 +2101,17 @@ update_and_draw_frame_round :: () {
                                 // If select is let go this frame, deselect the dwarf.
                                 if context.game_state.controls_state_prev_frame.select_is_held_down && !context.game_state.controls_state_this_frame.select_is_held_down {
                                     found, selected_dwarf_index := table_find(*dwarf_id_to_index, context.game_state.selected_dwarf_id);
-                                    assert(found);
 
-                                    kill_particle_by_id(context.game_state.selected_dwarf_particle_id);
+                                    if found {
+                                        kill_particle_by_id(context.game_state.selected_dwarf_particle_id);
 
-                                    dwarf_transition_state(*dwarves[selected_dwarf_index], .DECIDING);
-                                    dwarves[selected_dwarf_index].ignore_goblins_for = 2;
+                                        dwarf_transition_state(*dwarves[selected_dwarf_index], .DECIDING);
+                                        dwarves[selected_dwarf_index].ignore_goblins_for = 2;
 
-                                    context.game_state.selected_dwarf_id = 0;
+                                        context.game_state.selected_dwarf_id = 0;
+                                    } else {
+                                        print("WARN: could not find dwarf % that was supposedly selected. This is a no-op, and it should really only happen when a dwarf that was selected gets killed. If this is not what happened, something is probably terribly wrong.\n", context.game_state.selected_dwarf_id);
+                                    }
                                 }
                             } else {
                                 if context.game_state.controls_state_this_frame.select_is_pressed_once {
@@ -3491,8 +3496,8 @@ update_and_draw_frame_round :: () {
                         if particle.entity_id_to_follow > 0 {
                             found, entity := get_entity_by_id(particle.entity_kind_to_follow, particle.entity_id_to_follow);
                             if (found) {
-                                particle.position.x = entity.pos.x;
-                                particle.position.y = entity.pos.y - TILEMAP_GENERAL_WORLD_HEIGHT;
+                                particle.position.x = entity.pos.x + particle.entity_to_follow_pos_delta.x;
+                                particle.position.y = entity.pos.y + particle.entity_to_follow_pos_delta.y;
                             } else {
                                 print("WARN: Particle % was trying to reference entity % (kind %) that it's supposed to follow, but didn't find it. Destroying particle.\n", particle.id, particle.entity_id_to_follow, particle.entity_kind_to_follow);
                                 array_add(*particle_ids_to_kill_this_frame, particle.id);
@@ -7038,15 +7043,15 @@ draw_path_cost_particle :: (pos: Vector2, amount: int) {
     array_add(*gold_particle_sprites, coin_sprite);
 
     particle := Particle.{
-        position          = pos,
-        velocity          = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
-        size              = PARTICLE_SIZE_IN_UI,
-        fade              = true,
-        opacity           = 1,
-        sprites           = gold_particle_sprites,
-        time_left_ms      = PARTICLE_GOLD_TIME_TO_LIVE_MS,
-        time_left_max     = PARTICLE_GOLD_TIME_TO_LIVE_MS,
-        step_function     = steepstep,
+        position      = pos,
+        velocity      = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
+        size          = PARTICLE_SIZE_IN_UI,
+        fade          = true,
+        opacity       = 1,
+        sprites       = gold_particle_sprites,
+        time_left_ms  = PARTICLE_GOLD_TIME_TO_LIVE_MS,
+        time_left_max = PARTICLE_GOLD_TIME_TO_LIVE_MS,
+        step_function = steepstep,
     };
 
     draw_particle(particle);
@@ -7360,8 +7365,8 @@ create_dwarf_aggro_particle :: (pos: Vector2, dwarf_id: s32) -> Particle {
 
     particle_sprite := ParticleSprite.{
         texture            = tilemap_texture_general,
-        texture_source_row = PARTICLE_DWARF_AGGRO_SPRITE_SOURCE_ROW,
-        texture_source_col = PARTICLE_DWARF_AGGRO_SPRITE_SOURCE_COL,
+        texture_source_row = PARTICLE_DWARF_SELECTED_SPRITE_SOURCE_ROW,// PARTICLE_DWARF_AGGRO_SPRITE_SOURCE_ROW,
+        texture_source_col = PARTICLE_DWARF_SELECTED_SPRITE_SOURCE_COL,// PARTICLE_DWARF_AGGRO_SPRITE_SOURCE_COL,
         tint               = WHITE,
     };
 
@@ -7370,10 +7375,9 @@ create_dwarf_aggro_particle :: (pos: Vector2, dwarf_id: s32) -> Particle {
 
     particle := Particle.{
         id                    = particle_id,
-        position              = pos,
         velocity              = Vector2.{ 0.0, 0.0 },
         fade                  = false,
-        size                  = PARTICLE_SIZE_IN_WORLD,
+        size                  = PARTICLE_SIZE_IN_WORLD * 1.5,
         opacity               = 1,
         auto_remove           = true,
         time_left_ms          = PARTICLE_DWARF_AGGRO_TIME_TO_LIVE_MS,
@@ -7381,6 +7385,7 @@ create_dwarf_aggro_particle :: (pos: Vector2, dwarf_id: s32) -> Particle {
         sprites               = particle_sprites,
         entity_id_to_follow   = dwarf_id,
         entity_kind_to_follow = .Dwarf,
+        entity_to_follow_pos_delta = Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH * 0.5, TILEMAP_GENERAL_WORLD_WIDTH * -0.25 },
     };
 
     table_set(*particle_id_to_index, particle_id, particles.count);
@@ -7404,15 +7409,15 @@ create_dwarf_selected_particle :: (pos: Vector2, dwarf_id: s32) -> Particle {
 
     particle := Particle.{
         id                    = particle_id,
-        position              = pos,
         velocity              = Vector2.{ 0.0, 0.0 },
         fade                  = false,
-        size                  = PARTICLE_SIZE_IN_WORLD,
+        size                  = PARTICLE_SIZE_IN_WORLD * 1.5,
         opacity               = 1,
         auto_remove           = false,
         sprites               = particle_sprites,
         entity_id_to_follow   = dwarf_id,
         entity_kind_to_follow = .Dwarf,
+        entity_to_follow_pos_delta = Vector2.{ TILEMAP_GENERAL_WORLD_WIDTH * 0.5, TILEMAP_GENERAL_WORLD_WIDTH * -0.25 },
     };
 
     table_set(*particle_id_to_index, particle_id, particles.count);
@@ -8957,7 +8962,7 @@ draw_path_from_all_tile_ids :: (tile_ids: [] s32) {
         tile_rect   := get_world_rect_from_pos(tile_pos);
         tile_center := get_rect_center(tile_rect);
 
-        DrawRectangleRec(tile_rect, PINK);
+        DrawCircleV(tile_center, 2.0, PINK);
     }
 }
 
