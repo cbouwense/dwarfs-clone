@@ -220,6 +220,10 @@ PARTICLE_DWARF_DEATH_TIME_TO_LIVE_MS   :: 1500;
 PARTICLE_DWARF_DEATH_SPRITE_SOURCE_ROW :: 0;
 PARTICLE_DWARF_DEATH_SPRITE_SOURCE_COL :: 8;
 
+PARTICLE_ENTITY_DEATH_POOF_TIME_TO_LIVE_MS :: 3000;
+PARTICLE_ENTITY_DEATH_POOF_SPRITE_SOURCE_ROW :: 4;
+PARTICLE_ENTITY_DEATH_POOF_SPRITE_SOURCE_COL :: 1;
+
 PARTICLE_GOBLIN_DEATH_TIME_TO_LIVE_MS   :: 1500;
 PARTICLE_GOBLIN_DEATH_SPRITE_SOURCE_ROW :: 1;
 PARTICLE_GOBLIN_DEATH_SPRITE_SOURCE_COL :: 8;
@@ -816,7 +820,7 @@ MUSIC_VINDKALDR_AMBIENT_I_THE_FAIRY_THAT_DISAPPEARED_FILE_PATH :: "C:\\bin\\Vind
 SOUND_DIGGING_FILE_PATH :: ".\\data\\digging.wav";
 SOUND_SHAMAN_REVEAL_FILE_PATH :: ".\\data\\shaman_reveal.wav";
 
-PLAY_MUSIC :: true;
+PLAY_MUSIC :: false;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Other
@@ -1145,6 +1149,7 @@ Particle :: struct {
     orbital_angle         : float; // the current angle in degrees of the orbit
     orbital_radius        : float;
     size                  : float;
+    size_growth_rate      : float; // percentage to grow per second, I guess
     fade                  : bool;
     opacity               : float;
     auto_remove           : bool;
@@ -7152,37 +7157,135 @@ create_gold_particle :: (pos: Vector2, amount: int, is_positive_connotation: boo
     return particle;
 }
 
-create_dwarf_death_particle :: (pos: Vector2) -> Particle {
-    particle_id  := increment_then_read(*particle_id_counter);
-
-    particle_sprite := ParticleSprite.{
+create_dwarf_death_particles :: (pos: Vector2) {
+    // Skull particle
+    skull_particle_id  := increment_then_read(*particle_id_counter);
+    
+    skull_particle_sprite := ParticleSprite.{
         texture            = tilemap_texture_general,
         texture_source_row = PARTICLE_DWARF_DEATH_SPRITE_SOURCE_ROW,
         texture_source_col = PARTICLE_DWARF_DEATH_SPRITE_SOURCE_COL,
         tint               = WHITE,
     };
+    
+    skull_particle_sprites : [..] ParticleSprite;
+    array_add(*skull_particle_sprites, skull_particle_sprite);
 
-    particle_sprites : [..] ParticleSprite;
-    array_add(*particle_sprites, particle_sprite);
+    skull_particle_pos := Vector2.{ pos.x + TILEMAP_GENERAL_WORLD_WIDTH  * 0.5, pos.y };
 
-    particle := Particle.{
-        id                = particle_id,
-        position          = pos,
+    skull_particle := Particle.{
+        id                = skull_particle_id,
+        position          = skull_particle_pos,
         velocity          = Vector2.{ 0.0, PARTICLE_FLOAT_SPEED },
-        size              = PARTICLE_SIZE_IN_WORLD,
+        size              = PARTICLE_SIZE_IN_WORLD * 2,
         fade              = true,
         opacity           = 1,
-        sprites           = particle_sprites,
+        sprites           = skull_particle_sprites,
         auto_remove       = true,
         time_left_ms      = PARTICLE_DWARF_DEATH_TIME_TO_LIVE_MS,
         time_left_max     = PARTICLE_DWARF_DEATH_TIME_TO_LIVE_MS,
         step_function     = steepstep,
     };
 
-    table_set(*particle_id_to_index, particle_id, particles.count);
-    array_add(*particles, particle);
+    table_set(*particle_id_to_index, skull_particle_id, particles.count);
+    array_add(*particles, skull_particle);
+    
+    // Poof particles
+    poof_particle_sprite := ParticleSprite.{
+        texture            = tilemap_texture_general,
+        texture_source_row = PARTICLE_ENTITY_DEATH_POOF_SPRITE_SOURCE_ROW,
+        texture_source_col = PARTICLE_ENTITY_DEATH_POOF_SPRITE_SOURCE_COL,
+        tint               = WHITE,
+    };
+    
+    poof_particle_sprites : [..] ParticleSprite;
+    array_add(*poof_particle_sprites, poof_particle_sprite);
+    
+    poof_particle_1_pos := Vector2.{
+        pos.x + TILEMAP_GENERAL_WORLD_WIDTH  * 0.5,
+        pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5,
+    };
+    poof_particle_1_id := increment_then_read(*particle_id_counter);
+    poof_particle_1 := Particle.{
+        id                  = increment_then_read(*particle_id_counter),
+        position            = poof_particle_1_pos,
+        rotational_velocity = 20.0,
+        size                = PARTICLE_SIZE_IN_WORLD * 3,
+        size_growth_rate    = 20.0, // TODO
+        fade                = true,
+        opacity             = 1,
+        sprites             = poof_particle_sprites,
+        auto_remove         = true,
+        time_left_ms        = PARTICLE_ENTITY_DEATH_POOF_TIME_TO_LIVE_MS,
+        time_left_max       = PARTICLE_ENTITY_DEATH_POOF_TIME_TO_LIVE_MS,
+        step_function       = smootherstep,
+    };
 
-    return particle;
+    table_set(*particle_id_to_index, poof_particle_1_id, particles.count);
+    array_add(*particles, poof_particle_1);
+    
+    poof_particle_2_pos := pos;
+    poof_particle_2_id := increment_then_read(*particle_id_counter);
+    poof_particle_2 := Particle.{
+        id                  = poof_particle_2_id,
+        position            = poof_particle_2_pos,
+        rotational_velocity = -20.0,
+        size                = PARTICLE_SIZE_IN_WORLD,
+        size_growth_rate    = 10.0, // TODO
+        fade                = true,
+        opacity             = 1,
+        sprites             = poof_particle_sprites,
+        auto_remove         = true,
+        time_left_ms        = PARTICLE_ENTITY_DEATH_POOF_TIME_TO_LIVE_MS,
+        time_left_max       = PARTICLE_ENTITY_DEATH_POOF_TIME_TO_LIVE_MS,
+        step_function       = smootherstep,
+    };
+
+    table_set(*particle_id_to_index, poof_particle_2_id, particles.count);
+    array_add(*particles, poof_particle_2);
+
+    poof_particle_3_pos := Vector2.{
+        pos.x + TILEMAP_GENERAL_WORLD_WIDTH,
+        pos.y + TILEMAP_GENERAL_WORLD_HEIGHT,
+    };
+    poof_particle_3_id := increment_then_read(*particle_id_counter);
+    poof_particle_3 := Particle.{
+        id                  = poof_particle_3_id,
+        position            = poof_particle_3_pos,
+        rotational_velocity = 40.0,
+        size                = PARTICLE_SIZE_IN_WORLD,
+        size_growth_rate    = 10.0, // TODO
+        fade                = true,
+        opacity             = 1,
+        sprites             = poof_particle_sprites,
+        auto_remove         = true,
+        time_left_ms        = PARTICLE_ENTITY_DEATH_POOF_TIME_TO_LIVE_MS,
+        time_left_max       = PARTICLE_ENTITY_DEATH_POOF_TIME_TO_LIVE_MS,
+        step_function       = smootherstep,
+    };
+
+    table_set(*particle_id_to_index, poof_particle_3_id, particles.count);
+    array_add(*particles, poof_particle_3);
+
+    poof_particle_4_pos := Vector2.{ pos.x + TILEMAP_GENERAL_WORLD_WIDTH, pos.y };
+    poof_particle_4_id := increment_then_read(*particle_id_counter);
+    poof_particle_4 := Particle.{
+        id                  = poof_particle_4_id,
+        position            = poof_particle_4_pos,
+        rotational_velocity = -10.0,
+        size                = PARTICLE_SIZE_IN_WORLD * 1.5,
+        size_growth_rate    = 10.0, // TODO
+        fade                = true,
+        opacity             = 1,
+        sprites             = poof_particle_sprites,
+        auto_remove         = true,
+        time_left_ms        = PARTICLE_ENTITY_DEATH_POOF_TIME_TO_LIVE_MS,
+        time_left_max       = PARTICLE_ENTITY_DEATH_POOF_TIME_TO_LIVE_MS,
+        step_function       = smootherstep,
+    };
+
+    table_set(*particle_id_to_index, poof_particle_4_id, particles.count);
+    array_add(*particles, poof_particle_4);
 }
 
 create_goblin_death_particle :: (pos: Vector2) -> Particle {
@@ -8007,7 +8110,7 @@ kill_dwarf_by_index :: (dwarf_index: s64) {
     }
     table_remove(*dwarf_id_to_index, dwarf_being_killed_id);
 
-    create_dwarf_death_particle(dwarf_being_killed_pos);
+    create_dwarf_death_particles(dwarf_being_killed_pos);
 
     array_unordered_remove_by_index(*dwarves, dwarf_index);
 }
