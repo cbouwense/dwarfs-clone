@@ -823,7 +823,7 @@ MUSIC_VINDKALDR_AMBIENT_I_THE_FAIRY_THAT_DISAPPEARED_FILE_PATH :: "C:\\bin\\Vind
 SOUND_DIGGING_FILE_PATH :: ".\\data\\digging.wav";
 SOUND_SHAMAN_REVEAL_FILE_PATH :: ".\\data\\shaman_reveal.wav";
 
-PLAY_MUSIC :: true;
+PLAY_MUSIC :: false;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Other
@@ -2442,6 +2442,16 @@ update_and_draw_frame_round :: () {
 
                         if dwarf.spawn_grace_period_ms > 0 then dwarf.spawn_grace_period_ms -= xx (context.dt_seconds * 1000);
 
+                        // Turn the dwarf sprite to face whatever way it should be
+                        if dwarf.direction == {
+                            // don't change
+                            case .NORTH; // no op
+                            case .SOUTH; // no op
+
+                            case .EAST; dwarf.is_facing_left = false;
+                            case .WEST; dwarf.is_facing_left = true;
+                        }
+
                         if !is_dwarf_done_updating {
                             if #complete dwarf.state == {
                                 // You've just landed on a tile, now figure out what to do next
@@ -2647,10 +2657,6 @@ update_and_draw_frame_round :: () {
                                         assert_soft(false, "Dwarf % is trying to move into the invalid tile %\n", dwarf.id, target_tile_id);
                                     }
 
-                                    // Turn the dwarf sprite to face whatever way it should be
-                                    if dwarf.is_facing_left  && target_tile_pos.x > dwarf_tile.pos.x then dwarf.is_facing_left = false;
-                                    if !dwarf.is_facing_left && target_tile_pos.x < dwarf_tile.pos.x then dwarf.is_facing_left = true;
-
                                     // Calculate the squared distance (use squared distances so we can avoid a sqrtf).
                                     dx := target_tile_pos.x - dwarf.pos.x;
                                     dy := target_tile_pos.y - dwarf.pos.y;
@@ -2685,10 +2691,6 @@ update_and_draw_frame_round :: () {
                                         set_tile_as_type(dwarf.tile_id_mining, .TOUCHED_DIRT, false, false);
                                         tile_to_mine = get_tile_by_id(dwarf.tile_id_mining);
                                     }
-
-                                    // Turn the dwarf sprite to face whatever way it should be
-                                    if dwarf.is_facing_left  && tile_to_mine.pos.x > dwarf_tile.pos.x then dwarf.is_facing_left = false;
-                                    if !dwarf.is_facing_left && tile_to_mine.pos.x < dwarf_tile.pos.x then dwarf.is_facing_left = true;
 
                                     // It's possible for the tile the dwarf is mining to suddenly be changed, like into obsidian.
                                     // In this case, the dwarf should abandon the idea of mining its current tile.
@@ -2777,10 +2779,6 @@ update_and_draw_frame_round :: () {
 
                                         entity_canonical_tile_id := get_entity_canonical_tile_id(entity);
                                         entity_tile_ids := get_entity_tile_ids(entity);
-
-                                        // Turn the dwarf to face whichever way it should be.
-                                        if dwarf.is_facing_left  && entity.pos.x > dwarf_tile.pos.x then dwarf.is_facing_left = false;
-                                        if !dwarf.is_facing_left && entity.pos.x < dwarf_tile.pos.x then dwarf.is_facing_left = true;
 
                                         if is_entity_cardinal_neighbor_of_other_entity(dwarf, entity) {
                                             assert_soft(dwarf.entity_id_attacking == entity.id, "Dwarf % thinks he's attacking entity % but really found entity %", dwarf.id, dwarf.entity_id_attacking, entity.id);
@@ -2895,6 +2893,16 @@ update_and_draw_frame_round :: () {
                             is_goblin_done_updating = true;
                         }
 
+                        // Turn the goblin sprite to face whatever way it should be
+                        if goblin.direction == {
+                            // don't change
+                            case .NORTH; // no op
+                            case .SOUTH; // no op
+
+                            case .EAST; goblin.is_facing_left = false;
+                            case .WEST; goblin.is_facing_left = true;
+                        }
+
                         if !is_goblin_done_updating {
                             if #complete goblin.state == {
                                 case .DECIDING;
@@ -2974,10 +2982,12 @@ update_and_draw_frame_round :: () {
 
                                     if goblin.state == .DECIDING {
                                         if can_entity_make_progress(goblin) {
+                                            goblin.direction = get_direction_of_cardinal_neighbor(goblin_tile_id, goblin.tile_ids_on_path[0]);
                                             goblin_transition_state(goblin, .MOVING);
                                         } else {
                                             result := try_to_set_goblin_random_new_target(goblin);
                                             if result == .DIRECTION_FOUND {
+                                                goblin.direction = get_direction_of_cardinal_neighbor(goblin_tile_id, goblin.tile_ids_on_path[0]);
                                                 goblin_transition_state(goblin, .MOVING);
                                             } else {
                                                 goblin_can_remain_undecided = true;
@@ -2993,13 +3003,7 @@ update_and_draw_frame_round :: () {
                                     target_tile_id  := goblin.tile_ids_on_path[0];
                                     target_tile_pos := get_tile_pos_by_id(target_tile_id);
 
-                                    // assert_soft(goblin.pos.x == target_tile_pos.x || goblin.pos.y == target_tile_pos.y, "Goblin id % is going at an angle", goblin.id);
-
                                     tile_id_next_in_goblin_path := goblin.tile_ids_on_path[0];
-
-                                    // Turn the goblin sprite to face whatever way it should be
-                                    if goblin.is_facing_left  && target_tile_pos.x > goblin_tile.pos.x then goblin.is_facing_left = false;
-                                    if !goblin.is_facing_left && target_tile_pos.x < goblin_tile.pos.x then goblin.is_facing_left = true;
 
                                     goblin_pretty_much_reached_target := values_are_close(goblin.pos, target_tile_pos, 1);
                                     if goblin_pretty_much_reached_target {
@@ -3246,6 +3250,16 @@ update_and_draw_frame_round :: () {
                             }
                             // // If no dwarves nearby, then spawn goblins on cooldown
                             // if !found_dwarves_to_attack then shaman_transition_state(shaman, .SUMMONING);
+                        
+                            // Turn the shaman sprite to face whatever way it should be
+                            if shaman.direction == {
+                                // don't change
+                                case .NORTH; // no op
+                                case .SOUTH; // no op
+
+                                case .EAST; shaman.is_facing_left = false;
+                                case .WEST; shaman.is_facing_left = true;
+                            }
                         }
 
                         if #complete shaman.state == {
