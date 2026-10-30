@@ -39,6 +39,7 @@ WALL_HEALTH :: 200;
 DWARF_MOVE_SPEED :: 33;
 DWARF_MOVE_SPEED_FAST :: DWARF_MOVE_SPEED * 2;
 DWARF_FIRED_BY_CANNON_SPEED :: DWARF_MOVE_SPEED_FAST * 5;
+DWARF_SPAWN_GRACE_PERIOD_MS :: 2000;
 
 DWARF_MINER_START_COUNT :: 1;
 DWARF_MINER_DIG_COOLDOWN_MS    :: 1000;
@@ -1062,6 +1063,9 @@ Dwarf :: struct {
     dwarf_type          : DwarfType;
     ignore_goblins_for  : int;
     is_moving_quickly   : bool;
+    // Allow dwarves to be on the same tile as another dwarf right after they spawn,
+    // since they could all spawn on the same tile.
+    spawn_grace_period_ms : int;
     tile_id_cannon_fired_at : s32;
 }
 
@@ -2370,8 +2374,8 @@ update_and_draw_frame_round :: () {
                             if context.metagame.debug_mode || context.game_state.gold >= GOLD_COST_WALL {
                                 // Try to turn the selected tile into a wall
                                 tile_id := get_tile_id_by_pos(context.mouse_pos_in_world);
-                                tile_is_fully_mined    := is_tile_fully_mined(tile_id);
-                                entities_on_tile := get_entities_on_tile(tile_id);
+                                tile_is_fully_mined := is_tile_fully_mined(tile_id);
+                                entities_on_tile := get_entities_on_tile(tile_id, false);
 
                                 can_place_wall_on_desired_tile := (
                                     tile_is_fully_mined     &&
@@ -2411,15 +2415,17 @@ update_and_draw_frame_round :: () {
                     for *dwarf, dwarf_index: dwarves {
                         is_dwarf_done_updating := false;
 
-                        dwarf_center   := get_rect_center(get_world_rect_from_pos(dwarf.pos));
-                        dwarf_tile_id  := get_tile_id_by_pos(dwarf_center);
-                        dwarf_tile     := get_tile_by_id(dwarf_tile_id);
+                        dwarf_center  := get_rect_center(get_world_rect_from_pos(dwarf.pos));
+                        dwarf_tile_id := get_tile_id_by_pos(dwarf_center);
+                        dwarf_tile    := get_tile_by_id(dwarf_tile_id);
 
                         // Kill dwarf if touching liquid
                         if is_tile_liquid(dwarf_tile) {
                             array_add(*dwarf_ids_to_kill_this_frame, dwarf.id);
                             is_dwarf_done_updating = true;
                         }
+
+                        if dwarf.spawn_grace_period_ms > 0 then dwarf.spawn_grace_period_ms -= xx (context.dt_seconds * 1000);
 
                         if !is_dwarf_done_updating {
                             if #complete dwarf.state == {
@@ -2518,8 +2524,9 @@ update_and_draw_frame_round :: () {
                                                 set_entity_direction_to_face_next_target(dwarf);
 
                                                 dwarf.is_moving_quickly = true;
-
                                                 is_dwarf_done_deciding = true;
+                                                dwarf_can_remain_undecided = !is_tile_id_walkable_for_entity(tile_ids_on_path[0], dwarf.id);
+
                                                 break;
                                             }
                                         }
@@ -2534,12 +2541,13 @@ update_and_draw_frame_round :: () {
                                             nearby_goblin_status := deal_with_nearby_enemies(dwarf);
 
                                             if nearby_goblin_status == .NEARBY_ENEMY_NOT_FOUND {
-                                                // TODO: probably need more here
                                                 is_dwarf_on_patrol := dwarf_warrior_patrol(dwarf);
-                                                if is_dwarf_on_patrol then is_dwarf_done_deciding = true;
+                                                is_dwarf_done_deciding = is_dwarf_on_patrol;
                                             }
                                         }
+                                    }
 
+                                    if !is_dwarf_done_deciding {
                                         // If the dwarf has no targets, give him a new one
                                         if dwarf.tile_ids_on_path.count == 0 {
                                             dwarf.is_moving_quickly = false;
@@ -2620,9 +2628,7 @@ update_and_draw_frame_round :: () {
                                     target_tile_id  := dwarf.tile_ids_on_path[0];
                                     target_tile_pos := get_tile_pos_by_id(target_tile_id);
 
-                                    // assert_soft(dwarf.pos.x == target_tile_pos.x || dwarf.pos.y == target_tile_pos.y, "Dwarf % is going at an angle", dwarf.id);
-
-                                    if !is_tile_id_walkable_for_entity(target_tile_id, dwarf.id) {
+                                    if dwarf.spawn_grace_period_ms <= 0 && !is_tile_id_walkable_for_entity(target_tile_id, dwarf.id) {
                                         assert_soft(false, "Dwarf % is trying to move into the invalid tile %\n", dwarf.id, target_tile_id);
                                     }
 
@@ -2773,7 +2779,11 @@ update_and_draw_frame_round :: () {
 
                                                 if swing_connected {
                                                     damage := dwarf_get_attack_damage(dwarf);
-                                                    create_damage_particles(entity.pos, damage, dwarf.direction);
+                                                    entity_center := Vector2.{
+                                                        entity.pos.x + TILEMAP_GENERAL_WORLD_WIDTH  * 0.5,
+                                                        entity.pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5,
+                                                    };
+                                                    create_damage_particles(entity_center, damage, dwarf.direction);
 
                                                     entity.hp -= damage;
 
@@ -3059,7 +3069,11 @@ update_and_draw_frame_round :: () {
                                                 if swing_connected {
                                                     target_entity_canonical_tile_id := get_entity_canonical_tile_id(entity);
 
-                                                    create_damage_particles(entity.pos, GOBLIN_ATTACK_DAMAGE_PER_SWING, goblin.direction);
+                                                    entity_center := Vector2.{
+                                                        entity.pos.x + TILEMAP_GENERAL_WORLD_WIDTH  * 0.5,
+                                                        entity.pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5,
+                                                    };
+                                                    create_damage_particles(entity_center, GOBLIN_ATTACK_DAMAGE_PER_SWING, goblin.direction);
 
                                                     entity.hp -= GOBLIN_ATTACK_DAMAGE_PER_SWING;
 
@@ -3334,7 +3348,11 @@ update_and_draw_frame_round :: () {
                                         if swing_connected {
                                             target_entity_canonical_tile_id := get_entity_canonical_tile_id(dwarf_to_damage_2);
 
-                                            create_damage_particles(dwarf_to_damage_2.pos, SHAMAN_ATTACK_DAMAGE_PER_SWING, shaman.direction);
+                                            entity_center := Vector2.{
+                                                dwarf_to_damage_2.pos.x + TILEMAP_GENERAL_WORLD_WIDTH  * 0.5,
+                                                dwarf_to_damage_2.pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5,
+                                            };
+                                            create_damage_particles(entity_center, SHAMAN_ATTACK_DAMAGE_PER_SWING, shaman.direction);
 
                                             dwarf_to_damage_2.hp -= SHAMAN_ATTACK_DAMAGE_PER_SWING;
 
@@ -3374,7 +3392,7 @@ update_and_draw_frame_round :: () {
                 update_tiles :: (should_spread_lava_this_frame: bool) {
                     for *tile: context.tiles {
                         if tile_has_property(tile, .WATER_STILL) {
-                            inflict_non_dwarf_liquid_consequences(tile.id);
+                            // inflict_non_dwarf_liquid_consequences(tile.id);
 
                             reset_animation := sprite_update(*tile.animated_sprite, context.dt_seconds);
 
@@ -5049,7 +5067,7 @@ get_available_tiles_for_plague :: (starting_tile_id: s32, desired_depth: int) ->
         for col: 0..25 {
             tile_id := cast(s32) (top_left_tile_id + col + context.world_cols * row);
             tile := get_tile_by_id(tile_id);
-            entities_on_tile := get_entities_on_tile(tile_id);
+            entities_on_tile := get_entities_on_tile(tile_id, true);
 
             if ( 
                 tile != null &&
@@ -5069,12 +5087,12 @@ get_available_tiles_for_plague :: (starting_tile_id: s32, desired_depth: int) ->
     return available_tile_ids;
 }
 
-get_entities_on_tile :: (tile_id: s32) -> [..] *Entity {
+get_entities_on_tile :: (tile_id: s32, only_unwalkable_entities: bool) -> [..] *Entity {
     entities_on_tile: [..] *Entity;
     entities_on_tile.allocator = temp;
-
+    
     tile_has_outpost_on_it, outpost := table_find(*tile_ids_to_outposts, tile_id);
-    if tile_has_outpost_on_it then array_add(*entities_on_tile, outpost);
+    if tile_has_outpost_on_it && !only_unwalkable_entities then array_add(*entities_on_tile, outpost);
 
     tile_has_dwarf_on_it, dwarf := table_find(*tile_ids_to_dwarfs, tile_id);
     if tile_has_dwarf_on_it then array_add(*entities_on_tile, dwarf);
@@ -6337,7 +6355,6 @@ dwarf_warrior_patrol :: (dwarf: *Dwarf) -> continued_patrol: bool {
 
     array_add(*dwarf.tile_ids_on_path, tile_id_to_move_to);
     table_set(*tile_ids_to_dwarfs, tile_id_to_move_to, dwarf);
-    dwarf_transition_state(dwarf, .MOVING);
     return true;
 }
 
@@ -6375,7 +6392,6 @@ deal_with_nearby_enemies :: (dwarf: *Dwarf) -> DealWithNearbyEnemyResult {
                 array_copy(*dwarf.tile_ids_on_path, tile_ids_to_target);
                 table_set(*tile_ids_to_dwarfs, tile_ids_to_target[0], dwarf);
 
-                dwarf_transition_state(dwarf, .MOVING);
                 dwarf.is_moving_quickly = true;
             }
         }
@@ -7844,6 +7860,7 @@ create_dwarf :: (pos: Vector2, dwarf_type: DwarfType, gold_cost: int = 0) -> Dwa
         entity_id_attacking   = 0,
         attack_cooldown_ms    = dwarf_get_attack_cooldown_by_type(dwarf_type),
         is_facing_left        = false,
+        spawn_grace_period_ms = DWARF_SPAWN_GRACE_PERIOD_MS,
         // tile_ids_on_path intentionally not set
     };
 
@@ -7976,7 +7993,8 @@ create_shaman :: (pos: Vector2) -> Shaman {
     table_set(*shaman_id_to_index, shaman_id, shamans.count);
     array_add(*shamans, shaman);
 
-    try_to_play_sound(SoundEffectType.SHAMAN_REVEAL, true);
+    // TODO: get better sound
+    // try_to_play_sound(SoundEffectType.SHAMAN_REVEAL, true);
 
     return shaman;
 }
@@ -8465,7 +8483,7 @@ is_tile_alert_lava :: (tile_id: s32) -> bool {
 
 // TODO: entity kind, probably
 is_tile_id_walkable_for_entity :: (tile_id: s32, entity_id: s32) -> bool {
-    entities_on_tile := get_entities_on_tile(tile_id);
+    entities_on_tile := get_entities_on_tile(tile_id, true);
     if entities_on_tile.count > 1 return false;
     if entities_on_tile.count == 1 && entities_on_tile[0].id != entity_id return false;
 
