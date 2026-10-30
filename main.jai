@@ -366,13 +366,11 @@ SoundEffectTypeMaxCurrentlyPlaying :: enum {
     SHAMAN_REVEAL :: 2;
 }
 
-
-
 SoundEffect :: struct {
     id: int;
     type: SoundEffectType;
     duration_remaining_ms: int;
-    resume_playing_music_after_done: bool;
+    duck_music: bool;
 }
 
 Metagame :: struct {
@@ -387,6 +385,7 @@ Metagame :: struct {
     controls                : Controls;
     level                   : Level;
     music_currently_playing : Music;
+    deduck_music_ms         : int;
 }
 
 sounds : [SOUND_EFFECT_TYPE_COUNT] Sound;
@@ -815,13 +814,16 @@ ControlsState :: struct {
 // Music / sound effects
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+MUSIC_DUCK_VOLUME :: 0.33;
+MUSIC_DEDUCK_MS :: 1000;
+
 MUSIC_VINDKALDR_AMBIENT_I_MOON_SNATCHER_FILE_PATH :: "C:\\bin\\Vindkaldr - Ambient I ogg\\Vindkaldr - Ambient I - 01 Moon Snatcher.ogg";
 MUSIC_VINDKALDR_AMBIENT_I_THE_FAIRY_THAT_DISAPPEARED_FILE_PATH :: "C:\\bin\\Vindkaldr - Ambient I ogg\\Vindkaldr - Ambient I - 04 The Fairy That Disappeared.ogg";
 
 SOUND_DIGGING_FILE_PATH :: ".\\data\\digging.wav";
 SOUND_SHAMAN_REVEAL_FILE_PATH :: ".\\data\\shaman_reveal.wav";
 
-PLAY_MUSIC :: false;
+PLAY_MUSIC :: true;
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Other
@@ -1482,6 +1484,7 @@ initialize_round :: () {
     context.metagame.main_menu_screen = .ROOT;
     context.metagame.controls         = controls;
     context.metagame.music_currently_playing = music_vindkaldr_ambient_i_the_fairy_that_disappeared;
+    context.metagame.deduck_music_ms  = MUSIC_DEDUCK_MS;
     #if PLAY_MUSIC StopMusicStream(context.metagame.music_currently_playing);
     #if PLAY_MUSIC PlayMusicStream(context.metagame.music_currently_playing);
 
@@ -1947,7 +1950,20 @@ update_and_draw_frame_round :: () {
     //
     update :: () {
         // Update music
-        UpdateMusicStream(context.metagame.music_currently_playing);
+        update_music :: () {
+            UpdateMusicStream(context.metagame.music_currently_playing);
+            if context.metagame.deduck_music_ms < MUSIC_DEDUCK_MS {
+                context.metagame.deduck_music_ms += xx (context.dt_seconds * 1000);
+
+                t : float = context.metagame.deduck_music_ms * 1000.0 / MUSIC_DEDUCK_MS;
+                music_volume := lerp(MUSIC_DUCK_VOLUME, 1.0, smootherstep(t));
+               
+                print_vars(t, music_volume);
+
+                SetMusicVolume(context.metagame.music_currently_playing, music_volume);
+            }
+        }
+        update_music();
 
         // Sound effect sanity check
         for sound_effect_currently_playing_counts {
@@ -1968,9 +1984,8 @@ update_and_draw_frame_round :: () {
 
                 sound_effect_currently_playing_counts[sound_effect.type] -= 1;
 
-                // TODO: this doesn't quite work, the 
-                if sound_effect.resume_playing_music_after_done {
-                    #if PLAY_MUSIC PlayMusicStream(context.metagame.music_currently_playing);
+                if sound_effect.duck_music {
+                    context.metagame.deduck_music_ms = 0;
                 }
 
                 remove sound_effect;
@@ -3005,7 +3020,7 @@ update_and_draw_frame_round :: () {
                                 case .ATTACKING;
                                     assert_soft(goblin.entity_id_attacking > 0, "Goblin % is in attack state but has no target\n", goblin.id);
 
-                                    // TODO: this blows, fix this!
+                                    // TODO: this blows, fix this!!!!!!!!!!!!!
                                     //
                                     // Make sure the entity is still alive, it's possible that other goblins have killed it this frame.
                                     found: bool;
@@ -5008,7 +5023,7 @@ update_and_draw_frame_round :: () {
     draw();
 }
 
-try_to_play_sound :: (sound_effect_type: SoundEffectType, pause_currently_playing_music_while_playing: bool) -> played_sound: bool {
+try_to_play_sound :: (sound_effect_type: SoundEffectType, duck_music: bool) -> played_sound: bool {
     if sound_effect_currently_playing_counts[sound_effect_type] < sound_effect_maximums[sound_effect_type] {
         sound := sounds[sound_effect_type];
         sound_effect_currently_playing_counts[sound_effect_type] += 1;
@@ -5017,11 +5032,11 @@ try_to_play_sound :: (sound_effect_type: SoundEffectType, pause_currently_playin
             increment_then_read(*sound_effect_id_counter),
             sound_effect_type,
             sound_get_duration_ms(sound),
-            pause_currently_playing_music_while_playing,
+            duck_music,
         });
         
-        if pause_currently_playing_music_while_playing {
-            PauseMusicStream(context.metagame.music_currently_playing);
+        if duck_music {
+            SetMusicVolume(context.metagame.music_currently_playing, MUSIC_DUCK_VOLUME);
         }
         
         PlaySound(sound);
@@ -7993,8 +8008,7 @@ create_shaman :: (pos: Vector2) -> Shaman {
     table_set(*shaman_id_to_index, shaman_id, shamans.count);
     array_add(*shamans, shaman);
 
-    // TODO: get better sound
-    // try_to_play_sound(SoundEffectType.SHAMAN_REVEAL, true);
+    try_to_play_sound(SoundEffectType.SHAMAN_REVEAL, true);
 
     return shaman;
 }
