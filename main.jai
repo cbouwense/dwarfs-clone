@@ -744,7 +744,7 @@ TILEMAP_GOBLIN_WORLD_WIDTH    :: TILEMAP_GENERAL_WORLD_WIDTH  * GOBLIN_SCALE_X;
 TILEMAP_GOBLIN_WORLD_HEIGHT   :: TILEMAP_GENERAL_WORLD_HEIGHT * GOBLIN_SCALE_Y;
 
 TILEMAP_SHAMAN_TILE_WIDTH     :: 128;
-TILEMAP_SHAMAN_TILE_HEIGHT    :: 32;
+TILEMAP_SHAMAN_TILE_HEIGHT    :: 48;
 TILEMAP_SHAMAN_TILE_PADDING_X :: 48;
 TILEMAP_SHAMAN_TILE_PADDING_Y :: 4;
 SHAMAN_SCALE_FACTOR           :: 2;
@@ -1099,10 +1099,12 @@ Goblin :: struct {
 }
 
 ShamanAnimation :: enum {
-    REVEAL :: 0;
-    IDLE   :: 1;
-    ATTACK :: 2;
-    SUMMON :: 3;
+    REVEAL      :: 0;
+    IDLE        :: 1;
+    ATTACK_UP   :: 2;
+    ATTACK_SIDE :: 3;
+    ATTACK_DOWN :: 4;
+    SUMMON      :: 5;
 };
 
 ShamanState :: enum {
@@ -3253,14 +3255,13 @@ update_and_draw_frame_round :: () {
                             // if !found_dwarves_to_attack then shaman_transition_state(shaman, .SUMMONING);
                         
                             // Turn the shaman sprite to face whatever way it should be
-                            if shaman.direction == {
-                                // don't change
-                                case .NORTH; // no op
-                                case .SOUTH; // no op
+                            // if shaman.direction == {
+                            //     case .NORTH; // no op
+                            //     case .SOUTH; // no op
 
-                                case .EAST; shaman.is_facing_left = false;
-                                case .WEST; shaman.is_facing_left = true;
-                            }
+                            //     case .EAST; shaman.is_facing_left = false;
+                            //     case .WEST; shaman.is_facing_left = true;
+                            // }
                         }
 
                         if #complete shaman.state == {
@@ -3269,7 +3270,7 @@ update_and_draw_frame_round :: () {
                                     shaman.attack_cooldown_ms -= xx (context.dt_seconds * 1000);
                                 } else {
                                     shaman.attack_cooldown_ms = SHAMAN_ATTACK_COOLDOWN_MS;
-                                    entity_set_active_animation(shaman, xx ShamanAnimation.ATTACK);
+                                    shaman_set_attack_animation_based_on_direction(shaman);
                                 }
                             }
                             case .SUMMONING; {
@@ -3297,6 +3298,9 @@ update_and_draw_frame_round :: () {
                         for *anim: shaman.animations {
                             if !anim.active continue;
 
+                            tile_id_to_damage_1: s32;
+                            tile_id_to_damage_2: s32;
+
                             animation_will_play_last_frame_this_frame := sprite_update(anim, context.dt_seconds);
 
                             if it_index == xx ShamanAnimation.REVEAL {
@@ -3316,85 +3320,95 @@ update_and_draw_frame_round :: () {
                                     entity_set_active_animation(shaman, xx ShamanAnimation.IDLE);
                                 }
                             }
-                            else if it_index == xx ShamanAnimation.ATTACK {
-                                // YOU WERE ABOUT TO PLUMB IN THE UP AND DOWN ATTACK ANIMATIONS
-                                if sprite_animation_get_current_frame(anim) == SHAMAN_ANIMATION_ATTACK_SIDE_FRAME_ACTION && !shaman.did_anim_action {
+                            else if it_index == xx ShamanAnimation.ATTACK_UP {
+                                assert_soft(shaman.direction == .NORTH, "Expected shaman % to be facing north since it's currently in the ATTACK_UP animation, but found its direction was %\n", shaman.id, shaman.direction);
+
+                                if sprite_animation_get_current_frame(anim) == SHAMAN_ANIMATION_ATTACK_UP_FRAME_ACTION && !shaman.did_anim_action {
                                     shaman.did_anim_action = true;
+                                    tile_id_to_damage_1 = shaman_tile_id - cast(s32) context.world_cols;
+                                    tile_id_to_damage_2 = tile_id_to_damage_1 + 1;
+                                }
+                            }
+                            else if it_index == xx ShamanAnimation.ATTACK_SIDE {
+                                assert_soft(shaman.direction == .EAST || shaman.direction == .WEST, "Expected shaman % to be facing either east or west since it's currently in the ATTACK_SIDE animation, but found its direction was %\n", shaman.id, shaman.direction);
 
-                                    tile_id_to_damage_1: s32;
-                                    tile_id_to_damage_2: s32;
-
-                                    if shaman.direction == {
-                                        case .NORTH;
-                                            tile_id_to_damage_1 = shaman_tile_id - cast(s32) context.world_cols;
-                                            tile_id_to_damage_2 = tile_id_to_damage_1 + 1;
-
-                                        case .SOUTH;
-                                            tile_id_to_damage_1 = shaman_tile_id + cast(s32) (2 * context.world_cols);
-                                            tile_id_to_damage_2 = tile_id_to_damage_1 + 1;
-
-                                        case .EAST;
+                                if shaman.direction == {
+                                    case .EAST;
+                                        if sprite_animation_get_current_frame(anim) == SHAMAN_ANIMATION_ATTACK_SIDE_FRAME_ACTION && !shaman.did_anim_action {
+                                            shaman.did_anim_action = true;
                                             tile_id_to_damage_1 = shaman_tile_id + 2;
                                             tile_id_to_damage_2 = tile_id_to_damage_1 + cast(s32) context.world_cols;
-
-                                        case .WEST;
+                                        }
+                                        
+                                    case .WEST;
+                                        if sprite_animation_get_current_frame(anim) == SHAMAN_ANIMATION_ATTACK_SIDE_FRAME_ACTION && !shaman.did_anim_action {
+                                            shaman.did_anim_action = true;
                                             tile_id_to_damage_1 = shaman_tile_id - 1;
                                             tile_id_to_damage_2 = tile_id_to_damage_1 + cast(s32) context.world_cols;
-                                    }
-
-                                    dwarf_to_damage_1_found, dwarf_to_damage_1 := table_find(*tile_ids_to_dwarfs, tile_id_to_damage_1);
-                                    dwarf_to_damage_2_found, dwarf_to_damage_2 := table_find(*tile_ids_to_dwarfs, tile_id_to_damage_2);
-                                    
-                                    // assert_soft(dwarf_to_damage_1_found || dwarf_to_damage_2_found, "Expected at least one dwarf to be attacked by shaman, but found none. This might not actually be a problem, but it seems like a reasonable assumption as I am writing this. If this is not a problem, remove this assesrtion.");
-
-                                    // TODO: function
-                                    if dwarf_to_damage_1_found then {
-                                        // Hit check
-                                        rng := random_get_within_range(0, 1);
-                                        swing_connected := rng <= SHAMAN_HIT_CHANCE;
-
-                                        if swing_connected {
-                                            target_entity_canonical_tile_id := get_entity_canonical_tile_id(dwarf_to_damage_1);
-
-                                            // TODO: damage particles
-
-                                            dwarf_to_damage_1.hp -= SHAMAN_ATTACK_DAMAGE_PER_SWING;
-
-                                            if dwarf_to_damage_1.hp <= 0 {
-                                                kill_dwarf_by_id(dwarf_to_damage_1.id);
-
-                                                shaman_transition_state(shaman, .SUMMONING);
-                                            }
-                                        } else {
-                                            create_miss_particle(Vector2.{ dwarf_to_damage_1.pos.x, dwarf_to_damage_1.pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 });
                                         }
-                                    }
+                                }
+                            }
+                            else if it_index == xx ShamanAnimation.ATTACK_DOWN {
+                                assert_soft(shaman.direction == .SOUTH, "Expected shaman % to be facing south since it's currently in the ATTACK_DOWN animation, but found its direction was %\n", shaman.id, shaman.direction);
 
-                                    // TODO: function
-                                    if dwarf_to_damage_2_found then {
-                                        // Hit check
-                                        rng := random_get_within_range(0, 1);
-                                        swing_connected := rng <= SHAMAN_HIT_CHANCE;
+                                if sprite_animation_get_current_frame(anim) == SHAMAN_ANIMATION_ATTACK_DOWN_FRAME_ACTION && !shaman.did_anim_action {
+                                    shaman.did_anim_action = true;
+                                    tile_id_to_damage_1 = shaman_tile_id + cast(s32) (2 * context.world_cols);
+                                    tile_id_to_damage_2 = tile_id_to_damage_1 + 1;
+                                }
+                            }
 
-                                        if swing_connected {
-                                            target_entity_canonical_tile_id := get_entity_canonical_tile_id(dwarf_to_damage_2);
+                            if it_index == xx ShamanAnimation.ATTACK_UP || it_index == xx ShamanAnimation.ATTACK_DOWN || it_index == xx ShamanAnimation.ATTACK_SIDE {
+                                dwarf_to_damage_1_found, dwarf_to_damage_1 := table_find(*tile_ids_to_dwarfs, tile_id_to_damage_1);
+                                dwarf_to_damage_2_found, dwarf_to_damage_2 := table_find(*tile_ids_to_dwarfs, tile_id_to_damage_2);
 
-                                            entity_center := Vector2.{
-                                                dwarf_to_damage_2.pos.x + TILEMAP_GENERAL_WORLD_WIDTH  * 0.5,
-                                                dwarf_to_damage_2.pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5,
-                                            };
-                                            create_damage_particles(entity_center, SHAMAN_ATTACK_DAMAGE_PER_SWING, shaman.direction);
+                                // TODO: function
+                                if dwarf_to_damage_1_found {
+                                    // Hit check
+                                    rng := random_get_within_range(0, 1);
+                                    swing_connected := rng <= SHAMAN_HIT_CHANCE;
 
-                                            dwarf_to_damage_2.hp -= SHAMAN_ATTACK_DAMAGE_PER_SWING;
+                                    if swing_connected {
+                                        target_entity_canonical_tile_id := get_entity_canonical_tile_id(dwarf_to_damage_1);
 
-                                            if dwarf_to_damage_2.hp <= 0 {
-                                                kill_dwarf_by_id(dwarf_to_damage_2.id);
+                                        // TODO: damage particles
 
-                                                shaman_transition_state(shaman, .SUMMONING);
-                                            }
-                                        } else {
-                                            create_miss_particle(Vector2.{ dwarf_to_damage_2.pos.x, dwarf_to_damage_2.pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 });
+                                        dwarf_to_damage_1.hp -= SHAMAN_ATTACK_DAMAGE_PER_SWING;
+
+                                        if dwarf_to_damage_1.hp <= 0 {
+                                            kill_dwarf_by_id(dwarf_to_damage_1.id);
+
+                                            shaman_transition_state(shaman, .SUMMONING);
                                         }
+                                    } else {
+                                        create_miss_particle(Vector2.{ dwarf_to_damage_1.pos.x, dwarf_to_damage_1.pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 });
+                                    }
+                                }
+
+                                // TODO: function
+                                if dwarf_to_damage_2_found {
+                                    // Hit check
+                                    rng := random_get_within_range(0, 1);
+                                    swing_connected := rng <= SHAMAN_HIT_CHANCE;
+
+                                    if swing_connected {
+                                        target_entity_canonical_tile_id := get_entity_canonical_tile_id(dwarf_to_damage_2);
+
+                                        entity_center := Vector2.{
+                                            dwarf_to_damage_2.pos.x + TILEMAP_GENERAL_WORLD_WIDTH  * 0.5,
+                                            dwarf_to_damage_2.pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5,
+                                        };
+                                        create_damage_particles(entity_center, SHAMAN_ATTACK_DAMAGE_PER_SWING, shaman.direction);
+
+                                        dwarf_to_damage_2.hp -= SHAMAN_ATTACK_DAMAGE_PER_SWING;
+
+                                        if dwarf_to_damage_2.hp <= 0 {
+                                            kill_dwarf_by_id(dwarf_to_damage_2.id);
+
+                                            shaman_transition_state(shaman, .SUMMONING);
+                                        }
+                                    } else {
+                                        create_miss_particle(Vector2.{ dwarf_to_damage_2.pos.x, dwarf_to_damage_2.pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 });
                                     }
                                 }
 
@@ -5039,6 +5053,16 @@ update_and_draw_frame_round :: () {
     draw();
 }
 
+shaman_set_attack_animation_based_on_direction :: (shaman: *Shaman) {
+    if shaman.direction == {
+        case .NORTH; entity_set_active_animation(shaman, xx ShamanAnimation.ATTACK_UP);
+        case .SOUTH; entity_set_active_animation(shaman, xx ShamanAnimation.ATTACK_DOWN);
+        case .EAST;  entity_set_active_animation(shaman, xx ShamanAnimation.ATTACK_SIDE);
+        case .WEST;  entity_set_active_animation(shaman, xx ShamanAnimation.ATTACK_SIDE);
+        case; assert_soft(false, "Expected shaman % to be facing a cardinal direction, but found its direction to be %\n", shaman.id, shaman.direction);
+    }
+}
+
 try_to_play_sound :: (sound_effect_type: SoundEffectType, duck_music: bool) -> played_sound: bool {
     if sound_effect_currently_playing_counts[sound_effect_type] < sound_effect_maximums[sound_effect_type] {
         sound := sounds[sound_effect_type];
@@ -5563,14 +5587,6 @@ try_to_add_warning_and_alert_markers :: (tile_id: s32, cave_type: CaveType) {
             set_tile_property(neighbor_id_1, prop_warning);
         }
     }
-}
-
-dwarf_maybe_set_active_animation :: (dwarf: *Dwarf, active_animation_index: s64) {
-    for dwarf.animations {
-        // If there are any animations currently playing, let them finish before moving on
-        if it_index != xx active_animation_index && it.active then return;
-    }
-    entity_set_active_animation(dwarf, active_animation_index);
 }
 
 entity_set_active_animation :: (entity: *$T/interface Moveable, active_animation_index: s64) {
@@ -6686,9 +6702,8 @@ shaman_transition_state :: (shaman: *Shaman, new_state: ShamanState) {
     // What to do when entering these states
     if #complete new_state == {
         case .REVEALING;
-        case .IDLE;
-            entity_set_active_animation(shaman, xx ShamanAnimation.IDLE);
-        case .ATTACKING;
+        case .IDLE;      entity_set_active_animation(shaman, xx ShamanAnimation.IDLE);
+        case .ATTACKING; //shaman_set_attack_animation_based_on_direction(shaman);
         case .SUMMONING;
     }
 }
@@ -7991,11 +8006,17 @@ create_shaman :: (pos: Vector2) -> Shaman {
     shaman_animated_sprite_idle.first_frame = SHAMAN_ANIMATION_IDLE_START_FRAME;
     shaman_animated_sprite_idle.frame_count = SHAMAN_ANIMATION_IDLE_FRAME_COUNT;
 
-    // TODO: attack up and down
-
     shaman_animated_sprite_attack_side := shaman_animated_sprite_base;
     shaman_animated_sprite_attack_side.first_frame = SHAMAN_ANIMATION_ATTACK_SIDE_START_FRAME;
     shaman_animated_sprite_attack_side.frame_count = SHAMAN_ANIMATION_ATTACK_SIDE_FRAME_COUNT;
+
+    shaman_animated_sprite_attack_up := shaman_animated_sprite_base;
+    shaman_animated_sprite_attack_up.first_frame = SHAMAN_ANIMATION_ATTACK_UP_START_FRAME;
+    shaman_animated_sprite_attack_up.frame_count = SHAMAN_ANIMATION_ATTACK_UP_FRAME_COUNT;
+
+    shaman_animated_sprite_attack_down := shaman_animated_sprite_base;
+    shaman_animated_sprite_attack_down.first_frame = SHAMAN_ANIMATION_ATTACK_DOWN_START_FRAME;
+    shaman_animated_sprite_attack_down.frame_count = SHAMAN_ANIMATION_ATTACK_DOWN_FRAME_COUNT;
 
     shaman_animated_sprite_summon := shaman_animated_sprite_base;
     shaman_animated_sprite_summon.first_frame = SHAMAN_ANIMATION_SUMMON_START_FRAME;
@@ -8005,7 +8026,9 @@ create_shaman :: (pos: Vector2) -> Shaman {
     
     array_add(*animations, shaman_animated_sprite_reveal);
     array_add(*animations, shaman_animated_sprite_idle);
+    array_add(*animations, shaman_animated_sprite_attack_up);
     array_add(*animations, shaman_animated_sprite_attack_side);
+    array_add(*animations, shaman_animated_sprite_attack_down);
     array_add(*animations, shaman_animated_sprite_summon);
 
     shaman := Shaman.{
