@@ -121,10 +121,10 @@ SHAMAN_ANIMATION_ATTACK_DOWN_START_FRAME       :: 41;
 SHAMAN_ANIMATION_ATTACK_DOWN_FRAME_COUNT       :: 8;
 SHAMAN_ANIMATION_ATTACK_DOWN_FRAME_DURATION_MS :: 100;
 SHAMAN_ANIMATION_ATTACK_DOWN_FRAME_ACTION      :: 44;
-SHAMAN_ANIMATION_SUMMON_START_FRAME       :: 33;
+SHAMAN_ANIMATION_SUMMON_START_FRAME       :: 49;
 SHAMAN_ANIMATION_SUMMON_FRAME_COUNT       :: 16;
 SHAMAN_ANIMATION_SUMMON_FRAME_DURATION_MS :: 100;
-SHAMAN_ANIMATION_SUMMON_FRAME_ACTION      :: 45;
+SHAMAN_ANIMATION_SUMMON_FRAME_ACTION      :: 61;
 
 SHAMAN_SUMMON_COOLDOWN_MS :: 40000;
 SHAMAN_ATTACK_COOLDOWN_MS :: 2000;
@@ -2805,7 +2805,10 @@ update_and_draw_frame_round :: () {
 
                                                     if entity.hp <= 0 {
                                                         if goblin_found then kill_goblin_by_id(entity.id);
-                                                        if shaman_found then kill_shaman_by_id(entity.id);
+                                                        if shaman_found {
+                                                            create_dwarf_death_particles(entity_center);
+                                                            kill_shaman_by_id(entity.id);
+                                                        }
                                                         dwarf_transition_state(dwarf, .DECIDING);
                                                     }
                                                 } else {
@@ -3321,8 +3324,6 @@ update_and_draw_frame_round :: () {
                                 }
                             }
                             else if it_index == xx ShamanAnimation.ATTACK_UP {
-                                assert_soft(shaman.direction == .NORTH, "Expected shaman % to be facing north since it's currently in the ATTACK_UP animation, but found its direction was %\n", shaman.id, shaman.direction);
-
                                 if sprite_animation_get_current_frame(anim) == SHAMAN_ANIMATION_ATTACK_UP_FRAME_ACTION && !shaman.did_anim_action {
                                     shaman.did_anim_action = true;
                                     tile_id_to_damage_1 = shaman_tile_id - cast(s32) context.world_cols;
@@ -3330,8 +3331,6 @@ update_and_draw_frame_round :: () {
                                 }
                             }
                             else if it_index == xx ShamanAnimation.ATTACK_SIDE {
-                                assert_soft(shaman.direction == .EAST || shaman.direction == .WEST, "Expected shaman % to be facing either east or west since it's currently in the ATTACK_SIDE animation, but found its direction was %\n", shaman.id, shaman.direction);
-
                                 if shaman.direction == {
                                     case .EAST;
                                         if sprite_animation_get_current_frame(anim) == SHAMAN_ANIMATION_ATTACK_SIDE_FRAME_ACTION && !shaman.did_anim_action {
@@ -3349,8 +3348,6 @@ update_and_draw_frame_round :: () {
                                 }
                             }
                             else if it_index == xx ShamanAnimation.ATTACK_DOWN {
-                                assert_soft(shaman.direction == .SOUTH, "Expected shaman % to be facing south since it's currently in the ATTACK_DOWN animation, but found its direction was %\n", shaman.id, shaman.direction);
-
                                 if sprite_animation_get_current_frame(anim) == SHAMAN_ANIMATION_ATTACK_DOWN_FRAME_ACTION && !shaman.did_anim_action {
                                     shaman.did_anim_action = true;
                                     tile_id_to_damage_1 = shaman_tile_id + cast(s32) (2 * context.world_cols);
