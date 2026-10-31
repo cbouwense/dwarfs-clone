@@ -851,7 +851,6 @@ GameState :: struct {
     panic_pause_timer_ms               : int;
     controls_state_this_frame          : ControlsState;
     controls_state_prev_frame          : ControlsState;
-    started_dragging_at_pos            : Vector2;
     alert_banner_text                  : string;
     alert_banner_text_ms               : int;
     alert_banner_text_color            : Color;
@@ -2203,13 +2202,14 @@ update_and_draw_frame_round :: () {
                             }
                             // If we were drawing a path, but just let go, then create the path as a real thing.
                             else if context.game_state.controls_state_prev_frame.drawing_path {
-                                // Destroy any arrows these paths might be overlapping
+                                // Destroy any arrows these paths might be overlapping, except for the final tile of the path
+                                // we are drawing.
                                 {
                                     if path_being_traced_1.start_tile_id > 0 {
                                         path_1_tile_ids := get_tile_ids_on_path(path_being_traced_1);
                                         for path_1_tile_id: path_1_tile_ids {
                                             // The last tile id of a path does not destroy path arrows
-                                            if it_index == path_1_tile_ids.count continue;
+                                            if it_index == path_1_tile_ids.count-1 continue;
 
                                             for path: paths {
                                                 if path_1_tile_id == path.start_tile_id {
@@ -2223,7 +2223,7 @@ update_and_draw_frame_round :: () {
                                         path_2_tile_ids := get_tile_ids_on_path(path_being_traced_2);
                                         for path_2_tile_id: path_2_tile_ids {
                                             // The last tile id of a path does not destroy path arrows
-                                            if it_index == path_2_tile_ids.count continue;
+                                            if it_index == path_2_tile_ids.count-1 continue;
 
                                             for path: paths {
                                                 if path_2_tile_id == path.start_tile_id {
