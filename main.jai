@@ -3051,15 +3051,14 @@ update_and_draw_frame_round :: () {
                                     entity: *Entity;
                                     is_dwarf := false; // TODO: fix this!!!!!!!!!!!!!!!
 
-                                    set_entity_id_to_index(Dwarf);
-                                    found, entity_index = table_find(*entity_id_to_index, goblin.entity_id_attacking);
+                                    found, entity_index = table_find(*dwarf_id_to_index, goblin.entity_id_attacking);
                                     if found {
                                         is_dwarf = true;
                                         entity = *dwarves[entity_index];
                                     } else {
-                                        set_entity_id_to_index(Outpost);
-                                        found, entity_index = table_find(*entity_id_to_index, goblin.entity_id_attacking);
+                                        found, entity_index = table_find(*outpost_id_to_index, goblin.entity_id_attacking);
                                         if found {
+                                            print_vars(found, entity_index, outposts.data);
                                             entity = *outposts[entity_index];
 
                                             // If this goblin is attacking the home base
@@ -4360,7 +4359,7 @@ update_and_draw_frame_round :: () {
                             draw_light_gradient(
                                 center,
                                 160.0,
-                                Color.{ 180, 220, 150, 110 }
+                                Color.{ 180, 240, 150, 170 }
                             );
                         }
 
@@ -4386,7 +4385,7 @@ update_and_draw_frame_round :: () {
                             draw_light_gradient(
                                 center,
                                 210.0,
-                                Color.{ 255, 145, 150, 190 }
+                                Color.{ 255, 45, 50, 190 }
                             );
                         }
                     }
@@ -4439,6 +4438,20 @@ update_and_draw_frame_round :: () {
             EndBlendMode();
 
         EndTextureMode();
+
+        final_texture_source := Rectangle.{
+            0,
+            0,
+            xx final_render_texture.texture.width,
+            xx -final_render_texture.texture.height,
+        };
+
+        DrawTextureRec(
+            final_render_texture.texture,
+            final_texture_source,
+            Vector2.{ 0, 0 },
+            WHITE,
+        );
 
         // Draw UI
         draw_ui :: () {
@@ -5177,20 +5190,6 @@ update_and_draw_frame_round :: () {
         }
         DRAW_UI :: true;
         #if DRAW_UI then draw_ui();
-
-        final_texture_source := Rectangle.{
-            0,
-            0,
-            xx final_render_texture.texture.width,
-            xx -final_render_texture.texture.height,
-        };
-
-        DrawTextureRec(
-            final_render_texture.texture,
-            final_texture_source,
-            Vector2.{ 0, 0 },
-            WHITE,
-        );
 
         EndDrawing();
     }
@@ -8322,8 +8321,6 @@ create_outpost :: (pos: Vector2, is_home_base: bool) -> Outpost {
 
     outpost_tile_id := get_tile_id_by_pos(outpost.pos);
 
-    array_add(*outposts, outpost);
-
     // Give a little breathing room with caves for the home base
     if is_home_base {
         BLOCKS_BEFORE_CAVES :: 10;
@@ -8367,6 +8364,7 @@ create_outpost :: (pos: Vector2, is_home_base: bool) -> Outpost {
     }
 
     table_set(*outpost_id_to_index, outpost_id, outposts.count);
+    array_add(*outposts, outpost);
 
     return outpost;
 }
