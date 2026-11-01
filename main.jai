@@ -1252,6 +1252,10 @@ music_vindkaldr_ambient_i_the_fairy_that_disappeared: Music;
 sound_digging: Sound;
 sound_shaman_reveal: Sound;
 
+final_render_texture: RenderTexture2D;
+world_render_texture: RenderTexture2D;
+lightmap_render_texture: RenderTexture2D;
+
 main :: () {
     // SetConfigFlags(.FLAG_WINDOW_RESIZABLE | .FLAG_FULLSCREEN_MODE);
     SetConfigFlags(.FLAG_WINDOW_RESIZABLE);
@@ -1286,6 +1290,10 @@ main :: () {
     data_folder = join(base_path, "data");
 
     init_textures();
+    
+    final_render_texture = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
+    world_render_texture = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
+    lightmap_render_texture = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
 
     // Initialize font
     {
@@ -1311,6 +1319,10 @@ main :: () {
 
         context.metagame.should_quit_game = context.metagame.should_quit_game || WindowShouldClose();
     }
+
+    UnloadRenderTexture(final_render_texture);
+    UnloadRenderTexture(world_render_texture);
+    UnloadRenderTexture(lightmap_render_texture);
 }
 
 // Functions
@@ -3621,699 +3633,817 @@ update_and_draw_frame_round :: () {
         derive_things_to_draw();
 
         BeginDrawing();
-        defer EndDrawing();
 
-        ClearBackground(BEIGE);
+        // Render world
+        BeginTextureMode(world_render_texture);
 
-        // Draw world
-        draw_world :: () {
-            BeginMode2D(context.camera);
-            defer EndMode2D();
+            ClearBackground(BEIGE);
 
-            // First, draw base layer of dirt which is just one giant quad
-            draw_base_dirt_layer :: () {
-                dest := Rectangle.{ 
-                    0,
-                    0,
-                    xx (TILEMAP_GENERAL_WORLD_WIDTH  * context.world_cols),
-                    xx (TILEMAP_GENERAL_WORLD_HEIGHT * context.world_rows),
-                };
+            draw_world :: () {
+                BeginMode2D(context.camera);
+                defer EndMode2D();
 
-                if is_lod_close() || is_lod_normal() {
-                    // This accomplishes the tiling effect when we sample the source
-                    // with such a big triangle.
-                    source := Rectangle.{ 
-                        0, 
-                        0, 
+                // First, draw base layer of dirt which is just one giant quad
+                draw_base_dirt_layer :: () {
+                    dest := Rectangle.{ 
+                        0,
+                        0,
                         xx (TILEMAP_GENERAL_WORLD_WIDTH  * context.world_cols),
                         xx (TILEMAP_GENERAL_WORLD_HEIGHT * context.world_rows),
                     };
 
-                    DrawTexturePro(dirt_texture, source, dest, Vector2.{0,0}, 0.0, WHITE);
-                } else {
-                    DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_DIRT, dest, Vector2.{0,0}, 0.0, WHITE);
-                }
-            }
-            draw_base_dirt_layer();
-
-            // Draw tiles
-            draw_tiles :: () {
-                // Draw tiles base layer
-                draw_tiles_base_layer :: () {
-                    for *tile: tiles_to_draw_this_frame {
-                        tint := ifx tile_has_property(tile, .ENCASED) then DARKBROWN else WHITE;
-                        tile_dest := get_world_rect_from_pos(tile.pos);
-
-                        if is_lod_far() {
-                            if #complete tile.type == {
-                                case .UNTOUCHED_DIRT; // Nothing to draw, we tile dirt on one texture in the background
-                                case .IRON;           // Iron is not on the base layer
-                                
-                                case .TOUCHED_DIRT; {
-                                    DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_DIRT_GENERAL, tile_dest, Vector2.{0,0}, 0.0, tint);
-                                }
-
-                                case .MINED; {
-                                    source := Rectangle.{
-                                        xx (3 * TILEMAP_GENERAL_TILE_WIDTH),
-                                        1 * TILEMAP_GENERAL_TILE_HEIGHT,
-                                        TILEMAP_GENERAL_TILE_WIDTH,
-                                        TILEMAP_GENERAL_TILE_HEIGHT,
-                                    };
-
-                                    DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, tint);
-                                }
-                                case .CAVE; {
-                                    CAVE_SPRITE_SOURCE_ROW :: 2;
-                                    CAVE_SPRITE_SOURCE_COL :: 9;
-
-                                    source := Rectangle.{
-                                        xx (CAVE_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH),
-                                        xx (CAVE_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT),
-                                        TILEMAP_GENERAL_TILE_WIDTH,
-                                        TILEMAP_GENERAL_TILE_HEIGHT,
-                                    };
-
-                                    DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, tint);
-                                }
-                                case .OBSIDIAN; {
-                                    DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OBSIDIAN, tile_dest, Vector2.{0,0}, 0.0, tint);
-                                }
-                                case .WALL; {
-                                    DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_WALL, tile_dest, Vector2.{0,0}, 0.0, tint);
-                                }
-                                case .HOLE; {
-                                    DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOLE, tile_dest, Vector2.{0,0}, 0.0, tint);
-                                }
-                            }
-                        }
-                        // Normal / close distance
-                        else {
-                            if #complete tile.type == {
-                                case .UNTOUCHED_DIRT; // Nothing to draw, we tile dirt on one texture in the background
-                                // TODO: maybe draw cracks based on health
-                                case .TOUCHED_DIRT; {
-                                    DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_DIRT_GENERAL, tile_dest, Vector2.{0,0}, 0.0, tint);
-                                }
-                                case .MINED; {
-                                    tile_column := tile.id % 3;
-    
-                                    source := Rectangle.{
-                                        xx (tile_column * TILEMAP_GENERAL_TILE_WIDTH),
-                                        1 * TILEMAP_GENERAL_TILE_HEIGHT,
-                                        TILEMAP_GENERAL_TILE_WIDTH,
-                                        TILEMAP_GENERAL_TILE_HEIGHT,
-                                    };
-
-                                    DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, tint);
-                                }
-                                case .CAVE; {
-                                    CAVE_SPRITE_SOURCE_ROW :: 2;
-                                    CAVE_SPRITE_SOURCE_COL :: 9;
-
-                                    source := Rectangle.{
-                                        xx (CAVE_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH),
-                                        xx (CAVE_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT),
-                                        TILEMAP_GENERAL_TILE_WIDTH,
-                                        TILEMAP_GENERAL_TILE_HEIGHT,
-                                    };
-
-                                    DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, tint);
-                                }
-                                
-                                // Drawn on the top layer, so, nothing to do here while drawing the base layer.
-                                case .IRON;
-                                case .WALL;
-                                case .HOLE; 
-                                
-                                case .OBSIDIAN; {
-                                    DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OBSIDIAN, tile_dest, Vector2.{0,0}, 0.0, tint);
-                                }
-                            }
-                        }
-
-                        // Draw tile properties (order matters here)
-                        if tile.properties > 0 {
-                            if is_lod_far() {
-                                if tile_has_property(tile, .OUTPOST_FLOOR) {
-                                    DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTPOST_FLOOR_FAR_LOD, tile_dest, Vector2.{0,0}, 0.0, tint);
-                                }
-
-                                if tile_has_property(tile, .HOME_BASE_FLOOR) {
-                                    DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_FAR_LOD, tile_dest, Vector2.{0,0}, 0.0, tint);
-                                }
-
-                                if tile_has_property(tile, .WATER_STILL) {
-                                    WATER_FAR_LOD_SPRITE_SOURCE_ROW :: 3;
-                                    WATER_FAR_LOD_SPRITE_SOURCE_COL :: 9;
-
-                                    source := Rectangle.{
-                                        xx (WATER_FAR_LOD_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH),
-                                        xx (WATER_FAR_LOD_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT),
-                                        TILEMAP_GENERAL_TILE_WIDTH,
-                                        TILEMAP_GENERAL_TILE_HEIGHT,
-                                    };
-
-                                    DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, tint);
-                                }
-
-                                if tile_has_property(tile, .WATER_FLOWING) {
-                                    tile.animated_sprite.color = tint;
-
-                                    sprite_draw( 
-                                        tile.animated_sprite,
-                                        tile.pos,
-                                        TILEMAP_GENERAL_WORLD_WIDTH,
-                                        TILEMAP_GENERAL_WORLD_HEIGHT,
-                                        TILEMAP_GENERAL_TILE_WIDTH,
-                                        TILEMAP_GENERAL_TILE_HEIGHT,
-                                        false,
-                                    );
-                                }
-
-                                if tile_has_property(tile, .LAVA_STILL) {
-                                    LAVA_FAR_LOD_SPRITE_SOURCE_ROW :: 8;
-                                    LAVA_FAR_LOD_SPRITE_SOURCE_COL :: 9;
-
-                                    source := Rectangle.{
-                                        xx (LAVA_FAR_LOD_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH),
-                                        xx (LAVA_FAR_LOD_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT),
-                                        TILEMAP_GENERAL_TILE_WIDTH,
-                                        TILEMAP_GENERAL_TILE_HEIGHT,
-                                    };
-
-                                    DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, tint);
-                                }
-
-                                if tile_has_property(tile, .LAVA_FLOWING) {
-                                    tile.animated_sprite.color = tint;
-
-                                    sprite_draw(
-                                        tile.animated_sprite,
-                                        tile.pos,
-                                        TILEMAP_GENERAL_WORLD_WIDTH,
-                                        TILEMAP_GENERAL_WORLD_HEIGHT,
-                                        TILEMAP_GENERAL_TILE_WIDTH,
-                                        TILEMAP_GENERAL_TILE_HEIGHT,
-                                        false,
-                                    );
-                                }
-                            } else {
-                                if tile_has_property(tile, .OUTPOST_FLOOR) {
-                                    DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTPOST_FLOOR, tile_dest, Vector2.{0,0}, 0.0, tint);
-                                }
-                                
-                                if tile_has_property(tile, .HOME_BASE_FLOOR) {
-                                    neighbor_tile_north := get_neighbor_tile_id_by_direction(tile.id, .NORTH);
-                                    neighbor_tile_south := get_neighbor_tile_id_by_direction(tile.id, .SOUTH);
-                                    neighbor_tile_east  := get_neighbor_tile_id_by_direction(tile.id, .EAST);
-                                    neighbor_tile_west  := get_neighbor_tile_id_by_direction(tile.id, .WEST);
-
-                                    is_home_base_floor_north := is_tile_home_base_floor(neighbor_tile_north);
-                                    is_home_base_floor_south := is_tile_home_base_floor(neighbor_tile_south);
-                                    is_home_base_floor_east  := is_tile_home_base_floor(neighbor_tile_east);
-                                    is_home_base_floor_west  := is_tile_home_base_floor(neighbor_tile_west);
-
-                                    // Center
-                                    if is_home_base_floor_north && is_home_base_floor_south && is_home_base_floor_east && is_home_base_floor_west {
-                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_CENTER, tile_dest, Vector2.{0,0}, 0.0, tint);
-                                    }
-                                    // North
-                                    else if is_home_base_floor_south && is_home_base_floor_east && is_home_base_floor_west {
-                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_NORTH, tile_dest, Vector2.{0,0}, 0.0, tint);
-                                    }
-                                    // South
-                                    else if is_home_base_floor_north && is_home_base_floor_east && is_home_base_floor_west {
-                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_SOUTH, tile_dest, Vector2.{0,0}, 0.0, tint);
-                                    }
-                                    // East
-                                    else if is_home_base_floor_north && is_home_base_floor_south && is_home_base_floor_west {
-                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_EAST, tile_dest, Vector2.{0,0}, 0.0, tint);
-                                    }
-                                    // West
-                                    else if is_home_base_floor_north && is_home_base_floor_south && is_home_base_floor_east {
-                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_WEST, tile_dest, Vector2.{0,0}, 0.0, tint);
-                                    }
-                                    // North west
-                                    else if is_home_base_floor_south && is_home_base_floor_east {
-                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_NORTH_WEST, tile_dest, Vector2.{0,0}, 0.0, tint);
-                                    }
-                                    // North east
-                                    else if is_home_base_floor_south && is_home_base_floor_west {
-                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_NORTH_EAST, tile_dest, Vector2.{0,0}, 0.0, tint);
-                                    }
-                                    // South west
-                                    else if is_home_base_floor_north && is_home_base_floor_east {
-                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_SOUTH_WEST, tile_dest, Vector2.{0,0}, 0.0, tint);
-                                    }
-                                    // South east
-                                    else if is_home_base_floor_north && is_home_base_floor_west {
-                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_SOUTH_EAST, tile_dest, Vector2.{0,0}, 0.0, tint);
-                                    }
-                                    else {
-                                        assert_soft(false, "Encountered a home base floor tile % with some strange neighbors: %, %, %, %", tile.id, is_home_base_floor_north, is_home_base_floor_south, is_home_base_floor_east, is_home_base_floor_west);
-                                    }   
-                                }
-
-                                if tile_has_property(tile, .WATER_STILL) {
-                                    tile.animated_sprite.color = tint;
-
-                                    sprite_draw(
-                                        tile.animated_sprite,
-                                        tile.pos,
-                                        TILEMAP_GENERAL_WORLD_WIDTH,
-                                        TILEMAP_GENERAL_WORLD_HEIGHT,
-                                        TILEMAP_GENERAL_TILE_WIDTH,
-                                        TILEMAP_GENERAL_TILE_HEIGHT,
-                                        false,
-                                    );
-                                }
-
-                                if tile_has_property(tile, .WATER_FLOWING) {
-                                    tile.animated_sprite.color = tint;
-
-                                    sprite_draw(
-                                        tile.animated_sprite,
-                                        tile.pos,
-                                        TILEMAP_GENERAL_WORLD_WIDTH,
-                                        TILEMAP_GENERAL_WORLD_HEIGHT,
-                                        TILEMAP_GENERAL_TILE_WIDTH,
-                                        TILEMAP_GENERAL_TILE_HEIGHT,
-                                        false,
-                                    );
-                                }
-
-                                if tile_has_property(tile, .LAVA_STILL) {
-                                    source := Rectangle.{
-                                        LAVA_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
-                                        LAVA_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
-                                        TILEMAP_GENERAL_TILE_WIDTH,
-                                        TILEMAP_GENERAL_TILE_HEIGHT,
-                                    };
-
-                                    DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, tint);
-                                }
-
-                                if tile_has_property(tile, .LAVA_FLOWING) {
-                                    tile.animated_sprite.color = tint;
-
-                                    sprite_draw(
-                                       tile.animated_sprite,
-                                       tile.pos,
-                                       TILEMAP_GENERAL_WORLD_WIDTH,
-                                       TILEMAP_GENERAL_WORLD_HEIGHT,
-                                       TILEMAP_GENERAL_TILE_WIDTH,
-                                       TILEMAP_GENERAL_TILE_HEIGHT,
-                                       false,
-                                    );
-                                }
-                            }
-
-                            if tile_has_property(tile, .HAS_DYNAMITE) {
-                                DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_DYNAMITE, tile_dest, Vector2.{0,0}, 0.0, tint);
-                            }
-
-                            if tile_has_property(tile, .HAS_TREASURE) {
-                                DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_TREASURE, tile_dest, Vector2.{0,0}, 0.0, tint);
-                            }
-
-                            if context.metagame.debug_mode {
-                                real_pos := Vector2.{ tile.pos.x + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, tile.pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 };
-
-                                if tile_has_property(tile, .WATER_WARNING) {
-                                    DrawCircleV(real_pos, 4.0, WHITE);
-                                    DrawCircleV(real_pos, 3.0, ORANGE);
-                                }
-
-                                if tile_has_property(tile, .LAVA_WARNING) {
-                                    DrawCircleV(real_pos, 4.0, WHITE);
-                                    DrawCircleV(real_pos, 3.0, ORANGE);
-                                }
-
-                                if tile_has_property(tile, .WATER_ALERT) {
-                                    DrawCircleV(real_pos, 4.0, WHITE);
-                                    DrawCircleV(real_pos, 3.0, RED);
-                                }
-
-                                if tile_has_property(tile, .LAVA_ALERT) {
-                                    DrawCircleV(real_pos, 4.0, WHITE);
-                                    DrawCircleV(real_pos, 3.0, RED);
-                                }
-                            }
-                        }
-                    }
-                }
-                draw_tiles_base_layer();
-                
-                DRAW_TRENCHES :: true;
-                #if DRAW_TRENCHES draw_trenches :: () {
                     if is_lod_close() || is_lod_normal() {
-                        for tile: tiles_to_draw_this_frame {
-                            if !does_tile_type_render_trenches(tile.type) continue;
+                        // This accomplishes the tiling effect when we sample the source
+                        // with such a big triangle.
+                        source := Rectangle.{ 
+                            0, 
+                            0, 
+                            xx (TILEMAP_GENERAL_WORLD_WIDTH  * context.world_cols),
+                            xx (TILEMAP_GENERAL_WORLD_HEIGHT * context.world_rows),
+                        };
 
-                            if tile.trench_directions_sides > 0 then draw_trench_sides(tile);
-                        }
-
-                        for tile: tiles_to_draw_this_frame {
-                            if !does_tile_type_render_trenches(tile.type) continue;
-
-                            if tile.trench_directions_corners_mostly_crust  > 0 then draw_trench_corners_mostly_crust(tile);
-                            if tile.trench_directions_corners_mostly_dirt   > 0 then draw_trench_corners_mostly_dirt(tile);
-                            if tile.trench_directions_corners_special_crust > 0 then draw_trench_corners_special_crust(tile);
-                        }
-                    }
-                }
-                draw_trenches();
-
-                // Draw tiles top layer
-                draw_tiles_top_layer :: () {
-                    for tile: tiles_to_draw_this_frame {
-                        tile_dest := get_world_rect_from_pos(tile.pos);
-                        
-                        if #complete tile.type == {
-                            case .UNTOUCHED_DIRT;
-                            case .TOUCHED_DIRT;
-                            case .MINED;
-                            case .CAVE;
-                            case .OBSIDIAN;
-                            case .HOLE; {
-                                DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOLE, tile_dest, Vector2.{0,0}, 0.0, WHITE);
-                            }
-
-                            case .WALL; {
-                                DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_WALL, tile_dest, Vector2.{0,0}, 0.0, WHITE);
-                            }
-
-                            case .IRON; {
-                                DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_IRON, tile_dest, Vector2.{0,0}, 0.0, WHITE);
-                            }
-                        }
-                    }
-                }
-                draw_tiles_top_layer();
-            }
-            DRAW_TILES :: true;
-            #if DRAW_TILES then draw_tiles();
-
-            // Draw outposts
-            draw_outposts :: () {
-                for outpost: outposts_to_draw_this_frame {
-                    dest := Rectangle.{
-                        outpost.pos.x, outpost.pos.y, TILEMAP_GENERAL_WORLD_WIDTH * 3, TILEMAP_GENERAL_WORLD_HEIGHT * 3,
-                    };
-
-                    if outpost.is_home_base {
-                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE, dest, Vector2.{0,0}, 0.0, WHITE);
+                        DrawTexturePro(dirt_texture, source, dest, Vector2.{0,0}, 0.0, WHITE);
                     } else {
-                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTPOST, dest, Vector2.{0,0}, 0.0, Color.{ 255, 255, 255, xx (255 * outpost.build_completion_percentage) });
+                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_DIRT, dest, Vector2.{0,0}, 0.0, WHITE);
                     }
                 }
-            }
-            DRAW_OUTPOSTS :: true;
-            #if DRAW_OUTPOSTS then draw_outposts();
+                draw_base_dirt_layer();
 
-            // Draw paths
-            draw_paths :: () {
-                if context.game_state.controls_state_this_frame.drawing_path {
-                    if path_being_traced_1.start_tile_id > 0 draw_path(path_being_traced_1);
-                    if path_being_traced_2.start_tile_id > 0 draw_path(path_being_traced_2);
-                }
+                // Draw tiles
+                draw_tiles :: () {
+                    // Draw tiles base layer
+                    draw_tiles_base_layer :: () {
+                        for *tile: tiles_to_draw_this_frame {
+                            tint := ifx tile_has_property(tile, .ENCASED) then DARKBROWN else WHITE;
+                            tile_dest := get_world_rect_from_pos(tile.pos);
 
-                for path: paths_to_draw_this_frame draw_path(path);
-            }
-            draw_paths();
+                            if is_lod_far() {
+                                if #complete tile.type == {
+                                    case .UNTOUCHED_DIRT; // Nothing to draw, we tile dirt on one texture in the background
+                                    case .IRON;           // Iron is not on the base layer
+                                    
+                                    case .TOUCHED_DIRT; {
+                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_DIRT_GENERAL, tile_dest, Vector2.{0,0}, 0.0, tint);
+                                    }
 
-            // Draw the little rings / circles below units that make them visually contrasted relative to their surroundings.
-            // This has to be drawn separately from the unit drawing loops like "draw_dwarves" and "draw_goblins" because of
-            // z-ordering. Namely, the rings must be below all units to look correct. Even though logically units can only be
-            // on one tile at a time, their sprites do overlap while going between tiles.
-            draw_unit_rings :: () {
-                source_rect: Rectangle;
+                                    case .MINED; {
+                                        source := Rectangle.{
+                                            xx (3 * TILEMAP_GENERAL_TILE_WIDTH),
+                                            1 * TILEMAP_GENERAL_TILE_HEIGHT,
+                                            TILEMAP_GENERAL_TILE_WIDTH,
+                                            TILEMAP_GENERAL_TILE_HEIGHT,
+                                        };
 
-                for dwarf: dwarves_to_draw_this_frame {
-                    if is_lod_far() {
-                        if #complete dwarf.dwarf_type == {
-                            case .MINER;   source_rect = DWARF_MINER_DROP_SHADOW_FAR_SOURCE_RECT;
-                            case .WARRIOR; source_rect = DWARF_WARRIOR_DROP_SHADOW_FAR_SOURCE_RECT;
+                                        DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, tint);
+                                    }
+                                    case .CAVE; {
+                                        CAVE_SPRITE_SOURCE_ROW :: 2;
+                                        CAVE_SPRITE_SOURCE_COL :: 9;
+
+                                        source := Rectangle.{
+                                            xx (CAVE_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH),
+                                            xx (CAVE_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT),
+                                            TILEMAP_GENERAL_TILE_WIDTH,
+                                            TILEMAP_GENERAL_TILE_HEIGHT,
+                                        };
+
+                                        DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, tint);
+                                    }
+                                    case .OBSIDIAN; {
+                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OBSIDIAN, tile_dest, Vector2.{0,0}, 0.0, tint);
+                                    }
+                                    case .WALL; {
+                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_WALL, tile_dest, Vector2.{0,0}, 0.0, tint);
+                                    }
+                                    case .HOLE; {
+                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOLE, tile_dest, Vector2.{0,0}, 0.0, tint);
+                                    }
+                                }
+                            }
+                            // Normal / close distance
+                            else {
+                                if #complete tile.type == {
+                                    case .UNTOUCHED_DIRT; // Nothing to draw, we tile dirt on one texture in the background
+                                    // TODO: maybe draw cracks based on health
+                                    case .TOUCHED_DIRT; {
+                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_DIRT_GENERAL, tile_dest, Vector2.{0,0}, 0.0, tint);
+                                    }
+                                    case .MINED; {
+                                        tile_column := tile.id % 3;
+        
+                                        source := Rectangle.{
+                                            xx (tile_column * TILEMAP_GENERAL_TILE_WIDTH),
+                                            1 * TILEMAP_GENERAL_TILE_HEIGHT,
+                                            TILEMAP_GENERAL_TILE_WIDTH,
+                                            TILEMAP_GENERAL_TILE_HEIGHT,
+                                        };
+
+                                        DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, tint);
+                                    }
+                                    case .CAVE; {
+                                        CAVE_SPRITE_SOURCE_ROW :: 2;
+                                        CAVE_SPRITE_SOURCE_COL :: 9;
+
+                                        source := Rectangle.{
+                                            xx (CAVE_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH),
+                                            xx (CAVE_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT),
+                                            TILEMAP_GENERAL_TILE_WIDTH,
+                                            TILEMAP_GENERAL_TILE_HEIGHT,
+                                        };
+
+                                        DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, tint);
+                                    }
+                                    
+                                    // Drawn on the top layer, so, nothing to do here while drawing the base layer.
+                                    case .IRON;
+                                    case .WALL;
+                                    case .HOLE; 
+                                    
+                                    case .OBSIDIAN; {
+                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OBSIDIAN, tile_dest, Vector2.{0,0}, 0.0, tint);
+                                    }
+                                }
+                            }
+
+                            // Draw tile properties (order matters here)
+                            if tile.properties > 0 {
+                                if is_lod_far() {
+                                    if tile_has_property(tile, .OUTPOST_FLOOR) {
+                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTPOST_FLOOR_FAR_LOD, tile_dest, Vector2.{0,0}, 0.0, tint);
+                                    }
+
+                                    if tile_has_property(tile, .HOME_BASE_FLOOR) {
+                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_FAR_LOD, tile_dest, Vector2.{0,0}, 0.0, tint);
+                                    }
+
+                                    if tile_has_property(tile, .WATER_STILL) {
+                                        WATER_FAR_LOD_SPRITE_SOURCE_ROW :: 3;
+                                        WATER_FAR_LOD_SPRITE_SOURCE_COL :: 9;
+
+                                        source := Rectangle.{
+                                            xx (WATER_FAR_LOD_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH),
+                                            xx (WATER_FAR_LOD_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT),
+                                            TILEMAP_GENERAL_TILE_WIDTH,
+                                            TILEMAP_GENERAL_TILE_HEIGHT,
+                                        };
+
+                                        DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, tint);
+                                    }
+
+                                    if tile_has_property(tile, .WATER_FLOWING) {
+                                        tile.animated_sprite.color = tint;
+
+                                        sprite_draw( 
+                                            tile.animated_sprite,
+                                            tile.pos,
+                                            TILEMAP_GENERAL_WORLD_WIDTH,
+                                            TILEMAP_GENERAL_WORLD_HEIGHT,
+                                            TILEMAP_GENERAL_TILE_WIDTH,
+                                            TILEMAP_GENERAL_TILE_HEIGHT,
+                                            false,
+                                        );
+                                    }
+
+                                    if tile_has_property(tile, .LAVA_STILL) {
+                                        LAVA_FAR_LOD_SPRITE_SOURCE_ROW :: 8;
+                                        LAVA_FAR_LOD_SPRITE_SOURCE_COL :: 9;
+
+                                        source := Rectangle.{
+                                            xx (LAVA_FAR_LOD_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH),
+                                            xx (LAVA_FAR_LOD_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT),
+                                            TILEMAP_GENERAL_TILE_WIDTH,
+                                            TILEMAP_GENERAL_TILE_HEIGHT,
+                                        };
+
+                                        DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, tint);
+                                    }
+
+                                    if tile_has_property(tile, .LAVA_FLOWING) {
+                                        tile.animated_sprite.color = tint;
+
+                                        sprite_draw(
+                                            tile.animated_sprite,
+                                            tile.pos,
+                                            TILEMAP_GENERAL_WORLD_WIDTH,
+                                            TILEMAP_GENERAL_WORLD_HEIGHT,
+                                            TILEMAP_GENERAL_TILE_WIDTH,
+                                            TILEMAP_GENERAL_TILE_HEIGHT,
+                                            false,
+                                        );
+                                    }
+                                } else {
+                                    if tile_has_property(tile, .OUTPOST_FLOOR) {
+                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTPOST_FLOOR, tile_dest, Vector2.{0,0}, 0.0, tint);
+                                    }
+                                    
+                                    if tile_has_property(tile, .HOME_BASE_FLOOR) {
+                                        neighbor_tile_north := get_neighbor_tile_id_by_direction(tile.id, .NORTH);
+                                        neighbor_tile_south := get_neighbor_tile_id_by_direction(tile.id, .SOUTH);
+                                        neighbor_tile_east  := get_neighbor_tile_id_by_direction(tile.id, .EAST);
+                                        neighbor_tile_west  := get_neighbor_tile_id_by_direction(tile.id, .WEST);
+
+                                        is_home_base_floor_north := is_tile_home_base_floor(neighbor_tile_north);
+                                        is_home_base_floor_south := is_tile_home_base_floor(neighbor_tile_south);
+                                        is_home_base_floor_east  := is_tile_home_base_floor(neighbor_tile_east);
+                                        is_home_base_floor_west  := is_tile_home_base_floor(neighbor_tile_west);
+
+                                        // Center
+                                        if is_home_base_floor_north && is_home_base_floor_south && is_home_base_floor_east && is_home_base_floor_west {
+                                            DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_CENTER, tile_dest, Vector2.{0,0}, 0.0, tint);
+                                        }
+                                        // North
+                                        else if is_home_base_floor_south && is_home_base_floor_east && is_home_base_floor_west {
+                                            DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_NORTH, tile_dest, Vector2.{0,0}, 0.0, tint);
+                                        }
+                                        // South
+                                        else if is_home_base_floor_north && is_home_base_floor_east && is_home_base_floor_west {
+                                            DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_SOUTH, tile_dest, Vector2.{0,0}, 0.0, tint);
+                                        }
+                                        // East
+                                        else if is_home_base_floor_north && is_home_base_floor_south && is_home_base_floor_west {
+                                            DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_EAST, tile_dest, Vector2.{0,0}, 0.0, tint);
+                                        }
+                                        // West
+                                        else if is_home_base_floor_north && is_home_base_floor_south && is_home_base_floor_east {
+                                            DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_WEST, tile_dest, Vector2.{0,0}, 0.0, tint);
+                                        }
+                                        // North west
+                                        else if is_home_base_floor_south && is_home_base_floor_east {
+                                            DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_NORTH_WEST, tile_dest, Vector2.{0,0}, 0.0, tint);
+                                        }
+                                        // North east
+                                        else if is_home_base_floor_south && is_home_base_floor_west {
+                                            DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_NORTH_EAST, tile_dest, Vector2.{0,0}, 0.0, tint);
+                                        }
+                                        // South west
+                                        else if is_home_base_floor_north && is_home_base_floor_east {
+                                            DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_SOUTH_WEST, tile_dest, Vector2.{0,0}, 0.0, tint);
+                                        }
+                                        // South east
+                                        else if is_home_base_floor_north && is_home_base_floor_west {
+                                            DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE_FLOOR_SOUTH_EAST, tile_dest, Vector2.{0,0}, 0.0, tint);
+                                        }
+                                        else {
+                                            assert_soft(false, "Encountered a home base floor tile % with some strange neighbors: %, %, %, %", tile.id, is_home_base_floor_north, is_home_base_floor_south, is_home_base_floor_east, is_home_base_floor_west);
+                                        }   
+                                    }
+
+                                    if tile_has_property(tile, .WATER_STILL) {
+                                        tile.animated_sprite.color = tint;
+
+                                        sprite_draw(
+                                            tile.animated_sprite,
+                                            tile.pos,
+                                            TILEMAP_GENERAL_WORLD_WIDTH,
+                                            TILEMAP_GENERAL_WORLD_HEIGHT,
+                                            TILEMAP_GENERAL_TILE_WIDTH,
+                                            TILEMAP_GENERAL_TILE_HEIGHT,
+                                            false,
+                                        );
+                                    }
+
+                                    if tile_has_property(tile, .WATER_FLOWING) {
+                                        tile.animated_sprite.color = tint;
+
+                                        sprite_draw(
+                                            tile.animated_sprite,
+                                            tile.pos,
+                                            TILEMAP_GENERAL_WORLD_WIDTH,
+                                            TILEMAP_GENERAL_WORLD_HEIGHT,
+                                            TILEMAP_GENERAL_TILE_WIDTH,
+                                            TILEMAP_GENERAL_TILE_HEIGHT,
+                                            false,
+                                        );
+                                    }
+
+                                    if tile_has_property(tile, .LAVA_STILL) {
+                                        source := Rectangle.{
+                                            LAVA_SPRITE_SOURCE_COL * TILEMAP_GENERAL_TILE_WIDTH,
+                                            LAVA_SPRITE_SOURCE_ROW * TILEMAP_GENERAL_TILE_HEIGHT,
+                                            TILEMAP_GENERAL_TILE_WIDTH,
+                                            TILEMAP_GENERAL_TILE_HEIGHT,
+                                        };
+
+                                        DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, tint);
+                                    }
+
+                                    if tile_has_property(tile, .LAVA_FLOWING) {
+                                        tile.animated_sprite.color = tint;
+
+                                        sprite_draw(
+                                        tile.animated_sprite,
+                                        tile.pos,
+                                        TILEMAP_GENERAL_WORLD_WIDTH,
+                                        TILEMAP_GENERAL_WORLD_HEIGHT,
+                                        TILEMAP_GENERAL_TILE_WIDTH,
+                                        TILEMAP_GENERAL_TILE_HEIGHT,
+                                        false,
+                                        );
+                                    }
+                                }
+
+                                if tile_has_property(tile, .HAS_DYNAMITE) {
+                                    DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_DYNAMITE, tile_dest, Vector2.{0,0}, 0.0, tint);
+                                }
+
+                                if tile_has_property(tile, .HAS_TREASURE) {
+                                    DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_TREASURE, tile_dest, Vector2.{0,0}, 0.0, tint);
+                                }
+
+                                if context.metagame.debug_mode {
+                                    real_pos := Vector2.{ tile.pos.x + TILEMAP_GENERAL_WORLD_WIDTH * 0.5, tile.pos.y + TILEMAP_GENERAL_WORLD_HEIGHT * 0.5 };
+
+                                    if tile_has_property(tile, .WATER_WARNING) {
+                                        DrawCircleV(real_pos, 4.0, WHITE);
+                                        DrawCircleV(real_pos, 3.0, ORANGE);
+                                    }
+
+                                    if tile_has_property(tile, .LAVA_WARNING) {
+                                        DrawCircleV(real_pos, 4.0, WHITE);
+                                        DrawCircleV(real_pos, 3.0, ORANGE);
+                                    }
+
+                                    if tile_has_property(tile, .WATER_ALERT) {
+                                        DrawCircleV(real_pos, 4.0, WHITE);
+                                        DrawCircleV(real_pos, 3.0, RED);
+                                    }
+
+                                    if tile_has_property(tile, .LAVA_ALERT) {
+                                        DrawCircleV(real_pos, 4.0, WHITE);
+                                        DrawCircleV(real_pos, 3.0, RED);
+                                    }
+                                }
+                            }
                         }
-                        dest := get_world_rect_from_pos(dwarf.pos);
-
-                        DrawTexturePro(tilemap_texture_general, source_rect, dest, Vector2.{0,0}, 0.0, WHITE);
                     }
-                    else if is_lod_normal() || is_lod_close() {
-                        if is_lod_normal() {
+                    draw_tiles_base_layer();
+                    
+                    DRAW_TRENCHES :: true;
+                    #if DRAW_TRENCHES draw_trenches :: () {
+                        if is_lod_close() || is_lod_normal() {
+                            for tile: tiles_to_draw_this_frame {
+                                if !does_tile_type_render_trenches(tile.type) continue;
+
+                                if tile.trench_directions_sides > 0 then draw_trench_sides(tile);
+                            }
+
+                            for tile: tiles_to_draw_this_frame {
+                                if !does_tile_type_render_trenches(tile.type) continue;
+
+                                if tile.trench_directions_corners_mostly_crust  > 0 then draw_trench_corners_mostly_crust(tile);
+                                if tile.trench_directions_corners_mostly_dirt   > 0 then draw_trench_corners_mostly_dirt(tile);
+                                if tile.trench_directions_corners_special_crust > 0 then draw_trench_corners_special_crust(tile);
+                            }
+                        }
+                    }
+                    draw_trenches();
+
+                    // Draw tiles top layer
+                    draw_tiles_top_layer :: () {
+                        for tile: tiles_to_draw_this_frame {
+                            tile_dest := get_world_rect_from_pos(tile.pos);
+                            
+                            if #complete tile.type == {
+                                case .UNTOUCHED_DIRT;
+                                case .TOUCHED_DIRT;
+                                case .MINED;
+                                case .CAVE;
+                                case .OBSIDIAN;
+                                case .HOLE; {
+                                    DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOLE, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                }
+
+                                case .WALL; {
+                                    DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_WALL, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                }
+
+                                case .IRON; {
+                                    DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_IRON, tile_dest, Vector2.{0,0}, 0.0, WHITE);
+                                }
+                            }
+                        }
+                    }
+                    draw_tiles_top_layer();
+                }
+                DRAW_TILES :: true;
+                #if DRAW_TILES then draw_tiles();
+
+                // Draw outposts
+                draw_outposts :: () {
+                    for outpost: outposts_to_draw_this_frame {
+                        dest := Rectangle.{
+                            outpost.pos.x, outpost.pos.y, TILEMAP_GENERAL_WORLD_WIDTH * 3, TILEMAP_GENERAL_WORLD_HEIGHT * 3,
+                        };
+
+                        if outpost.is_home_base {
+                            DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_HOME_BASE, dest, Vector2.{0,0}, 0.0, WHITE);
+                        } else {
+                            DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTPOST, dest, Vector2.{0,0}, 0.0, Color.{ 255, 255, 255, xx (255 * outpost.build_completion_percentage) });
+                        }
+                    }
+                }
+                DRAW_OUTPOSTS :: true;
+                #if DRAW_OUTPOSTS then draw_outposts();
+
+                // Draw paths
+                draw_paths :: () {
+                    if context.game_state.controls_state_this_frame.drawing_path {
+                        if path_being_traced_1.start_tile_id > 0 draw_path(path_being_traced_1);
+                        if path_being_traced_2.start_tile_id > 0 draw_path(path_being_traced_2);
+                    }
+
+                    for path: paths_to_draw_this_frame draw_path(path);
+                }
+                draw_paths();
+
+                // Draw the little rings / circles below units that make them visually contrasted relative to their surroundings.
+                // This has to be drawn separately from the unit drawing loops like "draw_dwarves" and "draw_goblins" because of
+                // z-ordering. Namely, the rings must be below all units to look correct. Even though logically units can only be
+                // on one tile at a time, their sprites do overlap while going between tiles.
+                draw_unit_rings :: () {
+                    source_rect: Rectangle;
+
+                    for dwarf: dwarves_to_draw_this_frame {
+                        if is_lod_far() {
                             if #complete dwarf.dwarf_type == {
                                 case .MINER;   source_rect = DWARF_MINER_DROP_SHADOW_FAR_SOURCE_RECT;
                                 case .WARRIOR; source_rect = DWARF_WARRIOR_DROP_SHADOW_FAR_SOURCE_RECT;
                             }
                             dest := get_world_rect_from_pos(dwarf.pos);
-                            DrawTexturePro(tilemap_texture_general, source_rect, dest, Vector2.{0,0}, 0.0, WHITE);
-                        } else {
-                            if #complete dwarf.dwarf_type == {
-                                case .MINER;   source_rect = DWARF_MINER_DROP_SHADOW_CLOSE_SOURCE_RECT;
-                                case .WARRIOR; source_rect = DWARF_WARRIOR_DROP_SHADOW_CLOSE_SOURCE_RECT;
-                            }
-                            dest := get_world_rect_from_pos(dwarf.pos);
+
                             DrawTexturePro(tilemap_texture_general, source_rect, dest, Vector2.{0,0}, 0.0, WHITE);
                         }
+                        else if is_lod_normal() || is_lod_close() {
+                            if is_lod_normal() {
+                                if #complete dwarf.dwarf_type == {
+                                    case .MINER;   source_rect = DWARF_MINER_DROP_SHADOW_FAR_SOURCE_RECT;
+                                    case .WARRIOR; source_rect = DWARF_WARRIOR_DROP_SHADOW_FAR_SOURCE_RECT;
+                                }
+                                dest := get_world_rect_from_pos(dwarf.pos);
+                                DrawTexturePro(tilemap_texture_general, source_rect, dest, Vector2.{0,0}, 0.0, WHITE);
+                            } else {
+                                if #complete dwarf.dwarf_type == {
+                                    case .MINER;   source_rect = DWARF_MINER_DROP_SHADOW_CLOSE_SOURCE_RECT;
+                                    case .WARRIOR; source_rect = DWARF_WARRIOR_DROP_SHADOW_CLOSE_SOURCE_RECT;
+                                }
+                                dest := get_world_rect_from_pos(dwarf.pos);
+                                DrawTexturePro(tilemap_texture_general, source_rect, dest, Vector2.{0,0}, 0.0, WHITE);
+                            }
+                        }
+                        else {
+                            assert(false, "Weird lod");
+                        }
                     }
-                    else {
-                        assert(false, "Weird lod");
+
+                    for goblin: goblins_to_draw_this_frame {
+                        if is_lod_far() {
+                            source_rect := GOBLIN_DROP_SHADOW_FAR_SOURCE_RECT;
+                            dest_rect   := get_world_rect_from_pos(goblin.pos);
+
+                            DrawTexturePro(tilemap_texture_general, source_rect, dest_rect, Vector2.{0,0}, 0.0, WHITE);
+                        }
+                        else if is_lod_normal() {
+                            source_rect := GOBLIN_DROP_SHADOW_FAR_SOURCE_RECT;
+                            dest_rect   := get_world_rect_from_pos(goblin.pos);
+
+                            DrawTexturePro(tilemap_texture_general, source_rect, dest_rect, Vector2.{0,0}, 0.0, WHITE);
+                        }
+                        else if is_lod_close() {
+                            source_rect := GOBLIN_DROP_SHADOW_CLOSE_SOURCE_RECT;
+                            dest_rect   := get_world_rect_from_pos(goblin.pos);
+                            
+                            DrawTexturePro(tilemap_texture_general, source_rect, dest_rect, Vector2.{0,0}, 0.0, WHITE);
+                        }
+                        else {
+                            assert(false, "Got weird lod");
+                        }
                     }
                 }
+                draw_unit_rings();
 
-                for goblin: goblins_to_draw_this_frame {
-                    if is_lod_far() {
-                        source_rect := GOBLIN_DROP_SHADOW_FAR_SOURCE_RECT;
-                        dest_rect   := get_world_rect_from_pos(goblin.pos);
+                // Draw dwarves
+                draw_dwarves :: () {
+                    for dwarf: dwarves_to_draw_this_frame {
+                        source_rect : Rectangle;
 
-                        DrawTexturePro(tilemap_texture_general, source_rect, dest_rect, Vector2.{0,0}, 0.0, WHITE);
-                    }
-                    else if is_lod_normal() {
-                        source_rect := GOBLIN_DROP_SHADOW_FAR_SOURCE_RECT;
-                        dest_rect   := get_world_rect_from_pos(goblin.pos);
+                        if is_lod_normal() || is_lod_close() {
+                            // PERF: would it be faster to store the active index?
+                            found := false;
+                            for anim: dwarf.animations {
+                                if !anim.active continue;
+                                found = true;
 
-                        DrawTexturePro(tilemap_texture_general, source_rect, dest_rect, Vector2.{0,0}, 0.0, WHITE);
-                    }
-                    else if is_lod_close() {
-                        source_rect := GOBLIN_DROP_SHADOW_CLOSE_SOURCE_RECT;
-                        dest_rect   := get_world_rect_from_pos(goblin.pos);
-                        
-                        DrawTexturePro(tilemap_texture_general, source_rect, dest_rect, Vector2.{0,0}, 0.0, WHITE);
-                    }
-                    else {
-                        assert(false, "Got weird lod");
+                                sprite_dest := Vector2.{
+                                    dwarf.pos.x - TILEMAP_DWARF_MINER_TILE_PADDING_X,
+                                    dwarf.pos.y - TILEMAP_DWARF_MINER_TILE_PADDING_Y,
+                                };
+
+                                sprite_draw( 
+                                    anim,
+                                    sprite_dest,
+                                    xx ifx dwarf.dwarf_type == .MINER then TILEMAP_DWARF_MINER_WORLD_WIDTH  else TILEMAP_DWARF_WARRIOR_WORLD_WIDTH,
+                                    xx ifx dwarf.dwarf_type == .MINER then TILEMAP_DWARF_MINER_WORLD_HEIGHT else TILEMAP_DWARF_WARRIOR_WORLD_HEIGHT,
+                                    ifx dwarf.dwarf_type == .MINER then TILEMAP_DWARF_MINER_TILE_WIDTH  else TILEMAP_DWARF_WARRIOR_TILE_WIDTH,
+                                    ifx dwarf.dwarf_type == .MINER then TILEMAP_DWARF_MINER_TILE_HEIGHT else TILEMAP_DWARF_WARRIOR_TILE_HEIGHT,
+                                    dwarf.is_facing_left,
+                                    0.5,
+                                    0.666667,
+                                );
+                            }
+                            assert_soft(found, "Dwarf % had no animation active\n", dwarf.id);
+                        }
+
+                        if context.metagame.debug_mode then draw_path_from_all_tile_ids(dwarf.tile_ids_on_path);
                     }
                 }
-            }
-            draw_unit_rings();
+                draw_dwarves();
 
-            // Draw dwarves
-            draw_dwarves :: () {
-                for dwarf: dwarves_to_draw_this_frame {
-                    source_rect : Rectangle;
-
-                    if is_lod_normal() || is_lod_close() {
-                        // PERF: would it be faster to store the active index?
+                // Draw goblins
+                draw_goblins :: () {
+                    for goblin: goblins_to_draw_this_frame {
                         found := false;
-                        for anim: dwarf.animations {
+                        for anim: goblin.animations {
                             if !anim.active continue;
                             found = true;
 
                             sprite_dest := Vector2.{
-                                dwarf.pos.x - TILEMAP_DWARF_MINER_TILE_PADDING_X,
-                                dwarf.pos.y - TILEMAP_DWARF_MINER_TILE_PADDING_Y,
+                                goblin.pos.x - TILEMAP_GOBLIN_TILE_PADDING_X,
+                                goblin.pos.y - TILEMAP_GOBLIN_TILE_PADDING_Y,
                             };
 
-                            sprite_draw( 
+                            sprite_draw(
                                 anim,
                                 sprite_dest,
-                                xx ifx dwarf.dwarf_type == .MINER then TILEMAP_DWARF_MINER_WORLD_WIDTH  else TILEMAP_DWARF_WARRIOR_WORLD_WIDTH,
-                                xx ifx dwarf.dwarf_type == .MINER then TILEMAP_DWARF_MINER_WORLD_HEIGHT else TILEMAP_DWARF_WARRIOR_WORLD_HEIGHT,
-                                ifx dwarf.dwarf_type == .MINER then TILEMAP_DWARF_MINER_TILE_WIDTH  else TILEMAP_DWARF_WARRIOR_TILE_WIDTH,
-                                ifx dwarf.dwarf_type == .MINER then TILEMAP_DWARF_MINER_TILE_HEIGHT else TILEMAP_DWARF_WARRIOR_TILE_HEIGHT,
-                                dwarf.is_facing_left,
-                                0.5,
-                                0.666667,
+                                xx TILEMAP_GOBLIN_WORLD_WIDTH,
+                                xx TILEMAP_GOBLIN_WORLD_HEIGHT,
+                                TILEMAP_GOBLIN_TILE_WIDTH,
+                                TILEMAP_GOBLIN_TILE_HEIGHT,
+                                goblin.is_facing_left,
                             );
                         }
-                        assert_soft(found, "Dwarf % had no animation active\n", dwarf.id);
+                        assert_soft(found, "Goblin % had no animation active\n", goblin.id);
                     }
-
-                    if context.metagame.debug_mode then draw_path_from_all_tile_ids(dwarf.tile_ids_on_path);
                 }
-            }
-            draw_dwarves();
+                draw_goblins();
 
-            // Draw goblins
-            draw_goblins :: () {
-                for goblin: goblins_to_draw_this_frame {
-                    found := false;
-                    for anim: goblin.animations {
-                        if !anim.active continue;
-                        found = true;
+                // Draw goblins
+                draw_shamans :: () {
+                    for shaman: shamans_to_draw_this_frame {
+                        found := false;
+                        for anim: shaman.animations {
+                            if !anim.active continue;
+                            found = true;
 
-                        sprite_dest := Vector2.{
-                            goblin.pos.x - TILEMAP_GOBLIN_TILE_PADDING_X,
-                            goblin.pos.y - TILEMAP_GOBLIN_TILE_PADDING_Y,
-                        };
+                            sprite_dest := Vector2.{
+                                shaman.pos.x - 2 * TILEMAP_SHAMAN_TILE_PADDING_X,
+                                shaman.pos.y - 2 * TILEMAP_SHAMAN_TILE_PADDING_Y,
+                            };
 
-                        sprite_draw(
-                            anim,
-                            sprite_dest,
-                            xx TILEMAP_GOBLIN_WORLD_WIDTH,
-                            xx TILEMAP_GOBLIN_WORLD_HEIGHT,
-                            TILEMAP_GOBLIN_TILE_WIDTH,
-                            TILEMAP_GOBLIN_TILE_HEIGHT,
-                            goblin.is_facing_left,
-                        );
-                    }
-                    assert_soft(found, "Goblin % had no animation active\n", goblin.id);
-                }
-            }
-            draw_goblins();
+                            shaman_tile_id := get_tile_id_by_pos(shaman.pos);
 
-            // Draw goblins
-            draw_shamans :: () {
-                for shaman: shamans_to_draw_this_frame {
-                    found := false;
-                    for anim: shaman.animations {
-                        if !anim.active continue;
-                        found = true;
+                            tile_id_to_damage_1: s32;
+                            tile_id_to_damage_2: s32;
 
-                        sprite_dest := Vector2.{
-                            shaman.pos.x - 2 * TILEMAP_SHAMAN_TILE_PADDING_X,
-                            shaman.pos.y - 2 * TILEMAP_SHAMAN_TILE_PADDING_Y,
-                        };
+                            if shaman.direction == {
+                                case .NORTH;
+                                    tile_id_to_damage_1 = shaman_tile_id - cast(s32) context.world_cols;
+                                    tile_id_to_damage_2 = tile_id_to_damage_1 + 1;
 
-                        shaman_tile_id := get_tile_id_by_pos(shaman.pos);
+                                case .SOUTH;
+                                    tile_id_to_damage_1 = shaman_tile_id + cast(s32) (2 * context.world_cols);
+                                    tile_id_to_damage_2 = tile_id_to_damage_1 + 1;
 
-                        tile_id_to_damage_1: s32;
-                        tile_id_to_damage_2: s32;
+                                case .EAST;
+                                    tile_id_to_damage_1 = shaman_tile_id + 2;
+                                    tile_id_to_damage_2 = tile_id_to_damage_1 + cast(s32) context.world_cols;
 
-                        if shaman.direction == {
-                            case .NORTH;
-                                tile_id_to_damage_1 = shaman_tile_id - cast(s32) context.world_cols;
-                                tile_id_to_damage_2 = tile_id_to_damage_1 + 1;
+                                case .WEST;
+                                    tile_id_to_damage_1 = shaman_tile_id - 1;
+                                    tile_id_to_damage_2 = tile_id_to_damage_1 + cast(s32) context.world_cols;
+                            }
 
-                            case .SOUTH;
-                                tile_id_to_damage_1 = shaman_tile_id + cast(s32) (2 * context.world_cols);
-                                tile_id_to_damage_2 = tile_id_to_damage_1 + 1;
+                            tile_pos_to_damage_1 := get_tile_pos_by_id(tile_id_to_damage_1);
+                            tile_pos_to_damage_2 := get_tile_pos_by_id(tile_id_to_damage_2);
 
-                            case .EAST;
-                                tile_id_to_damage_1 = shaman_tile_id + 2;
-                                tile_id_to_damage_2 = tile_id_to_damage_1 + cast(s32) context.world_cols;
+                            tile_center_pos_to_damage_1 := get_rect_center(get_world_rect_from_pos(tile_pos_to_damage_1));
+                            tile_center_pos_to_damage_2 := get_rect_center(get_world_rect_from_pos(tile_pos_to_damage_2));
 
-                            case .WEST;
-                                tile_id_to_damage_1 = shaman_tile_id - 1;
-                                tile_id_to_damage_2 = tile_id_to_damage_1 + cast(s32) context.world_cols;
+                            if context.metagame.debug_mode {
+                                DrawCircleV(tile_center_pos_to_damage_1, 3.0, RED);
+                                DrawCircleV(tile_center_pos_to_damage_2, 3.0, RED);
+                            }
+
+                            sprite_draw(
+                                anim,
+                                sprite_dest,
+                                xx TILEMAP_SHAMAN_WORLD_WIDTH,
+                                xx TILEMAP_SHAMAN_WORLD_HEIGHT,
+                                TILEMAP_SHAMAN_TILE_WIDTH,
+                                TILEMAP_SHAMAN_TILE_HEIGHT,
+                                shaman.is_facing_left,
+
+                            );
                         }
-
-                        tile_pos_to_damage_1 := get_tile_pos_by_id(tile_id_to_damage_1);
-                        tile_pos_to_damage_2 := get_tile_pos_by_id(tile_id_to_damage_2);
-
-                        tile_center_pos_to_damage_1 := get_rect_center(get_world_rect_from_pos(tile_pos_to_damage_1));
-                        tile_center_pos_to_damage_2 := get_rect_center(get_world_rect_from_pos(tile_pos_to_damage_2));
-
-                        DrawCircleV(tile_center_pos_to_damage_1, 3.0, RED);
-                        DrawCircleV(tile_center_pos_to_damage_2, 3.0, RED);
-
-                        sprite_draw(
-                            anim,
-                            sprite_dest,
-                            xx TILEMAP_SHAMAN_WORLD_WIDTH,
-                            xx TILEMAP_SHAMAN_WORLD_HEIGHT,
-                            TILEMAP_SHAMAN_TILE_WIDTH,
-                            TILEMAP_SHAMAN_TILE_HEIGHT,
-                            shaman.is_facing_left,
-
-                        );
+                        assert(found, "Shaman % had no animation active\n", shaman.id);
                     }
-                    assert(found, "Shaman % had no animation active\n", shaman.id);
                 }
-            }
-            draw_shamans();
+                draw_shamans();
 
-            // Draw hovered tile / onion skins
-            draw_hovered_tile_or_onion_skins :: () {
-                hovered_tile_rect := get_tile_rect_that_pos_is_within(get_world_width(), get_world_height(), TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, context.mouse_pos_in_world);
-                hovered_tile_id := get_tile_id_by_pos(get_rect_pos(hovered_tile_rect));
+                // Draw hovered tile / onion skins
+                draw_hovered_tile_or_onion_skins :: () {
+                    hovered_tile_rect := get_tile_rect_that_pos_is_within(get_world_width(), get_world_height(), TILEMAP_GENERAL_WORLD_WIDTH, TILEMAP_GENERAL_WORLD_HEIGHT, context.mouse_pos_in_world);
+                    hovered_tile_id := get_tile_id_by_pos(get_rect_pos(hovered_tile_rect));
 
-                if context.game_state.control_mode == .ADD_OUTPOST {
-                    is_valid_placement, is_too_expensive, top_left_tile_id := get_outpost_placement(hovered_tile_id);
-                    top_left_tile_pos_of_onion_skin := get_tile_pos_by_id(top_left_tile_id);
+                    if context.game_state.control_mode == .ADD_OUTPOST {
+                        is_valid_placement, is_too_expensive, top_left_tile_id := get_outpost_placement(hovered_tile_id);
+                        top_left_tile_pos_of_onion_skin := get_tile_pos_by_id(top_left_tile_id);
 
-                    onion_skin_rect := Rectangle.{
-                        top_left_tile_pos_of_onion_skin.x,
-                        top_left_tile_pos_of_onion_skin.y,
-                        TILEMAP_GENERAL_WORLD_WIDTH  * 7,
-                        TILEMAP_GENERAL_WORLD_HEIGHT * 7,
-                    };
+                        onion_skin_rect := Rectangle.{
+                            top_left_tile_pos_of_onion_skin.x,
+                            top_left_tile_pos_of_onion_skin.y,
+                            TILEMAP_GENERAL_WORLD_WIDTH  * 7,
+                            TILEMAP_GENERAL_WORLD_HEIGHT * 7,
+                        };
 
-                    // PERF: texture
-                    DrawRectangleRec(onion_skin_rect, ifx is_valid_placement then TRANSPARENT_GREEN else TRANSPARENT_RED);
+                        // PERF: texture
+                        DrawRectangleRec(onion_skin_rect, ifx is_valid_placement then TRANSPARENT_GREEN else TRANSPARENT_RED);
 
-                    // Now that the onion skin is drawn, we want to also draw the outpost.
-                    outpost_step_1_tile_id := get_neighbor_tile_id_by_direction(hovered_tile_id, .NORTH_WEST);
-                    top_left_tile_id_outpost := get_neighbor_tile_id_by_direction(outpost_step_1_tile_id, .NORTH);
-                    top_left_tile_pos_outpost := get_tile_pos_by_id(top_left_tile_id_outpost); 
+                        // Now that the onion skin is drawn, we want to also draw the outpost.
+                        outpost_step_1_tile_id := get_neighbor_tile_id_by_direction(hovered_tile_id, .NORTH_WEST);
+                        top_left_tile_id_outpost := get_neighbor_tile_id_by_direction(outpost_step_1_tile_id, .NORTH);
+                        top_left_tile_pos_outpost := get_tile_pos_by_id(top_left_tile_id_outpost); 
 
-                    outpost_dest_rect := Rectangle.{
-                        top_left_tile_pos_outpost.x,
-                        top_left_tile_pos_outpost.y,
-                        TILEMAP_GENERAL_WORLD_WIDTH  * 3,
-                        TILEMAP_GENERAL_WORLD_HEIGHT * 3,
-                    };
-
-                    DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTPOST, outpost_dest_rect, Vector2.{0,0}, 0.0, TRANSPARENT_WHITE);
-
-                    if !is_valid_placement && is_too_expensive {
-                        top_left_tile_rect_outpost := get_world_rect_from_pos(top_left_tile_pos_outpost);
-                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_TOO_EXPENSIVE, top_left_tile_rect_outpost, Vector2.{0,0}, 0.0, TRANSPARENT_WHITE);
-                    }
-                } else {
-                    hovering_over_shaman, shaman   := table_find(*tile_ids_to_shamans, hovered_tile_id);
-                    hovering_over_outpost, outpost := table_find(*tile_ids_to_outposts, hovered_tile_id);
-
-                    if hovering_over_outpost {
                         outpost_dest_rect := Rectangle.{
-                            outpost.pos.x,
-                            outpost.pos.y,
+                            top_left_tile_pos_outpost.x,
+                            top_left_tile_pos_outpost.y,
                             TILEMAP_GENERAL_WORLD_WIDTH  * 3,
                             TILEMAP_GENERAL_WORLD_HEIGHT * 3,
                         };
 
-                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTLINE_3_BY_3, outpost_dest_rect, Vector2.{0,0}, 0.0, GREEN);
-                    }
-                    else if hovering_over_shaman {
-                        shaman_dest_rect := Rectangle.{
-                            shaman.pos.x,
-                            shaman.pos.y,
-                            TILEMAP_GENERAL_WORLD_WIDTH  * 2,
-                            TILEMAP_GENERAL_WORLD_HEIGHT * 2,
-                        };
+                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTPOST, outpost_dest_rect, Vector2.{0,0}, 0.0, TRANSPARENT_WHITE);
 
-                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTLINE_2_BY_2, shaman_dest_rect, Vector2.{0,0}, 0.0, RED);
-                    }
-                    else {
-                        // TODO: red over enemies and such
-                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTLINE_1_BY_1, hovered_tile_rect, Vector2.{0,0}, 0.0, GREEN);
+                        if !is_valid_placement && is_too_expensive {
+                            top_left_tile_rect_outpost := get_world_rect_from_pos(top_left_tile_pos_outpost);
+                            DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_TOO_EXPENSIVE, top_left_tile_rect_outpost, Vector2.{0,0}, 0.0, TRANSPARENT_WHITE);
+                        }
+                    } else {
+                        hovering_over_shaman, shaman   := table_find(*tile_ids_to_shamans, hovered_tile_id);
+                        hovering_over_outpost, outpost := table_find(*tile_ids_to_outposts, hovered_tile_id);
+
+                        if hovering_over_outpost {
+                            outpost_dest_rect := Rectangle.{
+                                outpost.pos.x,
+                                outpost.pos.y,
+                                TILEMAP_GENERAL_WORLD_WIDTH  * 3,
+                                TILEMAP_GENERAL_WORLD_HEIGHT * 3,
+                            };
+
+                            DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTLINE_3_BY_3, outpost_dest_rect, Vector2.{0,0}, 0.0, GREEN);
+                        }
+                        else if hovering_over_shaman {
+                            shaman_dest_rect := Rectangle.{
+                                shaman.pos.x,
+                                shaman.pos.y,
+                                TILEMAP_GENERAL_WORLD_WIDTH  * 2,
+                                TILEMAP_GENERAL_WORLD_HEIGHT * 2,
+                            };
+
+                            DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTLINE_2_BY_2, shaman_dest_rect, Vector2.{0,0}, 0.0, RED);
+                        }
+                        else {
+                            // TODO: red over enemies and such
+                            DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OUTLINE_1_BY_1, hovered_tile_rect, Vector2.{0,0}, 0.0, GREEN);
+                        }
                     }
                 }
-            }
-            draw_hovered_tile_or_onion_skins();
+                draw_hovered_tile_or_onion_skins();
 
-            // Draw particles
-            draw_particles :: () {
-                for particles_to_draw_this_frame draw_particle(it);
+                // Draw particles
+                draw_particles :: () {
+                    for particles_to_draw_this_frame draw_particle(it);
+                }
+                DRAW_PARTICLES :: true;
+                #if DRAW_PARTICLES then draw_particles();
             }
-            DRAW_PARTICLES :: true;
-            #if DRAW_PARTICLES then draw_particles();
+            draw_world();
+
+        EndTextureMode();
+
+        // Render lightmap
+        DRAW_LIGHT_MAP :: true;
+        #if DRAW_LIGHT_MAP then {
+        BeginTextureMode(lightmap_render_texture);
+
+            ClearBackground(Color.{ 145, 148, 160, 255 });
+
+            BeginMode2D(context.camera);
+
+                // Add all entity lights together
+                BeginBlendMode(.BLEND_ADDITIVE);
+
+                    draw_entity_lights :: () {
+                        for dwarf: dwarves {
+                            center := Vector2.{
+                                dwarf.pos.x + TILEMAP_GENERAL_TILE_WIDTH * 0.5,
+                                dwarf.pos.y + TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
+                            };
+
+                            draw_light_gradient(center, 160.0, Color.{ 255, 255, 190, 170 });
+                        }
+
+                        for goblin: goblins {
+                            center := Vector2.{
+                                goblin.pos.x + TILEMAP_GENERAL_TILE_WIDTH * 0.5,
+                                goblin.pos.y + TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
+                            };
+
+                            draw_light_gradient(
+                                center,
+                                160.0,
+                                Color.{ 180, 220, 150, 110 }
+                            );
+                        }
+
+                        for outpost: outposts {
+                            center := Vector2.{
+                                outpost.pos.x + TILEMAP_GENERAL_TILE_WIDTH * 1.5,
+                                outpost.pos.y + TILEMAP_GENERAL_TILE_HEIGHT * 1.5,
+                            };
+
+                            draw_light_gradient(
+                                center,
+                                320.0,
+                                Color.{ 255, 175, 105, xx (160 * outpost.build_completion_percentage) }
+                            );
+                        }
+
+                        for shaman: shamans {
+                            center := Vector2.{
+                                shaman.pos.x + TILEMAP_GENERAL_TILE_WIDTH * 1.0,
+                                shaman.pos.y + TILEMAP_GENERAL_TILE_HEIGHT * 1.0,
+                            };
+
+                            draw_light_gradient(
+                                center,
+                                210.0,
+                                Color.{ 255, 145, 150, 190 }
+                            );
+                        }
+                    }
+                    DRAW_ENTITY_LIGHTS :: true;
+                    #if DRAW_ENTITY_LIGHTS then draw_entity_lights();
+
+                EndBlendMode();
+
+            EndMode2D();
+
+        EndTextureMode();
         }
-        draw_world();
+
+        // Combine the world and lightmap
+        BeginTextureMode(final_render_texture);
+
+            ClearBackground(BLACK);
+
+            world_source := Rectangle.{
+                0,
+                0,
+                xx world_render_texture.texture.width,
+                xx -world_render_texture.texture.height,
+            };
+
+            DrawTextureRec(
+                world_render_texture.texture,
+                world_source,
+                Vector2.{ 0, 0 },
+                WHITE
+            );
+
+            lightmap_source := Rectangle.{
+                0,
+                0,
+                xx lightmap_render_texture.texture.width,
+                xx -lightmap_render_texture.texture.height,
+            };
+            
+            // Multiply the world by the lightmap
+            BeginBlendMode(.BLEND_MULTIPLIED);
+
+                DrawTextureRec(
+                    lightmap_render_texture.texture,
+                    lightmap_source,
+                    Vector2.{ 0, 0 },
+                    WHITE
+                );
+
+            EndBlendMode();
+
+        EndTextureMode();
 
         // Draw UI
         draw_ui :: () {
+            ClearBackground(BEIGE);
+
             screen_width  := GetScreenWidth();
             screen_height := GetScreenHeight();
 
@@ -5047,8 +5177,47 @@ update_and_draw_frame_round :: () {
         }
         DRAW_UI :: true;
         #if DRAW_UI then draw_ui();
+
+        final_texture_source := Rectangle.{
+            0,
+            0,
+            xx final_render_texture.texture.width,
+            xx -final_render_texture.texture.height,
+        };
+
+        DrawTextureRec(
+            final_render_texture.texture,
+            final_texture_source,
+            Vector2.{ 0, 0 },
+            WHITE,
+        );
+
+        EndDrawing();
     }
     draw();
+}
+
+// AI generated function
+draw_light_gradient :: (
+    center: Vector2,
+    radius: float32,
+    light_color: Color
+) {
+    // Keep the same RGB at the edge, but fade its alpha to zero.
+    outer_color := Color.{
+        light_color.r,
+        light_color.g,
+        light_color.b,
+        0
+    };
+
+    DrawCircleGradient(
+        cast(s32) center.x,
+        cast(s32) center.y,
+        radius,
+        light_color,
+        outer_color
+    );
 }
 
 shaman_set_attack_animation_based_on_direction :: (shaman: *Shaman) {
