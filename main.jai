@@ -1007,6 +1007,12 @@ Animated :: struct {
     is_facing_left  : bool;
 }
 
+LightFlicker :: struct {
+    flame_flicker_sample_index: s64;
+}
+
+FLAME_FLICKER_SAMPLES :: float.[0, 0.057683, 0.382812, 1.006042, 1.367909, 1.854082, 2.077511, 2.345548, 2.45699, 2.205991, 2.069151, 1.916465, 1.660685, 1.617573, 1.651184, 1.541285, 1.393802, 1.339234, 1.115296, 0.754701, 0.408435, 0.053656, 0.025263, 0.030784, 0.078993, 0, 0.156929, 0.175225, 0.046489, 0.060402, 0.29754, 0.26555, 0.087475, 0.296601, 0.537845, 0.715679, 0.782645, 0.970256, 0.957309, 0.525424, 0.384198, 0.310991, 0.31661, 0.617006, 0.778486, 0.543852, 0.457481, 0.444076, 0.499297, 0.415225, 0, 0.37722, 0.4903, 0.626039, 0.689198, 0.791016, 0.87059, 0.735215, 0.515917, 0.125071, 0.091904, 0.255145, 0.424903, 0.546684, 0.626994, 0.605633, 0.515997, 0.453483, 0.340268, 0.193267, 0.191236, 0.022256, 0.124116, 0.239093, 0.20612, 0, 0.363064, 0.608936, 0.850385, 0.946358, 0.97146, 0.957507, 0.945304, 0.818496, 0.808197, 0.546406, 0.287446, 0.136138, 0.042618, 0.024479, 0.028194, 0.031762, 0.247487, 0.142115, 0.034327, 0.006712, 0.120788];
+
 Outpost :: struct {
     #as using entity: Entity;
     type = Outpost;
@@ -1061,6 +1067,7 @@ Dwarf :: struct {
 
     using move: Moveable;
     using anim: Animated;
+    using flicker: LightFlicker;
 
     state               : DwarfState;
     attack_cooldown_ms  : s32;
@@ -1326,6 +1333,10 @@ main :: () {
 }
 
 // Functions
+
+get_light_radius :: (base_radius: float, flame_flicker_sample_index: s64) -> float32 {
+    return base_radius + FLAME_FLICKER_SAMPLES[flame_flicker_sample_index];
+}
 
 initialize_round :: () {
     reset_memory();
@@ -2444,6 +2455,9 @@ update_and_draw_frame_round :: () {
                     dwarf_ids_to_kill_this_frame : [..] s32;
 
                     for *dwarf, dwarf_index: dwarves {
+                        dwarf.flame_flicker_sample_index += 1;
+                        dwarf.flame_flicker_sample_index %= FLAME_FLICKER_SAMPLES.count;
+
                         is_dwarf_done_updating := false;
 
                         dwarf_center  := get_rect_center(get_world_rect_from_pos(dwarf.pos));
@@ -4347,7 +4361,9 @@ update_and_draw_frame_round :: () {
                                 dwarf.pos.y + TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
                             };
 
-                            draw_light_gradient(center, 160.0, Color.{ 255, 255, 190, 170 });
+                            radius := get_light_radius(100.0, dwarf.flame_flicker_sample_index);
+
+                            draw_light_circles(center, radius, Color.{ 255, 255, 190, 170 });
                         }
 
                         for goblin: goblins {
@@ -4356,9 +4372,9 @@ update_and_draw_frame_round :: () {
                                 goblin.pos.y + TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
                             };
 
-                            draw_light_gradient(
+                            draw_light_circles(
                                 center,
-                                160.0,
+                                100.0,
                                 Color.{ 180, 240, 150, 170 }
                             );
                         }
@@ -4369,7 +4385,7 @@ update_and_draw_frame_round :: () {
                                 outpost.pos.y + TILEMAP_GENERAL_TILE_HEIGHT * 1.5,
                             };
 
-                            draw_light_gradient(
+                            draw_light_circles(
                                 center,
                                 320.0,
                                 Color.{ 255, 175, 105, xx (160 * outpost.build_completion_percentage) }
@@ -4382,7 +4398,7 @@ update_and_draw_frame_round :: () {
                                 shaman.pos.y + TILEMAP_GENERAL_TILE_HEIGHT * 1.0,
                             };
 
-                            draw_light_gradient(
+                            draw_light_circles(
                                 center,
                                 210.0,
                                 Color.{ 255, 45, 50, 190 }
@@ -5196,27 +5212,21 @@ update_and_draw_frame_round :: () {
     draw();
 }
 
-// AI generated function
-draw_light_gradient :: (
+draw_light_circles :: (
     center: Vector2,
     radius: float32,
-    light_color: Color
+    color: Color
 ) {
-    // Keep the same RGB at the edge, but fade its alpha to zero.
-    outer_color := Color.{
-        light_color.r,
-        light_color.g,
-        light_color.b,
-        0
+    DrawCircleV(center, radius, color);
+
+    slightly_darker_color := Color.{
+        color.r,
+        color.g,
+        color.b,
+        color.a / 4,
     };
 
-    DrawCircleGradient(
-        cast(s32) center.x,
-        cast(s32) center.y,
-        radius,
-        light_color,
-        outer_color
-    );
+    DrawRing(center, radius - 1, radius + radius * 0.25, 0, 360, 20, slightly_darker_color);
 }
 
 shaman_set_attack_animation_based_on_direction :: (shaman: *Shaman) {
@@ -8162,7 +8172,6 @@ create_dwarf :: (pos: Vector2, dwarf_type: DwarfType, gold_cost: int = 0) -> Dwa
         attack_cooldown_ms    = dwarf_get_attack_cooldown_by_type(dwarf_type),
         is_facing_left        = false,
         spawn_grace_period_ms = DWARF_SPAWN_GRACE_PERIOD_MS,
-        // tile_ids_on_path intentionally not set
     };
 
     table_set(*dwarf_id_to_index, dwarf_id, dwarves.count);

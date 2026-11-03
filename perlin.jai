@@ -12,59 +12,8 @@
 #import "raylib";
 
 main :: () {
-    RES :: 512;
-    InitWindow(RES, RES, "Perlin Noise Debugger");
-    defer CloseWindow();
-
-    noise_data := perlin_noise_2d(RES, starting_frequency=8, starting_amplitude=2, octaves=1);
-    defer array_free(noise_data);
-
-    pixels := cast(*Color) alloc(RES * RES * size_of(Color));
-    defer free(pixels);
-
-    for i: 0..(RES * RES)-1 {
-        // 1. Correctly map raw noise [-1.0, 1.0] to a [0.0, 1.0] range
-        normalized := (noise_data[i] + 1.0) / 2.0; 
-        
-        // 2. Clamp just in case floating point math slightly overshoots
-        clamped := clamp(normalized, 0.0, 1.0);
-
-        // 3. Map to colors
-        THRESHOLD :: .95; // 0.90 means the top 10% of values.
-        
-        if clamped >= THRESHOLD {
-            // Map the top 90% to pure Red
-            pixels[i] = Color.{255, 0, 0, 255}; 
-        } else {
-            // Map the bottom 10% to standard grayscale
-            val := cast(u8) (clamped * 255.0);
-            pixels[i] = Color.{val, val, val, 255}; 
-        }
-    }
-
-    // Load into GPU
-    img := Image.{
-        data = pixels,
-        width = RES,
-        height = RES,
-        mipmaps = 1,
-        format = .PIXELFORMAT_UNCOMPRESSED_R8G8B8A8
-    };
-    texture := LoadTextureFromImage(img);
-
-    while !WindowShouldClose() {
-        BeginDrawing();
-        ClearBackground(BLACK);
-        
-        DrawTexture(texture, 0, 0, WHITE);
-        
-        DrawRectangle(10, 10, 280, 40, Color.{0, 0, 0, 150});
-        DrawText("Press 'S' to save as PNG", 20, 20, 20, RAYWHITE);
-        
-        if IsKeyPressed(.KEY_S) ExportImage(img, "debug_noise.png");
-        
-        EndDrawing();
-    }
+    perlin_noise_result := perlin_noise_1d(100, 4, 5, 3);
+    for perlin_noise_result print("%, ", it);
 }
 
 perlin_noise_2d :: ($DESIRED_VALUES: s32, starting_frequency: s32 = 1, starting_amplitude: float32 = 1.0, octaves: s32 = 1) -> perlin_2d: [] float {
@@ -155,4 +104,55 @@ smootherstep :: (x: float) -> float {
     if x <= 0.0 return 0.0;
     if x >= 1.0 return 1.0;
     return (6 * x * x * x * x * x) - (15 * x * x * x * x) + (10 * x * x * x); 
+}
+
+perlin_noise_1d :: (desired_values: s32, starting_frequency: s32, starting_amplitude: float32, octaves: s32, min_value := 0.0) -> [..] float {
+    assert(desired_values > 0,     "You probably want a positive desired_values. If not, delete this assertion.");
+    assert(starting_frequency > 0, "You probably want a positive starting_frequency. If not, delete this assertion.");
+    assert(octaves > 0,            "You probably want a positive octaves. If not, delete this assertion.");
+    assert(desired_values % starting_frequency == 0, "The perlin noise frequency must be a divisor of the number of desired values.");
+
+    results : [..] float;
+    for i: 0..desired_values {
+        array_add(*results, 0.0);
+    }
+
+    for o: 0..octaves {
+        octave_factor      := pow(2.0, cast(float) o);
+        amplitude          := starting_amplitude / octave_factor;
+        frequency          := starting_frequency * octave_factor;
+        ratio              := desired_values / frequency;
+        blocks_per_section := cast(int) (desired_values / frequency);
+
+        random_grid_scalars: [..]float;
+        for i: 0..(xx frequency-1) {
+            array_add(*random_grid_scalars, random_get_within_range(-1, 1));
+        }
+
+        // @TODO: maybe loop around to the first section's left gradient?
+        for i: 0..(desired_values - (blocks_per_section + 1)) {
+            // Get distance from current tile to each grid corner
+            f := floor(cast(float) i / ratio);
+            delta_l := (i - ratio * f) / blocks_per_section;
+            delta_r := (ratio * (f + 1) - i) / blocks_per_section;
+
+            // Get dot products of grid corner vectors and distances
+            l_scalar := random_grid_scalars[cast(int) (f)];
+            r_scalar := random_grid_scalars[cast(int) (f + 1)];
+            l_dot : float = l_scalar * delta_l;
+            r_dot : float = r_scalar * delta_r;
+
+            perlin := lerp(l_dot, r_dot, smootherstep(delta_l));
+            results[i] += amplitude * perlin;
+        }
+    }
+
+    // @PERF
+    for *results {
+        if it.* < min_value {
+            it.* = min_value + abs(it.*);
+        }
+    }
+
+    return results;
 }
