@@ -378,19 +378,21 @@ SoundEffect :: struct {
     duck_music: bool;
 }
 
+RENDER_TEXTURES_RESIZE_DEBOUNCE_MS :: 200;
+
 Metagame :: struct {
-    state                   : MetagameState;
-    thing_running           : MetagameThingRunning;
-    main_menu_screen        : MainMenuScreen;
-    initialized             : bool;
-    should_quit_game        : bool;
-    debug_mode              : bool;
-    pause_state             : PauseState;
-    game_over_state         : GameOverState;
-    controls                : Controls;
-    level                   : Level;
+    state : MetagameState;
+    thing_running : MetagameThingRunning;
+    main_menu_screen : MainMenuScreen;
+    initialized : bool;
+    should_quit_game : bool;
+    debug_mode : bool;
+    pause_state : PauseState;
+    game_over_state : GameOverState;
+    controls : Controls;
+    level : Level;
     music_currently_playing : Music;
-    deduck_music_ms         : int;
+    deduck_music_ms : int;
 }
 
 sounds : [SOUND_EFFECT_TYPE_COUNT] Sound;
@@ -780,6 +782,12 @@ init_textures :: () {
     dwarf_warrior_texture   = LoadTexture("data/dwarf-warrior.png");
     goblin_texture          = LoadTexture("data/goblin.png");
     shaman_texture          = LoadTexture("data/shaman.png");
+
+    final_render_texture    = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
+    world_render_texture    = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
+    lightmap_render_texture = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
+    
+    SetTextureFilter(final_render_texture.texture, .TEXTURE_FILTER_POINT);
 
     SetTextureWrap(dirt_texture, .TEXTURE_WRAP_REPEAT);
 }
@@ -1297,10 +1305,6 @@ main :: () {
     data_folder = join(base_path, "data");
 
     init_textures();
-    
-    final_render_texture = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
-    world_render_texture = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
-    lightmap_render_texture = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
 
     // Initialize font
     {
@@ -1619,9 +1623,6 @@ initialize_round :: () {
 }
 
 update_and_draw_frame_main_menu :: () {
-    screen_width  := GetScreenWidth();
-    screen_height := GetScreenHeight();
-
     BeginDrawing();
     defer EndDrawing();
 
@@ -1630,25 +1631,23 @@ update_and_draw_frame_main_menu :: () {
     if #complete context.metagame.main_menu_screen == {
         case .ROOT;
             // Button shared sizing stuff
-            main_menu_button_width  := screen_width  * 0.15;
-            main_menu_button_height := screen_height * 0.10;
+            main_menu_button_width  := GetScreenWidth()  * 0.15;
+            main_menu_button_height := GetScreenHeight() * 0.10;
             main_menu_button_margin :: 20;
             main_menu_button_gap    :: 10;
 
             MAIN_MENU_BUTTON_COUNT :: 4;
 
             get_main_button_rectangle :: (button_gap: int, button_y: float, button_width: float, button_height: float) -> Rectangle {
-                screen_width := GetScreenWidth();
-
                 return Rectangle.{
-                    screen_width * 0.5 - button_width * 0.5,
+                    GetScreenWidth() * 0.5 - button_width * 0.5,
                     button_y,
                     button_width,
                     button_height
                 };
             }
 
-            main_menu_button_y := screen_height * 0.5 - (MAIN_MENU_BUTTON_COUNT * 0.5 * main_menu_button_height) - (MAIN_MENU_BUTTON_COUNT * 0.5 - 0.5) * main_menu_button_gap;
+            main_menu_button_y := GetScreenHeight() * 0.5 - (MAIN_MENU_BUTTON_COUNT * 0.5 * main_menu_button_height) - (MAIN_MENU_BUTTON_COUNT * 0.5 - 0.5) * main_menu_button_gap;
 
             // Start new round button
             {
@@ -1977,6 +1976,22 @@ update_and_draw_frame_round :: () {
     // Update
     //
     update :: () {
+        // Update viewport
+        update_viewport :: () {
+            if IsWindowResized() {
+                UnloadRenderTexture(world_render_texture);
+                UnloadRenderTexture(lightmap_render_texture);
+                UnloadRenderTexture(final_render_texture);
+            
+                final_render_texture    = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
+                world_render_texture    = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
+                lightmap_render_texture = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
+
+                SetTextureFilter(final_render_texture.texture, .TEXTURE_FILTER_POINT);
+            }
+        }
+        update_viewport();
+
         // Update music
         update_music :: () {
             UpdateMusicStream(context.metagame.music_currently_playing);
@@ -4473,9 +4488,6 @@ update_and_draw_frame_round :: () {
         draw_ui :: () {
             ClearBackground(BEIGE);
 
-            screen_width  := GetScreenWidth();
-            screen_height := GetScreenHeight();
-
             // Draw warnings
             for dwarf: dwarves {
                 if dwarf.state == .FIRED_BY_CANNON continue;
@@ -4942,8 +4954,8 @@ update_and_draw_frame_round :: () {
                     if #complete context.metagame.pause_state == {
                         case .MENU;
                             // Button shared sizing stuff
-                            pause_menu_button_width  := screen_width  * 0.15;
-                            pause_menu_button_height := screen_height * 0.10;
+                            pause_menu_button_width  := GetScreenWidth()  * 0.15;
+                            pause_menu_button_height := GetScreenHeight() * 0.10;
 
                             pause_menu_button_margin :: 20;
                             pause_menu_button_gap    :: 10;
@@ -4953,17 +4965,15 @@ update_and_draw_frame_round :: () {
 
                             get_pause_button_rectangle :: (button_gap: int, pause_button_y: float, button_width: float, button_height: float) -> Rectangle {
                                 // TODO: use existing stuff here
-                                screen_width  := GetScreenWidth();
-
                                 return Rectangle.{
-                                    screen_width * 0.5 - button_width * 0.5,
+                                    GetScreenWidth() * 0.5 - button_width * 0.5,
                                     pause_button_y,
                                     button_width,
                                     button_height
                                 };
                             }
 
-                            pause_menu_button_y := screen_height * 0.5 - (PAUSE_MENU_BUTTON_COUNT * 0.5 * pause_menu_button_height) - (PAUSE_MENU_BUTTON_COUNT * 0.5 - 0.5) * pause_menu_button_gap;
+                            pause_menu_button_y := GetScreenHeight() * 0.5 - (PAUSE_MENU_BUTTON_COUNT * 0.5 * pause_menu_button_height) - (PAUSE_MENU_BUTTON_COUNT * 0.5 - 0.5) * pause_menu_button_gap;
 
                             // TODO: DRY these up
 
@@ -5019,10 +5029,10 @@ update_and_draw_frame_round :: () {
                         case .OPTIONS;
                             OPTIONS_HEADER_FONT_SIZE :: 40;
                     
-                            ACTION_COLUMN_X     : s32 = xx (screen_width * 0);
-                            BIND_ONE_COLUMN_X   := screen_width * 0.25;
-                            BIND_TWO_COLUMN_X   := screen_width * 0.50;
-                            BIND_THREE_COLUMN_X := screen_width * 0.75;
+                            ACTION_COLUMN_X     : s32 = xx (GetScreenWidth() * 0);
+                            BIND_ONE_COLUMN_X   := GetScreenWidth() * 0.25;
+                            BIND_TWO_COLUMN_X   := GetScreenWidth() * 0.50;
+                            BIND_THREE_COLUMN_X := GetScreenWidth() * 0.75;
 
                             OPTIONS_HEADER_Y :: 75;
 
@@ -5041,7 +5051,7 @@ update_and_draw_frame_round :: () {
 
                                 OPTIONS_ROW_FONT_SIZE : s32 : xx (OPTIONS_HEADER_FONT_SIZE * 0.75);
                                 
-                                BIND_BUTTON_WIDTH  := screen_width * 0.25;
+                                BIND_BUTTON_WIDTH  := GetScreenWidth() * 0.25;
                                 BIND_BUTTON_HEIGHT := BIND_BUTTON_WIDTH * 0.15;
 
                                 keybind_row :: (control: *Control) #expand {
@@ -5118,8 +5128,8 @@ update_and_draw_frame_round :: () {
                     if #complete context.metagame.game_over_state == {
                         case .MENU;
                             // Button shared sizing stuff
-                            game_over_menu_button_width  := screen_width  * 0.15;
-                            game_over_menu_button_height := screen_height * 0.10;
+                            game_over_menu_button_width  := GetScreenWidth()  * 0.15;
+                            game_over_menu_button_height := GetScreenHeight() * 0.10;
 
                             game_over_menu_button_margin :: 20;
                             game_over_menu_button_gap    :: 10;
@@ -5128,17 +5138,15 @@ update_and_draw_frame_round :: () {
 
                             get_game_over_button_rectangle :: (button_gap: int, button_y: float, button_width: float, button_height: float) -> Rectangle {
                                 // TODO: use existing stuff here
-                                screen_width := GetScreenWidth();
-
                                 return Rectangle.{
-                                    screen_width * 0.5 - button_width * 0.5,
+                                    GetScreenWidth() * 0.5 - button_width * 0.5,
                                     button_y,
                                     button_width,
                                     button_height
                                 };
                             }
 
-                            game_over_menu_button_y := screen_height * 0.5 - (GAME_OVER_MENU_BUTTON_COUNT * 0.5 * game_over_menu_button_height) - (GAME_OVER_MENU_BUTTON_COUNT * 0.5 - 0.5) * game_over_menu_button_gap;
+                            game_over_menu_button_y := GetScreenHeight() * 0.5 - (GAME_OVER_MENU_BUTTON_COUNT * 0.5 * game_over_menu_button_height) - (GAME_OVER_MENU_BUTTON_COUNT * 0.5 - 0.5) * game_over_menu_button_gap;
 
                             // TODO: DRY these up
 
