@@ -1987,6 +1987,7 @@ update_and_draw_frame_round :: () {
                 world_render_texture    = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
                 lightmap_render_texture = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
 
+                SetTextureFilter(world_render_texture.texture, .TEXTURE_FILTER_POINT);
                 SetTextureFilter(final_render_texture.texture, .TEXTURE_FILTER_POINT);
             }
         }
