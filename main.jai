@@ -4372,10 +4372,10 @@ update_and_draw_frame_round :: () {
                                 goblin.pos.y + TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
                             };
 
-                            draw_light_circles(
+                            draw_light_circle_gradient(
                                 center,
                                 100.0,
-                                Color.{ 180, 240, 150, 170 }
+                                Color.{ 50, 240, 50, 255 }
                             );
                         }
 
@@ -4385,7 +4385,7 @@ update_and_draw_frame_round :: () {
                                 outpost.pos.y + TILEMAP_GENERAL_TILE_HEIGHT * 1.5,
                             };
 
-                            draw_light_circles(
+                            draw_light_circle_gradient(
                                 center,
                                 320.0,
                                 Color.{ 255, 175, 105, xx (160 * outpost.build_completion_percentage) }
@@ -4398,10 +4398,10 @@ update_and_draw_frame_round :: () {
                                 shaman.pos.y + TILEMAP_GENERAL_TILE_HEIGHT * 1.0,
                             };
 
-                            draw_light_circles(
+                            draw_light_circle_gradient(
                                 center,
                                 210.0,
-                                Color.{ 255, 45, 50, 190 }
+                                Color.{ 255, 45, 50, 255 }
                             );
                         }
                     }
@@ -5215,7 +5215,7 @@ update_and_draw_frame_round :: () {
 draw_light_circles :: (
     center: Vector2,
     radius: float32,
-    color: Color
+    color: Color,
 ) {
     DrawCircleV(center, radius, color);
 
@@ -5227,6 +5227,21 @@ draw_light_circles :: (
     };
 
     DrawRing(center, radius - 1, radius + radius * 0.25, 0, 360, 20, slightly_darker_color);
+}
+
+draw_light_circle_gradient :: (
+    center: Vector2,
+    radius: float32,
+    color: Color
+) {
+    edge_color := Color.{
+        color.r,
+        color.g,
+        color.b,
+        0,
+    };
+
+    DrawCircleGradient(xx center.x, xx center.y, radius, color, edge_color);
 }
 
 shaman_set_attack_animation_based_on_direction :: (shaman: *Shaman) {
