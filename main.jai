@@ -783,11 +783,8 @@ init_textures :: () {
     goblin_texture          = LoadTexture("data/goblin.png");
     shaman_texture          = LoadTexture("data/shaman.png");
 
-    final_render_texture    = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
     world_render_texture    = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
     lightmap_render_texture = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
-    
-    SetTextureFilter(final_render_texture.texture, .TEXTURE_FILTER_POINT);
 
     SetTextureWrap(dirt_texture, .TEXTURE_WRAP_REPEAT);
 }
@@ -1267,7 +1264,6 @@ music_vindkaldr_ambient_i_the_fairy_that_disappeared: Music;
 sound_digging: Sound;
 sound_shaman_reveal: Sound;
 
-final_render_texture: RenderTexture2D;
 world_render_texture: RenderTexture2D;
 lightmap_render_texture: RenderTexture2D;
 
@@ -1331,7 +1327,6 @@ main :: () {
         context.metagame.should_quit_game = context.metagame.should_quit_game || WindowShouldClose();
     }
 
-    UnloadRenderTexture(final_render_texture);
     UnloadRenderTexture(world_render_texture);
     UnloadRenderTexture(lightmap_render_texture);
 }
@@ -1981,14 +1976,11 @@ update_and_draw_frame_round :: () {
             if IsWindowResized() {
                 UnloadRenderTexture(world_render_texture);
                 UnloadRenderTexture(lightmap_render_texture);
-                UnloadRenderTexture(final_render_texture);
             
-                final_render_texture    = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
                 world_render_texture    = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
                 lightmap_render_texture = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
 
                 SetTextureFilter(world_render_texture.texture, .TEXTURE_FILTER_POINT);
-                SetTextureFilter(final_render_texture.texture, .TEXTURE_FILTER_POINT);
             }
         }
         update_viewport();
@@ -4432,63 +4424,41 @@ update_and_draw_frame_round :: () {
         }
 
         // Combine the world and lightmap
-        BeginTextureMode(final_render_texture);
+        world_source := Rectangle.{
+            0,
+            0,
+            xx world_render_texture.texture.width,
+            xx -world_render_texture.texture.height,
+        };
 
-            ClearBackground(BLACK);
+        DrawTextureRec(
+            world_render_texture.texture,
+            world_source,
+            Vector2.{ 0, 0 },
+            WHITE
+        );
 
-            world_source := Rectangle.{
-                0,
-                0,
-                xx world_render_texture.texture.width,
-                xx -world_render_texture.texture.height,
-            };
+        lightmap_source := Rectangle.{
+            0,
+            0,
+            xx lightmap_render_texture.texture.width,
+            xx -lightmap_render_texture.texture.height,
+        };
+        
+        // Multiply the world by the lightmap
+        BeginBlendMode(.BLEND_MULTIPLIED);
 
             DrawTextureRec(
-                world_render_texture.texture,
-                world_source,
+                lightmap_render_texture.texture,
+                lightmap_source,
                 Vector2.{ 0, 0 },
                 WHITE
             );
 
-            lightmap_source := Rectangle.{
-                0,
-                0,
-                xx lightmap_render_texture.texture.width,
-                xx -lightmap_render_texture.texture.height,
-            };
-            
-            // Multiply the world by the lightmap
-            BeginBlendMode(.BLEND_MULTIPLIED);
-
-                DrawTextureRec(
-                    lightmap_render_texture.texture,
-                    lightmap_source,
-                    Vector2.{ 0, 0 },
-                    WHITE
-                );
-
-            EndBlendMode();
-
-        EndTextureMode();
-
-        final_texture_source := Rectangle.{
-            0,
-            0,
-            xx final_render_texture.texture.width,
-            xx -final_render_texture.texture.height,
-        };
-
-        DrawTextureRec(
-            final_render_texture.texture,
-            final_texture_source,
-            Vector2.{ 0, 0 },
-            WHITE,
-        );
+        EndBlendMode();
 
         // Draw UI
         draw_ui :: () {
-            ClearBackground(BEIGE);
-
             // Draw warnings
             for dwarf: dwarves {
                 if dwarf.state == .FIRED_BY_CANNON continue;
