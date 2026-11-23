@@ -265,6 +265,8 @@ TILEMAP_GENERAL_TILE_WIDTH   :: 32;
 TILEMAP_GENERAL_TILE_HEIGHT  :: 32;
 TILEMAP_GENERAL_WORLD_WIDTH  :: TILEMAP_GENERAL_TILE_WIDTH  * SCALE;
 TILEMAP_GENERAL_WORLD_HEIGHT :: TILEMAP_GENERAL_TILE_HEIGHT * SCALE;
+TILEMAP_GENERAL_WORLD_WIDTH_RECIPROCAL  :: 1 / TILEMAP_GENERAL_WORLD_WIDTH;
+TILEMAP_GENERAL_WORLD_HEIGHT_RECIPROCAL :: 1 / TILEMAP_GENERAL_WORLD_HEIGHT;
 
 WORLD_COLS_HUGE   :: 2048;
 WORLD_ROWS_HUGE   :: WORLD_COLS_HUGE;
@@ -291,6 +293,14 @@ WORLD_ROWS_TUTORIAL_GRADUATION       :: 128;
 
 TILE_WIDTH_F  :: cast(float32) TILEMAP_GENERAL_WORLD_WIDTH;
 TILE_HEIGHT_F :: cast(float32) TILEMAP_GENERAL_WORLD_HEIGHT;
+
+// TODO: don't hardcode this
+WORLD_WIDTH  :: WORLD_COLS_HUGE * TILE_WIDTH_F; 
+WORLD_HEIGHT :: WORLD_ROWS_HUGE * TILE_HEIGHT_F; 
+
+CHUNK_SIZE_TILE_COUNT :: 1024;
+CHUNK_SIZE_F :: TILE_WIDTH_F * CHUNK_SIZE_TILE_COUNT;
+CHUNK_COUNT :: (WORLD_WIDTH * WORLD_HEIGHT) / (CHUNK_SIZE_F * CHUNK_SIZE_F);
 
 TRANSPARENT_WHITE :: Color.{ 255, 255, 255, 100 };
 TRANSPARENT_RED   :: Color.{ 255,   0,   0, 100 };
@@ -1267,7 +1277,16 @@ sound_shaman_reveal: Sound;
 world_render_texture: RenderTexture2D;
 lightmap_render_texture: RenderTexture2D;
 
+Chunk :: struct {
+    rect: Rectangle;
+    // TODO: fixed size
+    tile_ids: [..] s32;
+}
+
+chunks : [CHUNK_COUNT] Chunk;
+
 main :: () {
+    print_vars(CHUNK_COUNT);
     // SetConfigFlags(.FLAG_WINDOW_RESIZABLE | .FLAG_FULLSCREEN_MODE);
     SetConfigFlags(.FLAG_WINDOW_RESIZABLE);
 
@@ -4438,24 +4457,26 @@ update_and_draw_frame_round :: () {
             WHITE
         );
 
-        lightmap_source := Rectangle.{
-            0,
-            0,
-            xx lightmap_render_texture.texture.width,
-            xx -lightmap_render_texture.texture.height,
-        };
+        #if DRAW_LIGHT_MAP then {
+            lightmap_source := Rectangle.{
+                0,
+                0,
+                xx (lightmap_render_texture.texture.width * 4),
+                xx (-lightmap_render_texture.texture.height * 4),
+            };
         
-        // Multiply the world by the lightmap
-        BeginBlendMode(.BLEND_MULTIPLIED);
+            // Multiply the world by the lightmap
+            BeginBlendMode(.BLEND_MULTIPLIED);
 
-            DrawTextureRec(
-                lightmap_render_texture.texture,
-                lightmap_source,
-                Vector2.{ 0, 0 },
-                WHITE
-            );
+                DrawTextureRec(
+                    lightmap_render_texture.texture,
+                    lightmap_source,
+                    Vector2.{ 0, 0 },
+                    WHITE
+                );
 
-        EndBlendMode();
+            EndBlendMode();
+        }
 
         // Draw UI
         draw_ui :: () {
@@ -9804,16 +9825,35 @@ derive_things_to_draw :: () {
     array_reset(*particles_to_draw_this_frame);
 
     derive_tiles_to_draw_this_frame :: () {
-        for tile: context.tiles {
-            pos := tile.pos;
+        DERIVE_TILES_A :: false;
 
-            if pos.x + TILEMAP_GENERAL_WORLD_WIDTH < context.window_start.x continue;
-            if pos.x - TILEMAP_GENERAL_WORLD_WIDTH > context.window_end.x continue;
-            
-            if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > context.window_end.y continue;
-            if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < context.window_start.y continue;
+        #if DERIVE_TILES_A {
+            for tile: context.tiles {
+                pos := tile.pos;
 
-            array_add(*tiles_to_draw_this_frame, tile);
+                if pos.x + TILEMAP_GENERAL_WORLD_WIDTH < context.window_start.x continue;
+                if pos.x - TILEMAP_GENERAL_WORLD_WIDTH > context.window_end.x continue;
+                
+                if pos.y - TILEMAP_GENERAL_WORLD_HEIGHT > context.window_end.y continue;
+                if pos.y + TILEMAP_GENERAL_WORLD_HEIGHT < context.window_start.y continue;
+
+                array_add(*tiles_to_draw_this_frame, tile);
+            }
+        } else {
+            for chunk: chunks {
+                window_rect := Rectangle.{
+                    window_start.x,
+                    window_start.y,
+                    window_end.x - window_start.x,
+                    window_end.y - window_start.y
+                };
+
+                if CheckCollisionRecs(chunk.rect, window_rect) {
+                    for tile_id: chunk.tile_ids {
+                        array_add(*tiles_to_draw_this_frame, context.tiles[tile_id - 1]);
+                    }
+                }
+            }
         }
     }
     derive_tiles_to_draw_this_frame();
@@ -10067,14 +10107,14 @@ get_tile_id_by_pos :: (pos: Vector2) -> s32 {
 }
 
 find_tile_id_by_pos :: (pos: Vector2) -> found_tile: bool, tile_id: s32 {
-    grid_x := cast(s32) (pos.x / TILEMAP_GENERAL_WORLD_WIDTH);
-    grid_y := cast(s32) (pos.y / TILEMAP_GENERAL_WORLD_HEIGHT);
-
+    grid_x := cast(s32) (pos.x * TILEMAP_GENERAL_WORLD_WIDTH_RECIPROCAL);
+    grid_y := cast(s32) (pos.y * TILEMAP_GENERAL_WORLD_HEIGHT_RECIPROCAL);
+    
     if grid_x < 0 || grid_x >= context.world_cols return false, 0;
     if grid_y < 0 || grid_y >= context.world_rows return false, 0;
-
+    
     index : s32 = (grid_y * xx context.world_cols) + grid_x;
-
+    
     return true, index + 1;
 }
 
