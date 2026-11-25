@@ -298,7 +298,7 @@ TILE_HEIGHT_F :: cast(float32) TILEMAP_GENERAL_WORLD_HEIGHT;
 WORLD_WIDTH  :: WORLD_COLS_HUGE * TILE_WIDTH_F; 
 WORLD_HEIGHT :: WORLD_ROWS_HUGE * TILE_HEIGHT_F; 
 
-CHUNK_SIZE_TILE_COUNT :: 128;
+CHUNK_SIZE_TILE_COUNT :: 32;
 CHUNK_SIZE_F :: TILE_WIDTH_F * CHUNK_SIZE_TILE_COUNT;
 CHUNK_COUNT :: cast(int) ((WORLD_WIDTH * WORLD_HEIGHT) / (CHUNK_SIZE_F * CHUNK_SIZE_F));
 
@@ -4071,13 +4071,16 @@ update_and_draw_frame_round :: () {
                     }
                     draw_tiles_base_layer();
                     
+                    
                     DRAW_TRENCHES :: true;
                     #if DRAW_TRENCHES draw_trenches :: () {
+                        trench_side_draw_calls: s32 = 0;
+
                         if is_lod_close() || is_lod_normal() {
                             for tile: tiles_to_draw_this_frame {
                                 if !does_tile_type_render_trenches(tile.type) continue;
 
-                                if tile.trench_directions_sides > 0 then draw_trench_sides(tile);
+                                if tile.trench_directions_sides > 0 then draw_trench_sides(tile, *trench_side_draw_calls);
                             }
 
                             for tile: tiles_to_draw_this_frame {
@@ -4417,6 +4420,15 @@ update_and_draw_frame_round :: () {
                 }
                 DRAW_PARTICLES :: true;
                 #if DRAW_PARTICLES then draw_particles();
+
+                DRAW_CHUNK_OUTLINES :: true;
+                #if DRAW_CHUNK_OUTLINES then {
+                    if context.metagame.debug_mode {
+                        for chunk: chunks {
+                            DrawRectangleLinesEx(chunk.rect, 5.0, SKYBLUE);
+                        }
+                    }
+                }
             }
             draw_world();
 
@@ -6043,7 +6055,7 @@ is_neighbor_obsidian :: (tile_id: s32, direction: Direction) -> bool {
     return is_neighbor_obsidian(tile, direction);
 }
 
-draw_trench_sides :: (tile: Tile) {
+draw_trench_sides :: (tile: Tile, trench_side_draw_calls: *s32) {
     dest   := get_world_rect_from_pos(tile.pos);
     rot    := 0.0;
     origin := Vector2.{ TILEMAP_GENERAL_TILE_WIDTH * 0.5, TILEMAP_GENERAL_TILE_HEIGHT * 0.5 };
@@ -6051,7 +6063,6 @@ draw_trench_sides :: (tile: Tile) {
     
     tint := WHITE; // Darkened if next to obsidian, dimmed if encased.
     
-
     if tile.trench_directions_sides & TrenchDirections.NORTH {
         final_dest := Rectangle.{
             dest.x + TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
@@ -6061,10 +6072,9 @@ draw_trench_sides :: (tile: Tile) {
         
         if tile.trench_directions_dark & TrenchDirections.NORTH {
             tint = DARKGRAY;
-        } else {
-            tint = WHITE;
         }
 
+        trench_side_draw_calls.* += 1;
         DrawTexturePro(tilemap_texture_general, TRENCH_SIDES_SOURCE, final_dest, origin, rot, tint);
     }
 
@@ -6083,6 +6093,7 @@ draw_trench_sides :: (tile: Tile) {
             tint = WHITE;
         }
 
+        trench_side_draw_calls.* += 1;
         DrawTexturePro(tilemap_texture_general, TRENCH_SIDES_SOURCE, final_dest, origin, rot, tint);
     }
 
@@ -6101,6 +6112,7 @@ draw_trench_sides :: (tile: Tile) {
             tint = WHITE;
         }
     
+        trench_side_draw_calls.* += 1;
         DrawTexturePro(tilemap_texture_general, TRENCH_SIDES_SOURCE, final_dest, origin, rot, tint);
     }
 
@@ -6119,6 +6131,7 @@ draw_trench_sides :: (tile: Tile) {
             tint = WHITE;
         }
 
+        trench_side_draw_calls.* += 1;
         DrawTexturePro(tilemap_texture_general, TRENCH_SIDES_SOURCE, final_dest, origin, rot, tint);
     }
 }
