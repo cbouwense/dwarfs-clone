@@ -5919,15 +5919,23 @@ update_trench_walls_if_necessary :: (tile: *Tile) {
 update_trench_corners_if_necessary :: (tile: *Tile) {
     if (tile == null) return;
 
+    is_encased  := is_tile_encased(tile);
+    is_obsidian := is_tile_obsidian(tile);
+
+    id_deltas_north := get_tile_direction_id_deltas(.NORTH);
+    id_deltas_south := get_tile_direction_id_deltas(.SOUTH);
+    id_deltas_east  := get_tile_direction_id_deltas(.EAST);
+    id_deltas_west  := get_tile_direction_id_deltas(.WEST);
+
+    neighbor_north  := get_tile_by_id(tile.id + id_deltas_north[0] + id_deltas_north[1]);
+    neighbor_south  := get_tile_by_id(tile.id + id_deltas_south[0] + id_deltas_south[1]);
+    neighbor_east   := get_tile_by_id(tile.id + id_deltas_east[0] + id_deltas_east[1]);
+    neighbor_west   := get_tile_by_id(tile.id + id_deltas_west[0] + id_deltas_west[1]);
+
     for dir: DIRECTIONS_CORNER {
         if dir == {
             case .NORTH_EAST;
-                id_deltas_north      := get_tile_direction_id_deltas(.NORTH);
-                id_deltas_east       := get_tile_direction_id_deltas(.EAST);
                 id_deltas_north_east := get_tile_direction_id_deltas(.NORTH_EAST);
-
-                neighbor_north       := get_tile_by_id(tile.id + id_deltas_north[0] + id_deltas_north[1]);
-                neighbor_east        := get_tile_by_id(tile.id + id_deltas_east[0] + id_deltas_east[1]);
                 neighbor_north_east  := get_tile_by_id(tile.id + id_deltas_north_east[0] + id_deltas_north_east[1]);
 
                 tile.trench_directions_corners_mostly_crust  &= ~TrenchDirections.NORTH_EAST;
@@ -5936,22 +5944,20 @@ update_trench_corners_if_necessary :: (tile: *Tile) {
 
                 if !does_tile_render_trenches(neighbor_north_east) {
                     if does_tile_render_trenches(neighbor_north) && does_tile_render_trenches(neighbor_east) {
-                        tile.trench_directions_corners_mostly_crust |= TrenchDirections.NORTH_EAST;
+                        tile.trench_directions_corners_mostly_crust     |= TrenchDirections.NORTH_EAST;
+                        if is_obsidian then tile.trench_directions_dark |= TrenchDirections.NORTH_EAST;
                     } else if !does_tile_render_trenches(neighbor_north) && !does_tile_render_trenches(neighbor_east) {
-                        tile.trench_directions_corners_mostly_dirt |= TrenchDirections.NORTH_EAST;
+                        tile.trench_directions_corners_mostly_dirt      |= TrenchDirections.NORTH_EAST;
+                        if is_obsidian then tile.trench_directions_dark |= TrenchDirections.NORTH_EAST;
                     }
                 } else {
                     if !does_tile_render_trenches(neighbor_north) && !does_tile_render_trenches(neighbor_east) {
-                        tile.trench_directions_corners_special_crust |= .NORTH_EAST;
+                        tile.trench_directions_corners_special_crust    |= .NORTH_EAST;
+                        if is_obsidian then tile.trench_directions_dark |= .NORTH_EAST;
                     }
                 }
             case .NORTH_WEST;
-                id_deltas_north      := get_tile_direction_id_deltas(.NORTH);
-                id_deltas_west       := get_tile_direction_id_deltas(.WEST);
                 id_deltas_north_west := get_tile_direction_id_deltas(.NORTH_WEST);
-
-                neighbor_north       := get_tile_by_id(tile.id + id_deltas_north[0] + id_deltas_north[1]);
-                neighbor_west        := get_tile_by_id(tile.id + id_deltas_west[0] + id_deltas_west[1]);
                 neighbor_north_west  := get_tile_by_id(tile.id + id_deltas_north_west[0] + id_deltas_north_west[1]);
 
                 tile.trench_directions_corners_mostly_crust  &= ~TrenchDirections.NORTH_WEST;
@@ -5971,12 +5977,7 @@ update_trench_corners_if_necessary :: (tile: *Tile) {
                     }
                 }
             case .SOUTH_EAST;
-                id_deltas_south      := get_tile_direction_id_deltas(.SOUTH);
-                id_deltas_east       := get_tile_direction_id_deltas(.EAST);
                 id_deltas_south_east := get_tile_direction_id_deltas(.SOUTH_EAST);
-
-                neighbor_south      := get_tile_by_id(tile.id + id_deltas_south[0] + id_deltas_south[1]);
-                neighbor_east       := get_tile_by_id(tile.id + id_deltas_east[0] + id_deltas_east[1]);
                 neighbor_south_east := get_tile_by_id(tile.id + id_deltas_south_east[0] + id_deltas_south_east[1]);
 
                 tile.trench_directions_corners_mostly_dirt   &= ~TrenchDirections.SOUTH_EAST;
@@ -5996,12 +5997,7 @@ update_trench_corners_if_necessary :: (tile: *Tile) {
                     }
                 }
             case .SOUTH_WEST;
-                id_deltas_south      := get_tile_direction_id_deltas(.SOUTH);
-                id_deltas_west       := get_tile_direction_id_deltas(.WEST);
                 id_deltas_south_west := get_tile_direction_id_deltas(.SOUTH_WEST);
-
-                neighbor_south       := get_tile_by_id(tile.id + id_deltas_south[0] + id_deltas_south[1]);
-                neighbor_west        := get_tile_by_id(tile.id + id_deltas_west[0] + id_deltas_west[1]);
                 neighbor_south_west  := get_tile_by_id(tile.id + id_deltas_south_west[0] + id_deltas_south_west[1]);
 
                 tile.trench_directions_corners_mostly_dirt   &= ~TrenchDirections.SOUTH_WEST;
@@ -6021,6 +6017,15 @@ update_trench_corners_if_necessary :: (tile: *Tile) {
                     }
                 }
         }
+    }
+
+    // If a tile is encased, then all of the corners should be darkened.
+    if is_encased {
+        tile.trench_directions_dark |= (
+            tile.trench_directions_corners_mostly_crust |
+            tile.trench_directions_corners_mostly_dirt  |
+            tile.trench_directions_corners_special_crust
+        );
     }
 }
 
@@ -6150,10 +6155,8 @@ draw_trench_corners_mostly_crust :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        if is_neighbor_obsidian(tile, .NORTH_EAST) || is_tile_encased(tile) {
+        if tile.trench_directions_dark & TrenchDirections.NORTH_EAST {
             tint = DARKGRAY;
-        } else {
-            tint = WHITE;
         }
 
         DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
@@ -6169,10 +6172,8 @@ draw_trench_corners_mostly_crust :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        if is_neighbor_obsidian(tile, .NORTH_WEST) || is_tile_encased(tile) {
+        if tile.trench_directions_dark & TrenchDirections.NORTH_WEST {
             tint = DARKGRAY;
-        } else {
-            tint = WHITE;
         }
 
         DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
@@ -6188,10 +6189,8 @@ draw_trench_corners_mostly_crust :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        if is_neighbor_obsidian(tile, .SOUTH_EAST) || is_tile_encased(tile) {
+        if tile.trench_directions_dark & TrenchDirections.SOUTH_EAST {
             tint = DARKGRAY;
-        } else {
-            tint = WHITE;
         }
     
         DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
@@ -6207,10 +6206,8 @@ draw_trench_corners_mostly_crust :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        if is_neighbor_obsidian(tile, .SOUTH_WEST) || is_tile_encased(tile) {
+        if tile.trench_directions_dark & TrenchDirections.SOUTH_WEST {
             tint = DARKGRAY;
-        } else {
-            tint = WHITE;
         }
 
         DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
@@ -6241,10 +6238,8 @@ draw_trench_corners_mostly_dirt :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        if is_neighbor_obsidian(tile, .NORTH_EAST) || is_tile_encased(tile) {
+        if tile.trench_directions_dark & TrenchDirections.NORTH_EAST {
             tint = DARKGRAY;
-        } else {
-            tint = WHITE;
         }
 
         DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
@@ -6260,10 +6255,8 @@ draw_trench_corners_mostly_dirt :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        if is_neighbor_obsidian(tile, .NORTH_WEST) || is_tile_encased(tile) {
+        if tile.trench_directions_dark & TrenchDirections.NORTH_WEST {
             tint = DARKGRAY;
-        } else {
-            tint = WHITE;
         }
         
         DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
@@ -6279,10 +6272,8 @@ draw_trench_corners_mostly_dirt :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        if is_neighbor_obsidian(tile, .SOUTH_EAST) || is_tile_encased(tile) {
+        if tile.trench_directions_dark & TrenchDirections.SOUTH_EAST {
             tint = DARKGRAY;
-        } else {
-            tint = WHITE;
         }
     
         DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
@@ -6298,10 +6289,8 @@ draw_trench_corners_mostly_dirt :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        if is_neighbor_obsidian(tile, .SOUTH_WEST) || is_tile_encased(tile) {
+        if tile.trench_directions_dark & TrenchDirections.SOUTH_WEST {
             tint = DARKGRAY;
-        } else {
-            tint = WHITE;
         }
 
         DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
@@ -6331,7 +6320,7 @@ draw_trench_corners_special_crust :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        tint := ifx is_neighbor_obsidian(tile, .NORTH) then DARKGRAY else WHITE;
+        tint := ifx tile.trench_directions_dark & TrenchDirections.NORTH then DARKGRAY else WHITE;
 
         DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
     }
@@ -6346,7 +6335,7 @@ draw_trench_corners_special_crust :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        tint := ifx is_neighbor_obsidian(tile, .NORTH) then DARKGRAY else WHITE;
+        tint := ifx tile.trench_directions_dark & TrenchDirections.NORTH then DARKGRAY else WHITE;
 
         DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
     }
@@ -6361,7 +6350,7 @@ draw_trench_corners_special_crust :: (tile: Tile) {
             dest.width, dest.height,
         };
     
-        tint := ifx is_neighbor_obsidian(tile, .SOUTH) then DARKGRAY else WHITE;
+        tint := ifx tile.trench_directions_dark & TrenchDirections.SOUTH then DARKGRAY else WHITE;
 
         DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
     }
@@ -6376,7 +6365,7 @@ draw_trench_corners_special_crust :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        tint := ifx is_neighbor_obsidian(tile, .SOUTH) then DARKGRAY else WHITE;
+        tint := ifx tile.trench_directions_dark & TrenchDirections.SOUTH then DARKGRAY else WHITE;
 
         DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
     }
