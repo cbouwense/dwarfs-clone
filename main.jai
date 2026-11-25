@@ -992,6 +992,7 @@ Tile :: struct {
     trench_directions_corners_mostly_crust  : TrenchDirections;
     trench_directions_corners_mostly_dirt   : TrenchDirections;
     trench_directions_corners_special_crust : TrenchDirections;
+    trench_directions_dark : TrenchDirections;
 }
 
 CaveType :: enum u8 {
@@ -5860,28 +5861,58 @@ update_trench_walls_if_necessary :: (tile: *Tile) {
     neighbor_east  := get_tile_by_id(neighbor_id_east);
     neighbor_west  := get_tile_by_id(neighbor_id_west);
 
-    if !does_tile_render_trenches(neighbor_north) {
-        tile.trench_directions_sides |= TrenchDirections.NORTH;
-    } else {
+    if does_tile_render_trenches(neighbor_north) {
         tile.trench_directions_sides &= ~TrenchDirections.NORTH;
-    }
-
-    if !does_tile_render_trenches(neighbor_south) {
-        tile.trench_directions_sides |= TrenchDirections.SOUTH;
     } else {
+        tile.trench_directions_sides |= TrenchDirections.NORTH;
+    }
+
+    if does_tile_render_trenches(neighbor_south) {
         tile.trench_directions_sides &= ~TrenchDirections.SOUTH;
+    } else {
+        tile.trench_directions_sides |= TrenchDirections.SOUTH;
     }
 
-    if !does_tile_render_trenches(neighbor_east) {
-        tile.trench_directions_sides |= TrenchDirections.EAST;
-    }  else {
+    if does_tile_render_trenches(neighbor_east) {
         tile.trench_directions_sides &= ~TrenchDirections.EAST;
+    }  else {
+        tile.trench_directions_sides |= TrenchDirections.EAST;
     }
 
-    if !does_tile_render_trenches(neighbor_west) {
-        tile.trench_directions_sides |= TrenchDirections.WEST;
-    }  else {
+    if does_tile_render_trenches(neighbor_west) {
         tile.trench_directions_sides &= ~TrenchDirections.WEST;
+    }  else {
+        tile.trench_directions_sides |= TrenchDirections.WEST;
+    }
+
+    // Update darkness
+    if is_tile_encased(tile) {
+        tile.trench_directions_dark = tile.trench_directions_sides;
+    } else {
+        if tile.trench_directions_sides & .NORTH {
+            if neighbor_north != null && neighbor_north.type == .OBSIDIAN {
+                tile.trench_directions_dark |= .NORTH;
+            }
+        }
+        
+        if tile.trench_directions_sides & .SOUTH {
+            if neighbor_south != null && neighbor_south.type == .OBSIDIAN {
+                tile.trench_directions_dark |= .SOUTH;
+            }
+        }
+        
+        if tile.trench_directions_sides & .EAST  {
+            if neighbor_east != null && neighbor_east.type  == .OBSIDIAN {
+                tile.trench_directions_dark |= .EAST;
+            }
+        }
+        
+        if tile.trench_directions_sides & .WEST  {
+            if neighbor_west != null && neighbor_west.type  == .OBSIDIAN {
+                tile.trench_directions_dark |= .WEST;
+            }
+        }
+        
     }
 }
 
@@ -6017,12 +6048,11 @@ draw_trench_sides :: (tile: Tile) {
     dest   := get_world_rect_from_pos(tile.pos);
     rot    := 0.0;
     origin := Vector2.{ TILEMAP_GENERAL_TILE_WIDTH * 0.5, TILEMAP_GENERAL_TILE_HEIGHT * 0.5 };
+    is_encased := is_tile_encased(tile);
     
-    get_neighbor_tile_id_by_direction(tile, .SOUTH);
-    get_neighbor_tile_id_by_direction(tile, .EAST);
-    get_neighbor_tile_id_by_direction(tile, .WEST);
     tint := WHITE; // Darkened if next to obsidian, dimmed if encased.
     
+
     if tile.trench_directions_sides & TrenchDirections.NORTH {
         final_dest := Rectangle.{
             dest.x + TILEMAP_GENERAL_TILE_HEIGHT * 0.5,
@@ -6030,7 +6060,7 @@ draw_trench_sides :: (tile: Tile) {
             dest.width, dest.height,
         };
         
-        if is_neighbor_obsidian(tile, .NORTH) || is_tile_encased(tile) {
+        if tile.trench_directions_dark & TrenchDirections.NORTH {
             tint = DARKGRAY;
         } else {
             tint = WHITE;
@@ -6048,7 +6078,7 @@ draw_trench_sides :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        if is_neighbor_obsidian(tile, .SOUTH) || is_tile_encased(tile) {
+        if tile.trench_directions_dark & TrenchDirections.SOUTH {
             tint = DARKGRAY;
         } else {
             tint = WHITE;
@@ -6066,7 +6096,7 @@ draw_trench_sides :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        if is_neighbor_obsidian(tile, .EAST) || is_tile_encased(tile) {
+        if tile.trench_directions_dark & TrenchDirections.EAST {
             tint = DARKGRAY;
         } else {
             tint = WHITE;
@@ -6084,7 +6114,7 @@ draw_trench_sides :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        if is_neighbor_obsidian(tile, .WEST) || is_tile_encased(tile) {
+        if tile.trench_directions_dark & TrenchDirections.WEST {
             tint = DARKGRAY;
         } else {
             tint = WHITE;
@@ -9633,6 +9663,7 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
             trench_directions_corners_mostly_crust  = 0,
             trench_directions_corners_mostly_dirt   = 0,
             trench_directions_corners_special_crust = 0,
+            trench_directions_dark = 0,
         };
 
         table_set(*context.tile_ids_to_index, tile_id, context.tiles.count);
