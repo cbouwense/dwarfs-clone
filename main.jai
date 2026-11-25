@@ -1221,6 +1221,10 @@ data_folder: string;
 
 #add_context tiles: [..] Tile;
 #add_context tile_ids_to_index: Table(s32, s64);
+tile_indices_water_still   : [..] s64;
+tile_indices_water_flowing : [..] s64;
+tile_indices_lava_still    : [..] s64;
+tile_indices_lava_flowing  : [..] s64;
 
 tiles_to_draw_this_frame : [..] Tile;
 
@@ -3534,64 +3538,69 @@ update_and_draw_frame_round :: () {
                     context.game_state.lava_flow_cooldown_ms -= xx (context.dt_seconds * 1000);
                 }
 
-                // Update tiles
-                update_tiles :: (should_spread_lava_this_frame: bool) {
-                    for *tile: context.tiles {
-                        if tile_has_property(tile, .WATER_STILL) {
-                            // inflict_non_dwarf_liquid_consequences(tile.id);
+                // Update liquid tiles
+                update_liquid_tiles :: (should_spread_lava_this_frame: bool) {
+                    for tile_index_water_still: tile_indices_water_still {
+                        tile := context.tiles[tile_index_water_still];
+                        // inflict_non_dwarf_liquid_consequences(tile.id);
+                        
+                        reset_animation := sprite_update(*tile.animated_sprite, context.dt_seconds);
+                        
+                        if reset_animation {
+                            try_to_set_cardinal_neighbors_as_flowing_tile_type(tile.id, .WATER_FLOWING);
+                        }
+                    }
+                    
+                    for tile_index_water_flowing: tile_indices_water_flowing {
+                        tile := *context.tiles[tile_index_water_flowing];
 
-                            reset_animation := sprite_update(*tile.animated_sprite, context.dt_seconds);
+                        inflict_non_dwarf_liquid_consequences(tile.id);
 
-                            if reset_animation {
-                                try_to_set_cardinal_neighbors_as_flowing_tile_type(tile.id, .WATER_FLOWING);
+                        tile.animated_sprite.rotation = determine_rotation_of_liquid_flowing_sprite(tile.id, .WATER);
+
+                        reset_animation := sprite_update(*tile.animated_sprite, context.dt_seconds);
+
+                        if reset_animation {
+                            try_to_set_cardinal_neighbors_as_flowing_tile_type(tile.id, .WATER_FLOWING);
+
+                            if are_all_neighbors_unable_to_be_spread_to(tile.id) {
+                                set_tile_as_water_still(tile);
                             }
                         }
+                    }
 
-                        if tile_has_property(tile, .WATER_FLOWING) {
-                            inflict_non_dwarf_liquid_consequences(tile.id);
+                    for tile_index_lava_still: tile_indices_lava_still {
+                        tile := context.tiles[tile_index_lava_still];
 
-                            tile.animated_sprite.rotation = determine_rotation_of_liquid_flowing_sprite(tile.id, .WATER);
+                        inflict_non_dwarf_liquid_consequences(tile.id);
 
-                            reset_animation := sprite_update(*tile.animated_sprite, context.dt_seconds);
-
-                            if reset_animation {
-                                try_to_set_cardinal_neighbors_as_flowing_tile_type(tile.id, .WATER_FLOWING);
-
-                                if are_all_neighbors_unable_to_be_spread_to(tile.id) {
-                                    set_tile_as_water_still(tile);
-                                }
-                            }
+                        reset_animation := sprite_update(*tile.animated_sprite, context.dt_seconds);
+                        
+                        if should_spread_lava_this_frame {
+                            try_to_set_cardinal_neighbors_as_flowing_tile_type(tile.id, .LAVA_FLOWING);
                         }
+                    }
 
-                        if tile_has_property(tile, .LAVA_STILL) {
-                            inflict_non_dwarf_liquid_consequences(tile.id);
+                    for tile_index_lava_flowing: tile_indices_lava_flowing {
+                        tile := *context.tiles[tile_index_lava_flowing];
 
-                            reset_animation := sprite_update(*tile.animated_sprite, context.dt_seconds);
-                            
-                            if should_spread_lava_this_frame {
-                                try_to_set_cardinal_neighbors_as_flowing_tile_type(tile.id, .LAVA_FLOWING);
-                            }
-                        }
+                        inflict_non_dwarf_liquid_consequences(tile.id);
 
-                        if tile_has_property(tile, .LAVA_FLOWING) {
-                            inflict_non_dwarf_liquid_consequences(tile.id);
+                        tile.animated_sprite.rotation = determine_rotation_of_liquid_flowing_sprite(tile.id, .LAVA);
 
-                            tile.animated_sprite.rotation = determine_rotation_of_liquid_flowing_sprite(tile.id, .LAVA);
+                        reset_animation := sprite_update(*tile.animated_sprite, context.dt_seconds);
 
-                            reset_animation := sprite_update(*tile.animated_sprite, context.dt_seconds);
+                        if reset_animation {
+                            try_to_set_cardinal_neighbors_as_flowing_tile_type(tile.id, .LAVA_FLOWING);
 
-                            if reset_animation {
-                                try_to_set_cardinal_neighbors_as_flowing_tile_type(tile.id, .LAVA_FLOWING);
-
-                                if are_all_neighbors_unable_to_be_spread_to(tile.id) {
-                                    set_tile_as_lava_still(tile);
-                                }
+                            if are_all_neighbors_unable_to_be_spread_to(tile.id) {
+                                set_tile_as_lava_still(tile);
                             }
                         }
                     }
                 }
-                UPDATE_TILES :: true;
-                #if UPDATE_TILES then update_tiles(should_spread_lava_this_frame);
+                UPDATE_LIQUID_TILES :: true;
+                #if UPDATE_LIQUID_TILES then update_liquid_tiles(should_spread_lava_this_frame);
 
                 update_iron :: () {
                     if context.game_state.controls_state_this_frame.add_iron {
@@ -8746,6 +8755,12 @@ set_tile_as_water_still :: (tile: *Tile) {
     unset_tile_property(tile, .WATER_FLOWING);
     set_tile_property(tile, .WATER_STILL);
 
+    found, tile_index := table_find(*context.tile_ids_to_index, tile.id);
+    assert(found);
+    // This is an assumption that water turning into still would have previously been water flowing.
+    array_unordered_remove_by_value(*tile_indices_water_flowing, tile_index);
+    array_add(*tile_indices_water_still, tile_index);
+
     tile.animated_sprite = AnimatedSprite.{
         texture           = water_still_texture,
         active            = true,
@@ -8767,6 +8782,10 @@ set_tile_as_water_still :: (tile_id: s32) {
 
 set_tile_as_water_flowing :: (tile: *Tile) {
     set_tile_property(tile, .WATER_FLOWING);
+
+    found, tile_index := table_find(*context.tile_ids_to_index, tile.id);
+    assert(found);
+    array_add(*tile_indices_water_flowing, tile_index);
 
     tile.animated_sprite = AnimatedSprite.{
         texture           = water_flowing_texture,
@@ -8790,6 +8809,12 @@ set_tile_as_water_flowing :: (tile_id: s32) {
 set_tile_as_lava_still :: (tile: *Tile) {
     unset_tile_property(tile, .LAVA_FLOWING);
     set_tile_property(tile, .LAVA_STILL);
+
+    found, tile_index := table_find(*context.tile_ids_to_index, tile.id);
+    assert(found);
+    // This is an assumption that water turning into still would have previously been water flowing.
+    array_unordered_remove_by_value(*tile_indices_lava_flowing, tile_index);
+    array_add(*tile_indices_lava_still, tile_index);
     
     try_to_add_warning_and_alert_markers(tile.id, .LAVA);
 }
@@ -8801,6 +8826,10 @@ set_tile_as_lava_still :: (tile_id: s32) {
 
 set_tile_as_lava_flowing :: (tile: *Tile) {
     set_tile_property(tile, .LAVA_FLOWING);
+
+    found, tile_index := table_find(*context.tile_ids_to_index, tile.id);
+    assert(found);
+    array_add(*tile_indices_lava_flowing, tile_index);
 
     tile.animated_sprite = AnimatedSprite.{
         texture           = lava_flowing_texture,
@@ -9617,7 +9646,6 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
     chunk := get_chunk_by_tile_id(tile.id);
     array_add(*chunk.tile_indices, context.tiles.count - 1);
 
-    // Do any side effects that need to happen as part of this mutation.
     if #complete as_type == {
         case .UNTOUCHED_DIRT; {
             tile_exists, tile_index := table_find(*context.tile_ids_to_index, tile_id);

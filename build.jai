@@ -41,11 +41,11 @@ create_workspace :: (opts: Compiler.Build_Options, workspace_name := "") -> Work
     tracy_plugin_to_create := Plugin_To_Create.{ name = "tracy" };
     
     plugins : [..] *Metaprogram_Plugin;
-    // success := init_plugins(.[tracy_plugin_to_create], *plugins, ws);
-    // if !success {
-    //     log_error("A plugin init() failed. Exiting.\n");
-    //     exit(0);
-    // }
+    success := init_plugins(.[tracy_plugin_to_create], *plugins, ws);
+    if !success {
+        log_error("A plugin init() failed. Exiting.\n");
+        exit(0);
+    }
 
     for plugins it.workspace = ws;
     for plugins if it.before_intercept it.before_intercept(it, *intercept_flags);
