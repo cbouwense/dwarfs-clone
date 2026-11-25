@@ -1,6 +1,12 @@
 #import "Basic";
+#import "Print_Vars";
 
 main :: () {
-    my_array: [..] s32;
-    array_add(*my_array, );
+    TEN :: 10;
+    for row: 0..TEN {
+        for col: 0..TEN {
+            id := (col % TEN) + (row * TEN);
+            print_vars(id);
+        }
+    }
 }

@@ -298,9 +298,9 @@ TILE_HEIGHT_F :: cast(float32) TILEMAP_GENERAL_WORLD_HEIGHT;
 WORLD_WIDTH  :: WORLD_COLS_HUGE * TILE_WIDTH_F; 
 WORLD_HEIGHT :: WORLD_ROWS_HUGE * TILE_HEIGHT_F; 
 
-CHUNK_SIZE_TILE_COUNT :: 1024;
+CHUNK_SIZE_TILE_COUNT :: 128;
 CHUNK_SIZE_F :: TILE_WIDTH_F * CHUNK_SIZE_TILE_COUNT;
-CHUNK_COUNT :: (WORLD_WIDTH * WORLD_HEIGHT) / (CHUNK_SIZE_F * CHUNK_SIZE_F);
+CHUNK_COUNT :: cast(int) ((WORLD_WIDTH * WORLD_HEIGHT) / (CHUNK_SIZE_F * CHUNK_SIZE_F));
 
 TRANSPARENT_WHITE :: Color.{ 255, 255, 255, 100 };
 TRANSPARENT_RED   :: Color.{ 255,   0,   0, 100 };
@@ -1280,13 +1280,12 @@ lightmap_render_texture: RenderTexture2D;
 Chunk :: struct {
     rect: Rectangle;
     // TODO: fixed size
-    tile_ids: [..] s32;
+    tile_indices: [..] s64;
 }
-
-chunks : [CHUNK_COUNT] Chunk;
+// TODO: move this somewhere?
+chunks : [CHUNK_COUNT] *Chunk;
 
 main :: () {
-    print_vars(CHUNK_COUNT);
     // SetConfigFlags(.FLAG_WINDOW_RESIZABLE | .FLAG_FULLSCREEN_MODE);
     SetConfigFlags(.FLAG_WINDOW_RESIZABLE);
 
@@ -1352,6 +1351,30 @@ main :: () {
 
 // Functions
 
+get_chunk_by_tile_id :: (tile_id: s32) -> *Chunk {
+    assert(tile_id > 0);
+    assert(tile_id <= context.world_rows * context.world_cols);
+
+    // Convert 1-based tile ID to zero-based index.
+    tile_index := tile_id - 1;
+
+    // Get tile coordinates in the world.
+    tile_col := tile_index % context.world_cols;
+    tile_row := tile_index / context.world_cols;
+
+    // Get chunk coordinates.
+    chunk_col := tile_col / CHUNK_SIZE_TILE_COUNT;
+    chunk_row := tile_row / CHUNK_SIZE_TILE_COUNT;
+
+    // Convert chunk coordinates to a 1D array index.
+    chunks_per_row := (context.world_cols + CHUNK_SIZE_TILE_COUNT - 1) / CHUNK_SIZE_TILE_COUNT;
+    chunk_index := chunk_row * chunks_per_row + chunk_col;
+
+    assert(chunk_index >= 0 && chunk_index < CHUNK_COUNT);
+
+    return chunks[chunk_index];
+}
+
 get_light_radius :: (base_radius: float, flame_flicker_sample_index: s64) -> float32 {
     return base_radius + FLAME_FLICKER_SAMPLES[flame_flicker_sample_index];
 }
@@ -1381,6 +1404,18 @@ initialize_round :: () {
     context.world_cols_shift = integer_log2(xx context.world_cols);
     context.world_cols_recip = 1.0 / context.world_cols;
     context.world_rows_recip = 1.0 / context.world_rows;
+
+    // Initialize chunks
+    chunks_per_row := context.world_cols / CHUNK_SIZE_TILE_COUNT;
+    for * chunk: chunks {
+        chunk.* = New(Chunk);
+        chunk.*.rect = Rectangle.{
+            xx ((it_index % chunks_per_row) * CHUNK_SIZE_F),
+            xx ((it_index / chunks_per_row) * CHUNK_SIZE_F),
+            CHUNK_SIZE_F,
+            CHUNK_SIZE_F,
+        };
+    }
 
     // Set temp allocator for various things.
     {
@@ -1586,27 +1621,29 @@ initialize_round :: () {
                 }
             }
 
-            home_base := create_outpost(
-                Vector2.{
-                    context.world_cols * TILEMAP_GENERAL_WORLD_WIDTH  * 0.5,
-                    context.world_rows * TILEMAP_GENERAL_WORLD_HEIGHT * 0.5,
-                },
-                true,
-            );
-
+            // TODO: idk there's some glitch with negative tile ids
+            // home_base := create_outpost(
+                //     Vector2.{
+            //         context.world_cols * TILEMAP_GENERAL_WORLD_WIDTH  * 0.5,
+            //         context.world_rows * TILEMAP_GENERAL_WORLD_HEIGHT * 0.5,
+            //     },
+            //     true,
+            // );
+            
             // Initialize dwarves
-            GENERATE_DWARVES_ENABLED :: true;
+            // TODO: true
+            GENERATE_DWARVES_ENABLED :: false;
             #if GENERATE_DWARVES_ENABLED {
                 dx, dy : float;
                 neighbor_pos: Vector2;
                 assert(outposts.count > 0);
-
+                
                 for 1..DWARF_MINER_START_COUNT {
                     // Initialize miner dwarves
                     dx = TILE_DIRECTION_DELTAS[xx Direction.NORTH][0];
                     dy = TILE_DIRECTION_DELTAS[xx Direction.NORTH][1];
                     neighbor_pos = Vector2.{ home_base.pos.x + dx, home_base.pos.y + dy };
-
+                    
                     create_dwarf(neighbor_pos, .MINER);
                 }
                 
@@ -1615,31 +1652,37 @@ initialize_round :: () {
                     dx = TILE_DIRECTION_DELTAS[xx Direction.EAST][0];
                     dy = TILE_DIRECTION_DELTAS[xx Direction.EAST][1];
                     neighbor_pos = Vector2.{ home_base.pos.x + dx, home_base.pos.y + dy };
-
+                    
                     create_dwarf(neighbor_pos, .WARRIOR);
                 }
             }
-
+            
+            // TODO: idk there's some glitch with negative tile ids
+            //
             // Initialize camera
-            context.camera.target = outposts[0].pos;
-
-        case .TUTORIAL_CONTROLS;
+            // context.camera.target = outposts[0].pos;
+            context.camera.target = Vector2.{
+                        context.world_cols * TILEMAP_GENERAL_WORLD_WIDTH  * 0.5,
+                        context.world_rows * TILEMAP_GENERAL_WORLD_HEIGHT * 0.5,
+                    };
+            
+            case .TUTORIAL_CONTROLS;
             // Initialize camera
             context.camera.target = Vector2.{
                 context.world_cols * TILEMAP_GENERAL_WORLD_WIDTH  * 0.5,
                 context.world_rows * TILEMAP_GENERAL_WORLD_HEIGHT * 0.5,
             };
+        }
+        
+        context.camera.offset   = Vector2.{ GetScreenWidth() * 0.5, GetScreenHeight() * 0.5 };
+        context.camera.rotation = 0.0;
+        context.camera.zoom     = 2.0;
     }
-
-    context.camera.offset   = Vector2.{ GetScreenWidth() * 0.5, GetScreenHeight() * 0.5 };
-    context.camera.rotation = 0.0;
-    context.camera.zoom     = 2.0;
-}
-
-update_and_draw_frame_main_menu :: () {
-    BeginDrawing();
-    defer EndDrawing();
-
+    
+    update_and_draw_frame_main_menu :: () {
+        BeginDrawing();
+        defer EndDrawing();
+        
     ClearBackground(BEIGE);
 
     if #complete context.metagame.main_menu_screen == {
@@ -1722,6 +1765,14 @@ update_and_draw_frame_main_menu :: () {
 }
 
 update_and_draw_frame_round :: () {
+    // for chunk: chunks {
+    //     print("chunk %: ", it_index);
+    //     for chunk.tile_ids {
+    //         print("%, ", it);
+    //     }
+    //     print("\n");
+    // }
+
     // PERF: can this be keep_memory?
     table_reset(*tile_ids_to_dwarfs);
     table_reset(*tile_ids_to_goblins);
@@ -5942,10 +5993,15 @@ TRENCH_SIDES_SOURCE := Rectangle.{
     TILEMAP_GENERAL_TILE_HEIGHT,
 };
 
-is_neighbor_obsidian :: (tile_id: s32, direction: Direction) -> bool {
-    neighbor_tile_id_north := get_neighbor_tile_id_by_direction(tile_id, direction);
+is_neighbor_obsidian :: (tile: Tile, direction: Direction) -> bool {
+    neighbor_tile_id_north := get_neighbor_tile_id_by_direction(tile, direction);
     neighbor_tile_north := get_tile_by_id(neighbor_tile_id_north);
     return neighbor_tile_north != null && neighbor_tile_north.type == .OBSIDIAN;
+}
+
+is_neighbor_obsidian :: (tile_id: s32, direction: Direction) -> bool {
+    tile := get_tile_by_id(tile_id);
+    return is_neighbor_obsidian(tile, direction);
 }
 
 draw_trench_sides :: (tile: Tile) {
@@ -5953,9 +6009,9 @@ draw_trench_sides :: (tile: Tile) {
     rot    := 0.0;
     origin := Vector2.{ TILEMAP_GENERAL_TILE_WIDTH * 0.5, TILEMAP_GENERAL_TILE_HEIGHT * 0.5 };
     
-    get_neighbor_tile_id_by_direction(tile.id, .SOUTH);
-    get_neighbor_tile_id_by_direction(tile.id, .EAST);
-    get_neighbor_tile_id_by_direction(tile.id, .WEST);
+    get_neighbor_tile_id_by_direction(tile, .SOUTH);
+    get_neighbor_tile_id_by_direction(tile, .EAST);
+    get_neighbor_tile_id_by_direction(tile, .WEST);
     tint := WHITE; // Darkened if next to obsidian, dimmed if encased.
     
     if tile.trench_directions_sides & TrenchDirections.NORTH {
@@ -5965,7 +6021,7 @@ draw_trench_sides :: (tile: Tile) {
             dest.width, dest.height,
         };
         
-        if is_neighbor_obsidian(tile.id, .NORTH) || is_tile_encased(tile.id) {
+        if is_neighbor_obsidian(tile, .NORTH) || is_tile_encased(tile) {
             tint = DARKGRAY;
         } else {
             tint = WHITE;
@@ -5983,7 +6039,7 @@ draw_trench_sides :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        if is_neighbor_obsidian(tile.id, .SOUTH) || is_tile_encased(tile.id) {
+        if is_neighbor_obsidian(tile, .SOUTH) || is_tile_encased(tile) {
             tint = DARKGRAY;
         } else {
             tint = WHITE;
@@ -6001,7 +6057,7 @@ draw_trench_sides :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        if is_neighbor_obsidian(tile.id, .EAST) || is_tile_encased(tile.id) {
+        if is_neighbor_obsidian(tile, .EAST) || is_tile_encased(tile) {
             tint = DARKGRAY;
         } else {
             tint = WHITE;
@@ -6019,7 +6075,7 @@ draw_trench_sides :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        if is_neighbor_obsidian(tile.id, .WEST) || is_tile_encased(tile.id) {
+        if is_neighbor_obsidian(tile, .WEST) || is_tile_encased(tile) {
             tint = DARKGRAY;
         } else {
             tint = WHITE;
@@ -6055,7 +6111,7 @@ draw_trench_corners_mostly_crust :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        if is_neighbor_obsidian(tile.id, .NORTH_EAST) || is_tile_encased(tile.id) {
+        if is_neighbor_obsidian(tile, .NORTH_EAST) || is_tile_encased(tile) {
             tint = DARKGRAY;
         } else {
             tint = WHITE;
@@ -6074,7 +6130,7 @@ draw_trench_corners_mostly_crust :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        if is_neighbor_obsidian(tile.id, .NORTH_WEST) || is_tile_encased(tile.id) {
+        if is_neighbor_obsidian(tile, .NORTH_WEST) || is_tile_encased(tile) {
             tint = DARKGRAY;
         } else {
             tint = WHITE;
@@ -6093,7 +6149,7 @@ draw_trench_corners_mostly_crust :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        if is_neighbor_obsidian(tile.id, .SOUTH_EAST) || is_tile_encased(tile.id) {
+        if is_neighbor_obsidian(tile, .SOUTH_EAST) || is_tile_encased(tile) {
             tint = DARKGRAY;
         } else {
             tint = WHITE;
@@ -6112,7 +6168,7 @@ draw_trench_corners_mostly_crust :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        if is_neighbor_obsidian(tile.id, .SOUTH_WEST) || is_tile_encased(tile.id) {
+        if is_neighbor_obsidian(tile, .SOUTH_WEST) || is_tile_encased(tile) {
             tint = DARKGRAY;
         } else {
             tint = WHITE;
@@ -6146,7 +6202,7 @@ draw_trench_corners_mostly_dirt :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        if is_neighbor_obsidian(tile.id, .NORTH_EAST) || is_tile_encased(tile.id) {
+        if is_neighbor_obsidian(tile, .NORTH_EAST) || is_tile_encased(tile) {
             tint = DARKGRAY;
         } else {
             tint = WHITE;
@@ -6165,7 +6221,7 @@ draw_trench_corners_mostly_dirt :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        if is_neighbor_obsidian(tile.id, .NORTH_WEST) || is_tile_encased(tile.id) {
+        if is_neighbor_obsidian(tile, .NORTH_WEST) || is_tile_encased(tile) {
             tint = DARKGRAY;
         } else {
             tint = WHITE;
@@ -6184,7 +6240,7 @@ draw_trench_corners_mostly_dirt :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        if is_neighbor_obsidian(tile.id, .SOUTH_EAST) || is_tile_encased(tile.id) {
+        if is_neighbor_obsidian(tile, .SOUTH_EAST) || is_tile_encased(tile) {
             tint = DARKGRAY;
         } else {
             tint = WHITE;
@@ -6203,7 +6259,7 @@ draw_trench_corners_mostly_dirt :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        if is_neighbor_obsidian(tile.id, .SOUTH_WEST) || is_tile_encased(tile.id) {
+        if is_neighbor_obsidian(tile, .SOUTH_WEST) || is_tile_encased(tile) {
             tint = DARKGRAY;
         } else {
             tint = WHITE;
@@ -6236,7 +6292,7 @@ draw_trench_corners_special_crust :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        tint := ifx is_neighbor_obsidian(tile.id, .NORTH) then DARKGRAY else WHITE;
+        tint := ifx is_neighbor_obsidian(tile, .NORTH) then DARKGRAY else WHITE;
 
         DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
     }
@@ -6251,7 +6307,7 @@ draw_trench_corners_special_crust :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        tint := ifx is_neighbor_obsidian(tile.id, .NORTH) then DARKGRAY else WHITE;
+        tint := ifx is_neighbor_obsidian(tile, .NORTH) then DARKGRAY else WHITE;
 
         DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
     }
@@ -6266,7 +6322,7 @@ draw_trench_corners_special_crust :: (tile: Tile) {
             dest.width, dest.height,
         };
     
-        tint := ifx is_neighbor_obsidian(tile.id, .SOUTH) then DARKGRAY else WHITE;
+        tint := ifx is_neighbor_obsidian(tile, .SOUTH) then DARKGRAY else WHITE;
 
         DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
     }
@@ -6281,7 +6337,7 @@ draw_trench_corners_special_crust :: (tile: Tile) {
             dest.width, dest.height,
         };
 
-        tint := ifx is_neighbor_obsidian(tile.id, .SOUTH) then DARKGRAY else WHITE;
+        tint := ifx is_neighbor_obsidian(tile, .SOUTH) then DARKGRAY else WHITE;
 
         DrawTexturePro(tilemap_texture_general, source, final_dest, ORIGIN, 0.0, tint);
     }
@@ -8345,26 +8401,28 @@ create_outpost :: (pos: Vector2, is_home_base: bool) -> Outpost {
 
     outpost_tile_id := get_tile_id_by_pos(outpost.pos);
 
+    // TODO: this is giving negative tile ids or some shit?
+    //
     // Give a little breathing room with caves for the home base
-    if is_home_base {
-        BLOCKS_BEFORE_CAVES :: 10;
-        for dy_idx: -BLOCKS_BEFORE_CAVES..BLOCKS_BEFORE_CAVES {
-            for dx_idx: -BLOCKS_BEFORE_CAVES..BLOCKS_BEFORE_CAVES {
-                // A circular clearing looks more natural
-                if (dx_idx * dx_idx + dy_idx * dy_idx) > (BLOCKS_BEFORE_CAVES * BLOCKS_BEFORE_CAVES) {
-                    continue;
-                }
+    if is_home_base return outpost;
+    //     BLOCKS_BEFORE_CAVES :: 10;
+    //     for dy_idx: -BLOCKS_BEFORE_CAVES..BLOCKS_BEFORE_CAVES {
+    //         for dx_idx: -BLOCKS_BEFORE_CAVES..BLOCKS_BEFORE_CAVES {
+    //             // A circular clearing looks more natural
+    //             if (dx_idx * dx_idx + dy_idx * dy_idx) > (BLOCKS_BEFORE_CAVES * BLOCKS_BEFORE_CAVES) {
+    //                 continue;
+    //             }
 
-                neighbor_pos := Vector2.{ 
-                    outpost.pos.x + (dx_idx * TILEMAP_GENERAL_WORLD_WIDTH), 
-                    outpost.pos.y + (dy_idx * TILEMAP_GENERAL_WORLD_HEIGHT) 
-                };
+    //             neighbor_pos := Vector2.{ 
+    //                 outpost.pos.x + (dx_idx * TILEMAP_GENERAL_WORLD_WIDTH), 
+    //                 outpost.pos.y + (dy_idx * TILEMAP_GENERAL_WORLD_HEIGHT) 
+    //             };
                 
-                found, neighbor_id := find_tile_id_by_pos(neighbor_pos);
-                if found then set_tile_as_type(neighbor_id, .UNTOUCHED_DIRT, false, false);
-            }
-        }
-    }
+    //             found, neighbor_id := find_tile_id_by_pos(neighbor_pos);
+    //             if found then set_tile_as_type(neighbor_id, .UNTOUCHED_DIRT, false, false);
+    //         }
+    //     }
+    // }
 
     // Dig out the tiles around the outpost (including the outpost tiles itself).
     // The outpost's canonical tile is the top left one, and its pos is the top
@@ -8532,10 +8590,15 @@ kill_outpost_by_id :: (outpost_id: s32) {
     kill_outpost_by_index(outpost_index);
 }
 
-get_neighbor_tile_id_by_direction :: (tile_id: s32, direction: Direction) -> s32 {
+get_neighbor_tile_id_by_direction :: (tile: Tile, direction: Direction) -> s32 {
     dx := get_tile_direction_id_deltas(direction)[0];
     dy := get_tile_direction_id_deltas(direction)[1];
-    return tile_id + dx + dy;
+    return tile.id + dx + dy;
+}
+
+get_neighbor_tile_id_by_direction :: (tile_id: s32, direction: Direction) -> s32 {
+    tile := get_tile_by_id(tile_id);
+    return get_neighbor_tile_id_by_direction(tile, direction);
 }
 
 get_neighbor_tile_ids :: (tile_id: s32) -> [..] s32 {
@@ -8756,6 +8819,58 @@ set_tile_as_lava_flowing :: (tile: *Tile) {
 set_tile_as_lava_flowing :: (tile_id: s32) {
     tile := get_tile_by_id(tile_id);
     if tile != null then set_tile_as_lava_flowing(tile);
+}
+
+is_tile_water_still :: (tile: Tile) -> bool {
+    return tile_has_property(tile, .WATER_STILL);
+}
+
+is_tile_water_flowing :: (tile: Tile) -> bool {
+    return tile_has_property(tile, .WATER_FLOWING);
+}
+
+is_tile_lava_still :: (tile: Tile) -> bool {
+    return tile_has_property(tile, .LAVA_STILL);
+}
+
+is_tile_lava_flowing :: (tile: Tile) -> bool {
+    return tile_has_property(tile, .LAVA_FLOWING);
+}
+
+is_tile_outpost_floor :: (tile: Tile) -> bool {
+    return tile_has_property(tile, TileProperty.OUTPOST_FLOOR);
+}
+
+is_tile_home_base_floor :: (tile: Tile) -> bool {
+    return tile_has_property(tile, TileProperty.HOME_BASE_FLOOR);
+}
+
+is_tile_encased :: (tile: Tile) -> bool {
+    return tile_has_property(tile, TileProperty.ENCASED);
+}
+
+is_tile_dynamite :: (tile: Tile) -> bool {
+    return tile_has_property(tile, TileProperty.HAS_DYNAMITE);
+}
+
+is_tile_treasure :: (tile: Tile) -> bool {
+    return tile_has_property(tile, TileProperty.HAS_TREASURE);
+}
+
+is_tile_warning_water :: (tile: Tile) -> bool {
+    return tile_has_property(tile, TileProperty.WATER_WARNING);
+}
+
+is_tile_alert_water :: (tile: Tile) -> bool {
+    return tile_has_property(tile, TileProperty.WATER_ALERT);
+}
+
+is_tile_warning_lava :: (tile: Tile) -> bool {
+    return tile_has_property(tile, TileProperty.LAVA_WARNING);
+}
+
+is_tile_alert_lava :: (tile: Tile) -> bool {
+    return tile_has_property(tile, TileProperty.LAVA_ALERT);
 }
 
 is_tile_water_still :: (tile_id: s32) -> bool {
@@ -9498,6 +9613,10 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
     tile := get_tile_by_id(tile_id);
     assert(tile != null);
 
+    // Add tile id to chunk
+    chunk := get_chunk_by_tile_id(tile.id);
+    array_add(*chunk.tile_indices, context.tiles.count - 1);
+
     // Do any side effects that need to happen as part of this mutation.
     if #complete as_type == {
         case .UNTOUCHED_DIRT; {
@@ -9842,15 +9961,16 @@ derive_things_to_draw :: () {
         } else {
             for chunk: chunks {
                 window_rect := Rectangle.{
-                    window_start.x,
-                    window_start.y,
-                    window_end.x - window_start.x,
-                    window_end.y - window_start.y
+                    context.window_start.x,
+                    context.window_start.y,
+                    context.window_end.x - context.window_start.x,
+                    context.window_end.y - context.window_start.y
                 };
 
                 if CheckCollisionRecs(chunk.rect, window_rect) {
-                    for tile_id: chunk.tile_ids {
-                        array_add(*tiles_to_draw_this_frame, context.tiles[tile_id - 1]);
+                    // PERF: is this slow?
+                    for tile_index: chunk.tile_indices {
+                        array_add(*tiles_to_draw_this_frame, context.tiles[tile_index]);
                     }
                 }
             }
