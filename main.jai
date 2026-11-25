@@ -265,8 +265,8 @@ TILEMAP_GENERAL_TILE_WIDTH   :: 32;
 TILEMAP_GENERAL_TILE_HEIGHT  :: 32;
 TILEMAP_GENERAL_WORLD_WIDTH  :: TILEMAP_GENERAL_TILE_WIDTH  * SCALE;
 TILEMAP_GENERAL_WORLD_HEIGHT :: TILEMAP_GENERAL_TILE_HEIGHT * SCALE;
-TILEMAP_GENERAL_WORLD_WIDTH_RECIPROCAL  :: 1 / TILEMAP_GENERAL_WORLD_WIDTH;
-TILEMAP_GENERAL_WORLD_HEIGHT_RECIPROCAL :: 1 / TILEMAP_GENERAL_WORLD_HEIGHT;
+TILEMAP_GENERAL_WORLD_WIDTH_RECIPROCAL  :: 1.0 / TILEMAP_GENERAL_WORLD_WIDTH;
+TILEMAP_GENERAL_WORLD_HEIGHT_RECIPROCAL :: 1.0 / TILEMAP_GENERAL_WORLD_HEIGHT;
 
 WORLD_COLS_HUGE   :: 2048;
 WORLD_ROWS_HUGE   :: WORLD_COLS_HUGE;
@@ -1626,18 +1626,16 @@ initialize_round :: () {
                 }
             }
 
-            // TODO: idk there's some glitch with negative tile ids
-            // home_base := create_outpost(
-                //     Vector2.{
-            //         context.world_cols * TILEMAP_GENERAL_WORLD_WIDTH  * 0.5,
-            //         context.world_rows * TILEMAP_GENERAL_WORLD_HEIGHT * 0.5,
-            //     },
-            //     true,
-            // );
+            home_base := create_outpost(
+                Vector2.{
+                    context.world_cols * TILEMAP_GENERAL_WORLD_WIDTH  * 0.5,
+                    context.world_rows * TILEMAP_GENERAL_WORLD_HEIGHT * 0.5,
+                },
+                true,
+            );
             
             // Initialize dwarves
-            // TODO: true
-            GENERATE_DWARVES_ENABLED :: false;
+            GENERATE_DWARVES_ENABLED :: true;
             #if GENERATE_DWARVES_ENABLED {
                 dx, dy : float;
                 neighbor_pos: Vector2;
@@ -1662,14 +1660,8 @@ initialize_round :: () {
                 }
             }
             
-            // TODO: idk there's some glitch with negative tile ids
-            //
             // Initialize camera
-            // context.camera.target = outposts[0].pos;
-            context.camera.target = Vector2.{
-                        context.world_cols * TILEMAP_GENERAL_WORLD_WIDTH  * 0.5,
-                        context.world_rows * TILEMAP_GENERAL_WORLD_HEIGHT * 0.5,
-                    };
+            context.camera.target = outposts[0].pos;
             
             case .TUTORIAL_CONTROLS;
             // Initialize camera
@@ -3855,14 +3847,14 @@ update_and_draw_frame_round :: () {
                                         DrawTexturePro(tilemap_texture_general, source, tile_dest, Vector2.{0,0}, 0.0, tint);
                                     }
                                     
+                                    case .OBSIDIAN; {
+                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OBSIDIAN, tile_dest, Vector2.{0,0}, 0.0, tint);
+                                    }
+
                                     // Drawn on the top layer, so, nothing to do here while drawing the base layer.
                                     case .IRON;
                                     case .WALL;
                                     case .HOLE; 
-                                    
-                                    case .OBSIDIAN; {
-                                        DrawTexturePro(tilemap_texture_general, TILEMAP_SOURCE_RECT_OBSIDIAN, tile_dest, Vector2.{0,0}, 0.0, tint);
-                                    }
                                 }
                             }
 
@@ -6039,13 +6031,15 @@ TRENCH_SIDES_SOURCE := Rectangle.{
 };
 
 is_neighbor_obsidian :: (tile: Tile, direction: Direction) -> bool {
-    neighbor_tile_id_north := get_neighbor_tile_id_by_direction(tile, direction);
-    neighbor_tile_north := get_tile_by_id(neighbor_tile_id_north);
+    neighbor_tile_id_north := get_neighbor_tile_id_by_direction(tile.id, direction);
+    neighbor_tile_north    := get_tile_by_id(neighbor_tile_id_north);
     return neighbor_tile_north != null && neighbor_tile_north.type == .OBSIDIAN;
 }
 
 is_neighbor_obsidian :: (tile_id: s32, direction: Direction) -> bool {
     tile := get_tile_by_id(tile_id);
+    if tile == null return false;
+
     return is_neighbor_obsidian(tile, direction);
 }
 
@@ -8429,28 +8423,26 @@ create_outpost :: (pos: Vector2, is_home_base: bool) -> Outpost {
 
     outpost_tile_id := get_tile_id_by_pos(outpost.pos);
 
-    // TODO: this is giving negative tile ids or some shit?
-    //
     // Give a little breathing room with caves for the home base
-    if is_home_base return outpost;
-    //     BLOCKS_BEFORE_CAVES :: 10;
-    //     for dy_idx: -BLOCKS_BEFORE_CAVES..BLOCKS_BEFORE_CAVES {
-    //         for dx_idx: -BLOCKS_BEFORE_CAVES..BLOCKS_BEFORE_CAVES {
-    //             // A circular clearing looks more natural
-    //             if (dx_idx * dx_idx + dy_idx * dy_idx) > (BLOCKS_BEFORE_CAVES * BLOCKS_BEFORE_CAVES) {
-    //                 continue;
-    //             }
+    if is_home_base {
+        BLOCKS_BEFORE_CAVES :: 10;
+        for dy_idx: -BLOCKS_BEFORE_CAVES..BLOCKS_BEFORE_CAVES {
+            for dx_idx: -BLOCKS_BEFORE_CAVES..BLOCKS_BEFORE_CAVES {
+                // A circular clearing looks more natural
+                if (dx_idx * dx_idx + dy_idx * dy_idx) > (BLOCKS_BEFORE_CAVES * BLOCKS_BEFORE_CAVES) {
+                    continue;
+                }
 
-    //             neighbor_pos := Vector2.{ 
-    //                 outpost.pos.x + (dx_idx * TILEMAP_GENERAL_WORLD_WIDTH), 
-    //                 outpost.pos.y + (dy_idx * TILEMAP_GENERAL_WORLD_HEIGHT) 
-    //             };
+                neighbor_pos := Vector2.{ 
+                    outpost.pos.x + (dx_idx * TILEMAP_GENERAL_WORLD_WIDTH), 
+                    outpost.pos.y + (dy_idx * TILEMAP_GENERAL_WORLD_HEIGHT) 
+                };
                 
-    //             found, neighbor_id := find_tile_id_by_pos(neighbor_pos);
-    //             if found then set_tile_as_type(neighbor_id, .UNTOUCHED_DIRT, false, false);
-    //         }
-    //     }
-    // }
+                found, neighbor_id := find_tile_id_by_pos(neighbor_pos);
+                if found then set_tile_as_type(neighbor_id, .UNTOUCHED_DIRT, false, false);
+            }
+        }
+    }
 
     // Dig out the tiles around the outpost (including the outpost tiles itself).
     // The outpost's canonical tile is the top left one, and its pos is the top
@@ -8618,15 +8610,10 @@ kill_outpost_by_id :: (outpost_id: s32) {
     kill_outpost_by_index(outpost_index);
 }
 
-get_neighbor_tile_id_by_direction :: (tile: Tile, direction: Direction) -> s32 {
+get_neighbor_tile_id_by_direction :: (tile_id: s32, direction: Direction) -> s32 {
     dx := get_tile_direction_id_deltas(direction)[0];
     dy := get_tile_direction_id_deltas(direction)[1];
-    return tile.id + dx + dy;
-}
-
-get_neighbor_tile_id_by_direction :: (tile_id: s32, direction: Direction) -> s32 {
-    tile := get_tile_by_id(tile_id);
-    return get_neighbor_tile_id_by_direction(tile, direction);
+    return tile_id + dx + dy;
 }
 
 get_neighbor_tile_ids :: (tile_id: s32) -> [..] s32 {
@@ -9662,16 +9649,26 @@ set_tile_as_type :: (tile_id: s32, as_type : TileType, grant_points: bool, grant
     tile := get_tile_by_id(tile_id);
     assert(tile != null);
 
-    // Add tile id to chunk
+    // Add tile index to chunk
     chunk := get_chunk_by_tile_id(tile.id);
-    array_add(*chunk.tile_indices, context.tiles.count - 1);
+    index_to_add := context.tiles.count - 1;
+    array_add(*chunk.tile_indices, index_to_add);
+
+    // Sanity check
+    {
+        chunk_index_max := -1;
+        for chunk.tile_indices {
+            if it > chunk_index_max then chunk_index_max = it;
+        }
+        assert(chunk_index_max < context.tiles.count);
+    }
 
     if #complete as_type == {
         case .UNTOUCHED_DIRT; {
-            tile_exists, tile_index := table_find(*context.tile_ids_to_index, tile_id);
-            assert(tile_exists);
-            array_unordered_remove_by_index(*context.tiles, tile_index);
-            table_remove(*context.tile_ids_to_index, tile_id);
+            // tile_exists, tile_index := table_find(*context.tile_ids_to_index, tile_id);
+            // assert(tile_exists);
+            // array_unordered_remove_by_index(*context.tiles, tile_index);
+            // table_remove(*context.tile_ids_to_index, tile_id);
             update_trenches_if_necessary(tile_id);
         }
         case .CAVE; {
